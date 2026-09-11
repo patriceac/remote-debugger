@@ -522,7 +522,10 @@ internal sealed partial class LabForm
         }
         else Fail("loopback.tray_restore", "The loopback controller tray Open action restores its window", new { menu = "Ouvrir missing", trayIcon = tray.IconName, overflowOpened = tray.OverflowOpened });
 
-        var terminate = FindVisibleId(ContractId("terminateSession"));
+        AutomationElement? terminate = null;
+        try { terminate = FindVisibleId(ContractId("terminateSession")); }
+        catch (InvalidOperationException) { }
+        catch (ElementNotAvailableException) { }
         if (terminate == null)
         {
             Fail("loopback.terminate", "The controller terminate action ends the loopback session and exits the agent", new { id = ContractId("terminateSession") });
