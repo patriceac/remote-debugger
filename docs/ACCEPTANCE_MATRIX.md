@@ -10,7 +10,7 @@ The normal network run is two concurrent Release requests in the same
 `IsolatedTestNet` cohort:
 
 ```powershell
-./scripts/Build.ps1 -IncludeLab
+./scripts/Build.ps1 -IncludeLab -Sign
 ./scripts/Test-HyperV.ps1 -Role Both -Scope Runtime -Cohort remote-debugger-acceptance
 ```
 
@@ -28,6 +28,21 @@ evidence:
 Loopback results explicitly block LAN discovery, Private firewall, installed
 broker, and UAC claims. Those gates remain owned by the two-VM `Both` run; the
 loopback run does not turn local transport into LAN evidence.
+
+The elapsed-time run is separate so its five-minute rotation and ten-minute
+disconnect interval do not get confused with the shorter interaction checks:
+
+```powershell
+./scripts/Test-HyperV.ps1 -Role LoopbackLifetime -Scope Runtime -UpdateVariant None
+```
+
+It seeds a real unreachable saved connection, observes the displayed code
+through its actual expiry, rejects that expired code, pairs with the new code
+using Enter, and stops the guest controller process. It then observes the
+agent's reconnect countdown and actual process exit. Sleep-request queries
+are explicitly blocked if the guest cannot run `powercfg /requests` with
+the required Windows privileges. The normal Loopback run also leaves viewing
+running for more than five minutes to check automatic stream renewal.
 
 The signed update fixtures are built separately and are used only by the
 provisioned update runs:

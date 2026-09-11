@@ -1,72 +1,65 @@
-# Validation record — 0.1.0 Release
+# Validation record — 0.2.0 candidate
 
-The final Release passed its application scenario in **one disconnected Windows VM**, using TLS between a controller and an agent on that VM. This validates those application functions within that scope. Complete acceptance between two PCs, GUI input across two independent desktops, and actual elevated maintenance remain open.
+The support workflow overhaul is implemented, but full acceptance is not yet complete. Administrator provisioning, actual privileged maintenance, and silent binary replacement still need an administrator-capable isolated Windows test environment. The normal harness launches the application as a medium-integrity user and cannot approve the initial Windows consent prompt. Preparation of a dedicated test environment has been authorized; it has not yet supplied privileged acceptance evidence.
 
-## Final build and evidence
+The [0.1.0 validation record](VALIDATION-0.1.0.md) is historical evidence for the previous interface and protocol. Its passing scenarios do not establish a pass for this candidate. The [acceptance matrix](ACCEPTANCE_MATRIX.md) describes planned checks; it is not a completed test report.
 
-- Executable: `artifacts/release/RemoteDebugger.exe`.
-- Configuration: Release, self-contained .NET 8, Windows x64, portable single executable.
-- SHA-256: `9462400E97374FB94C9FBA8DF0A7F7157ACDAB64CBBBF308F3D7B9384972C68D`.
-- Broker request: `executable-test-20260910T224925638Z-5061357b`, completed September 10, 2026 at 22:55 UTC (September 11 at 00:55 Paris time).
-- Canonical payload submitted to SYSTEM broker: the project's `artifacts` directory. The lab executable launched the actual Release GUI and CLI inside worker 2.
-- Broker and GuestAgent both report `HarnessSucceeded=true`; `TestEvaluated=true`, `TestPassed=true` and application `passed=true`.
-- **34/34 unit tests** passed in Release. They exercise pure logic only: framing, path confinement, pairing limits, screen geometry, maintenance lease policy and the 5 fps hard cap. No application-under-test ran on the physical host.
-- **44/44 scenario checks** passed, including the explicit scope marker `single_vm_loopback_only_NOT_network_acceptance`.
+## Build and pure tests
 
-The maintainer retains the original broker and GuestAgent reports and local records named `evidence/release-validation.json`, `evidence/lab-result.json`, `evidence/unit-tests.json` and `evidence/stream-metrics.json`. Raw reports and screenshots are excluded from this repository because they can contain machine and session details. This document summarizes that historical run; reproduction instructions are below.
+- Windows x64, self-contained .NET 8, Release single executable.
+- Release build: zero warnings and zero errors.
+- September 11, 2026: **82/82 pure unit tests passed**, with no skipped tests. They cover framing and path confinement, six-digit pairing and rate limits, PAKE authentication, session timing, screen geometry, typed table sorting, discovery address identity, maintenance lease policy, and update policy.
+- Authenticode publisher SHA-256: `772169E21DEBE5D4E39D74BE04F168038C539552844CA06F86766A5FAEAD36EC`. This is an explicitly enrolled local publisher, not a publicly trusted certificate. Signing does not install a development-host trust root.
 
-The local wrapper initially reported failure after this successful run because it treated the unset/stale PowerShell `$LASTEXITCODE` as the runner's result. It now uses the runner's `ThrowOnFailure` contract. The terminal broker, GuestAgent and application reports establish the pass independently; the product binary was not changed afterward.
+Compilers and pure unit tests ran on the development host. The application, its CLI, fixtures, and integration Lab run only in broker-controlled Hyper-V guests.
 
-## Application behavior evaluated
+## Isolated interface findings
 
-| Area | Evidence obtained |
-|---|---|
-| Pairing and access | GUI pairing, CLI reuse, unknown-token denial, wrong-certificate denial, disabled admin session and rejection before local admin consent |
-| Deploy and verify | Upload fixture v1, launch, verify running image/hash/file version; repeat with distinct v2 binary |
-| Interaction and retrieval | CLI mouse click, Unicode text, key chord, UI Automation save, fresh screenshot, result and log downloads for both versions |
-| Debugging | Actual Windows debugger attach, breakpoint exception `80000003`, detach; minidump written |
-| Diagnostics | Process CPU/RAM/responding state, system CPU/RAM/volumes, network, services, event log and file listing |
-| Commands | Standard-user maintenance command, deadline, explicit cancellation |
-| Streaming | Continuous 1080p TLS JPEG stream while commands and input execute; stale screen layout rejection; real GUI presentation |
-| Recovery | Persisted pairing after agent restart, upload offset recovery and final SHA-256 match, mutation replay without duplicate launch, new PID after restart |
-| Failure and revocation | Deliberate hang detected and recovered, deliberate crash detected, application relaunched, intervention history checked, previous controller denied after revocation |
+The initial 0.2.0 interface smoke exposed a Windows firewall dialog covering pairing, along with clipped labels and unnecessary inner scrollbars. The agent now remains on loopback until the protected broker confirms Private/LocalSubnet firewall preparation. This keeps pairing visible before the one-time setup.
 
-The hang fixture intentionally recovers after 15 seconds. This is evidence of detection and subsequent response; it does not claim an automatic repair of arbitrary hung applications.
+Request `executable-test-20260911T154100399Z-c97f6194` tested Release hash `8E36014F8DFBCFA0406EA3C8C73F7E5E3F95254645DBF93FEC043AF6A0C46BB9`. Its inspected screenshots showed pairing without the firewall dialog and without the inner scrollbars. It was an **unevaluated interface smoke**, not a support session pass. The controller screenshot exposed further clipped labels, which were subsequently corrected. That earlier hash is not the current candidate.
 
-## Stream and rendered interface
+## Runtime acceptance
 
-The final CLI measurement received **58 distinct frames in 12.017 seconds: 4.826 fps**, at 1920×1080. The estimated application payload rate was **14.66 Mbit/s**, mean capture/encode **38.90 ms**, and inter-frame p95 **223.98 ms**. The controller CPU sample was 1.46% of total machine capacity, and the separate agent sample was 3.82%. These are short samples on a shared host, not LAN throughput or sustained performance guarantees.
+Request `executable-test-20260911T162741983Z-01a2132d` exercised signed Release hash `FB8545C318125583909F0BA5641376FAE0C85B014909D9D108CDC0B54BD4F56E`, built from source commit `8d23d25`, in a disconnected guest with two GUI processes on loopback.
 
-The GUI paints before acknowledging each frame. Its inspected screenshot showed **5.1 fps, 16.7 Mbit/s and 47 ms encoding** in its separate short measurement window. Counting the immediately available first frame can put this displayed average slightly above 5; the server schedules subsequent frames at a maximum of 5 fps. The CLI does not measure GUI decode/presentation.
+The report contains **51 passing checks, three required failures, and five optional blocked checks**. Pairing with Enter, exact running-executable hash equality, automatic fresh viewing, default input enablement, real viewer focus, automatic process/files data, typed sorting, minimum-size navigation, and uninterrupted viewing beyond 310 seconds passed. Existing fixture deployment, UI Automation, file transfer, diagnostics, debugger/dump, cancellation, streaming, path confinement, idempotence, restart, hang/crash recovery, and intervention-history checks also passed.
 
-Screenshots recorded as visually reviewed during that run (retained locally):
+This was **not an overall pass**: the tray probe selected an app-title element instead of the Explorer notification icon, failed restoration, and then failed when looking for controls in the hidden window. The saved UI Automation inventory confirms the wrong process and the actual Explorer overflow control. The Lab now confines tray lookup to Explorer shell windows and searches actual menu surfaces. A separate `LoopbackTray` role retests pairing, live viewing, tray restoration and termination without repeating the elapsed-time and broad regression checks.
 
-- `evidence/pilot-live.jpg`: functioning live viewer, explicit navigation and stream status. Recursive preview is expected because both roles share one desktop in this test.
-- `evidence/pilot-resources.jpg`: populated process list, timestamps, CPU values and volume information.
-- `evidence/remote-v2.jpg`: fixture v2 and its expected saved input visible.
-- `evidence/final-desktop.png`: visible agent after revocation, no paired controller, intervention entry confirming revoked access.
+Root visually reviewed connected-agent, live-view, Processes, and Files screenshots at 1060 by 720. The primary controls fit; process columns remain horizontally scrollable where necessary. Earlier blank sleep state, misleading connected footer, clipped live controls and file-toolbar alignment were corrected. The later candidate also labels reconnection explicitly and ties the footer to its visible workspace. This is default-DPI evidence, not a multiple-DPI approval.
 
-## Isolation and cleanup
+Both the broker and guest harness completed successfully for that request. Application evaluation returned `TestPassed=false` for the tray failures. Worker 2 ended Off, process cleanup verified no survivors, all 40 evidence files were copied, no evidence warnings were reported, and the payload child was deleted. Loopback does not establish LAN discovery or GUI input delivery between two independent desktops. Exact hash equality in this run does not establish replacement of a mismatched executable.
 
-The final request used `NetworkProfile=None`. Guest process cleanup reports success, verification success, no survivors and no errors. Worker 2 reports final state `Off`; all network adapters are disconnected. The broker reports the disposable payload child deleted. A subsequent read-only filesystem and `Msvm_StorageAllocationSettingData` query confirmed the child is absent and has **zero attachments**. There were no evidence warnings, skipped files or infrastructure retries. Background OS recycling is a separate broker responsibility.
+## Actual elapsed-time acceptance
 
-## Two-VM attempt and remaining boundaries
+Request `executable-test-20260911T161809684Z-a8517312` tested Release hash `00BAEE42251B0A8E53D1E77E205D750D63C219CA89E112B6B81FB15DD24467A6`, built from `14aa39d`. It passed all nine required checks: **ten checks passed and two optional power-request checks were blocked**. The broker and guest harness succeeded, and application evaluation returned `TestPassed=true`.
 
-Earlier build `7BB16262CD968A932E900562EEA0D99578E5663FCE036A299C13D9DCD0920CAE` was tested with two concurrent `IsolatedTestNet` requests sharing one cohort. The controller at `10.254.0.103` discovered the agent at `10.254.0.102`; GUI TLS pairing, rejection checks, v1 deployment/running identity and passive UI inspection passed. Foreground interaction then failed while a Windows security/firewall prompt obstructed the desktop. This is historical partial evidence, **not a final-build network pass**.
+The visible initial countdown was 04:57. Across 126 unchanged observations, the code remained stable until expiry and rotated after 297.300 seconds. The expired code was denied and created no grant; the newly displayed code paired through Enter on the same endpoint.
 
-Requests `executable-test-20260910T215921496Z-537d12a5` and `executable-test-20260910T215921716Z-521b4bf2` are summarized in `evidence/two-vm-limit.json`. One peer subsequently failed the broker check: `The IsolatedTestNet switch has an adapter that is not bound to one active broker lease.` The separate read-only harness diagnosis found lease/adapter revalidation outside the lifecycle mutex; the exact rejected transient state was not captured. The harness infrastructure and its guard were not modified or bypassed.
+The controller process was stopped at 16:24:21 UTC. The agent showed its reconnect countdown 15.187 seconds later, at 09:59 remaining, and exited at 16:34:37 UTC, within two seconds of the observed ten-minute deadline. The run also seeded an unreachable saved connection to check that inactive saved state did not delay agent shutdown.
 
-Both reports record VM Off, adapter disconnection/removal, network lease-state deletion and payload child deletion; both child paths were verified absent. The failed peer has no terminal GuestAgent result, so its process cleanup is **not** attested. These records do not prove final removal of the shared switch. `IsolatedTestNet` exempts its request interface from the guest firewall; connectivity under that profile does not validate the product's firewall installer.
+Worker 3 ended Off; process cleanup verified no survivors, all ten evidence files were copied, no evidence warnings were reported, and the payload child was deleted. Windows denied the medium-user `powercfg /requests` query, so OS-level sleep-request acquisition and release remain unverified. This earlier hash does not validate later private-listener promotion or managed-launch changes; its session timing logic remains unchanged.
 
-The following remain unvalidated:
+## Remaining acceptance boundaries
 
-1. Complete final-Release operation between two machines, including human GUI mouse/keyboard forwarding, LAN latency, multi-monitor and DPI combinations, and long sessions. Loopback input forwarding from the viewer is deliberately skipped because controller and agent share the same foreground window and input desktop. The CLI input operations did run.
-2. Actual local UAC consent and administrator commands. The product provides a visible one-hour helper through `maintenance.session`, a status query, and the per-operation `maintenance.elevated` alternative. The current broker has no elevation/consent contract. Real elevated command completion, cancellation, parent shutdown, revocation and one-hour helper expiry were not exercised; only pure lease policy and denial without authorization were validated.
-3. Installation of the product's Private/LocalSubnet firewall rules. A separate inspected prompt was on the Default desktop and requested public/private firewall access; missing UI Automation controls alone did not prove a secure UAC desktop.
-4. Application-specific troubleshooting and account workflows on a physical remote PC were outside this recorded test run.
+1. One-time Windows administrator setup, protected installation and service identity/ACL behavior, and product Private/LocalSubnet firewall rules.
+2. Silent automatic administrator maintenance on connection and cleanup on termination, parent exit, timeout, and interrupted update.
+3. Signed upgrades, downgrades, and different builds with identical version labels; exact running-controller-byte identity after restart; interruption, invalid signer/hash rejection, rollback, and termination during replacement.
+4. Complete operation across two separate PCs: discovery, fresh viewing, GUI mouse/keyboard forwarding, network disconnect/reconnect, and network boundary checks. No host fallback or UAC bypass is used to fill these gaps.
+5. OS-level sleep-request acquisition and release, reconnect before the grace deadline, and cleanup during an interrupted privileged update.
+6. Multiple-DPI visual review and multi-monitor input geometry. Minimum-size layout and viewing beyond one five-minute stream connection have evidence as described above.
 
 ## Reproduction
 
-Run `scripts/Test-Unit.ps1`, then `scripts/Build.ps1 -IncludeLab`. `scripts/Test-HyperV.ps1 -Role Local` submits the disconnected scenario through the SYSTEM broker. Two-machine mode uses concurrent `-Role Agent` and `-Role Controller` calls with the same non-secret `-Cohort`. Respect broker availability and the unresolved validation limits above; never substitute host execution.
+```powershell
+./scripts/Test-Unit.ps1
+./scripts/Build.ps1 -IncludeLab -Sign
+./scripts/Test-HyperV.ps1 -Role Loopback -Scope Runtime -UpdateVariant None
+./scripts/Test-HyperV.ps1 -Role LoopbackTray -Scope Runtime -UpdateVariant None
+./scripts/Test-HyperV.ps1 -Role LoopbackLifetime -Scope Runtime -UpdateVariant None
+```
 
-The fixture is a small Windows Forms application with editable text, save, an animated clock, deliberate hang and deliberate crash. v1/v2 differ in file version and hash. The lab's test-only UDP bootstrap simulates reading the agent's pairing code and fingerprint; all remote product operations use the actual Release controller CLI. The bootstrap is absent from the distributable executable. Application assertions use atomically written `lab-result.json`, avoiding collision with the GuestAgent's own reserved `result.json`.
+For provisioned two-PC acceptance, prepare the supported administrator-consent guest capability first, build real signed variants with `scripts/Build-UpdateFixtures.ps1`, and use the `Provisioned` or `Full` scopes with the matching update variant. The broker owns workers, payload staging, networking, and cleanup. Do not substitute application execution on the physical host.
+
+Raw reports, screenshots, pairing codes, and session data remain in ignored local evidence directories and broker result storage. The distributable includes public documentation and the public publisher certificate only, never private keys or raw acceptance captures.
