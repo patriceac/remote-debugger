@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Security.Cryptography;
+using System.Security.Principal;
 using System.Text.Json;
 using RemoteDebugger.Core;
 
@@ -42,6 +43,69 @@ public sealed record UpdateExitPlan(string TransactionId, DateTimeOffset Deadlin
 public static class SupportPlatform
 {
     public static event Action? ManagedRelaunchRequested;
+
+    /// <summary>
+    /// Redirects a subsequently launched portable agent to the provisioned,
+    /// protected Program Files copy. This path never elevates. Controller and
+    /// CLI processes deliberately remain on their actual running executable,
+    /// whose exact hash is authoritative for synchronization.
+    /// </summary>
+    public static async Task<bool> TryRelaunchManagedAgentAsync(
+        IReadOnlyList<string> launchArguments,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(launchArguments);
+        if (launchArguments.Count > 0 && string.Equals(launchArguments[0], "cli", StringComparison.OrdinalIgnoreCase)) return false;
+        if (launchArguments.Any(argument => argument.Equals("--controller", StringComparison.OrdinalIgnoreCase) ||
+                                            argument.Equals("--platform-service", StringComparison.OrdinalIgnoreCase) ||
+                                            argument.Equals("--support-provision", StringComparison.OrdinalIgnoreCase) ||
+                                            argument.Equals("--elevated-job", StringComparison.OrdinalIgnoreCase) ||
+                                            argument.Equals("--ui-job", StringComparison.OrdinalIgnoreCase) ||
+                                            argument.Equals("--resume-update", StringComparison.OrdinalIgnoreCase) ||
+                                            argument.Equals("--update-transaction", StringComparison.OrdinalIgnoreCase)))
+            return false;
+
+        string currentPath = Path.GetFullPath(Environment.ProcessPath ?? throw new InvalidOperationException("Current executable path is unavailable."));
+        if (PathsEqual(currentPath, SupportPlatformPaths.ApplicationExecutable)) return false;
+        if (!File.Exists(SupportPlatformPaths.ConfigurationPath)) return false;
+        if (Native.IsElevated())
+            throw new InvalidOperationException("Launch the portable agent normally so the managed application remains unelevated in the interactive user session.");
+
+        SupportConfiguration configuration;
+        try
+        {
+            configuration = JsonSerializer.Deserialize<SupportConfiguration>(
+                await File.ReadAllTextAsync(SupportPlatformPaths.ConfigurationPath, ct), Json.Options)
+                ?? throw new InvalidDataException("The protected support configuration is empty.");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            throw new InvalidOperationException("The installed support configuration cannot be verified.", ex);
+        }
+
+        if (configuration.ProtocolVersion != SupportPlatformPaths.ProtocolVersion ||
+            !PathsEqual(configuration.RegisteredApplicationPath, SupportPlatformPaths.ApplicationExecutable))
+            throw new InvalidOperationException("The installed support configuration is incompatible or names an unexpected managed application.");
+        string currentSid = WindowsIdentity.GetCurrent().User?.Value
+            ?? throw new InvalidOperationException("Current Windows user SID is unavailable.");
+        if (!string.Equals(currentSid, configuration.RegisteredUserSid, StringComparison.OrdinalIgnoreCase) ||
+            Process.GetCurrentProcess().SessionId <= 0)
+            throw new UnauthorizedAccessException("Privileged support is registered to a different interactive Windows user.");
+        if (!File.Exists(configuration.RegisteredApplicationPath) || !File.Exists(SupportPlatformPaths.ServiceExecutable))
+            throw new FileNotFoundException("The provisioned managed application or its local support service is missing.");
+
+        _ = PrivilegedPathSafety.RequireUnderNonReparseRoot(configuration.RegisteredApplicationPath, SupportPlatformPaths.ProductDirectory);
+        _ = PrivilegedPathSafety.RequireUnderNonReparseRoot(SupportPlatformPaths.ServiceExecutable, SupportPlatformPaths.ProductDirectory);
+        _ = AuthenticodeVerifier.VerifyPinnedTrusted(currentPath, configuration.PublisherThumbprint);
+        ct.ThrowIfCancellationRequested();
+        _ = AuthenticodeVerifier.VerifyPinnedTrusted(configuration.RegisteredApplicationPath, configuration.PublisherThumbprint);
+        _ = AuthenticodeVerifier.VerifyPinnedTrusted(SupportPlatformPaths.ServiceExecutable, configuration.PublisherThumbprint);
+        ct.ThrowIfCancellationRequested();
+
+        var start = CreateManagedStartInfo(launchArguments);
+        _ = Process.Start(start) ?? throw new IOException("The protected managed Remote Debugger application did not start.");
+        return true;
+    }
 
     public static async Task<SupportPlatformStatus> GetStatusAsync(CancellationToken ct = default)
     {
@@ -111,21 +175,7 @@ public static class SupportPlatform
                     "Privileged support was provisioned. Launch the protected managed application shown in RegisteredApplicationPath.",
                     SupportPlatformPaths.ApplicationExecutable, signature.SignerThumbprint,
                     typeof(Program).Assembly.GetName().Version?.ToString());
-            var start = new ProcessStartInfo(SupportPlatformPaths.ApplicationExecutable) { UseShellExecute = false, WorkingDirectory = SupportPlatformPaths.ProductDirectory };
-            string[] launch = Environment.GetCommandLineArgs().Skip(1).ToArray();
-            for (int index = 0; index < launch.Length; index++)
-            {
-                if (launch[index] is "--resume-update" or "--update-transaction" or "--wait-for-process-exit")
-                {
-                    index += launch[index] == "--wait-for-process-exit" ? 2 : 1;
-                    continue;
-                }
-                start.ArgumentList.Add(launch[index]);
-            }
-            using var current = Process.GetCurrentProcess();
-            start.ArgumentList.Add("--wait-for-process-exit");
-            start.ArgumentList.Add(current.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
-            start.ArgumentList.Add(current.StartTime.ToUniversalTime().Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            var start = CreateManagedStartInfo(Environment.GetCommandLineArgs().Skip(1).ToArray());
             _ = Process.Start(start) ?? throw new IOException("The managed Remote Debugger application did not relaunch.");
             ManagedRelaunchRequested?.Invoke();
             return new(SupportPlatformAvailability.Ready, true, true, true, false, false,
@@ -207,4 +257,27 @@ public static class SupportPlatform
         return new(path, stream.Length, Convert.ToHexString(await SHA256.HashDataAsync(stream, ct)),
             FileVersionInfo.GetVersionInfo(path).FileVersion, signature.SignerThumbprint);
     }
+
+    private static ProcessStartInfo CreateManagedStartInfo(IReadOnlyList<string> launchArguments)
+    {
+        var start = new ProcessStartInfo(SupportPlatformPaths.ApplicationExecutable)
+        {
+            UseShellExecute = false,
+            WorkingDirectory = SupportPlatformPaths.ProductDirectory
+        };
+        for (int index = 0; index < launchArguments.Count; index++)
+        {
+            if (launchArguments[index] is "--resume-update" or "--update-transaction") { index++; continue; }
+            if (launchArguments[index] == "--wait-for-process-exit") { index += 2; continue; }
+            start.ArgumentList.Add(launchArguments[index]);
+        }
+        using var current = Process.GetCurrentProcess();
+        start.ArgumentList.Add("--wait-for-process-exit");
+        start.ArgumentList.Add(current.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        start.ArgumentList.Add(current.StartTime.ToUniversalTime().Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        return start;
+    }
+
+    private static bool PathsEqual(string left, string right) =>
+        string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);
 }
