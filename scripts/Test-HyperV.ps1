@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('Both', 'Agent', 'Controller', 'Loopback', 'LoopbackLifetime')]
+    [ValidateSet('Both', 'Agent', 'Controller', 'Loopback', 'LoopbackTray', 'LoopbackLifetime')]
     [string]$Role = 'Both',
     [ValidateSet('Runtime', 'Provisioned', 'Full')]
     [string]$Scope = 'Runtime',
@@ -7,7 +7,8 @@ param(
     [string]$UpdateVariant = 'None',
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$')]
     [string]$Cohort = 'remote-debugger-acceptance',
-    [int]$ExecutionTimeoutSeconds = 1200
+    [int]$ExecutionTimeoutSeconds = 1200,
+    [string]$BrokerRoot
 )
 
 $ErrorActionPreference = 'Stop'
@@ -22,7 +23,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $artifact 'release\RemoteDebugger.ex
 if (-not (Test-Path -LiteralPath (Join-Path $artifact 'lab\RemoteDebugger.Lab.exe') -PathType Leaf)) { throw 'Build the Lab artifact with scripts\Build.ps1 -IncludeLab before submitting acceptance.' }
 if ($ExecutionTimeoutSeconds -lt 300 -or $ExecutionTimeoutSeconds -gt 1800) { throw 'ExecutionTimeoutSeconds must be between 300 and 1800 seconds.' }
 if ($UpdateVariant -ne 'None' -and $Scope -notin @('Provisioned', 'Full')) { throw 'UpdateVariant requires a Provisioned or Full scope.' }
-if ($Role -in @('Loopback', 'LoopbackLifetime') -and ($Scope -ne 'Runtime' -or $UpdateVariant -ne 'None')) { throw 'Loopback roles require Runtime scope and None update variant.' }
+if ($Role -in @('Loopback', 'LoopbackTray', 'LoopbackLifetime') -and ($Scope -ne 'Runtime' -or $UpdateVariant -ne 'None')) { throw 'Loopback roles require Runtime scope and None update variant.' }
 if ($UpdateVariant -ne 'None') {
     foreach ($fixture in @('older', 'newer', 'same-version')) {
         if (-not (Test-Path -LiteralPath (Join-Path $artifact "update-fixtures\$fixture\RemoteDebugger.exe") -PathType Leaf)) {
@@ -44,9 +45,12 @@ function New-RoleRequest([string]$roleName) {
         ExecutionTimeoutSeconds = $ExecutionTimeoutSeconds
         ThrowOnFailure = $true
     }
-    if ($roleName -notin @('Local', 'Loopback', 'LoopbackLifetime')) {
+    if ($roleName -notin @('Local', 'Loopback', 'LoopbackTray', 'LoopbackLifetime')) {
         $request.NetworkProfile = 'IsolatedTestNet'
         $request.NetworkCohort = $Cohort
+    }
+    if (-not [string]::IsNullOrWhiteSpace($BrokerRoot)) {
+        $request.BrokerRoot = $BrokerRoot
     }
     return $request
 }

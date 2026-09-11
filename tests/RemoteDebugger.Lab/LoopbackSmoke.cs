@@ -31,7 +31,19 @@ internal sealed partial class LabForm
         }
     }
 
-    private async Task LoopbackSmokeCoreAsync()
+    private async Task LoopbackTrayAsync()
+    {
+        try
+        {
+            await LoopbackSmokeCoreAsync(trayOnly: true);
+        }
+        finally
+        {
+            await CleanupLoopbackProcessesAsync();
+        }
+    }
+
+    private async Task LoopbackSmokeCoreAsync(bool trayOnly = false)
     {
         if (scope != "runtime" || IsUpdateVariant) throw new ArgumentException("Loopback smoke only accepts the Runtime/None configuration.");
 
@@ -113,6 +125,12 @@ internal sealed partial class LabForm
 
         ProbeDefaultInput();
         ProbeLoopbackRemoteScreenInput();
+        if (trayOnly)
+        {
+            await ProbeLoopbackTrayAndTerminateAsync();
+            await FinishAsync();
+            return;
+        }
         await ProbeAutoDataAsync();
         await RunRegressionScenarioAsync(status);
         await ProbeLoopbackTrayAndTerminateAsync();
