@@ -1204,7 +1204,11 @@ public sealed class MainForm : Forms.Form
     private async Task<bool> ShutdownAsync()
     {
         renderTimer.Stop(); discoveryTimer.Stop(); discoveryLifetime?.Cancel(); heartbeatLifetime?.Cancel(); pairingLifetime?.Cancel(); liveStream?.Cancel(); action?.Cancel();
-        RemoteClient? oldClient = client;
+        // A saved connection only pre-fills the controller form. It is not an
+        // active outbound session, and must never delay an agent replacement
+        // while trying to contact an unrelated (possibly offline) old peer.
+        RemoteClient? oldClient = supportSession || pairingBusy ? client : null;
+        client = null;
         AgentServer? localAgent = agent;
         sessionGeneration++;
         supportSession = false;
