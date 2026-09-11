@@ -338,7 +338,6 @@ public sealed class AgentServer : IDisposable
                             try
                             {
                                 await Wire.WriteAsync(tls, reply, timeout.Token);
-                                updates.NotifyReplySent(r, reply);
                             }
                             catch when (r.Operation == "update.commit" && reply.Ok)
                             {
@@ -352,6 +351,7 @@ public sealed class AgentServer : IDisposable
                                 }
                                 throw;
                             }
+                            updates.NotifyReplySent(r, reply);
                         }
                         finally { updateGate.Release(); }
                         return;
