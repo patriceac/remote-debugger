@@ -84,6 +84,7 @@ internal sealed partial class LabForm : Forms.Form
             try
             {
                 if (role is "loopback" or "loopback-smoke") await LoopbackSmokeAsync();
+                else if (role is "loopbacktray" or "loopback-tray") await LoopbackTrayAsync();
                 else if (role is "loopback-lifetime" or "loopbacklifetime") await LoopbackLifetimeAsync();
                 else if (IsAgent) await AgentAsync();
                 else await ControllerAsync();
