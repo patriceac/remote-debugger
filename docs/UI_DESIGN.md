@@ -24,6 +24,8 @@ Header: left current screen title and one line of context, right one rounded sta
 
 Footer: concise actual task/status on left, measurement timestamp or frame statistics on right. Progress and errors use this strip or a compact inline banner; no modal for routine loading or retries.
 
+Header and agent text share the same left content edge. Text rendering must not add font-size-dependent indentation. Heading and subtitle rows use measured text height, including wrapped lines, rather than fixed heights that clip ascenders or descenders.
+
 ## Agent: first view (agent-pairing.svg)
 
 Header title Donner le controle, subline name of local computer. Pairing content in main canvas, width 620 logical px, aligned 64 px from left main edge and 74 px below header. Eyebrow CODE DE CONNEXION, title Partagez ce code, subline Saisissez-le sur le PC qui vous assiste.

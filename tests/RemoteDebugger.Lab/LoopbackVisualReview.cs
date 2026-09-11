@@ -5,6 +5,41 @@ namespace RemoteDebugger.Lab;
 
 internal sealed partial class LabForm
 {
+    private async Task ProbeAgentTypographyAsync(bool paired)
+    {
+        foreach (var size in new[] { new System.Drawing.Size(1060, 720), new System.Drawing.Size(1280, 860) })
+        {
+            ResizeProductWindow(size.Width, size.Height);
+            await Task.Delay(600, stop.Token);
+            var labels = new[]
+            {
+                (Id: "headerTitle", Points: 22f, Bold: true),
+                (Id: "headerSubtitle", Points: 10.5f, Bold: false),
+                (Id: "agentEyebrow", Points: 9.5f, Bold: true),
+                (Id: "agentHeading", Points: 32f, Bold: true),
+                (Id: "agentSubtitle", Points: 13f, Bold: false),
+                (Id: "agentPairCode", Points: paired ? 24f : 42f, Bold: true)
+            }.Select(spec =>
+            {
+                var label = FindVisibleId(spec.Id) ?? throw new InvalidOperationException("Missing typography label " + spec.Id);
+                var bounds = label.Current.BoundingRectangle;
+                using var font = new System.Drawing.Font(spec.Id == "agentPairCode" && !paired ? "Consolas" : "Segoe UI", spec.Points,
+                    spec.Bold ? System.Drawing.FontStyle.Bold : System.Drawing.FontStyle.Regular);
+                var required = System.Windows.Forms.TextRenderer.MeasureText(Value(label), font,
+                    new System.Drawing.Size((int)Math.Floor(bounds.Width), int.MaxValue),
+                    System.Windows.Forms.TextFormatFlags.NoPadding | System.Windows.Forms.TextFormatFlags.NoPrefix | System.Windows.Forms.TextFormatFlags.WordBreak);
+                return new { spec.Id, bounds.Left, bounds.Top, bounds.Width, bounds.Height, requiredHeight = required.Height, textFits = bounds.Height >= required.Height };
+            }).ToArray();
+            bool aligned = labels.All(label => Math.Abs(label.Left - labels[0].Left) <= 1);
+            bool fits = labels.All(label => label.textFits);
+            string state = paired ? "connected" : "pairing";
+            string id = $"loopback.typography_{state}_{size.Width}";
+            if (aligned && fits) Pass(id, "Agent and header text share a left edge and have room for every rendered line", new { size.Width, size.Height, aligned, fits, labels });
+            else Fail(id, "Agent and header text share a left edge and have room for every rendered line", new { size.Width, size.Height, aligned, fits, labels });
+            CaptureDesktop($"agent-{state}-typography-{size.Width}.png");
+        }
+    }
+
     private async Task VerifyContinuousViewingAsync()
     {
         var started = System.Diagnostics.Stopwatch.StartNew();

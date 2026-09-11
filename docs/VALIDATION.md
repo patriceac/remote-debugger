@@ -1,6 +1,6 @@
 # Validation record — 0.2.0 candidate
 
-The support workflow overhaul is implemented, but full acceptance is not yet complete. Administrator provisioning, actual privileged maintenance, and silent binary replacement still need an administrator-capable isolated Windows test environment. The normal harness launches the application as a medium-integrity user and cannot approve the initial Windows consent prompt. Preparation of a dedicated test environment has been authorized; it has not yet supplied privileged acceptance evidence.
+The support workflow overhaul is implemented. Release validation combines pure tests, isolated runtime/UI checks, actual five- and ten-minute timers, and a dedicated administrator-provisioned two-PC update test. Completed evidence and remaining limits are distinguished below.
 
 The [0.1.0 validation record](VALIDATION-0.1.0.md) is historical evidence for the previous interface and protocol. Its passing scenarios do not establish a pass for this candidate. The [acceptance matrix](ACCEPTANCE_MATRIX.md) describes planned checks; it is not a completed test report.
 
@@ -8,7 +8,7 @@ The [0.1.0 validation record](VALIDATION-0.1.0.md) is historical evidence for th
 
 - Windows x64, self-contained .NET 8, Release single executable.
 - Release build: zero warnings and zero errors.
-- September 11, 2026: **82/82 pure unit tests passed**, with no skipped tests. They cover framing and path confinement, six-digit pairing and rate limits, PAKE authentication, session timing, screen geometry, typed table sorting, discovery address identity, maintenance lease policy, and update policy.
+- September 11, 2026: **100/100 pure unit tests passed**, with no skipped tests (88 Core and twelve platform tests). They cover framing and path confinement, six-digit pairing and rate limits, PAKE authentication, session timing, screen geometry, typed table sorting, discovery address identity and stable endpoint selection, maintenance lease policy, update policy, service PID attestation, firewall/update deadline ordering, startup-health readiness, and bounded byte progress.
 - Authenticode publisher SHA-256: `772169E21DEBE5D4E39D74BE04F168038C539552844CA06F86766A5FAEAD36EC`. This is an explicitly enrolled local publisher, not a publicly trusted certificate. Signing does not install a development-host trust root.
 
 Compilers and pure unit tests ran on the development host. The application, its CLI, fixtures, and integration Lab run only in broker-controlled Hyper-V guests.
@@ -31,6 +31,8 @@ Root visually reviewed connected-agent, live-view, Processes, and Files screensh
 
 Both the broker and guest harness completed successfully for that request. Application evaluation returned `TestPassed=false` for the tray failures. Worker 2 ended Off, process cleanup verified no survivors, all 40 evidence files were copied, no evidence warnings were reported, and the payload child was deleted. Loopback does not establish LAN discovery or GUI input delivery between two independent desktops. Exact hash equality in this run does not establish replacement of a mismatched executable.
 
+The focused tray rerun `executable-test-20260911T174611921Z-c1fb9abe` passed all required assertions with Release SHA-256 `9019DB6BC9AB9F14CD064BA63A1F97C0E6DEC67CAB0134C0116D4B68B0CF4C9A`. Closing kept the controller and authenticated session alive; Explorer's actual notification icon opened its menu; Open restored the window; termination exited the agent and denied the old token. The live screenshot was visually reviewed. Broker and guest harnesses succeeded, the VM ended Off, process cleanup verified zero survivors, the child was deleted and absent from disk and VM attachments, and no evidence warnings occurred. Power and LAN checks were explicitly outside this loopback run. The subsequent service identity fix does not change this UI flow.
+
 ## Actual elapsed-time acceptance
 
 Request `executable-test-20260911T161809684Z-a8517312` tested Release hash `00BAEE42251B0A8E53D1E77E205D750D63C219CA89E112B6B81FB15DD24467A6`, built from `14aa39d`. It passed all nine required checks: **ten checks passed and two optional power-request checks were blocked**. The broker and guest harness succeeded, and application evaluation returned `TestPassed=true`.
@@ -39,16 +41,36 @@ The visible initial countdown was 04:57. Across 126 unchanged observations, the 
 
 The controller process was stopped at 16:24:21 UTC. The agent showed its reconnect countdown 15.187 seconds later, at 09:59 remaining, and exited at 16:34:37 UTC, within two seconds of the observed ten-minute deadline. The run also seeded an unreachable saved connection to check that inactive saved state did not delay agent shutdown.
 
-Worker 3 ended Off; process cleanup verified no survivors, all ten evidence files were copied, no evidence warnings were reported, and the payload child was deleted. Windows denied the medium-user `powercfg /requests` query, so OS-level sleep-request acquisition and release remain unverified. This earlier hash does not validate later private-listener promotion or managed-launch changes; its session timing logic remains unchanged.
+Worker 3 ended Off; process cleanup verified no survivors, all ten evidence files were copied, no evidence warnings were reported, and the payload child was deleted. Windows denied the medium-user `powercfg /requests` query in this run; the later provisioned run supplies a separate privileged observer. This earlier hash does not validate later private-listener promotion or managed-launch changes; its session timing logic remains unchanged.
+
+## Provisioned two-PC acceptance
+
+The dedicated test image uses an administrator-installed, publisher-pinned broker. The application and Lab run as the registered interactive user at medium integrity. The test network connects only the two disposable guests.
+
+The initial runs verified protected installation, service identity, automatic Private/LocalSubnet firewall-rule creation, discovery on launch, six-digit Enter pairing, the actual Windows system sleep request, and visible automatic administrator maintenance without another prompt. They exposed cold-start platform deadlines and a two-minute product deadline that cancelled a real 168 MB update transfer. A later run completed transfer, signature verification and replacement, then exposed a race between remote reconnect and the startup-health acknowledgement. The current candidate separates authentication and synchronization deadlines and waits for explicit startup readiness. Its compressed executable is approximately 75 MB; both interfaces show actual byte progress. These earlier runs are diagnostic evidence, not an update completion pass.
+
+The next run used controller Release SHA-256 `48CA5077A06C0A4B31E27DD60ED9FA0E900F662C469D2C06A2EE2F9755D6FCA0` and a different signed executable with the same 0.2.0 version label. Requests `executable-test-20260911T185526406Z-9dfe54b6` (agent) and `executable-test-20260911T185526672Z-d6d52106` (controller) verified real transfer, protected replacement, automatic restart, exact running-binary hash equality, automatic administrator maintenance, and fresh live viewing across two independent desktops. Root inspected progress screenshots showing 61% / 44.0 MiB on the controller and 70% / 50.0 MiB on the agent at different capture times, then inspected the connected live view. The controller's follow-up reconnect failed because automatic discovery reselected the same peer and the interface treated that as a target change, ending support. Thus this run proves update completion but **is not an overall controller acceptance pass**. The agent's OS sleep request was observed both acquired and subsequently released.
+
+Both request harnesses succeeded, ended their workers Off before recycling, verified zero process survivors, removed their payload children, and disconnected and removed their request network leases. Child absence and zero remaining attachments were independently checked. The agent evidence transfer retried once and then succeeded; neither terminal result reported evidence warnings.
+
+After correcting discovery reselection, the focused rerun **passed all required assertions on both PCs**: 15 agent checks and 15 controller checks passed. Requests were `executable-test-20260911T191138599Z-9058dd95` (agent) and `executable-test-20260911T191138842Z-6fac9759` (controller), using Release SHA-256 `7DA396687FEB3F6C55877A6DE3BCC469381DCC74084D0C80FF328D0760E19E42` and same-version fixture `5F234FF97D0F17D6B08069E93FBB2660EC01F8D06A1FA8226EE3B0D4479DEB63`. Exact-byte replacement, automatic live viewing, saved-session reconnect across a discovery refresh, close-to-tray with authenticated heartbeat, actual tray Open restoration, explicit termination, agent exit and OS sleep-request release all passed. Root inspected both progress bars and the connected live screenshot. The latter was dimmed by a user-opened screenshot overlay, while the live badge and telemetry remained visible.
+
+Both broker and guest harnesses succeeded with application `TestPassed=true`; workers ended Off before recycling; cleanup verified no process survivors, payload children or attached payload disks; network leases were removed and adapters disconnected. The agent evidence transfer retried once, then succeeded without terminal warnings. Optional first-time UAC, code rotation and expired-code checks were outside this focused run; earlier elapsed-time evidence covers rotation. Subsequent typography changes are assessed separately below and do not change the updater or session lifecycle.
+
+## Final typography and packaged interface check
+
+The user identified unequal text indents and clipped type on the connected-agent screen. The header and agent text now share a text renderer without font-dependent padding, their layout margins align, and heading/subtitle rows use measured text height instead of fixed rows. The 32-point agent heading requires 59 pixels; the previous row allowed 50 pixels before margins.
+
+Request `executable-test-20260911T192255617Z-0d78105e` tested the final signed Release SHA-256 `53A99E5988A4F71B7259DFB8187164CDF6F4FC44A9C5B6E9572A629104FA0D4E` in a disconnected guest. **All required assertions passed; 19 checks passed.** Pairing and connected views passed text-bound measurements at 1060×720 and 1280×860: all six inspected text blocks had the same left edge and enough height for their measured text. Root visually inspected pairing at minimum size and connected views at both sizes, confirming full headings, subtitles and session text. The same run passed Enter pairing, exact executable identity, fresh live viewing, default input/focus, actual tray restoration and termination.
+
+Broker and guest harnesses succeeded, application `TestPassed=true`, worker 2 ended Off before recycling, and process cleanup verified zero survivors. The payload child was deleted, absent on disk and absent from VM attachments; all network adapters were disconnected and no evidence warnings were reported. An early optional live capture requested the connected screenshot before it existed and correctly returned `GuestEvidenceUnavailable`; the later capture and complete terminal evidence succeeded. The final ZIP is assembled from this exact executable. This layout-only run does not repeat the provisioned updater test above.
 
 ## Remaining acceptance boundaries
 
-1. One-time Windows administrator setup, protected installation and service identity/ACL behavior, and product Private/LocalSubnet firewall rules.
-2. Silent automatic administrator maintenance on connection and cleanup on termination, parent exit, timeout, and interrupted update.
-3. Signed upgrades, downgrades, and different builds with identical version labels; exact running-controller-byte identity after restart; interruption, invalid signer/hash rejection, rollback, and termination during replacement.
-4. Complete operation across two separate PCs: discovery, fresh viewing, GUI mouse/keyboard forwarding, network disconnect/reconnect, and network boundary checks. No host fallback or UAC bypass is used to fill these gaps.
-5. OS-level sleep-request acquisition and release, reconnect before the grace deadline, and cleanup during an interrupted privileged update.
-6. Multiple-DPI visual review and multi-monitor input geometry. Minimum-size layout and viewing beyond one five-minute stream connection have evidence as described above.
+1. Interactive first-time UAC consent is not automated. The dedicated run used the explicitly administrator-provisioned image and verified the protected application and LocalSystem service identities. No UAC bypass or application execution on the development host was used.
+2. The extended upgrade, downgrade, interrupted-transfer, rollback, termination-during-replacement, and privileged crash-cleanup matrix has not been completed. Same-version replacement and the exact executable hash after restart have runtime evidence; policy unit tests do not replace that extended matrix.
+3. Automatic Private/LocalSubnet firewall rules were inspected. The disposable isolated network exempts its test adapter from firewall enforcement, so this does not prove enforcement on a physical LAN. Discovery and fresh viewing between separate desktops passed; full GUI mouse/keyboard delivery on independent PCs remains outside the completed focused run.
+4. Multiple-DPI visual review and multi-monitor input geometry remain unverified. Minimum-size layout and viewing beyond one five-minute stream connection have evidence as described above.
 
 ## Reproduction
 

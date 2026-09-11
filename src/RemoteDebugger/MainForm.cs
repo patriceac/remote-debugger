@@ -36,8 +36,8 @@ public sealed class MainForm : Forms.Form
     private readonly Forms.Panel rail = new() { Dock = Forms.DockStyle.Fill, BackColor = Rail };
     private readonly Forms.Panel header = new() { Dock = Forms.DockStyle.Fill, BackColor = Surface };
     private readonly Forms.Panel footer = new() { Dock = Forms.DockStyle.Fill, BackColor = Surface };
-    private readonly Forms.Label headerTitle = new() { AutoSize = true, ForeColor = PrimaryText };
-    private readonly Forms.Label headerSubtitle = new() { AutoSize = true, ForeColor = SecondaryText };
+    private readonly Forms.Label headerTitle = new WorkspaceLabel() { Name = "headerTitle", AutoSize = true, ForeColor = PrimaryText };
+    private readonly Forms.Label headerSubtitle = new WorkspaceLabel() { Name = "headerSubtitle", AutoSize = true, ForeColor = SecondaryText };
     private readonly Forms.Panel statusPill = new() { Name = "connectionStatus", Height = 32, Width = 184 };
     private readonly Forms.Label statusDot = new() { AutoSize = true, Text = "●", Font = new Font("Segoe UI", 9), Margin = new Forms.Padding(10, 7, 4, 0) };
     private readonly Forms.Label statusLabel = new() { AutoSize = true, Font = new Font("Segoe UI", 9.5F), Margin = new Forms.Padding(0, 7, 8, 0) };
@@ -58,17 +58,17 @@ public sealed class MainForm : Forms.Form
 
     // Agent screen.
     private readonly Forms.Label agentEyebrow = Eyebrow("CODE DE CONNEXION");
-    private readonly Forms.Label agentHeading = new() { Text = "Partagez ce code", AutoSize = false, Dock = Forms.DockStyle.Fill, Font = new Font("Segoe UI", 32, FontStyle.Bold), ForeColor = PrimaryText, TextAlign = ContentAlignment.MiddleLeft };
-    private readonly Forms.Label agentSubtitle = new() { Text = "Saisissez-le sur le PC qui vous assiste.", AutoSize = false, Dock = Forms.DockStyle.Fill, Font = new Font("Segoe UI", 13), ForeColor = SecondaryText, TextAlign = ContentAlignment.MiddleLeft };
-    private readonly Forms.Label agentPairCode = new() { Name = "agentPairCode", AutoSize = true, Text = "— — —", Font = new Font("Consolas", 42, FontStyle.Bold), ForeColor = PrimaryText };
+    private readonly Forms.Label agentHeading = new WorkspaceLabel() { Name = "agentHeading", Text = "Partagez ce code", AutoSize = true, Dock = Forms.DockStyle.Fill, Font = new Font("Segoe UI", 32, FontStyle.Bold), ForeColor = PrimaryText };
+    private readonly Forms.Label agentSubtitle = new WorkspaceLabel() { Name = "agentSubtitle", Text = "Saisissez-le sur le PC qui vous assiste.", AutoSize = true, Dock = Forms.DockStyle.Fill, Font = new Font("Segoe UI", 13), ForeColor = SecondaryText };
+    private readonly Forms.Label agentPairCode = new WorkspaceLabel() { Name = "agentPairCode", AutoSize = true, Text = "— — —", Font = new Font("Consolas", 42, FontStyle.Bold), ForeColor = PrimaryText };
     private readonly Forms.Button copyAgentCode = Button("Copier", "copyAgentCode", 86);
     private readonly Forms.ProgressBar pairingCountdown = new() { Name = "pairingCountdown", Minimum = 0, Maximum = 300, Value = 0, Height = 4, Style = Forms.ProgressBarStyle.Continuous };
-    private readonly Forms.Label pairingCountdownText = new() { Name = "pairingCountdownText", AutoSize = true, ForeColor = SecondaryText };
-    private readonly Forms.Label agentState = new() { Name = "agentState", AutoSize = true, ForeColor = PrimaryText };
+    private readonly Forms.Label pairingCountdownText = new WorkspaceLabel() { Name = "pairingCountdownText", AutoSize = true, ForeColor = SecondaryText };
+    private readonly Forms.Label agentState = new WorkspaceLabel() { Name = "agentState", AutoSize = true, ForeColor = PrimaryText };
     private readonly Forms.Label agentNetworkState = new() { Name = "agentNetworkState", AutoSize = true, ForeColor = SecondaryText };
     private readonly Forms.Label agentSleepState = new() { Name = "agentSleepState", AutoSize = true, ForeColor = SecondaryText };
     private readonly Forms.Label agentMaintenanceState = new() { Name = "agentMaintenanceState", AutoSize = true, ForeColor = SecondaryText };
-    private readonly Forms.Label agentSessionNote = new() { AutoSize = true, ForeColor = SecondaryText, MaximumSize = new Size(620, 0) };
+    private readonly Forms.Label agentSessionNote = new WorkspaceLabel() { AutoSize = true, ForeColor = SecondaryText, MaximumSize = new Size(620, 0) };
     private readonly Forms.Panel setupNotice = new() { Name = "agentSetupNotice", AutoSize = true, Visible = false, Padding = new Forms.Padding(12), BackColor = WarningBack };
     private readonly Forms.Label setupNoticeText = new() { AutoSize = true, ForeColor = WarningText, MaximumSize = new Size(440, 0) };
     private readonly Forms.Button preparePlatform = Button("Activer sur ce PC", "preparePlatform", 148);
@@ -272,11 +272,11 @@ public sealed class MainForm : Forms.Form
 
     private void BuildHeader()
     {
-        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 1, Padding = new Forms.Padding(28, 0, 28, 0) };
+        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 1, Padding = new Forms.Padding(28, 0, 28, 0), Margin = Forms.Padding.Empty };
         layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
         layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
-        var titles = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = new Forms.Padding(0, 14, 0, 0) };
-        titles.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 34)); titles.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 24));
+        var titles = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = new Forms.Padding(0, 14, 0, 0), Margin = Forms.Padding.Empty };
+        titles.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize)); titles.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         headerTitle.Font = new Font("Segoe UI", 22, FontStyle.Bold); headerSubtitle.Font = new Font("Segoe UI", 10.5F);
         titles.Controls.Add(headerTitle, 0, 0); titles.Controls.Add(headerSubtitle, 0, 1);
         var actions = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.LeftToRight, WrapContents = false, AutoSize = true, Padding = new Forms.Padding(0, 20, 0, 0) };
@@ -302,9 +302,9 @@ public sealed class MainForm : Forms.Form
     private void BuildAgentPage()
     {
         var page = new PagePanel("Donner le contrôle") { BackColor = Canvas, Padding = new Forms.Padding(0) };
-        var content = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 1, Padding = new Forms.Padding(28, 48, 28, 20) };
+        var content = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 1, Padding = new Forms.Padding(28, 48, 28, 20), Margin = Forms.Padding.Empty };
         content.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
-        var heroHost = new Forms.Panel { Dock = Forms.DockStyle.Fill, BackColor = Canvas };
+        var heroHost = new Forms.Panel { Dock = Forms.DockStyle.Fill, BackColor = Canvas, Margin = Forms.Padding.Empty };
         var hero = BuildAgentContent(); hero.Dock = Forms.DockStyle.Top; hero.Width = 760; hero.Anchor = Forms.AnchorStyles.Top | Forms.AnchorStyles.Left;
         heroHost.Controls.Add(hero); content.Controls.Add(heroHost, 0, 0);
         page.Controls.Add(content); rolePages.TabPages.Add(page);
@@ -316,8 +316,8 @@ public sealed class MainForm : Forms.Form
         var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Top, Width = 760, AutoSize = true, AutoSizeMode = Forms.AutoSizeMode.GrowAndShrink, ColumnCount = 1, RowCount = 11, Margin = Forms.Padding.Empty, Padding = Forms.Padding.Empty };
         layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 20));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 50));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 26));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 78));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 8));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 24));
@@ -1415,7 +1415,7 @@ public sealed class MainForm : Forms.Form
     private static string Pretty(object value) => JsonSerializer.Serialize(value, new JsonSerializerOptions(Json.Options) { WriteIndented = true });
     private static void AddSummary(Forms.TableLayoutPanel table, int col, string title, Forms.Label value) { var flow = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false }; flow.Controls.Add(new Forms.Label { Text = title, AutoSize = true, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F) }); flow.Controls.Add(value); table.Controls.Add(flow, col, 0); }
     private static Forms.Label SummaryValue(string name) => new() { Name = name, Text = "—", AutoSize = true, ForeColor = PrimaryText, Font = new Font("Segoe UI", 13, FontStyle.Bold) };
-    private static Forms.Label Eyebrow(string text) => new() { Text = text, AutoSize = true, ForeColor = Teal, Font = new Font("Segoe UI", 9.5F, FontStyle.Bold), Margin = new Forms.Padding(0) };
+    private static Forms.Label Eyebrow(string text) => new WorkspaceLabel() { Name = "agentEyebrow", Text = text, AutoSize = true, ForeColor = Teal, Font = new Font("Segoe UI", 9.5F, FontStyle.Bold) };
     private static Forms.Control SectionTitle(string title, string subtitle)
     {
         var panel = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = new Forms.Padding(0) };

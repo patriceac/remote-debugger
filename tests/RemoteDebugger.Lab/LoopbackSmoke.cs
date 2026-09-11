@@ -83,6 +83,7 @@ internal sealed partial class LabForm
         else Block("loopback.platform_status", "The Release CLI exposes the local platform status without changing the loopback setup", "The artifact did not return a local platform-status response.", required: false);
         Block("loopback.lan_scope", "LAN discovery, private firewall, installed broker, and UAC remain outside the loopback smoke claim", "Both product processes are intentionally bound to 127.0.0.1; the two-VM Provisioned/Full run owns LAN and broker evidence.", new { network = "loopback-only", discoveryClaimed = false, firewallClaimed = false, serviceClaimed = false }, required: false);
         CaptureDesktop("loopback-agent-pairing.png");
+        if (trayOnly) await ProbeAgentTypographyAsync(paired: false);
 
         loopbackController = LaunchLoopbackProduct(false, controllerRoot);
         product = loopbackController;
@@ -127,6 +128,9 @@ internal sealed partial class LabForm
         ProbeLoopbackRemoteScreenInput();
         if (trayOnly)
         {
+            product = loopbackAgent;
+            try { await ProbeAgentTypographyAsync(paired: true); }
+            finally { product = loopbackController; Native.FocusWindow(loopbackController.Id); }
             await ProbeLoopbackTrayAndTerminateAsync();
             await FinishAsync();
             return;
