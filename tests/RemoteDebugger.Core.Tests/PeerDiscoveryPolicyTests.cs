@@ -25,4 +25,18 @@ public sealed class PeerDiscoveryPolicyTests
     [Fact]
     public void AnotherPcOnTheSameSubnetRemainsDiscoverable() =>
         Assert.True(PeerDiscoveryPolicy.IsRemoteAddress("10.254.0.3", [IPAddress.Parse("10.254.0.2")]));
+
+    [Theory]
+    [InlineData("10.254.0.3", "10.254.0.3")]
+    [InlineData("10.254.0.3", "::ffff:10.254.0.3")]
+    [InlineData("Agent.Example", "agent.example.")]
+    public void RediscoveryOfSameEndpointDoesNotChangeTarget(string activeHost, string discoveredHost) =>
+        Assert.True(PeerDiscoveryPolicy.IsSameEndpoint(activeHost, 45832, discoveredHost, 45832));
+
+    [Theory]
+    [InlineData("10.254.0.3", 45832, "10.254.0.4", 45832)]
+    [InlineData("10.254.0.3", 45832, "10.254.0.3", 45831)]
+    [InlineData("agent-a", 45832, "agent-b", 45832)]
+    public void DifferentEndpointChangesTarget(string activeHost, int activePort, string discoveredHost, int discoveredPort) =>
+        Assert.False(PeerDiscoveryPolicy.IsSameEndpoint(activeHost, activePort, discoveredHost, discoveredPort));
 }

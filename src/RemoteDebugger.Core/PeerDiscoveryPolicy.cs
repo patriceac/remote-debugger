@@ -13,5 +13,13 @@ public static class PeerDiscoveryPolicy
         return !localAddresses.Any(local => Normalize(local).Equals(address));
     }
 
+    public static bool IsSameEndpoint(string firstHost, int firstPort, string secondHost, int secondPort)
+    {
+        if (firstPort != secondPort || string.IsNullOrWhiteSpace(firstHost) || string.IsNullOrWhiteSpace(secondHost)) return false;
+        if (IPAddress.TryParse(firstHost, out var firstAddress) && IPAddress.TryParse(secondHost, out var secondAddress))
+            return Normalize(firstAddress).Equals(Normalize(secondAddress));
+        return string.Equals(firstHost.TrimEnd('.'), secondHost.TrimEnd('.'), StringComparison.OrdinalIgnoreCase);
+    }
+
     private static IPAddress Normalize(IPAddress address) => address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address;
 }
