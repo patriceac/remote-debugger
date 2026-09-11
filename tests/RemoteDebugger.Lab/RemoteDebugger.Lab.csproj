@@ -1,1 +1,15 @@
-<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>WinExe</OutputType><TargetFramework>net8.0-windows</TargetFramework><UseWindowsForms>true</UseWindowsForms><UseWPF>true</UseWPF><AssemblyName>RemoteDebugger.Lab</AssemblyName></PropertyGroup><ItemGroup><ProjectReference Include="../../src/RemoteDebugger/RemoteDebugger.csproj"/></ItemGroup></Project>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>RemoteDebugger.Lab</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/RemoteDebugger/RemoteDebugger.csproj" />
+    <Content Include="../acceptance-contract.json" Link="acceptance-contract.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+  </ItemGroup>
+</Project>
