@@ -74,6 +74,8 @@ public sealed class AgentServer : IDisposable
     private string tokenHash = "";
     private string controllerBinaryHash = "";
     private readonly SupportSession session = new();
+    private readonly SessionResumeStore resumeStore;
+    private ResumableSession? resumed;
     private readonly SemaphoreSlim pairingSlot = new(1, 1);
     private int disposed;
     public PairingGate Pairing { get; } = new();
@@ -86,6 +88,7 @@ public sealed class AgentServer : IDisposable
     public SupportSessionSnapshot Session => session.Snapshot;
     public AgentServer(string root, int port = 45832, bool loopbackOnly = false)
     {
+        resumeStore = new(root);
         Directory.CreateDirectory(root); Port = port; authPath = Path.Combine(root, "agent.auth");
         string certPath = Path.Combine(root, "identity.pfx.dpapi");
         if (File.Exists(certPath)) certificate = new X509Certificate2(Vault.Read(certPath), (string?)null, X509KeyStorageFlags.UserKeySet);
@@ -101,15 +104,34 @@ public sealed class AgentServer : IDisposable
         // A normal launch always starts a new support session. Persisted grants from
         // older versions must never silently grant access on a fresh launch.
         if (File.Exists(authPath)) Vault.Save(authPath, []);
+        string[] launchArguments = Environment.GetCommandLineArgs(); int resumeIndex = Array.IndexOf(launchArguments, "--resume-update");
+        if (resumeIndex >= 0 && resumeIndex + 1 < launchArguments.Length)
+            resumed = resumeStore.Restore(launchArguments[resumeIndex + 1]);
+        if (resumed != null)
+        {
+            tokenHash = resumed.GrantHash; controllerBinaryHash = resumed.ControllerHash;
+            session.Pair(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
+        }
+        else resumeStore.Clear();
         Operations = new Operations(root);
         listener = new TcpListener(loopbackOnly ? IPAddress.Loopback : IPAddress.Any, port);
         discovery = new UdpClient(new IPEndPoint(loopbackOnly ? IPAddress.Loopback : IPAddress.Any, Discovery.Port));
     }
     public void Start()
     {
-        _ = ExecutableIdentity.Sha256; Pairing.Open(); listener.Start();
+        _ = ExecutableIdentity.Sha256; if (!Paired) Pairing.Open(); listener.Start();
         _ = Task.Run(AcceptAsync); _ = Task.Run(DiscoverAsync); _ = Task.Run(WatchSessionAsync);
         Status?.Invoke("Agent ready for pairing; access is visible in this window.");
+        if (Paired) _ = StartMaintenanceAsync();
+    }
+    public (string Ticket, DateTimeOffset ExpiresUtc) PrepareUpdateReconnect(string replacementHash, DateTimeOffset deadline)
+    {
+        lock (authLock)
+        {
+            if (tokenHash.Length == 0 || !Safety.Equal(controllerBinaryHash, replacementHash))
+                throw new UnauthorizedAccessException("Only the authenticated controller binary can replace the agent.");
+            return resumeStore.Create(tokenHash, controllerBinaryHash, ExecutableIdentity.Sha256, replacementHash, deadline);
+        }
     }
     private async Task WatchSessionAsync()
     {
@@ -130,6 +152,7 @@ public sealed class AgentServer : IDisposable
     }
     public void Revoke()
     {
+        resumeStore.Clear(); resumed = null;
         lock (authLock) { tokenHash = ""; grantLifetime.Cancel(); grantLifetime = new(); Vault.Save(authPath, []); Pairing.Close(); }
         foreach (var job in running.Values) job.Cancel();
         Native.ReleaseAllInput();
@@ -171,13 +194,15 @@ public sealed class AgentServer : IDisposable
                     try
                     {
                         handshake.CancelAfter(TimeSpan.FromSeconds(30));
-                        var result = await PairingTransport.AcceptAsync(tls, r, Pairing, Fingerprint, handshake.Token);
-                        lock (authLock)
+                        await PairingTransport.AcceptAsync(tls, r, Pairing, Fingerprint, (token, controllerHash) =>
                         {
-                            tokenHash = Safety.Hash(result.Token); controllerBinaryHash = result.ControllerHash; grantLifetime.Cancel(); grantLifetime = new();
-                            foreach (var job in running.Values) job.Cancel(); requests.Clear();
-                            session.Pair(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
-                        }
+                            lock (authLock)
+                            {
+                                tokenHash = Safety.Hash(token); controllerBinaryHash = controllerHash; grantLifetime.Cancel(); grantLifetime = new();
+                                foreach (var job in running.Values) job.Cancel(); requests.Clear();
+                                session.Pair(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
+                            }
+                        }, handshake.Token);
                         _ = StartMaintenanceAsync(); Status?.Invoke("Controller paired. Synchronizing the support session.");
                     }
                     finally { pairingSlot.Release(); }
@@ -186,6 +211,15 @@ public sealed class AgentServer : IDisposable
                 else
                 {
                     bool authorized; CancellationToken grant; lock (authLock) { authorized = tokenHash.Length != 0 && Safety.Equal(tokenHash, Safety.Hash(r.Token ?? "")); grant = grantLifetime.Token; }
+                    if (authorized && !PairingExchange.ValidHash(r.BinarySha256)) authorized = false;
+                    if (authorized && !Safety.Equal(controllerBinaryHash, r.BinarySha256!.ToUpperInvariant()))
+                    {
+                        controllerBinaryHash = r.BinarySha256!.ToUpperInvariant();
+                        session.SetBinaryMatched(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
+                        Native.ReleaseAllInput();
+                        foreach (var job in running.Values) job.Cancel();
+                    }
+                    if (authorized && r.Operation != "session.disconnect") session.Observe();
                     if (!authorized || session.ShouldExit) reply = Reply.Failure(r.Id, "access_denied", "This support session is not authorized or has ended.");
                     else if (r.Operation == "session.heartbeat")
                     {
@@ -193,6 +227,13 @@ public sealed class AgentServer : IDisposable
                         reply = Reply.Success(r.Id, new { session = Session, agentBinarySha256 = ExecutableIdentity.Sha256, controllerBinarySha256 = controllerBinaryHash, binaryMatched = Session.BinaryMatched, processId = Environment.ProcessId, maintenance = Operations.Maintenance.Status });
                     }
                     else if (r.Operation == "session.disconnect") { Native.ReleaseAllInput(); session.Disconnect(); reply = Reply.Success(r.Id, new { session = Session }); }
+                    else if (r.Operation == "update.resume")
+                    {
+                        if (resumed == null || resumed.ExpiresUtc <= DateTimeOffset.UtcNow ||
+                            !Safety.Equal(resumed.TicketHash, Safety.Hash(r.Args.Str("ticket"))))
+                            reply = Reply.Failure(r.Id, "resume_denied", "Update reconnect authorization is invalid or expired.");
+                        else reply = Reply.Success(r.Id, new { resumed = true, agentBinarySha256 = ExecutableIdentity.Sha256, binaryMatched = Session.BinaryMatched });
+                    }
                     else if (r.Operation is "session.end" or "revoke")
                     {
                         await Wire.WriteAsync(tls, Reply.Success(r.Id, new { ended = true }), timeout.Token); Terminate(); return;
@@ -281,7 +322,7 @@ public sealed class RemoteClient(Connection connection)
         using var tcp = new TcpClient { NoDelay = true }; await tcp.ConnectAsync(Connection.Host, Connection.Port, timeout.Token);
         using var tls = new SslStream(tcp.GetStream(), false, (_, cert, _, _) => cert != null && Safety.Equal(Convert.ToHexString(SHA256.HashData(cert.GetRawCertData())), Connection.Fingerprint.ToUpperInvariant().Replace(":", "")));
         await tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions { TargetHost = "RemoteDebugger", EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13 }, timeout.Token);
-        var request = new Request(id ?? Guid.NewGuid().ToString(), Connection.Token, operation, args is JsonElement e ? e : Json.Element(args ?? new { }), seconds);
+        var request = new Request(id ?? Guid.NewGuid().ToString(), Connection.Token, operation, args is JsonElement e ? e : Json.Element(args ?? new { }), seconds, ExecutableIdentity.Sha256);
         await Wire.WriteAsync(tls, request, timeout.Token); return await Wire.ReadAsync<Reply>(tls, timeout.Token);
     }
     public async Task StreamAsync(Func<ScreenFrame, Task> present, int fps = StreamPolicy.MaximumFps, int monitor = 0, int seconds = 300, CancellationToken ct = default)
@@ -289,7 +330,7 @@ public sealed class RemoteClient(Connection connection)
         using var tcp = new TcpClient(); await tcp.ConnectAsync(Connection.Host, Connection.Port, ct); tcp.NoDelay = true;
         using var tls = new SslStream(tcp.GetStream(), false, (_, cert, _, _) => cert != null && Safety.Equal(Convert.ToHexString(SHA256.HashData(cert.GetRawCertData())), Connection.Fingerprint.ToUpperInvariant().Replace(":", "")));
         await tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions { TargetHost = "RemoteDebugger", EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13 }, ct);
-        await Wire.WriteAsync(tls, new Request(Guid.NewGuid().ToString(), Connection.Token, "screen.stream", Json.Element(new { fps, monitor, maxWidth = 1920, quality = 65 }), seconds), ct);
+        await Wire.WriteAsync(tls, new Request(Guid.NewGuid().ToString(), Connection.Token, "screen.stream", Json.Element(new { fps, monitor, maxWidth = 1920, quality = 65 }), seconds, ExecutableIdentity.Sha256), ct);
         while (!ct.IsCancellationRequested)
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(10000);

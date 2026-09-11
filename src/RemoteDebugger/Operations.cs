@@ -9,6 +9,7 @@ namespace RemoteDebugger;
 
 public sealed class Operations
 {
+    private static readonly string Version = typeof(Operations).Assembly.GetName().Version?.ToString(3) ?? "unknown";
     public string Root { get; }
     public string Workspace => Path.Combine(Root, "workspace");
     private string Transfers => Path.Combine(Root, "transfers");
@@ -25,14 +26,14 @@ public sealed class Operations
             if (File.Exists(path) && new FileInfo(path).Length > 8 * 1024 * 1024) File.Move(path, path + ".previous", true);
             JsonElement binary = data.ValueKind == JsonValueKind.Object && data.TryGetProperty("binary", out var b) ? b : operation == "upload.commit" ? data : Json.Element(null);
             object? versionEvidence = binary.ValueKind == JsonValueKind.Object ? new { file = Path.GetFileName(binary.Str("path")), sha256 = binary.Str("sha256"), fileVersion = binary.Str("fileVersion"), size = binary.Long("size"), pid = data.Int("pid") } : null;
-            File.AppendAllText(path, Json.Text(new { id, operation, start, end = DateTimeOffset.UtcNow, ok, error, toolVersion = "0.1.0", versionEvidence }) + Environment.NewLine);
+            File.AppendAllText(path, Json.Text(new { id, operation, start, end = DateTimeOffset.UtcNow, ok, error, toolVersion = Version, versionEvidence }) + Environment.NewLine);
         }
     }
     public async Task<object?> ExecuteAsync(string op, JsonElement a, CancellationToken ct)
     {
         switch (op)
         {
-            case "status": return new { machine = Environment.MachineName, user = Environment.UserName, version = "0.1.0", os = Environment.OSVersion.VersionString, workspace = Workspace, elevated = Native.IsElevated(), processId = Environment.ProcessId };
+            case "status": return new { machine = Environment.MachineName, user = Environment.UserName, version = Version, os = Environment.OSVersion.VersionString, workspace = Workspace, elevated = Native.IsElevated(), processId = Environment.ProcessId, agentBinarySha256 = ExecutableIdentity.Sha256 };
             case "history": lock (historyLock) return File.Exists(Path.Combine(Root, "history.jsonl")) ? File.ReadLines(Path.Combine(Root, "history.jsonl")).TakeLast(200).Select(x => JsonSerializer.Deserialize<JsonElement>(x)).ToArray() : [];
             case "upload.begin": case "upload.chunk": case "upload.commit": case "upload.status": case "upload.abort":
                 await transferLock.WaitAsync(ct); try { return await UploadAsync(op, a, ct); } finally { transferLock.Release(); }
@@ -43,7 +44,7 @@ public sealed class Operations
                     long offset = a.Long("offset"); if (offset < 0 || offset > f.Length) throw new ArgumentException("Invalid offset."); f.Position = offset;
                     byte[] data = new byte[256 * 1024]; int n = await f.ReadAsync(data, ct); return new { offset, data = Convert.ToBase64String(data, 0, n) };
                 }
-            case "files": return new DirectoryInfo(string.IsNullOrWhiteSpace(a.Str("path")) ? Workspace : Resolve(a.Str("path"))).EnumerateFileSystemInfos().Take(1000).Select(x => new { x.Name, path = x.FullName, directory = x.Attributes.HasFlag(FileAttributes.Directory), modifiedUtc = x.LastWriteTimeUtc }).ToArray();
+            case "files": return new DirectoryInfo(string.IsNullOrWhiteSpace(a.Str("path")) ? Workspace : Resolve(a.Str("path"))).EnumerateFileSystemInfos().Take(1000).Select(x => new { x.Name, path = x.FullName, directory = x.Attributes.HasFlag(FileAttributes.Directory), size = x is FileInfo file ? (long?)file.Length : null, modifiedUtc = x.LastWriteTimeUtc }).ToArray();
             case "processes": return await ResourceSampling.ProcessesAsync(ct);
             case "process.info": return await ProcessInfoAsync(a.Int("pid"), ct);
             case "start":

@@ -15,7 +15,7 @@ public static class Json
     public static long Long(this JsonElement e, string key, long fallback = 0) => e.ValueKind == JsonValueKind.Object && e.TryGetProperty(key, out var v) ? v.GetInt64() : fallback;
     public static string[] Strings(this JsonElement e, string key) => e.ValueKind == JsonValueKind.Object && e.TryGetProperty(key, out var v) ? v.EnumerateArray().Select(x => x.GetString() ?? "").ToArray() : [];
 }
-public sealed record Request(string Id, string Token, string Operation, JsonElement Args, int TimeoutSeconds = 60);
+public sealed record Request(string Id, string Token, string Operation, JsonElement Args, int TimeoutSeconds = 60, string? BinarySha256 = null);
 public sealed record Reply(string Id, bool Ok, JsonElement Data, string? Error = null, string? Message = null)
 {
     public static Reply Success(string id, object? data) => new(id, true, Json.Element(data));

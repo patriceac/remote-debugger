@@ -54,7 +54,7 @@ internal static class PairingTransport
         return target with { Fingerprint = fingerprint, Token = token };
     }
     public static async Task<(string Token, string ControllerHash)> AcceptAsync(SslStream tls, Request request,
-        PairingGate gate, string fingerprint, CancellationToken ct)
+        PairingGate gate, string fingerprint, Action<string, string> registerGrant, CancellationToken ct)
     {
         if (request.Args.Str("protocol") != PairingExchange.Protocol || !PairingExchange.ValidHash(request.Args.Str("binarySha256")))
             throw new AuthenticationException("Unsupported pairing protocol. Update this installation.");
@@ -71,6 +71,7 @@ internal static class PairingTransport
         if (!exchange.VerifyProof(proof.Str("proof"), "controller") || !gate.CompleteAttempt(code))
             throw new AuthenticationException("Pairing code is incorrect or expired.");
         string token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+        registerGrant(token, controllerHash);
         await Wire.WriteAsync(tls, Reply.Success(request.Id, new { token, proof = exchange.Proof("agent", token) }), ct).ConfigureAwait(false);
         return (token, controllerHash);
     }

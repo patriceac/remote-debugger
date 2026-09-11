@@ -1,9 +1,10 @@
-param([switch]$IncludeLab)
+param([switch]$IncludeLab, [switch]$Sign, [string]$Version = '0.2.0')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot
 $artifactRoot = Join-Path $projectRoot 'artifacts'
-& dotnet publish (Join-Path $projectRoot 'src\RemoteDebugger\RemoteDebugger.csproj') -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -o (Join-Path $artifactRoot 'release')
+& dotnet publish (Join-Path $projectRoot 'src\RemoteDebugger\RemoteDebugger.csproj') -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none ('-p:Version=' + $Version) -o (Join-Path $artifactRoot 'release')
 if ($LASTEXITCODE -ne 0) { throw 'Release publish failed.' }
+if ($Sign) { & (Join-Path $PSScriptRoot 'Sign-Release.ps1') }
 if ($IncludeLab) {
     $fixtureRoot = Join-Path $artifactRoot 'lab\fixtures'
     New-Item -ItemType Directory -Path (Join-Path $fixtureRoot 'v1'),(Join-Path $fixtureRoot 'v2') -Force | Out-Null
