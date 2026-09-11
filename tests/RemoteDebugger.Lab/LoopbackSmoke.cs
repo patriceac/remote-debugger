@@ -114,6 +114,7 @@ internal sealed partial class LabForm
         ProbeDefaultInput();
         ProbeLoopbackRemoteScreenInput();
         await ProbeAutoDataAsync();
+        await CaptureLoopbackMinimumSizeAsync();
         await RunRegressionScenarioAsync(status);
         await ProbeLoopbackTrayAndTerminateAsync();
         await FinishAsync();
