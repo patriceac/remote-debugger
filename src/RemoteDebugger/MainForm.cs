@@ -825,8 +825,10 @@ public sealed class MainForm : Forms.Form
 
     private bool IsRemotePeer(Peer peer)
     {
-        if (string.Equals(peer.Name, Environment.MachineName, StringComparison.OrdinalIgnoreCase)) return false;
-        return !string.Equals(peer.Host, "127.0.0.1", StringComparison.OrdinalIgnoreCase) || !loopbackOnly;
+        var localAddresses = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+            .SelectMany(adapter => adapter.GetIPProperties().UnicastAddresses)
+            .Select(unicast => unicast.Address);
+        return PeerDiscoveryPolicy.IsRemoteAddress(peer.Host, localAddresses);
     }
 
     private void RenderPeers()
