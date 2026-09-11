@@ -1175,8 +1175,8 @@ internal sealed partial class LabForm : Forms.Form
             // after PAKE pairing.  Observe the visible pairing/synchronization
             // transition as proof that Enter was handled, then validate the
             // restored transaction through the saved authenticated token.
-            bool pairingAttempted = await WaitForTextAsync("connectionStatus", IsPairingAttempt, 20);
-            string outcomeText = TryValue("connectionStatus");
+            bool pairingAttempted = await WaitForTextAsync("connectionFormState", IsPairingAttempt, 20);
+            string outcomeText = TryValue("connectionFormState");
             connected = IsConnected(outcomeText);
             if (pairingAttempted)
                 Pass("controller.code_enter_pairing", "Entering the six-digit code and pressing Enter starts the authenticated pairing flow before the rollback handoff", new { pairText, outcomeText, codeLength = code.Length, connected, rollbackHandoff = true });
@@ -1189,12 +1189,12 @@ internal sealed partial class LabForm : Forms.Form
             // succeeds. Record the actual status transition from Enter first,
             // then give the managed handoff a bounded 240 seconds to become
             // connected. The later binary-hash assertion remains required.
-            bool pairingAttempted = await WaitForTextAsync("connectionStatus", IsPairingAttempt, 30);
-            string transitionText = TryValue("connectionStatus");
+            bool pairingAttempted = await WaitForTextAsync("connectionFormState", IsPairingAttempt, 30);
+            string transitionText = TryValue("connectionFormState");
             if (pairingAttempted)
                 Pass("controller.code_enter_pairing", "Entering the six-digit code and pressing Enter starts authenticated update pairing", new { pairText, transitionText, codeLength = code.Length, updateVariant });
             else
-                Fail("controller.code_enter_pairing", "Entering the six-digit code and pressing Enter starts authenticated update pairing", new { pairText, transitionText, codeLength = code.Length, updateVariant, visible = UiTexts().Take(35).ToArray() });
+                Fail("controller.code_enter_pairing", "Entering the six-digit code and pressing Enter starts authenticated update pairing", new { pairText, transitionText, codeLength = code.Length, updateVariant, visible = UiTexts().Take(100).ToArray() });
 
             var connectedWait = Stopwatch.StartNew();
             connected = await WaitForTextAsync("connectionStatus", IsConnected, 240);
@@ -1203,7 +1203,10 @@ internal sealed partial class LabForm : Forms.Form
             if (connected)
                 Pass("controller.code_enter_connected", "The update pairing flow reaches a connected state after the staged handoff", new { transitionText, connectedText, updateVariant, waitedSeconds = connectedWaitedSeconds, timeoutSeconds = 240 });
             else
-                Fail("controller.code_enter_connected", "The update pairing flow reaches a connected state after the staged handoff", new { transitionText, connectedText, updateVariant, waitedSeconds = connectedWaitedSeconds, timeoutSeconds = 240, visible = UiTexts().Take(35).ToArray() });
+            {
+                CaptureDesktop("controller-update-failure.png");
+                Fail("controller.code_enter_connected", "The update pairing flow reaches a connected state after the staged handoff", new { transitionText, connectedText, formStatus = TryValue("connectionFormState"), updateVariant, waitedSeconds = connectedWaitedSeconds, timeoutSeconds = 240, visible = UiTexts().Take(100).ToArray() });
+            }
             if (!connected) throw new InvalidOperationException("Controller did not reach connected state after update pairing and handoff.");
         }
         else
