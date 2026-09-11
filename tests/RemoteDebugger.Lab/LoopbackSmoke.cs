@@ -157,11 +157,80 @@ internal sealed partial class LabForm
     private const uint MouseEventRightDown = 0x0008;
     private const uint MouseEventRightUp = 0x0010;
 
+    private static AutomationElement[] FindExplorerShellRoots()
+    {
+        try
+        {
+            // UIA's desktop-wide descendant walk is both expensive and prone
+            // to finding the product window itself before it reaches the
+            // shell notification area.  Restrict the search to top-level
+            // windows owned by the Explorer processes that host the taskbar.
+            var explorerPids = new HashSet<int>();
+            foreach (var explorer in Process.GetProcessesByName("explorer"))
+            {
+                try { explorerPids.Add(explorer.Id); }
+                catch (InvalidOperationException) { }
+                finally { explorer.Dispose(); }
+            }
+            if (explorerPids.Count == 0) return [];
+
+            return AutomationElement.RootElement.FindAll(TreeScope.Children, Condition.TrueCondition).Cast<AutomationElement>()
+                .Where(element =>
+                {
+                    try
+                    {
+                        var current = element.Current;
+                        if (!explorerPids.Contains(current.ProcessId)) return false;
+
+                        // Shell_TrayWnd and NotifyIconOverflowWindow are the
+                        // usual Windows 10/11 providers.  Keep the taskbar
+                        // bounds fallback for XAML popup providers whose
+                        // class name is implementation-specific.
+                        string className = current.ClassName.ToLowerInvariant();
+                        string name = current.Name.ToLowerInvariant();
+                        bool shellClass = className.Contains("tray", StringComparison.Ordinal)
+                            || className.Contains("notify", StringComparison.Ordinal)
+                            || className.Contains("overflow", StringComparison.Ordinal)
+                            || className.Contains("popup", StringComparison.Ordinal)
+                            || className.Contains("shell", StringComparison.Ordinal);
+                        bool shellName = name.Contains("notification", StringComparison.Ordinal)
+                            || name.Contains("hidden icon", StringComparison.Ordinal)
+                            || name.Contains("icône", StringComparison.Ordinal)
+                            || name.Contains("icones", StringComparison.Ordinal)
+                            || name.Contains("icônes", StringComparison.Ordinal)
+                            || name.Contains("masqu", StringComparison.Ordinal);
+                        var bounds = current.BoundingRectangle;
+                        var screen = Forms.Screen.PrimaryScreen?.Bounds;
+                        bool nearTaskbar = screen.HasValue && !bounds.IsEmpty && bounds.Bottom >= screen.Value.Bottom - 260;
+                        return shellClass || shellName || nearTaskbar;
+                    }
+                    catch (Exception) { return false; }
+                })
+                .ToArray();
+        }
+        catch (Exception) { return []; }
+    }
+
+    private static AutomationElement[] FindExplorerShellElements()
+    {
+        var elements = new List<AutomationElement>();
+        foreach (var root in FindExplorerShellRoots())
+        {
+            elements.Add(root);
+            try
+            {
+                elements.AddRange(root.FindAll(TreeScope.Descendants, Condition.TrueCondition).Cast<AutomationElement>());
+            }
+            catch (Exception) { }
+        }
+        return elements.ToArray();
+    }
+
     private static AutomationElement[] FindSystemTrayIcons()
     {
         try
         {
-            return AutomationElement.RootElement.FindAll(TreeScope.Descendants, Condition.TrueCondition).Cast<AutomationElement>()
+            return FindExplorerShellElements()
                 .Where(element =>
                 {
                     try
@@ -189,7 +258,7 @@ internal sealed partial class LabForm
     {
         try
         {
-            return AutomationElement.RootElement.FindAll(TreeScope.Descendants, Condition.TrueCondition).Cast<AutomationElement>()
+            return FindExplorerShellElements()
                 .Where(element =>
                 {
                     try
@@ -202,16 +271,23 @@ internal sealed partial class LabForm
                         bool nameHint = name.Contains("hidden", StringComparison.Ordinal)
                             || name.Contains("masqu", StringComparison.Ordinal)
                             || name.Contains("icône", StringComparison.Ordinal)
+                            || name.Contains("icones", StringComparison.Ordinal)
+                            || name.Contains("icônes", StringComparison.Ordinal)
                             || name.Contains("icon", StringComparison.Ordinal)
                             || name.Contains("overflow", StringComparison.Ordinal)
                             || name.Contains("chevron", StringComparison.Ordinal)
-                            || name.Contains("plus", StringComparison.Ordinal);
+                            || name.Contains("plus", StringComparison.Ordinal)
+                            || name.Contains("notification area", StringComparison.Ordinal)
+                            || name.Contains("zone de notification", StringComparison.Ordinal)
+                            || name.Contains("show hidden", StringComparison.Ordinal)
+                            || name.Contains("afficher les ic", StringComparison.Ordinal);
                         bool shellHint = id.Contains("tray", StringComparison.Ordinal)
                             || id.Contains("overflow", StringComparison.Ordinal)
                             || className.Contains("tray", StringComparison.Ordinal)
                             || className.Contains("notify", StringComparison.Ordinal)
-                            || className.Contains("overflow", StringComparison.Ordinal);
-                        bool supportedType = type is "ControlType.Button" or "ControlType.Custom" or "ControlType.Pane";
+                            || className.Contains("overflow", StringComparison.Ordinal)
+                            || className.Contains("toolbar", StringComparison.Ordinal);
+                        bool supportedType = type is "ControlType.Button" or "ControlType.Custom" or "ControlType.Pane" or "ControlType.SplitButton";
                         return !current.IsOffscreen && supportedType && (nameHint || shellHint);
                     }
                     catch (ElementNotAvailableException) { return false; }
@@ -292,7 +368,7 @@ internal sealed partial class LabForm
                 if (!RightClickTrayIcon(icon)) continue;
                 for (int n = 0; n < 20; n++)
                 {
-                    var open = FindDesktopMenuItem("Ouvrir") ?? FindDesktopMenuItem("Open");
+                    var open = FindLoopbackTrayMenuItem("Ouvrir") ?? FindLoopbackTrayMenuItem("Open");
                     if (open != null) return new TrayContext(open, iconName, overflowOpened);
                     await Task.Delay(250, stop.Token);
                 }
@@ -308,7 +384,7 @@ internal sealed partial class LabForm
     {
         try
         {
-            var inventory = AutomationElement.RootElement.FindAll(TreeScope.Descendants, Condition.TrueCondition).Cast<AutomationElement>()
+            var inventory = FindExplorerShellElements()
                 .Select(element =>
                 {
                     try
@@ -348,6 +424,40 @@ internal sealed partial class LabForm
         // after the controller hides. Retain the desktop image beside the
         // bounded UIA inventory so a selector miss is reviewable.
         CaptureDesktop("loopback-tray-lookup.png");
+    }
+
+    private AutomationElement? FindLoopbackTrayMenuItem(string name)
+    {
+        try
+        {
+            int productPid = 0;
+            try { productPid = product?.Id ?? loopbackController?.Id ?? 0; } catch (InvalidOperationException) { }
+            foreach (var window in AutomationElement.RootElement.FindAll(TreeScope.Children, Condition.TrueCondition).Cast<AutomationElement>())
+            {
+                try
+                {
+                    var current = window.Current;
+                    string className = current.ClassName;
+                    string type = current.ControlType.ProgrammaticName;
+                    bool nativeMenu = string.Equals(className, "#32768", StringComparison.Ordinal)
+                        || type == "ControlType.Menu";
+                    bool productMenu = productPid > 0
+                        && current.ProcessId == productPid
+                        && (type == "ControlType.Window" || type == "ControlType.Menu")
+                        && (className.Contains("menu", StringComparison.OrdinalIgnoreCase)
+                            || className.Contains("dropdown", StringComparison.OrdinalIgnoreCase)
+                            || className.Contains("context", StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(className, "#32768", StringComparison.Ordinal));
+                    if (!nativeMenu && !productMenu) continue;
+                    if (!current.IsOffscreen && string.Equals(current.Name, name, StringComparison.OrdinalIgnoreCase)) return window;
+                    var item = window.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.NameProperty, name));
+                    if (item != null && !item.Current.IsOffscreen) return item;
+                }
+                catch (Exception) { }
+            }
+        }
+        catch (Exception) { }
+        return null;
     }
 
     private bool IsLoopbackControllerVisible()
