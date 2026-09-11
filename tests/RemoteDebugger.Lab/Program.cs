@@ -543,6 +543,9 @@ internal sealed partial class LabForm : Forms.Form
     private async Task AgentCoordinationAsync(string initialCode)
     {
         using var udp = new UdpClient(new IPEndPoint(IsLoopback ? IPAddress.Loopback : IPAddress.Any, CoordinationPort));
+        // Keep coordination alive across the managed replacement. The
+        // controller sends DONE after observing the replacement's final exit.
+        retainCoordinationAfterProductExit = IsUpdateVariant;
         string? currentCode = initialCode;
         while (!stop.IsCancellationRequested)
         {
@@ -697,7 +700,7 @@ internal sealed partial class LabForm : Forms.Form
             {
                 if (candidate.Id == previousPid || candidate.Id == Environment.ProcessId || candidate.HasExited) { candidate.Dispose(); continue; }
                 string path = candidate.MainModule?.FileName ?? "";
-                if (!path.EndsWith("RemoteDebugger.exe", StringComparison.OrdinalIgnoreCase)) { candidate.Dispose(); continue; }
+                if (!PathsEqual(path, application) || candidate.MainWindowHandle == IntPtr.Zero) { candidate.Dispose(); continue; }
                 product?.Dispose();
                 product = candidate;
                 return;
@@ -755,7 +758,9 @@ internal sealed partial class LabForm : Forms.Form
     private async Task ProbeMaintenanceAfterPairingAsync()
     {
         string[] texts = UiTexts();
-        bool visibleActive = texts.Any(x => x.Contains("maintenance", StringComparison.OrdinalIgnoreCase) && (x.Contains("active", StringComparison.OrdinalIgnoreCase) || x.Contains("actif", StringComparison.OrdinalIgnoreCase) || x.Contains("autor", StringComparison.OrdinalIgnoreCase)));
+        await WaitForUiAsync(() => FindVisibleId("agentMaintenanceState") is { } state && Value(state).Equals("Active", StringComparison.OrdinalIgnoreCase), 60);
+        string maintenanceState = Value(FindVisibleId("agentMaintenanceState")!);
+        bool visibleActive = maintenanceState.Equals("Active", StringComparison.OrdinalIgnoreCase);
         var service = await ReadRemoteDebuggerServicesAsync();
         bool serviceReady = brokerProvisioning != null
             ? ProvisioningEvidence.HasLocalSystemService(service, brokerProvisioning.ServiceExecutablePath)
@@ -1257,9 +1262,12 @@ internal sealed partial class LabForm : Forms.Form
 
         if (IsUpdateVariant)
         {
+            var pairedAgent = await LabMessageAsync(peerHost, "RD_LAB_STATUS", retry: false);
+            if (!pairedAgent.GetProperty("alive").GetBoolean() || !pairedAgent.GetProperty("paired").GetBoolean())
+                throw new InvalidOperationException("The replacement agent did not confirm its live paired state.");
             await ProbeVariantReconnectAsync(controllerHash);
             bool updateAgentExited = await ProbeTrayAndTerminateAsync();
-            if (!updateAgentExited) await LabMessageAsync(peerHost, "RD_LAB_DONE");
+            await LabMessageAsync(peerHost, "RD_LAB_DONE", retry: false);
             await FinishAsync();
             return;
         }
@@ -1282,7 +1290,8 @@ internal sealed partial class LabForm : Forms.Form
         await Task.Delay(1000, stop.Token);
         var heartbeat = await WaitForBinaryMatchAsync(controllerHash, 30);
         string remoteHash = FindString(heartbeat, "agentBinarySha256", "binarySha256", "releaseSha256", "executableSha256", "sha256");
-        bool codePrompt = !string.IsNullOrWhiteSpace(TryValue("pairCode")) && SixDigits.IsMatch(TryValue("pairCode"));
+        var visibleCode = FindVisibleId(ContractId("pairCode"));
+        bool codePrompt = visibleCode != null && visibleCode.Current.IsEnabled && SixDigits.IsMatch(Value(visibleCode));
         bool resumed = disconnectAccepted && remoteHash.Equals(controllerHash, StringComparison.OrdinalIgnoreCase) && !codePrompt;
         if (resumed) Pass("controller.sync_reconnect", "A synchronized agent reconnects through the saved session without requesting a new pairing code", new { updateVariant, disconnected = true, remoteHash, codePrompt = false, heartbeat });
         else Fail("controller.sync_reconnect", "A synchronized agent reconnects through the saved session without requesting a new pairing code", new { updateVariant, disconnectAccepted, remoteHash, codePrompt, heartbeat });
