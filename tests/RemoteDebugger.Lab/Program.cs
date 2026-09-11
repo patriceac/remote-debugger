@@ -1628,19 +1628,43 @@ internal sealed partial class LabForm : Forms.Form
         product.CloseMainWindow();
         await Task.Delay(1400, stop.Token);
         product.Refresh();
-        bool trayAlive = !product.HasExited && product.MainWindowHandle == IntPtr.Zero;
+        TrayContext tray = await OpenTrayContextAsync();
+        bool trayAlive = !product.HasExited && product.MainWindowHandle == IntPtr.Zero && tray.OpenItem != null;
         JsonElement? heartbeat = null;
         try { heartbeat = Data(await CallAsync("status")); } catch (Exception) { }
         bool heartbeatAlive = heartbeat.HasValue && heartbeat.Value.ValueKind == JsonValueKind.Object;
-        if (trayAlive && heartbeatAlive) Pass("controller.close_to_tray", "Closing the controller hides it in the tray while its session heartbeat remains alive", new { pid = product.Id, heartbeat = heartbeat!.Value });
-        else Fail("controller.close_to_tray", "Closing the controller hides the controller in the tray while its session heartbeat remains alive", new { trayAlive, heartbeatAlive, pid = product.Id, exited = product.HasExited });
-        var open = FindDesktopMenuItem("Ouvrir");
-        if (open != null) { InvokeElement(open); await WaitForUiAsync(() => product.MainWindowHandle != IntPtr.Zero, 15); }
-        else Fail("controller.tray_restore", "The tray Open action restores the controller", new { menu = "Ouvrir missing" });
+        if (trayAlive && heartbeatAlive) Pass("controller.close_to_tray", "Closing the controller hides it in the tray while its session heartbeat remains alive", new { pid = product.Id, trayIcon = tray.IconName, overflowOpened = tray.OverflowOpened, menuVisible = true, heartbeat = heartbeat!.Value });
+        else Fail("controller.close_to_tray", "Closing the controller hides the controller in the tray while its session heartbeat remains alive", new { trayAlive, heartbeatAlive, trayIcon = tray.IconName, overflowOpened = tray.OverflowOpened, menuVisible = tray.OpenItem != null, pid = product.Id, exited = product.HasExited });
+        var open = tray.OpenItem;
+        bool restored = false;
+        string restoreError = "";
+        if (open != null)
+        {
+            try
+            {
+                InvokeElement(open);
+                await WaitForUiAsync(() => product.MainWindowHandle != IntPtr.Zero, 15);
+                restored = true;
+            }
+            catch (Exception ex) { restoreError = ex.Message; }
+        }
+        if (restored) Pass("controller.tray_restore", "The tray Open action restores the controller", new { menuVisible = true, restored, trayIcon = tray.IconName, overflowOpened = tray.OverflowOpened });
+        else Fail("controller.tray_restore", "The tray Open action restores the controller", new { menuVisible = open != null, restored, trayIcon = tray.IconName, overflowOpened = tray.OverflowOpened, error = string.IsNullOrWhiteSpace(restoreError) ? "Ouvrir missing" : restoreError });
 
-        var terminate = FindVisibleId(ContractId("terminateSession"));
+        AutomationElement? terminate = null;
+        try { terminate = FindVisibleId(ContractId("terminateSession")); }
+        catch (Exception ex)
+        {
+            Fail("controller.terminate", "The controller exposes a clear terminate support action", new { id = ContractId("terminateSession"), lookupError = ex.Message });
+            return false;
+        }
         if (terminate == null) { Fail("controller.terminate", "The controller exposes a clear terminate support action", new { id = ContractId("terminateSession") }); return false; }
-        InvokeElement(terminate);
+        try { InvokeElement(terminate); }
+        catch (Exception ex)
+        {
+            Fail("controller.terminate", "The controller exposes a clear terminate support action", new { id = ContractId("terminateSession"), invokeError = ex.Message });
+            return false;
+        }
         bool disconnected = await WaitForTextAsync("connectionStatus", x => !IsConnected(x), 30);
         JsonElement? stopped = null;
         for (int n = 0; n < 18; n++)
