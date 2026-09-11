@@ -61,8 +61,11 @@ public static class Discovery
 
 public sealed class AgentServer : IDisposable
 {
-    private readonly TcpListener listener;
-    private readonly UdpClient discovery;
+    private readonly object transportLock = new();
+    private TcpListener listener;
+    private UdpClient discovery;
+    private bool privateNetworkEnabled;
+    private long transportGeneration;
     private readonly X509Certificate2 certificate;
     private readonly CancellationTokenSource stop = new();
     private readonly SemaphoreSlim slots = new(12);
@@ -82,6 +85,7 @@ public sealed class AgentServer : IDisposable
     private readonly SemaphoreSlim pairingSlot = new(1, 1);
     private int disposed;
     private int terminating;
+    private int started;
     private int listening;
     public PairingGate Pairing { get; } = new();
     public Operations Operations { get; }
@@ -133,15 +137,98 @@ public sealed class AgentServer : IDisposable
             if (Interlocked.CompareExchange(ref terminating, 2, 0) != 0) return;
             Dispose(); TerminationRequested?.Invoke();
         };
+        privateNetworkEnabled = !loopbackOnly;
         listener = new TcpListener(loopbackOnly ? IPAddress.Loopback : IPAddress.Any, port);
         discovery = new UdpClient(new IPEndPoint(loopbackOnly ? IPAddress.Loopback : IPAddress.Any, Discovery.Port));
     }
     public void Start()
     {
-        _ = ExecutableIdentity.Sha256; if (!Paired) Pairing.Open(); listener.Start(); Volatile.Write(ref listening, 1);
-        _ = Task.Run(AcceptAsync); _ = Task.Run(DiscoverAsync); _ = Task.Run(WatchSessionAsync);
+        _ = ExecutableIdentity.Sha256;
+        lock (transportLock)
+        {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
+            if (Volatile.Read(ref started) != 0) throw new InvalidOperationException("The agent listener has already started.");
+            if (!Paired) Pairing.Open();
+            listener.Start();
+            Volatile.Write(ref started, 1);
+            StartTransportLoopsLocked();
+        }
+        _ = Task.Run(WatchSessionAsync);
         Status?.Invoke("Agent ready for pairing; access is visible in this window.");
         if (Paired) _ = StartMaintenanceAsync();
+    }
+    public void EnablePrivateNetwork()
+    {
+        Exception? promotionFailure = null;
+        lock (transportLock)
+        {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
+            if (Volatile.Read(ref started) == 0) throw new InvalidOperationException("Start the agent before enabling its private-network listener.");
+            if (privateNetworkEnabled)
+            {
+                if (Volatile.Read(ref listening) == 0) throw new InvalidOperationException("The private-network listener is not accepting connections.");
+                return;
+            }
+
+            Volatile.Write(ref listening, 0);
+            try { listener.Stop(); } catch (SocketException) { }
+            try { discovery.Dispose(); } catch { }
+
+            try
+            {
+                (listener, discovery) = CreateStartedTransport(IPAddress.Any);
+                privateNetworkEnabled = true;
+                StartTransportLoopsLocked();
+            }
+            catch (SocketException ex)
+            {
+                promotionFailure = ex;
+                try
+                {
+                    (listener, discovery) = CreateStartedTransport(IPAddress.Loopback);
+                    privateNetworkEnabled = false;
+                    StartTransportLoopsLocked();
+                }
+                catch (SocketException restoreFailure)
+                {
+                    throw new IOException("The private-network listener failed and loopback pairing could not be restored.",
+                        new AggregateException(ex, restoreFailure));
+                }
+            }
+        }
+
+        if (promotionFailure != null)
+        {
+            Status?.Invoke("Private-network listening failed; loopback pairing remains available with the same code.");
+            throw new IOException("The private-network listener could not start; loopback pairing was restored.", promotionFailure);
+        }
+        Status?.Invoke("Private-network listening is active; the current pairing code remains valid.");
+    }
+    private (TcpListener Listener, UdpClient Discovery) CreateStartedTransport(IPAddress address)
+    {
+        var nextListener = new TcpListener(address, Port);
+        UdpClient? nextDiscovery = null;
+        try
+        {
+            nextDiscovery = new UdpClient(new IPEndPoint(address, Discovery.Port));
+            nextListener.Start();
+            return (nextListener, nextDiscovery);
+        }
+        catch
+        {
+            try { nextListener.Stop(); } catch { }
+            try { nextDiscovery?.Dispose(); } catch { }
+            throw;
+        }
+    }
+    private void StartTransportLoopsLocked()
+    {
+        TcpListener activeListener = listener;
+        UdpClient activeDiscovery = discovery;
+        long generation = ++transportGeneration;
+        Volatile.Write(ref listening, 1);
+        _ = Task.Run(() => AcceptAsync(activeListener, generation));
+        _ = Task.Run(() => DiscoverAsync(activeDiscovery));
     }
     public (string Ticket, DateTimeOffset ExpiresUtc) PrepareUpdateReconnect(string replacementHash, DateTimeOffset deadline)
     {
@@ -199,15 +286,23 @@ public sealed class AgentServer : IDisposable
         Operations.Maintenance.Dispose();
         requests.Clear(); Status?.Invoke("Access revoked. Active operations cancelled.");
     }
-    private async Task DiscoverAsync()
+    private async Task DiscoverAsync(UdpClient activeDiscovery)
     {
-        try { while (!stop.IsCancellationRequested) { var r = await discovery.ReceiveAsync(stop.Token); if (r.Buffer.Length == Discovery.Query.Length && Encoding.UTF8.GetString(r.Buffer) == Discovery.Query) await discovery.SendAsync(JsonSerializer.SerializeToUtf8Bytes(new Peer(Environment.MachineName, "", Port, Fingerprint), Json.Options), r.RemoteEndPoint, stop.Token); } }
+        try { while (!stop.IsCancellationRequested) { var r = await activeDiscovery.ReceiveAsync(stop.Token); if (r.Buffer.Length == Discovery.Query.Length && Encoding.UTF8.GetString(r.Buffer) == Discovery.Query) await activeDiscovery.SendAsync(JsonSerializer.SerializeToUtf8Bytes(new Peer(Environment.MachineName, "", Port, Fingerprint), Json.Options), r.RemoteEndPoint, stop.Token); } }
         catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or SocketException) { }
     }
-    private async Task AcceptAsync()
+    private async Task AcceptAsync(TcpListener activeListener, long generation)
     {
-        try { while (!stop.IsCancellationRequested) { var tcp = await listener.AcceptTcpClientAsync(stop.Token); if (tcp.Client.RemoteEndPoint is not IPEndPoint remote || !IsLocalPeer(remote.Address) || !slots.Wait(0)) { tcp.Dispose(); continue; } tcp.NoDelay = true; _ = ServeAsync(tcp); } }
+        try { while (!stop.IsCancellationRequested) { var tcp = await activeListener.AcceptTcpClientAsync(stop.Token); if (tcp.Client.RemoteEndPoint is not IPEndPoint remote || !IsLocalPeer(remote.Address) || !slots.Wait(0)) { tcp.Dispose(); continue; } tcp.NoDelay = true; _ = ServeAsync(tcp); } }
         catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or SocketException) { }
+        finally
+        {
+            lock (transportLock)
+            {
+                if (Volatile.Read(ref disposed) == 0 && generation == transportGeneration && ReferenceEquals(listener, activeListener))
+                    Volatile.Write(ref listening, 0);
+            }
+        }
     }
     private static bool IsLocalPeer(IPAddress peer)
     {
@@ -418,7 +513,23 @@ public sealed class AgentServer : IDisposable
         try { await Operations.Maintenance.StartAsync(stop.Token); Status?.Invoke("Administrator maintenance active for this session."); }
         catch (Exception ex) { if (!stop.IsCancellationRequested) Status?.Invoke("Administrator maintenance unavailable: " + ex.Message); }
     }
-    public void Dispose() { if (Interlocked.Exchange(ref disposed, 1) != 0) return; Volatile.Write(ref listening, 0); Pairing.Close(); stop.Cancel(); Operations.Maintenance.Dispose(); Native.ReleaseAllInput(); listener.Stop(); discovery.Dispose(); updates.Dispose(); }
+    public void Dispose()
+    {
+        TcpListener activeListener;
+        UdpClient activeDiscovery;
+        lock (transportLock)
+        {
+            if (Interlocked.Exchange(ref disposed, 1) != 0) return;
+            Volatile.Write(ref listening, 0);
+            transportGeneration++;
+            activeListener = listener;
+            activeDiscovery = discovery;
+        }
+        Pairing.Close(); stop.Cancel(); Operations.Maintenance.Dispose(); Native.ReleaseAllInput();
+        try { activeListener.Stop(); } catch { }
+        try { activeDiscovery.Dispose(); } catch { }
+        updates.Dispose();
+    }
 }
 
 public sealed class RemoteClient(Connection connection)
