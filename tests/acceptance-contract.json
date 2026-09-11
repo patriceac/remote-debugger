@@ -21,6 +21,7 @@
     "pairCode": "pairCode",
     "pair": "pair",
     "connectionStatus": "connectionStatus",
+    "connectionFormState": "connectionFormState",
     "terminateSession": "terminateSession",
     "navScreen": "navScreen",
     "navProcesses": "navProcesses",

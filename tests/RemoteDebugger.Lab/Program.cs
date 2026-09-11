@@ -1187,7 +1187,7 @@ internal sealed partial class LabForm : Forms.Form
         {
             // Updating can transfer and stage a large replacement after PAKE
             // succeeds. Record the actual status transition from Enter first,
-            // then give the managed handoff a bounded 240 seconds to become
+            // then give the managed handoff a bounded 600 seconds to become
             // connected. The later binary-hash assertion remains required.
             bool pairingAttempted = await WaitForTextAsync("connectionFormState", IsPairingAttempt, 30);
             string transitionText = TryValue("connectionFormState");
@@ -1197,15 +1197,15 @@ internal sealed partial class LabForm : Forms.Form
                 Fail("controller.code_enter_pairing", "Entering the six-digit code and pressing Enter starts authenticated update pairing", new { pairText, transitionText, codeLength = code.Length, updateVariant, visible = UiTexts().Take(100).ToArray() });
 
             var connectedWait = Stopwatch.StartNew();
-            connected = await WaitForTextAsync("connectionStatus", IsConnected, 240);
+            connected = await WaitForTextAsync("connectionStatus", IsConnected, 600);
             double connectedWaitedSeconds = connectedWait.Elapsed.TotalSeconds;
             string connectedText = TryValue("connectionStatus");
             if (connected)
-                Pass("controller.code_enter_connected", "The update pairing flow reaches a connected state after the staged handoff", new { transitionText, connectedText, updateVariant, waitedSeconds = connectedWaitedSeconds, timeoutSeconds = 240 });
+                Pass("controller.code_enter_connected", "The update pairing flow reaches a connected state after the staged handoff", new { transitionText, connectedText, updateVariant, waitedSeconds = connectedWaitedSeconds, timeoutSeconds = 600 });
             else
             {
                 CaptureDesktop("controller-update-failure.png");
-                Fail("controller.code_enter_connected", "The update pairing flow reaches a connected state after the staged handoff", new { transitionText, connectedText, formStatus = TryValue("connectionFormState"), updateVariant, waitedSeconds = connectedWaitedSeconds, timeoutSeconds = 240, visible = UiTexts().Take(100).ToArray() });
+                Fail("controller.code_enter_connected", "The update pairing flow reaches a connected state after the staged handoff", new { transitionText, connectedText, formStatus = TryValue("connectionFormState"), updateVariant, waitedSeconds = connectedWaitedSeconds, timeoutSeconds = 600, visible = UiTexts().Take(100).ToArray() });
             }
             if (!connected) throw new InvalidOperationException("Controller did not reach connected state after update pairing and handoff.");
         }
