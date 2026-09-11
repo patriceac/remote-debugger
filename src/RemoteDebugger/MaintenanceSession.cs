@@ -18,8 +18,9 @@ public sealed class MaintenanceSession(string root) : IDisposable
 {
     private readonly string dataRoot = Path.GetFullPath(root);
     private readonly SemaphoreSlim gate = new(1, 1);
+    private readonly object stateLock = new();
     private NamedPipeClientStream? pipe;
-    private CancellationTokenSource lifetime = new();
+    private readonly CancellationTokenSource lifetime = new();
     private MaintenanceSessionStatus status = new(false, false, true, "Privileged maintenance has not started.");
     private int disposed;
 
@@ -32,6 +33,7 @@ public sealed class MaintenanceSession(string root) : IDisposable
         await gate.WaitAsync(ct);
         try
         {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
             if (pipe is { IsConnected: true }) return;
             DisposePipe();
             var platform = await SupportPlatform.GetStatusAsync(ct);
@@ -49,9 +51,14 @@ public sealed class MaintenanceSession(string root) : IDisposable
                 await Wire.WriteAsync(candidate, new Request(id, "", "maintenance.open", Json.Element(new { dataRoot })), connect.Token);
                 var reply = await Wire.ReadAsync<Reply>(candidate, connect.Token);
                 var data = RemoteClient.Require(reply);
-                pipe = candidate;
-                Volatile.Write(ref status, new(true, true, false,
-                    "Administrator maintenance is active until the paired agent session ends.", data.Str("leaseId")));
+                lock (stateLock)
+                {
+                    ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
+                    connect.Token.ThrowIfCancellationRequested();
+                    pipe = candidate;
+                    Volatile.Write(ref status, new(true, true, false,
+                        "Administrator maintenance is active until the paired agent session ends.", data.Str("leaseId")));
+                }
             }
             catch { candidate.Dispose(); throw; }
         }
@@ -64,6 +71,7 @@ public sealed class MaintenanceSession(string root) : IDisposable
         await gate.WaitAsync(ct);
         try
         {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
             var current = pipe;
             if (current is not { IsConnected: true } || !CurrentStatus.Active)
                 throw new InvalidOperationException("Administrator maintenance is unavailable. Pair the session after provisioning local support.");
@@ -90,19 +98,33 @@ public sealed class MaintenanceSession(string root) : IDisposable
 
     private void DisposePipe()
     {
-        var current = Interlocked.Exchange(ref pipe, null);
+        NamedPipeClientStream? current;
+        lock (stateLock)
+        {
+            current = pipe;
+            pipe = null;
+            if (Volatile.Read(ref disposed) == 0)
+                Volatile.Write(ref status, new(false, CurrentStatus.BrokerAvailable, CurrentStatus.RequiresProvisioning, "Administrator maintenance ended."));
+        }
         try { current?.Dispose(); } catch { }
-        if (Volatile.Read(ref disposed) == 0)
-            Volatile.Write(ref status, new(false, CurrentStatus.BrokerAvailable, CurrentStatus.RequiresProvisioning, "Administrator maintenance ended."));
     }
 
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref disposed, 1) != 0) return;
-        lifetime.Cancel();
-        DisposePipe();
-        lifetime.Dispose();
-        gate.Dispose();
-        Volatile.Write(ref status, new(false, false, false, "Administrator maintenance ended with the agent session."));
+        NamedPipeClientStream? current;
+        lock (stateLock)
+        {
+            if (Interlocked.Exchange(ref disposed, 1) != 0) return;
+            current = pipe;
+            pipe = null;
+            Volatile.Write(ref status, new(false, false, false, "Administrator maintenance ended with the agent session."));
+        }
+
+        // Cancellation and pipe closure interrupt in-flight calls. The semaphore
+        // and token source remain owned by this object until it is collected so
+        // continuations that already passed their initial disposal check can
+        // finish without touching synchronization primitives that were torn down.
+        try { lifetime.Cancel(); } catch (ObjectDisposedException) { }
+        try { current?.Dispose(); } catch { }
     }
 }
