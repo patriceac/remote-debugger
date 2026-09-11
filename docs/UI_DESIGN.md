@@ -42,6 +42,8 @@ Selected machine name, IP, one 6-digit field (160 px, Consolas 20), teal Connect
 
 During pairing/sync keep selected target fixed, disable duplicate submissions, show Appairage... / Synchronisation de l'agent... / Reconnexion... in the form. Do not label Live until a fresh frame is displayed and hashes match. Selecting another target cancels pending work and clears its input queue/state.
 
+During an update, show a thin transfer bar and an explicit percentage plus received/total MiB. The controller uses acknowledged bytes, and the agent uses bytes actually written. The agent reuses the code-countdown area after pairing. At 100 percent, label verification and restart/reconnection separately; transfer completion must not imply a live session. The terminate action remains available during synchronization.
+
 ## Controller: live view (controller-live.svg)
 
 Header remote PC name and IP, Connected pill, terminate button. Toolbar under header: Ecran label with monitor selector, checked Controle souris et clavier toggle, small Pause/Reprendre viewing action. Main viewport fills remaining space with #142630 letterbox; no giant padding or redundant surrounding cards. Small EN DIRECT badge sits within the viewer top-left only while frames are current. An interruption overlay must clearly distinguish the last frozen frame.

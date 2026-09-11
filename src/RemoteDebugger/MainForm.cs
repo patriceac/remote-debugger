@@ -82,6 +82,11 @@ public sealed class MainForm : Forms.Form
     private readonly Forms.Button pairButton = Button("Connecter", "pair", 110, primary: true);
     private readonly Forms.Button discoverButton = Button("Actualiser", "discover", 92);
     private readonly Forms.Label connectionState = new() { Name = "connectionFormState", AutoSize = true, ForeColor = SecondaryText, MaximumSize = new Size(460, 0) };
+    private readonly Forms.TableLayoutPanel updateProgressArea = new() { Dock = Forms.DockStyle.Top, Height = 50, ColumnCount = 1, RowCount = 2, Margin = Forms.Padding.Empty, Visible = false };
+    private readonly Forms.Panel updateProgressTrack = new() { Name = "updateProgress", Dock = Forms.DockStyle.Fill, BackColor = Divider, Margin = new Forms.Padding(0, 0, 0, 4) };
+    private readonly Forms.Panel updateProgressFill = new() { Dock = Forms.DockStyle.Left, BackColor = Teal, Width = 0 };
+    private readonly Forms.Label updateProgressText = new() { Name = "updateProgressText", Dock = Forms.DockStyle.Fill, AutoSize = false, ForeColor = SecondaryText, Margin = Forms.Padding.Empty };
+    private int updateTransferPercent;
     private readonly Forms.Label selectedPeerName = new() { AutoSize = true, Font = new Font("Segoe UI", 15, FontStyle.Bold), ForeColor = PrimaryText };
     private readonly Forms.Label selectedPeerAddress = new() { AutoSize = true, ForeColor = SecondaryText };
     private readonly Forms.Label discoveryState = new() { AutoSize = true, ForeColor = SecondaryText };
@@ -401,7 +406,33 @@ public sealed class MainForm : Forms.Form
         panel.Controls.Add(new Forms.Label { Text = "Code à 6 chiffres", AutoSize = true, ForeColor = SecondaryText, Margin = Forms.Padding.Empty, Dock = Forms.DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 4);
         var codeRow = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, WrapContents = false, FlowDirection = Forms.FlowDirection.LeftToRight, Margin = new Forms.Padding(0) };
         code.Width = 160; code.Height = 40; code.Font = new Font("Consolas", 20); code.MaxLength = 6; code.TextAlign = Forms.HorizontalAlignment.Center; code.Margin = new Forms.Padding(0, 0, 12, 0); codeRow.Controls.Add(code); codeRow.Controls.Add(pairButton); panel.Controls.Add(codeRow, 0, 5);
-        connectionState.Margin = new Forms.Padding(0, 7, 0, 0); panel.Controls.Add(connectionState, 0, 6); return panel;
+        connectionState.Margin = new Forms.Padding(0, 7, 0, 0); panel.Controls.Add(connectionState, 0, 6);
+        updateProgressArea.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 10));
+        updateProgressArea.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
+        updateProgressTrack.Controls.Add(updateProgressFill);
+        updateProgressTrack.SizeChanged += (_, _) => updateProgressFill.Width = updateProgressTrack.ClientSize.Width * updateTransferPercent / 100;
+        updateProgressArea.Controls.Add(updateProgressTrack, 0, 0); updateProgressArea.Controls.Add(updateProgressText, 0, 1);
+        panel.Controls.Add(updateProgressArea, 0, 7); return panel;
+    }
+
+    private static string UpdateProgressDescription(AgentUpdateProgress progress) => progress.Stage switch
+    {
+        "transferring" => $"Transfert · {progress.TransferPercent} % · {progress.TransferredBytes / 1048576d:N1} / {progress.TotalBytes / 1048576d:N1} Mio",
+        "verifying" => "Transfert terminé · vérification de la version…",
+        "restarting" => "Transfert terminé · redémarrage et reconnexion…",
+        "complete" => "Version synchronisée",
+        _ => "Préparation du transfert…"
+    };
+
+    private void ShowUpdateProgress(AgentUpdateProgress progress)
+    {
+        updateProgressArea.Visible = true;
+        updateTransferPercent = progress.TransferPercent;
+        updateProgressFill.Width = updateProgressTrack.ClientSize.Width * updateTransferPercent / 100;
+        updateProgressFill.BackColor = Teal;
+        updateProgressText.ForeColor = SecondaryText;
+        updateProgressText.Text = UpdateProgressDescription(progress);
+        updateProgressTrack.AccessibleName = updateProgressText.Text;
     }
 
     private PagePanel BuildScreenPage()
@@ -695,7 +726,8 @@ public sealed class MainForm : Forms.Form
         }
         else if (session.Connected)
         {
-            CurrentPairingCode = null; pairingCountdown.Value = 0; pairingCountdownText.Text = "Synchronisation de l’agent…"; agentPairCode.Text = "Synchronisation en cours"; agentState.Text = "Session authentifiée · préparation de l’agent"; agentSessionNote.Text = "Les commandes restent désactivées jusqu’à la validation des versions."; terminateSession.Visible = true;
+            var updateProgress = agent.UpdateProgress;
+            CurrentPairingCode = null; pairingCountdown.Value = updateProgress.TransferPercent * 3; pairingCountdownText.Text = UpdateProgressDescription(updateProgress); agentPairCode.Text = "Synchronisation en cours"; agentState.Text = "Session authentifiée · préparation de l’agent"; agentSessionNote.Text = "Les commandes restent désactivées jusqu’à la validation des versions."; terminateSession.Visible = true;
         }
         else if (session.HasPaired && session.State == "reconnecting")
         {
@@ -736,7 +768,7 @@ public sealed class MainForm : Forms.Form
         statusLabel.ForeColor = connected ? ConnectedText : reconnecting ? WarningText : Color.FromArgb(80, 103, 113);
         statusLabel.Text = connected ? "Connecté" : reconnecting ? "Reconnexion…" : synchronizing ? "Synchronisation…" : pairing ? "Appairage…" : "En attente de connexion";
         statusPill.AccessibleName = statusLabel.Text; statusPill.Region?.Dispose(); statusPill.Region = RoundedRegion(statusPill.Size, 16);
-        terminateSession.Visible = onAgent ? agent?.Session.Connected == true || agent?.Session.State == "reconnecting" : supportSession;
+        terminateSession.Visible = onAgent ? agent?.Session.Connected == true || agent?.Session.State == "reconnecting" : supportSession || synchronizingAgent;
         roleAgent.BackColor = onAgent ? SelectedRail : Rail; roleController.BackColor = onController ? SelectedRail : Rail; navConnection.BackColor = onController && controllerPages.SelectedIndex == 0 ? SelectedRail : Rail; navScreen.BackColor = onController && controllerPages.SelectedIndex == 1 ? SelectedRail : Rail; navProcesses.BackColor = onController && controllerPages.SelectedIndex == 2 ? SelectedRail : Rail; navFiles.BackColor = onController && controllerPages.SelectedIndex == 3 ? SelectedRail : Rail; navDiagnostics.BackColor = onController && controllerPages.SelectedIndex == 4 ? SelectedRail : Rail;
     }
 
@@ -863,6 +895,7 @@ public sealed class MainForm : Forms.Form
         if (code.Text.Length != 6 || !code.Text.All(char.IsAsciiDigit)) { connectionState.Text = "Le code doit comporter exactement six chiffres."; code.Focus(); return; }
         pairingBusy = true; synchronizingAgent = false; pairButton.Enabled = false; discoverButton.Enabled = false; code.Enabled = false; host.Enabled = false; operationGeneration++; int generation = operationGeneration; sessionGeneration++; lastFrameUtc = null; liveFrameFresh = false; var pairingCts = new CancellationTokenSource(); pairingLifetime = pairingCts;
         RemoteClient? pairedClient = null;
+        updateProgressArea.Visible = false;
         try
         {
             pairedClient = new RemoteClient(new Connection(host.Text.Trim(), 45832, selectedFingerprint, "")); client = pairedClient; connectionState.Text = "Appairage…"; footerMessage = "Appairage…"; UpdateHeader(); RefreshFooter();
@@ -872,11 +905,15 @@ public sealed class MainForm : Forms.Form
                 try { await pairedClient.PairAsync(code.Text, handshake.Token); }
                 catch (OperationCanceledException) when (!pairingCts.IsCancellationRequested) { throw new TimeoutException("L’appairage n’a pas abouti dans le délai prévu."); }
             }
-            pairedClient.Save(); synchronizingAgent = true; connectionState.Text = "Synchronisation de l’agent…"; footerMessage = "Synchronisation de l’agent…"; footerDetail = "Transfert et validation de la version"; UpdateHeader(); RefreshFooter();
+            pairedClient.Save(); synchronizingAgent = true; connectionState.Text = "Synchronisation de l’agent…"; footerMessage = "Synchronisation de l’agent…"; footerDetail = "Transfert et validation de la version"; ShowUpdateProgress(new AgentUpdateProgress("idle", 0, 0)); UpdateHeader(); RefreshFooter();
             using (var synchronization = CancellationTokenSource.CreateLinkedTokenSource(pairingCts.Token))
             {
                 synchronization.CancelAfter(TimeSpan.FromSeconds(SupportOperationTimeouts.ControllerSynchronizationSeconds));
-                try { await SupportPlatform.SynchronizeAgentAsync(pairedClient, synchronization.Token); }
+                var progress = new Progress<AgentUpdateProgress>(value =>
+                {
+                    if (!IsDisposed && generation == operationGeneration && pairingBusy) ShowUpdateProgress(value);
+                });
+                try { await SupportPlatform.SynchronizeAgentAsync(pairedClient, synchronization.Token, progress); }
                 catch (OperationCanceledException) when (!pairingCts.IsCancellationRequested) { throw new TimeoutException("La synchronisation de l’agent n’a pas abouti dans le délai prévu."); }
             }
             if (generation != operationGeneration) return; synchronizingAgent = false; supportSession = true; heartbeatHealthy = false; powerHold ??= PowerHold.Acquire(); StartHeartbeat(); SelectRole(1); SelectControllerPage(1); connectionState.Text = "Session établie."; footerMessage = "Session active · versions synchronisées"; footerDetail = "Chargement des mesures…"; RefreshFooter(); _ = LoadInitialRemoteStateAsync(generation);
@@ -888,6 +925,11 @@ public sealed class MainForm : Forms.Form
             bool ownsPairing = ReferenceEquals(pairingLifetime, pairingCts);
             if (ownsPairing)
             {
+                if (updateProgressArea.Visible && !supportSession)
+                {
+                    updateProgressText.Text = "Synchronisation interrompue";
+                    updateProgressText.ForeColor = DestructiveText; updateProgressFill.BackColor = DestructiveText;
+                }
                 pairingLifetime = null;
                 synchronizingAgent = false;
                 pairingCts.Dispose();

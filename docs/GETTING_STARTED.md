@@ -6,7 +6,7 @@ The interface uses French labels. Use the same signed Release on both Windows x6
 2. On first use, **Activer sur ce PC** performs the one-time Windows administrator setup. It installs the protected support application and a local broker, enrolls the publisher, and relaunches the managed copy. Thereafter Private-network authorization and administrator maintenance are automatic. The application does not change a Public network to Private.
 3. On the controlling PC choose **Prendre le contrôle**. Nearby PCs appear automatically. Select the receiving PC, or enter its IP address if discovery is unavailable.
 4. Enter the receiving PC's code and press Enter or **Connecter**. Pairing authenticates the encrypted connection using the code, and subsequent connections pin that identity.
-5. Wait for binary synchronization. If necessary, the agent silently receives and restarts into the exact signed executable running on the controller. A brief planned restart does not require another code. The controller then opens **Écran distant** automatically.
+5. Wait for binary synchronization. If necessary, the agent silently receives and restarts into the exact signed executable running on the controller. Both PCs show actual transfer bytes and percentage; verification and restart are separate stages after the transfer reaches 100 percent. A planned restart does not require another code. The controller then opens **Écran distant** automatically.
 
 The agent uses TCP 45832 and UDP 45833 on the local subnet. No router configuration, port forwarding, or Internet service is needed.
 
