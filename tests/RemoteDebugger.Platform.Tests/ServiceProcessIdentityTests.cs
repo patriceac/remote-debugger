@@ -1,4 +1,5 @@
 using Xunit;
+using RemoteDebugger.Core;
 
 namespace RemoteDebugger.Platform.Tests;
 
@@ -46,5 +47,21 @@ public sealed class SupportOperationTimeoutTests
         Assert.True(SupportOperationTimeouts.FirewallEnsureExecutionSeconds >= 60);
         Assert.True(SupportOperationTimeouts.FirewallEnsureRoundTripSeconds >
                     SupportOperationTimeouts.FirewallEnsureExecutionSeconds);
+    }
+
+    [Fact]
+    public void UpdateBudgetsCoverTransferAndColdRestartPreparation()
+    {
+        Assert.True(SupportOperationTimeouts.ControllerSynchronizationSeconds >
+                    SupportOperationTimeouts.PairingHandshakeSeconds);
+
+        int supportedColdPreparationSeconds =
+            SupportOperationTimeouts.PlatformStatusRoundTripSeconds * 2 +
+            SupportOperationTimeouts.FirewallEnsureRoundTripSeconds;
+        Assert.True(SupportOperationTimeouts.UpdateStartupHealthReportSeconds > supportedColdPreparationSeconds);
+        Assert.True(SupportOperationTimeouts.UpdateStartupHealthRollbackSeconds >
+                    SupportOperationTimeouts.UpdateStartupHealthReportSeconds + 15);
+        Assert.True(UpdateReconnectGrant.MaximumLifetime.TotalSeconds >
+                    SupportOperationTimeouts.UpdateStartupHealthRollbackSeconds);
     }
 }

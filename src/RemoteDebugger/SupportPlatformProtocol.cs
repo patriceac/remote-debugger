@@ -32,6 +32,10 @@ internal static class SupportOperationTimeouts
     public const int PlatformStatusRoundTripSeconds = 75;
     public const int FirewallEnsureExecutionSeconds = 120;
     public const int FirewallEnsureRoundTripSeconds = 135;
+    public const int PairingHandshakeSeconds = 120;
+    public const int ControllerSynchronizationSeconds = 600;
+    public const int UpdateStartupHealthReportSeconds = 300;
+    public const int UpdateStartupHealthRollbackSeconds = 360;
 }
 
 internal sealed record SupportConfiguration(

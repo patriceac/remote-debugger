@@ -42,7 +42,8 @@ public static class Program
             form.Shown += async (_, _) =>
             {
                 Exception? last = null;
-                for (int attempt = 0; attempt < 60; attempt++)
+                DateTimeOffset deadline = DateTimeOffset.UtcNow.AddSeconds(SupportOperationTimeouts.UpdateStartupHealthReportSeconds);
+                while (!form.IsDisposed && DateTimeOffset.UtcNow < deadline)
                 {
                     try
                     {

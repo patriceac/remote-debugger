@@ -307,11 +307,14 @@ internal sealed class PrivilegedUpdateManager : IDisposable
         {
             using var process = Process.GetProcessById(transaction.NewProcessId!.Value);
             exited = process.WaitForExitAsync(transactionCancellation);
-            Task completed = await Task.WhenAny(signal.Task, exited, Task.Delay(TimeSpan.FromSeconds(45), transactionCancellation));
+            Task completed = await Task.WhenAny(signal.Task, exited,
+                Task.Delay(TimeSpan.FromSeconds(SupportOperationTimeouts.UpdateStartupHealthRollbackSeconds), transactionCancellation));
             transactionCancellation.ThrowIfCancellationRequested();
             if (completed != signal.Task || !await signal.Task)
             {
-                string reason = completed == exited ? "Updated application exited before reporting startup health." : "Updated application did not report startup health within 45 seconds.";
+                string reason = completed == exited
+                    ? "Updated application exited before reporting startup health."
+                    : $"Updated application did not report startup health within {SupportOperationTimeouts.UpdateStartupHealthRollbackSeconds} seconds.";
                 await RollbackAsync(Load(transaction.TransactionId), reason);
             }
         }

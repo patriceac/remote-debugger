@@ -157,6 +157,7 @@ public sealed class MainForm : Forms.Form
     private bool heartbeatHealthy;
     private bool supportSession;
     private bool pairingBusy;
+    private bool synchronizingAgent;
     private bool terminating;
     private bool quitting;
     private bool shutdownStarted;
@@ -727,11 +728,13 @@ public sealed class MainForm : Forms.Form
 
         bool connected = onAgent ? agent?.Session is { Connected: true, BinaryMatched: true } : heartbeatHealthy && supportSession;
         bool reconnecting = onAgent ? agent?.Session.State == "reconnecting" : supportSession && !heartbeatHealthy;
-        bool synchronizing = onAgent && agent?.Session is { Connected: true, BinaryMatched: false };
+        bool pairing = onController && pairingBusy && !synchronizingAgent;
+        bool synchronizing = onAgent && agent?.Session is { Connected: true, BinaryMatched: false } ||
+            onController && pairingBusy && synchronizingAgent;
         statusPill.BackColor = connected ? ConnectedBack : reconnecting ? Color.FromArgb(255, 244, 222) : Color.FromArgb(237, 241, 244);
         statusDot.ForeColor = connected ? Color.FromArgb(50, 137, 91) : reconnecting ? WarningText : SecondaryText;
         statusLabel.ForeColor = connected ? ConnectedText : reconnecting ? WarningText : Color.FromArgb(80, 103, 113);
-        statusLabel.Text = connected ? "Connecté" : reconnecting ? "Reconnexion…" : synchronizing ? "Synchronisation…" : "En attente de connexion";
+        statusLabel.Text = connected ? "Connecté" : reconnecting ? "Reconnexion…" : synchronizing ? "Synchronisation…" : pairing ? "Appairage…" : "En attente de connexion";
         statusPill.AccessibleName = statusLabel.Text; statusPill.Region?.Dispose(); statusPill.Region = RoundedRegion(statusPill.Size, 16);
         terminateSession.Visible = onAgent ? agent?.Session.Connected == true || agent?.Session.State == "reconnecting" : supportSession;
         roleAgent.BackColor = onAgent ? SelectedRail : Rail; roleController.BackColor = onController ? SelectedRail : Rail; navConnection.BackColor = onController && controllerPages.SelectedIndex == 0 ? SelectedRail : Rail; navScreen.BackColor = onController && controllerPages.SelectedIndex == 1 ? SelectedRail : Rail; navProcesses.BackColor = onController && controllerPages.SelectedIndex == 2 ? SelectedRail : Rail; navFiles.BackColor = onController && controllerPages.SelectedIndex == 3 ? SelectedRail : Rail; navDiagnostics.BackColor = onController && controllerPages.SelectedIndex == 4 ? SelectedRail : Rail;
@@ -858,13 +861,27 @@ public sealed class MainForm : Forms.Form
     {
         if (pairingBusy || string.IsNullOrWhiteSpace(host.Text)) { connectionState.Text = "Choisissez un PC ou saisissez son adresse IP."; return; }
         if (code.Text.Length != 6 || !code.Text.All(char.IsAsciiDigit)) { connectionState.Text = "Le code doit comporter exactement six chiffres."; code.Focus(); return; }
-        pairingBusy = true; pairButton.Enabled = false; discoverButton.Enabled = false; code.Enabled = false; host.Enabled = false; operationGeneration++; int generation = operationGeneration; sessionGeneration++; lastFrameUtc = null; liveFrameFresh = false; var pairingCts = new CancellationTokenSource(TimeSpan.FromMinutes(2)); pairingLifetime = pairingCts; CancellationToken ct = pairingCts.Token;
+        pairingBusy = true; synchronizingAgent = false; pairButton.Enabled = false; discoverButton.Enabled = false; code.Enabled = false; host.Enabled = false; operationGeneration++; int generation = operationGeneration; sessionGeneration++; lastFrameUtc = null; liveFrameFresh = false; var pairingCts = new CancellationTokenSource(); pairingLifetime = pairingCts;
         RemoteClient? pairedClient = null;
         try
         {
-            connectionState.Text = "Appairage…"; footerMessage = "Appairage…"; RefreshFooter(); pairedClient = new RemoteClient(new Connection(host.Text.Trim(), 45832, selectedFingerprint, "")); client = pairedClient; await pairedClient.PairAsync(code.Text, ct); pairedClient.Save(); connectionState.Text = "Synchronisation de l’agent…"; await SupportPlatform.SynchronizeAgentAsync(pairedClient, ct); if (generation != operationGeneration) return; supportSession = true; heartbeatHealthy = false; powerHold ??= PowerHold.Acquire(); StartHeartbeat(); SelectRole(1); SelectControllerPage(1); connectionState.Text = "Session établie."; footerMessage = "Session active · versions synchronisées"; footerDetail = "Chargement des mesures…"; RefreshFooter(); _ = LoadInitialRemoteStateAsync(generation);
+            pairedClient = new RemoteClient(new Connection(host.Text.Trim(), 45832, selectedFingerprint, "")); client = pairedClient; connectionState.Text = "Appairage…"; footerMessage = "Appairage…"; UpdateHeader(); RefreshFooter();
+            using (var handshake = CancellationTokenSource.CreateLinkedTokenSource(pairingCts.Token))
+            {
+                handshake.CancelAfter(TimeSpan.FromSeconds(SupportOperationTimeouts.PairingHandshakeSeconds));
+                try { await pairedClient.PairAsync(code.Text, handshake.Token); }
+                catch (OperationCanceledException) when (!pairingCts.IsCancellationRequested) { throw new TimeoutException("L’appairage n’a pas abouti dans le délai prévu."); }
+            }
+            pairedClient.Save(); synchronizingAgent = true; connectionState.Text = "Synchronisation de l’agent…"; footerMessage = "Synchronisation de l’agent…"; footerDetail = "Transfert et validation de la version"; UpdateHeader(); RefreshFooter();
+            using (var synchronization = CancellationTokenSource.CreateLinkedTokenSource(pairingCts.Token))
+            {
+                synchronization.CancelAfter(TimeSpan.FromSeconds(SupportOperationTimeouts.ControllerSynchronizationSeconds));
+                try { await SupportPlatform.SynchronizeAgentAsync(pairedClient, synchronization.Token); }
+                catch (OperationCanceledException) when (!pairingCts.IsCancellationRequested) { throw new TimeoutException("La synchronisation de l’agent n’a pas abouti dans le délai prévu."); }
+            }
+            if (generation != operationGeneration) return; synchronizingAgent = false; supportSession = true; heartbeatHealthy = false; powerHold ??= PowerHold.Acquire(); StartHeartbeat(); SelectRole(1); SelectControllerPage(1); connectionState.Text = "Session établie."; footerMessage = "Session active · versions synchronisées"; footerDetail = "Chargement des mesures…"; RefreshFooter(); _ = LoadInitialRemoteStateAsync(generation);
         }
-        catch (OperationCanceledException) { if (pairedClient != null) _ = EndSessionBestEffortAsync(pairedClient); if (generation == operationGeneration) connectionState.Text = "Connexion annulée."; }
+        catch (OperationCanceledException) { if (pairedClient != null) _ = EndSessionBestEffortAsync(pairedClient); if (generation == operationGeneration) { connectionState.Text = "Connexion annulée."; footerMessage = "Connexion annulée"; footerDetail = "Réessayez avec le code affiché par l’agent"; } }
         catch (Exception ex) { if (pairedClient != null) _ = EndSessionBestEffortAsync(pairedClient); if (generation == operationGeneration) { connectionState.Text = "Échec : " + ex.Message; footerMessage = "Connexion impossible"; footerDetail = ex.Message; RefreshFooter(); } }
         finally
         {
@@ -872,9 +889,10 @@ public sealed class MainForm : Forms.Form
             if (ownsPairing)
             {
                 pairingLifetime = null;
+                synchronizingAgent = false;
                 pairingCts.Dispose();
             }
-            if (ownsPairing || generation == operationGeneration) { pairingBusy = false; pairButton.Enabled = true; discoverButton.Enabled = true; code.Enabled = true; host.Enabled = true; }
+            if (ownsPairing || generation == operationGeneration) { pairingBusy = false; pairButton.Enabled = true; discoverButton.Enabled = true; code.Enabled = true; host.Enabled = true; UpdateHeader(); RefreshFooter(); }
         }
     }
 
