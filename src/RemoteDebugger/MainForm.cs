@@ -93,6 +93,7 @@ public sealed class MainForm : Forms.Form
     private readonly List<Peer> discoveredPeers = [];
     private Peer? selectedPeer;
     private string selectedFingerprint = "";
+    private bool renderingPeers;
 
     // Live screen.
     private readonly RemoteScreenView screen = new() { Name = "remoteScreen", Dock = Forms.DockStyle.Fill, SizeMode = Forms.PictureBoxSizeMode.Zoom, BackColor = Rail };
@@ -868,12 +869,33 @@ public sealed class MainForm : Forms.Form
 
     private void RenderPeers()
     {
-        string? keep = selectedPeer?.Host ?? host.Text.Trim(); peers.BeginUpdate(); peers.Items.Clear(); foreach (var peer in discoveredPeers) { var item = new Forms.ListViewItem(peer.Name); item.SubItems.Add(peer.Host); item.SubItems.Add("Disponible"); item.Tag = peer; peers.Items.Add(item); if (peer.Host == keep) item.Selected = true; } peers.EndUpdate();
+        string? keep = selectedPeer?.Host ?? host.Text.Trim();
+        renderingPeers = true;
+        peers.BeginUpdate();
+        try
+        {
+            peers.Items.Clear();
+            foreach (var peer in discoveredPeers)
+            {
+                var item = new Forms.ListViewItem(peer.Name); item.SubItems.Add(peer.Host); item.SubItems.Add("Disponible"); item.Tag = peer; peers.Items.Add(item); if (peer.Host == keep) item.Selected = true;
+            }
+        }
+        finally
+        {
+            peers.EndUpdate();
+            renderingPeers = false;
+        }
     }
 
     private void SelectPeerFromList()
     {
+        if (renderingPeers) return;
         if (peers.SelectedItems.Count == 0 || peers.SelectedItems[0].Tag is not Peer peer) return;
+        if (supportSession && client != null && PeerDiscoveryPolicy.IsSameEndpoint(client.Connection.Host, client.Connection.Port, peer.Host, peer.Port))
+        {
+            selectedPeer = peer; selectedPeerName.Text = peer.Name; selectedPeerAddress.Text = peer.Host;
+            return;
+        }
         if (pairingBusy) { pairingLifetime?.Cancel(); action?.Cancel(); operationGeneration++; }
         if (supportSession && client != null)
         {
