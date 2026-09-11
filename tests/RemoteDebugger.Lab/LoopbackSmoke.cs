@@ -168,6 +168,14 @@ internal sealed partial class LabForm
     }
 
     private sealed record TrayContext(AutomationElement? OpenItem, string IconName, bool OverflowOpened);
+    private sealed record TrayBounds(int Left, int Top, int Width, int Height);
+    private sealed record TrayClickResult(bool Success, string Method, string Name, string Error, TrayBounds Bounds);
+
+    private static TrayBounds ToTrayBounds(System.Windows.Rect bounds)
+        => new(RoundTrayCoordinate(bounds.Left), RoundTrayCoordinate(bounds.Top), RoundTrayCoordinate(bounds.Width), RoundTrayCoordinate(bounds.Height));
+
+    private static int RoundTrayCoordinate(double value)
+        => value <= int.MinValue ? int.MinValue : value >= int.MaxValue ? int.MaxValue : (int)Math.Round(value);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern void mouse_event(uint flags, uint x, uint y, uint data, UIntPtr extraInfo);
@@ -248,24 +256,34 @@ internal sealed partial class LabForm
     {
         try
         {
-            return FindExplorerShellElements()
-                .Where(element =>
+            // Materialize each candidate while its provider snapshot is still
+            // valid.  A deferred LINQ sort can re-read an Explorer XAML
+            // element after the overflow island refreshes and turn one stale
+            // provider into an empty result for the whole query.
+            var matches = new List<AutomationElement>();
+            foreach (var element in FindExplorerShellElements())
+            {
+                try
                 {
-                    try
-                    {
-                        var current = element.Current;
-                        // Windows 11 exposes overflow notification icons as
-                        // Custom/Pane/Image providers, while older shells use
-                        // Button/ListItem.  Keep the name anchored to the
-                        // product and exclude a top-level window title.
-                        return !current.IsOffscreen
-                            && current.ControlType.ProgrammaticName != "ControlType.Window"
-                            && current.Name.Contains("Remote Debugger", StringComparison.OrdinalIgnoreCase);
-                    }
-                    catch (ElementNotAvailableException) { return false; }
-                })
-                .OrderByDescending(TrayElementScore)
-                .ToArray();
+                    var current = element.Current;
+                    // Windows 11 exposes overflow notification icons as
+                    // Custom/Pane/Image providers, while older shells use
+                    // Button/ListItem.  Keep the name anchored to the
+                    // product and exclude a top-level window title.
+                    if (!current.IsOffscreen
+                        && current.ControlType.ProgrammaticName != "ControlType.Window"
+                        && current.Name.Contains("Remote Debugger", StringComparison.OrdinalIgnoreCase))
+                        matches.Add(element);
+                }
+                // Explorer's XAML island can invalidate one provider while it
+                // is being materialized.  A single stale descendant must not
+                // discard the other, already available tray elements.
+                catch (Exception) { }
+            }
+            // Keep the eagerly materialized order.  Re-scoring UIA elements
+            // after the XAML island refresh can invalidate a provider between
+            // selection and the click even though the candidate was visible.
+            return matches.ToArray();
         }
         catch (Exception) { return []; }
     }
@@ -276,42 +294,41 @@ internal sealed partial class LabForm
     {
         try
         {
-            return FindExplorerShellElements()
-                .Where(element =>
+            var matches = new List<AutomationElement>();
+            foreach (var element in FindExplorerShellElements())
+            {
+                try
                 {
-                    try
-                    {
-                        var current = element.Current;
-                        string name = current.Name.ToLowerInvariant();
-                        string type = current.ControlType.ProgrammaticName;
-                        string id = current.AutomationId.ToLowerInvariant();
-                        string className = current.ClassName.ToLowerInvariant();
-                        bool nameHint = name.Contains("hidden", StringComparison.Ordinal)
-                            || name.Contains("masqu", StringComparison.Ordinal)
-                            || name.Contains("icône", StringComparison.Ordinal)
-                            || name.Contains("icones", StringComparison.Ordinal)
-                            || name.Contains("icônes", StringComparison.Ordinal)
-                            || name.Contains("icon", StringComparison.Ordinal)
-                            || name.Contains("overflow", StringComparison.Ordinal)
-                            || name.Contains("chevron", StringComparison.Ordinal)
-                            || name.Contains("plus", StringComparison.Ordinal)
-                            || name.Contains("notification area", StringComparison.Ordinal)
-                            || name.Contains("zone de notification", StringComparison.Ordinal)
-                            || name.Contains("show hidden", StringComparison.Ordinal)
-                            || name.Contains("afficher les ic", StringComparison.Ordinal);
-                        bool shellHint = id.Contains("tray", StringComparison.Ordinal)
-                            || id.Contains("overflow", StringComparison.Ordinal)
-                            || className.Contains("tray", StringComparison.Ordinal)
-                            || className.Contains("notify", StringComparison.Ordinal)
-                            || className.Contains("overflow", StringComparison.Ordinal)
-                            || className.Contains("toolbar", StringComparison.Ordinal);
-                        bool supportedType = type is "ControlType.Button" or "ControlType.Custom" or "ControlType.Pane" or "ControlType.SplitButton";
-                        return !current.IsOffscreen && supportedType && (nameHint || shellHint);
-                    }
-                    catch (ElementNotAvailableException) { return false; }
-                })
-                .OrderByDescending(TrayElementScore)
-                .ToArray();
+                    var current = element.Current;
+                    string name = current.Name.ToLowerInvariant();
+                    string type = current.ControlType.ProgrammaticName;
+                    string id = current.AutomationId.ToLowerInvariant();
+                    string className = current.ClassName.ToLowerInvariant();
+                    bool nameHint = name.Contains("hidden", StringComparison.Ordinal)
+                        || name.Contains("masqu", StringComparison.Ordinal)
+                        || name.Contains("icône", StringComparison.Ordinal)
+                        || name.Contains("icones", StringComparison.Ordinal)
+                        || name.Contains("icônes", StringComparison.Ordinal)
+                        || name.Contains("icon", StringComparison.Ordinal)
+                        || name.Contains("overflow", StringComparison.Ordinal)
+                        || name.Contains("chevron", StringComparison.Ordinal)
+                        || name.Contains("plus", StringComparison.Ordinal)
+                        || name.Contains("notification area", StringComparison.Ordinal)
+                        || name.Contains("zone de notification", StringComparison.Ordinal)
+                        || name.Contains("show hidden", StringComparison.Ordinal)
+                        || name.Contains("afficher les ic", StringComparison.Ordinal);
+                    bool shellHint = id.Contains("tray", StringComparison.Ordinal)
+                        || id.Contains("overflow", StringComparison.Ordinal)
+                        || className.Contains("tray", StringComparison.Ordinal)
+                        || className.Contains("notify", StringComparison.Ordinal)
+                        || className.Contains("overflow", StringComparison.Ordinal)
+                        || className.Contains("toolbar", StringComparison.Ordinal);
+                    bool supportedType = type is "ControlType.Button" or "ControlType.Custom" or "ControlType.Pane" or "ControlType.SplitButton";
+                    if (!current.IsOffscreen && supportedType && (nameHint || shellHint)) matches.Add(element);
+                }
+                catch (Exception) { }
+            }
+            return matches.ToArray();
         }
         catch (Exception) { return []; }
     }
@@ -339,43 +356,151 @@ internal sealed partial class LabForm
             if (className.Contains("notify", StringComparison.Ordinal) || className.Contains("overflow", StringComparison.Ordinal)) score += 3;
             return score;
         }
-        catch (ElementNotAvailableException) { return 0; }
+        catch (Exception) { return 0; }
     }
 
-    private static bool RightClickTrayIcon(AutomationElement icon)
+    private static object DescribeTrayElement(AutomationElement element)
     {
         try
         {
-            var point = icon.GetClickablePoint();
-            Forms.Cursor.Position = new System.Drawing.Point((int)Math.Round(point.X), (int)Math.Round(point.Y));
-            mouse_event(MouseEventRightDown, 0, 0, 0, UIntPtr.Zero);
-            mouse_event(MouseEventRightUp, 0, 0, 0, UIntPtr.Zero);
-            return true;
+            var current = element.Current;
+            var bounds = current.BoundingRectangle;
+            return new
+            {
+                name = current.Name,
+                automationId = current.AutomationId,
+                className = current.ClassName,
+                controlType = current.ControlType.ProgrammaticName,
+                processId = current.ProcessId,
+                offscreen = current.IsOffscreen,
+                bounds = ToTrayBounds(bounds)
+            };
         }
-        catch (Exception) { return false; }
+        catch (Exception ex) { return new { unavailable = true, error = ex.Message }; }
+    }
+
+    private static TrayClickResult RightClickTrayIcon(AutomationElement icon)
+    {
+        string name = "";
+        TrayBounds bounds = new(0, 0, 0, 0);
+        string clickablePointError = "";
+        try
+        {
+            var current = icon.Current;
+            name = current.Name;
+            var rectangle = current.BoundingRectangle;
+            bounds = ToTrayBounds(rectangle);
+            if (current.IsOffscreen) return new(false, "none", name, "icon_is_offscreen", bounds);
+
+            var point = icon.GetClickablePoint();
+            if (double.IsNaN(point.X) || double.IsNaN(point.Y) || double.IsInfinity(point.X) || double.IsInfinity(point.Y))
+                throw new InvalidOperationException("UIA returned a non-finite clickable point.");
+            EmitRightClick(point.X, point.Y);
+            return new(true, "GetClickablePoint", name, "", bounds);
+        }
+        catch (Exception ex)
+        {
+            clickablePointError = ex.Message;
+        }
+
+        // Windows 11's NotifyItemIcon often exposes a visible bounding box but
+        // no UIA clickable point.  Use the freshly read box only as an input
+        // fallback, and keep the original UIA error in the evidence.
+        try
+        {
+            var current = icon.Current;
+            name = current.Name;
+            var rectangle = current.BoundingRectangle;
+            bounds = ToTrayBounds(rectangle);
+            if (current.IsOffscreen || rectangle.IsEmpty || rectangle.Width <= 0 || rectangle.Height <= 0)
+                return new(false, "BoundingRectangleCenter", name, clickablePointError + "; invalid visible bounds", bounds);
+
+            var virtualScreen = Forms.SystemInformation.VirtualScreen;
+            if (virtualScreen.Width <= 0 || virtualScreen.Height <= 0)
+                return new(false, "BoundingRectangleCenter", name, clickablePointError + "; virtual screen unavailable", bounds);
+            double centerX = rectangle.Left + rectangle.Width / 2d;
+            double centerY = rectangle.Top + rectangle.Height / 2d;
+            int x = (int)Math.Round(Math.Clamp(centerX, virtualScreen.Left, virtualScreen.Right - 1));
+            int y = (int)Math.Round(Math.Clamp(centerY, virtualScreen.Top, virtualScreen.Bottom - 1));
+            EmitRightClick(x, y);
+            return new(true, "BoundingRectangleCenter", name, clickablePointError, bounds);
+        }
+        catch (Exception ex)
+        {
+            string error = string.IsNullOrWhiteSpace(clickablePointError) ? ex.Message : clickablePointError + "; " + ex.Message;
+            return new(false, "BoundingRectangleCenter", name, error, bounds);
+        }
+    }
+
+    private static void EmitRightClick(double x, double y)
+    {
+        Forms.Cursor.Position = new System.Drawing.Point((int)Math.Round(x), (int)Math.Round(y));
+        mouse_event(MouseEventRightDown, 0, 0, 0, UIntPtr.Zero);
+        mouse_event(MouseEventRightUp, 0, 0, 0, UIntPtr.Zero);
+    }
+
+    private void WriteTrayAttemptDiagnostics(string outcome, IReadOnlyCollection<object> attempts)
+    {
+        try
+        {
+            File.WriteAllText(Path.Combine(output, "tray-attempts.json"), Json.Text(new
+            {
+                schemaVersion = 1,
+                outcome,
+                capturedUtc = DateTimeOffset.UtcNow,
+                attempts
+            }));
+        }
+        catch (Exception ex)
+        {
+            try { File.AppendAllText(Path.Combine(output, "capture-warnings.txt"), "tray-attempts: " + ex.Message + Environment.NewLine); } catch (IOException) { }
+        }
     }
 
     private async Task<TrayContext> OpenTrayContextAsync()
     {
         bool overflowOpened = false;
         string failure = "";
+        int poll = 0;
+        var attempts = new List<object>();
         var deadline = Stopwatch.StartNew();
-        while (deadline.Elapsed < TimeSpan.FromSeconds(8))
+        while (deadline.Elapsed < TimeSpan.FromSeconds(12))
         {
+            poll++;
             AutomationElement[] icons = FindSystemTrayIcons();
+            attempts.Add(new
+            {
+                stage = "icon_search",
+                poll,
+                elapsedMs = deadline.ElapsedMilliseconds,
+                overflowOpened,
+                candidateCount = icons.Length,
+                candidates = icons.Take(24).Select(DescribeTrayElement).ToArray()
+            });
             if (icons.Length == 0 && !overflowOpened)
             {
                 AutomationElement[] overflows = FindTrayOverflowButtons();
+                attempts.Add(new
+                {
+                    stage = "overflow_search",
+                    poll,
+                    candidateCount = overflows.Length,
+                    candidates = overflows.Take(24).Select(DescribeTrayElement).ToArray()
+                });
                 foreach (var overflow in overflows)
                 {
                     try
                     {
                         InvokeElement(overflow);
                         overflowOpened = true;
-                        await Task.Delay(500, stop.Token);
+                        attempts.Add(new { stage = "overflow_invoke", poll, success = true, candidate = DescribeTrayElement(overflow) });
+                        await Task.Delay(350, stop.Token);
                         break;
                     }
-                    catch (Exception) { }
+                    catch (Exception ex)
+                    {
+                        attempts.Add(new { stage = "overflow_invoke", poll, success = false, error = ex.Message, candidate = DescribeTrayElement(overflow) });
+                    }
                 }
                 if (!overflowOpened) failure = "tray_icon_and_overflow_not_found";
             }
@@ -390,18 +515,29 @@ internal sealed partial class LabForm
             }
             foreach (var icon in icons)
             {
-                string iconName = Safe(() => icon.Current.Name);
-                if (!RightClickTrayIcon(icon)) continue;
-                while (deadline.Elapsed < TimeSpan.FromSeconds(8))
+                TrayClickResult click = RightClickTrayIcon(icon);
+                attempts.Add(new { stage = "tray_right_click", poll, click });
+                if (!click.Success)
+                {
+                    failure = "tray_icon_right_click_failed";
+                    continue;
+                }
+                while (deadline.Elapsed < TimeSpan.FromSeconds(12))
                 {
                     var open = FindLoopbackTrayMenuItem("Ouvrir") ?? FindLoopbackTrayMenuItem("Open");
-                    if (open != null) return new TrayContext(open, iconName, overflowOpened);
+                    attempts.Add(new { stage = "tray_menu_search", poll, iconName = click.Name, menuVisible = open != null });
+                    if (open != null)
+                    {
+                        WriteTrayAttemptDiagnostics("context_menu_found", attempts);
+                        return new TrayContext(open, click.Name, overflowOpened);
+                    }
                     await Task.Delay(250, stop.Token);
                 }
                 failure = "tray_context_menu_missing";
             }
             await Task.Delay(250, stop.Token);
         }
+        WriteTrayAttemptDiagnostics(failure.Length == 0 ? "tray_lookup_failed" : failure, attempts);
         DumpTrayDiagnostics(failure.Length == 0 ? "tray_lookup_failed" : failure);
         return new TrayContext(null, "", overflowOpened);
     }
@@ -434,7 +570,7 @@ internal sealed partial class LabForm
                             || nearTaskbar;
                         return trayHint ? new { name, id, className, type, processId = current.ProcessId, offscreen = current.IsOffscreen, bounds = new { left = bounds.Left, top = bounds.Top, width = bounds.Width, height = bounds.Height } } : null;
                     }
-                    catch (ElementNotAvailableException) { return null; }
+                    catch (Exception) { return null; }
                 })
                 .Where(value => value != null)
                 .Take(300)
@@ -525,8 +661,22 @@ internal sealed partial class LabForm
         var open = tray.OpenItem;
         if (open != null)
         {
-            InvokeElement(open);
-            await WaitForUiAsync(IsLoopbackControllerVisible, 15);
+            bool restored = false;
+            string restoreError = "";
+            try
+            {
+                InvokeElement(open);
+                await WaitForUiAsync(IsLoopbackControllerVisible, 15);
+                restored = true;
+            }
+            catch (Exception ex)
+            {
+                restoreError = ex.Message;
+            }
+            if (restored)
+                Pass("loopback.tray_restore", "The loopback controller tray Open action restores its window", new { menuVisible = true, restored, trayIcon = tray.IconName, overflowOpened = tray.OverflowOpened });
+            else
+                Fail("loopback.tray_restore", "The loopback controller tray Open action restores its window", new { menuVisible = true, restored, trayIcon = tray.IconName, overflowOpened = tray.OverflowOpened, error = restoreError });
         }
         else Fail("loopback.tray_restore", "The loopback controller tray Open action restores its window", new { menu = "Ouvrir missing", trayIcon = tray.IconName, overflowOpened = tray.OverflowOpened });
 
