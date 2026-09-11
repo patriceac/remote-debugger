@@ -432,7 +432,21 @@ public sealed class RemoteClient(Connection connection)
         Connection = await PairingTransport.PairAsync(Connection, code, ct).ConfigureAwait(false);
     }
     public async Task<JsonElement> HeartbeatAsync(CancellationToken ct = default) => Require(await CallAsync("session.heartbeat", ct: ct, seconds: 5).ConfigureAwait(false));
-    public async Task EndSessionAsync(CancellationToken ct = default) { Require(await CallAsync("session.end", ct: ct, seconds: 45).ConfigureAwait(false)); }
+    public async Task EndSessionAsync(CancellationToken ct = default)
+    {
+        // A user can press End while the agent is between updater processes.
+        // Keep the old session token solely to terminate the resumed listener.
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(TimeSpan.FromSeconds(50));
+        while (true)
+        {
+            try { Require(await CallAsync("session.end", ct: deadline.Token, seconds: 35).ConfigureAwait(false)); return; }
+            catch (Exception ex) when (ex is SocketException or IOException or AuthenticationException)
+            {
+                await Task.Delay(500, deadline.Token).ConfigureAwait(false);
+            }
+        }
+    }
     public async Task DisconnectAsync(CancellationToken ct = default) { Require(await CallAsync("session.disconnect", ct: ct, seconds: 5).ConfigureAwait(false)); }
     public async Task<Reply> CallAsync(string operation, object? args = null, CancellationToken ct = default, string? id = null, int seconds = 60)
     {

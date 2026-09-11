@@ -556,6 +556,10 @@ public sealed class MainForm : Forms.Form
         if (loopbackOnly) { agentNetworkState.Text = "Local uniquement"; return; }
         try
         {
+            if (await SupportPlatform.TryRelaunchManagedAgentAsync(Environment.GetCommandLineArgs().Skip(1).ToArray()))
+            {
+                OnManagedRelaunchRequested(); return;
+            }
             SupportPlatformStatus status = await SupportPlatform.PrepareAsync(requireFirewall: true);
             if (!ReferenceEquals(agent, preparing) || quitting) return;
             if (status.Available && status.FirewallReady && !agentNetworkPrepared)
