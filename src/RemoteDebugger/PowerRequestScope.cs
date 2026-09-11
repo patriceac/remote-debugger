@@ -6,6 +6,8 @@ namespace RemoteDebugger;
 
 internal sealed class PowerRequestScope : IDisposable
 {
+    // POWER_REQUEST_TYPE: DisplayRequired = 0, SystemRequired = 1.
+    private const int SystemRequired = 1;
     private readonly SafeFileHandle handle;
     private bool set;
 
@@ -20,7 +22,7 @@ internal sealed class PowerRequestScope : IDisposable
         try { handle = PowerCreateRequest(ref context); }
         finally { Marshal.FreeHGlobal(context.SimpleReasonString); }
         if (handle.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error(), "Windows could not create an update power request.");
-        if (!PowerSetRequest(handle, 0))
+        if (!PowerSetRequest(handle, SystemRequired))
         {
             int error = Marshal.GetLastWin32Error();
             handle.Dispose();
@@ -34,7 +36,7 @@ internal sealed class PowerRequestScope : IDisposable
 
     public void Dispose()
     {
-        if (set) { _ = PowerClearRequest(handle, 0); set = false; }
+        if (set) { _ = PowerClearRequest(handle, SystemRequired); set = false; }
         handle.Dispose();
     }
 

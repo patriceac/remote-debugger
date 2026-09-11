@@ -13,14 +13,10 @@ try {
     $publicCertificate = Join-Path (Split-Path $executable) 'RemoteDebugger.publisher.cer'
     if (Test-Path -LiteralPath $publicCertificate) { $files += [pscustomobject]@{ Path = $publicCertificate; Entry = 'RemoteDebugger.publisher.cer' } }
     $files += [pscustomobject]@{ Path = (Join-Path $projectRoot 'README.md'); Entry = 'README.md' }
-    foreach ($file in Get-ChildItem -LiteralPath (Join-Path $projectRoot 'docs') -File) {
-        $files += [pscustomobject]@{ Path = $file.FullName; Entry = 'docs/' + $file.Name }
-    }
-    $evidencePath = Join-Path $projectRoot 'evidence'
-    if (Test-Path -LiteralPath $evidencePath) {
-        foreach ($file in Get-ChildItem -LiteralPath $evidencePath -File) {
-            $files += [pscustomobject]@{ Path = $file.FullName; Entry = 'evidence/' + $file.Name }
-        }
+    $documentationRoot = Join-Path $projectRoot 'docs'
+    foreach ($file in Get-ChildItem -LiteralPath $documentationRoot -File -Recurse) {
+        $relative = [IO.Path]::GetRelativePath($documentationRoot, $file.FullName).Replace('\', '/')
+        $files += [pscustomobject]@{ Path = $file.FullName; Entry = 'docs/' + $relative }
     }
     foreach ($file in $files) {
         [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $file.Path, $file.Entry, [IO.Compression.CompressionLevel]::Optimal) | Out-Null
