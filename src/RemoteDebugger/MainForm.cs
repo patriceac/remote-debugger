@@ -608,10 +608,10 @@ public sealed class MainForm : Forms.Form
             if (!ReferenceEquals(agent, preparing) || quitting) return;
             if (status.Available && status.FirewallReady && !agentNetworkPrepared)
             {
+                // Keep the displayed code, rate limits and any accepted local
+                // connection while widening the prepared listener to the LAN.
+                preparing.EnablePrivateNetwork();
                 agentNetworkPrepared = true;
-                // No external controller can have paired on the pending
-                // loopback listener. Preserve a planned-update resume record.
-                preparing.Dispose(); agent = null; StartAgent();
             }
             ApplyPlatformStatus(status);
         }
