@@ -737,7 +737,18 @@ public sealed class MainForm : Forms.Form
         roleAgent.BackColor = onAgent ? SelectedRail : Rail; roleController.BackColor = onController ? SelectedRail : Rail; navConnection.BackColor = onController && controllerPages.SelectedIndex == 0 ? SelectedRail : Rail; navScreen.BackColor = onController && controllerPages.SelectedIndex == 1 ? SelectedRail : Rail; navProcesses.BackColor = onController && controllerPages.SelectedIndex == 2 ? SelectedRail : Rail; navFiles.BackColor = onController && controllerPages.SelectedIndex == 3 ? SelectedRail : Rail; navDiagnostics.BackColor = onController && controllerPages.SelectedIndex == 4 ? SelectedRail : Rail;
     }
 
-    private void RefreshFooter() { footerLeft.Text = footerMessage; footerRight.Text = footerDetail; }
+    private void RefreshFooter()
+    {
+        footerLeft.Text = footerMessage;
+        footerRight.Text = rolePages.SelectedIndex == 1 && supportSession && heartbeatHealthy && !terminating
+            ? controllerPages.SelectedIndex switch
+            {
+                2 => lastMeasurementUtc is { } measured ? $"{processRows.Count} processus · mesuré à {measured.ToLocalTime():HH:mm:ss}" : resourceState.Text,
+                3 => "Fichiers · " + fileState.Text,
+                _ => footerDetail
+            }
+            : footerDetail;
+    }
 
     private void SelectRole(int index)
     {
