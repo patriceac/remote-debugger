@@ -666,6 +666,8 @@ public sealed class MainForm : Forms.Form
 
     private void UpdateAgentState()
     {
+        agentSleepState.Text = powerHold != null ? "Suspendue" : "Active";
+        agentSleepState.ForeColor = powerHold != null ? PrimaryText : SecondaryText;
         bool paired = agent?.Session.HasPaired == true;
         agentEyebrow.Text = paired ? "SESSION D’ASSISTANCE" : "CODE DE CONNEXION";
         agentHeading.Text = paired ? "Votre PC est pris en charge" : "Partagez ce code";
@@ -680,6 +682,8 @@ public sealed class MainForm : Forms.Form
         }
         if (agent == null) { agentPairCode.Text = "— — —"; CurrentPairingCode = null; agentState.Text = "Agent en attente de préparation"; agentSessionNote.Text = "L’agent démarrera avec cette application lorsqu’elle est lancée en mode assistance."; setupNotice.Visible = false; return; }
         var session = agent.Session;
+        if (paired && !terminating && !quitting)
+            footerMessage = session.State switch { "connected" => "Assistance active", "synchronizing" => "Synchronisation de l’agent…", "reconnecting" => "En attente du contrôleur", _ => footerMessage };
         if (session.Connected && session.BinaryMatched)
         {
             CurrentPairingCode = null; pairingCountdownText.Text = "Le code est consommé."; pairingCountdown.Value = 0; string duration = session.StartedUtc is { } started ? FormatDuration(DateTimeOffset.UtcNow - started) : "à l’instant"; agentPairCode.Text = "Contrôleur connecté"; agentState.Text = $"Connecté · assistance depuis {duration}"; agentSessionNote.Text = "Le contrôleur authentifié peut maintenant assister ce PC. Terminer l’assistance coupe immédiatement l’accès et libère la mise en veille."; terminateSession.Visible = true;

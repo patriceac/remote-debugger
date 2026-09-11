@@ -5,6 +5,21 @@ namespace RemoteDebugger.Lab;
 
 internal sealed partial class LabForm
 {
+    private async Task VerifyContinuousViewingAsync()
+    {
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var initial = await WaitForLiveEvidenceAsync(30);
+        if (!initial.BadgeVisible || !initial.TelemetryVisible) throw new InvalidOperationException("Live viewing was not ready before the continuity check.");
+        Pass("loopback.continuous_view_started", "Live viewing is present before waiting across the five-minute transport boundary", new { initial.TelemetryText }, required: false);
+        while (started.Elapsed < TimeSpan.FromSeconds(310)) await Task.Delay(1000, stop.Token);
+        var renewed = await WaitForLiveEvidenceAsync(30);
+        bool live = renewed.BadgeVisible && renewed.TelemetryVisible;
+        var evidence = new { elapsedSeconds = started.Elapsed.TotalSeconds, renewed.BadgeVisible, renewed.BadgeText, renewed.TelemetryText, freshnessRequirementSeconds = 3 };
+        if (live) Pass("loopback.continuous_view_renewal", "The visible viewer receives fresh frames beyond its five-minute transport boundary without manual resume", evidence);
+        else Fail("loopback.continuous_view_renewal", "The visible viewer receives fresh frames beyond its five-minute transport boundary without manual resume", evidence);
+        CaptureDesktop("controller-live-after-five-minutes.png");
+    }
+
     private async Task CaptureLoopbackMinimumSizeAsync()
     {
         if (loopbackController == null || loopbackAgent == null) throw new InvalidOperationException("The visual review needs both Release processes.");
