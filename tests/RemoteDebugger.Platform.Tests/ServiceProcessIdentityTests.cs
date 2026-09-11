@@ -87,3 +87,23 @@ public sealed class AgentUpdateHealthTests
         Assert.Contains("startup validation failed", failure.Message);
     }
 }
+
+public sealed class AgentUpdateProgressTests
+{
+    [Theory]
+    [InlineData(-1, 100, 0)]
+    [InlineData(0, 100, 0)]
+    [InlineData(25, 100, 25)]
+    [InlineData(199, 200, 99)]
+    [InlineData(100, 100, 100)]
+    [InlineData(150, 100, 100)]
+    [InlineData(10, 0, 0)]
+    public void TransferPercentIsIntegralAndBounded(long transferred, long total, int expected)
+    {
+        var progress = new AgentUpdateProgress("transferring", transferred, total);
+
+        Assert.Equal(expected, progress.TransferPercent);
+        Assert.Equal(transferred, progress.TransferredBytes);
+        Assert.Equal(total, progress.TotalBytes);
+    }
+}

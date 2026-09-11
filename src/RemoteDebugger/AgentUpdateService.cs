@@ -34,6 +34,7 @@ public sealed class AgentUpdateService : IDisposable
     private int disposed;
     private string? activeTransactionId;
     private UpdateExitPlan? pendingExitPlan;
+    private AgentUpdateProgress progress = new("idle", 0, 0);
 
     public event Action? UpdateRestartRequested;
 
@@ -45,13 +46,30 @@ public sealed class AgentUpdateService : IDisposable
         string[] launch = Environment.GetCommandLineArgs();
         int transactionIndex = Array.IndexOf(launch, "--update-transaction");
         if (transactionIndex >= 0 && transactionIndex + 1 < launch.Length && Guid.TryParseExact(launch[transactionIndex + 1], "N", out _))
+        {
             activeTransactionId = launch[transactionIndex + 1];
+            try
+            {
+                string meta = MetaPath(activeTransactionId);
+                if (File.Exists(meta))
+                {
+                    var transfer = JsonSerializer.Deserialize<AgentUpdateTransfer>(File.ReadAllText(meta), Json.Options);
+                    if (transfer != null) SetProgress("restarting", transfer.Candidate.Size, transfer.Candidate.Size);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or JsonException) { }
+        }
     }
 
     public bool ControllerSynchronized => Volatile.Read(ref controllerSynchronized) != 0;
     public UpdateExitPlan? PendingExitPlan => Volatile.Read(ref pendingExitPlan);
+    public AgentUpdateProgress Progress => Volatile.Read(ref progress);
     public bool IsOperation(string operation) => Operations.Contains(operation);
-    public void ResetControllerSynchronization() => Volatile.Write(ref controllerSynchronized, 0);
+    public void ResetControllerSynchronization()
+    {
+        Volatile.Write(ref controllerSynchronized, 0);
+        SetProgress("idle", 0, 0);
+    }
 
     public async Task<Reply> DispatchAsync(Request request, CancellationToken ct)
     {
@@ -117,13 +135,16 @@ public sealed class AgentUpdateService : IDisposable
                 !UpdatePolicy.FixedHexEquals(existing.Candidate.SignerThumbprint, candidate.SignerThumbprint))
                 throw new IOException("Transaction id already identifies different executable bytes.");
             Volatile.Write(ref activeTransactionId, transactionId);
-            return new { transactionId, offset = new FileInfo(partial).Length, candidate.Size };
+            long offset = new FileInfo(partial).Length;
+            SetProgress("transferring", offset, candidate.Size);
+            return new { transactionId, offset, candidate.Size };
         }
         string temp = meta + ".new";
         await File.WriteAllTextAsync(temp, JsonSerializer.Serialize(new AgentUpdateTransfer(candidate, DateTimeOffset.UtcNow), Json.Options), ct);
         File.Move(temp, meta, false);
         using (File.Create(partial)) { }
         Volatile.Write(ref activeTransactionId, transactionId);
+        SetProgress("transferring", 0, candidate.Size);
         return new { transactionId, offset = 0L, candidate.Size };
     }
 
@@ -131,7 +152,9 @@ public sealed class AgentUpdateService : IDisposable
     {
         string transactionId = ValidateTransactionId(args.Str("transactionId"));
         var transfer = await LoadTransferAsync(transactionId, ct);
-        return new { transactionId, offset = new FileInfo(PartialPath(transactionId)).Length, transfer.Candidate.Size };
+        long offset = new FileInfo(PartialPath(transactionId)).Length;
+        SetProgress("transferring", offset, transfer.Candidate.Size);
+        return new { transactionId, offset, transfer.Candidate.Size };
     }
 
     private async Task<object> ChunkAsync(JsonElement args, CancellationToken ct)
@@ -158,7 +181,9 @@ public sealed class AgentUpdateService : IDisposable
             await stream.WriteAsync(data, ct);
             await stream.FlushAsync(ct);
         }
-        return new { transactionId, offset = stream.Length };
+        long acknowledged = stream.Length;
+        SetProgress("transferring", acknowledged, transfer.Candidate.Size);
+        return new { transactionId, offset = acknowledged };
     }
 
     private async Task<object> StageAsync(JsonElement args, CancellationToken ct)
@@ -166,6 +191,7 @@ public sealed class AgentUpdateService : IDisposable
         string transactionId = ValidateTransactionId(args.Str("transactionId"));
         var transfer = await LoadTransferAsync(transactionId, ct);
         string partial = PartialPath(transactionId);
+        SetProgress("verifying", new FileInfo(partial).Length, transfer.Candidate.Size);
         var actual = await SnapshotTransferredFileAsync(partial, ct);
         RequireTransferMatch(actual, transfer.Candidate);
         var result = await SupportPlatform.BrokerCallAsync("update.stage", new { transactionId, sourcePath = partial, candidate = transfer.Candidate }, ct, 120);
@@ -200,6 +226,7 @@ public sealed class AgentUpdateService : IDisposable
             arguments,
             workingDirectory = Environment.CurrentDirectory
         }, ct, 60);
+        SetProgress("restarting", transfer.Candidate.Size, transfer.Candidate.Size);
         return new
         {
             transactionId,
@@ -242,6 +269,7 @@ public sealed class AgentUpdateService : IDisposable
         if (!UpdatePolicy.FixedHexEquals(expected, running.Sha256))
             throw new InvalidOperationException("Agent running executable still differs from the authenticated controller executable.");
         Volatile.Write(ref controllerSynchronized, 1);
+        SetProgress("complete", running.Size, running.Size);
         string transactionId = args.Str("transactionId");
         if (Guid.TryParseExact(transactionId, "N", out _))
         {
@@ -264,6 +292,7 @@ public sealed class AgentUpdateService : IDisposable
         DeleteIfExists(MetaPath(transactionId));
         if (string.Equals(Volatile.Read(ref activeTransactionId), transactionId, StringComparison.OrdinalIgnoreCase))
             Volatile.Write(ref activeTransactionId, null);
+        SetProgress("idle", 0, 0);
         return new { transactionId, cancelled = true, broker };
     }
 
@@ -284,6 +313,7 @@ public sealed class AgentUpdateService : IDisposable
             DeleteIfExists(MetaPath(transactionId));
             Volatile.Write(ref activeTransactionId, null);
             Volatile.Write(ref pendingExitPlan, null);
+            SetProgress("idle", 0, 0);
             return;
         }
         var result = await SupportPlatform.BrokerCallAsync("update.cancel", new { transactionId, relaunchPrevious = false }, ct, 25);
@@ -296,6 +326,7 @@ public sealed class AgentUpdateService : IDisposable
         DeleteIfExists(MetaPath(transactionId));
         Volatile.Write(ref activeTransactionId, null);
         Volatile.Write(ref pendingExitPlan, null);
+        SetProgress("idle", 0, 0);
     }
 
     private async Task<ExecutableSnapshot> SnapshotTransferredFileAsync(string path, CancellationToken ct)
@@ -334,6 +365,8 @@ public sealed class AgentUpdateService : IDisposable
 
     private static string ValidateTransactionId(string value) =>
         Guid.TryParseExact(value, "N", out _) ? value : throw new ArgumentException("Update transaction id must be a UUID in N format.");
+    private void SetProgress(string stage, long transferredBytes, long totalBytes) =>
+        Volatile.Write(ref progress, new AgentUpdateProgress(stage, transferredBytes, totalBytes));
     private string MetaPath(string transactionId) => Path.Combine(transferRoot, transactionId + ".json");
     private string PartialPath(string transactionId) => Path.Combine(transferRoot, transactionId + ".partial.exe");
     private static void DeleteIfExists(string path) { if (File.Exists(path)) File.Delete(path); }
@@ -342,7 +375,10 @@ public sealed class AgentUpdateService : IDisposable
 
 internal static class AgentUpdateClient
 {
-    public static async Task<AgentSynchronizationResult> SynchronizeAgentAsync(RemoteClient client, CancellationToken ct)
+    public static async Task<AgentSynchronizationResult> SynchronizeAgentAsync(
+        RemoteClient client,
+        CancellationToken ct,
+        IProgress<AgentUpdateProgress>? progress = null)
     {
         var controller = await SupportPlatform.CaptureCurrentExecutableAsync(ct);
         var snapshot = RemoteClient.Require(await client.CallAsync("update.snapshot", ct: ct, seconds: 30));
@@ -351,6 +387,7 @@ internal static class AgentUpdateClient
         if (IsExact(controller, agent))
         {
             RemoteClient.Require(await client.CallAsync("update.confirm", new { sha256 = controller.Sha256 }, ct, seconds: 30));
+            progress?.Report(new("complete", controller.Size, controller.Size));
             return new(true, false, controller, agent, null, "Agent already runs the controller's exact executable bytes.");
         }
 
@@ -358,6 +395,7 @@ internal static class AgentUpdateClient
         var begin = RemoteClient.Require(await client.CallAsync("update.begin", new { transactionId, candidate = controller }, ct, seconds: 30));
         long offset = begin.Long("offset");
         if (offset < 0 || offset > controller.Size) throw new InvalidDataException("Agent returned an invalid update resume offset.");
+        progress?.Report(new("transferring", offset, controller.Size));
         await using (var input = File.Open(controller.Path, FileMode.Open, FileAccess.Read, FileShare.Read))
         {
             input.Position = offset;
@@ -367,11 +405,18 @@ internal static class AgentUpdateClient
                 int count = await input.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, input.Length - offset)), ct);
                 if (count == 0) throw new EndOfStreamException("Controller executable changed while transferring.");
                 var result = RemoteClient.Require(await client.CallAsync("update.chunk", new { transactionId, offset, data = Convert.ToBase64String(buffer, 0, count) }, ct, seconds: 60));
-                offset = result.Long("offset");
+                long acknowledged = result.Long("offset");
+                if (acknowledged != offset + count)
+                    throw new InvalidDataException("Agent returned an invalid acknowledged update offset.");
+                offset = acknowledged;
+                input.Position = offset;
+                progress?.Report(new("transferring", offset, controller.Size));
             }
         }
+        progress?.Report(new("verifying", controller.Size, controller.Size));
         RemoteClient.Require(await client.CallAsync("update.stage", new { transactionId }, ct, seconds: 180));
         var commit = RemoteClient.Require(await client.CallAsync("update.commit", new { transactionId }, ct, seconds: 60));
+        progress?.Report(new("restarting", controller.Size, controller.Size));
         string ticket = commit.Str("reconnectTicket");
         DateTimeOffset expires = commit.GetProperty("reconnectExpiresUtc").GetDateTimeOffset();
         DateTimeOffset planned = commit.GetProperty("plannedDisconnectDeadlineUtc").GetDateTimeOffset();
@@ -415,6 +460,7 @@ internal static class AgentUpdateClient
         agent = finalSnapshot.GetProperty("agent").Deserialize<ExecutableSnapshot>(Json.Options) ?? throw new InvalidDataException("Updated agent did not return an executable snapshot.");
         UpdatePolicy.RequireExactControllerBinary(controller, agent);
         RemoteClient.Require(await client.CallAsync("update.confirm", new { sha256 = controller.Sha256, transactionId, ticket }, ct, seconds: 30));
+        progress?.Report(new("complete", controller.Size, controller.Size));
         return new(false, true, controller, agent, planned, "Agent replaced, relaunched, health-checked, and confirmed on the controller's exact executable bytes.");
     }
 

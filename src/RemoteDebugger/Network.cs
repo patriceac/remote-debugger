@@ -93,6 +93,7 @@ public sealed class AgentServer : IDisposable
     public int Port { get; }
     public bool IsListening => Volatile.Read(ref listening) != 0 && Volatile.Read(ref disposed) == 0;
     public bool Paired { get { lock (authLock) return tokenHash.Length != 0; } }
+    public AgentUpdateProgress UpdateProgress => updates.Progress;
     public event Action<string>? Status;
     public event Action? TerminationRequested;
     public SupportSessionSnapshot Session => session.Snapshot;

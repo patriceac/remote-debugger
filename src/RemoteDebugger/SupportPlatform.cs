@@ -39,6 +39,14 @@ public sealed record AgentSynchronizationResult(
     DateTimeOffset? PlannedDisconnectDeadlineUtc,
     string Message);
 
+/// <summary>Immutable progress for the exact-binary agent synchronization.</summary>
+public sealed record AgentUpdateProgress(string Stage, long TransferredBytes, long TotalBytes)
+{
+    public int TransferPercent => TotalBytes <= 0
+        ? 0
+        : (int)Math.Clamp(TransferredBytes / (double)TotalBytes * 100d, 0d, 100d);
+}
+
 public sealed record UpdateExitPlan(string TransactionId, DateTimeOffset DeadlineUtc);
 
 public static class SupportPlatform
@@ -209,8 +217,11 @@ public static class SupportPlatform
         return process.ExitCode == 0 || (await process.StandardOutput.ReadToEndAsync(ct)).Contains("1056", StringComparison.Ordinal);
     }
 
-    public static async Task<AgentSynchronizationResult> SynchronizeAgentAsync(RemoteClient client, CancellationToken ct = default) =>
-        await AgentUpdateClient.SynchronizeAgentAsync(client, ct);
+    public static async Task<AgentSynchronizationResult> SynchronizeAgentAsync(
+        RemoteClient client,
+        CancellationToken ct = default,
+        IProgress<AgentUpdateProgress>? progress = null) =>
+        await AgentUpdateClient.SynchronizeAgentAsync(client, ct, progress);
 
     internal static async Task<JsonElement> BrokerCallAsync(string operation, object args, CancellationToken ct, int timeoutSeconds = 30)
     {
