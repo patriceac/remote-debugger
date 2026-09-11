@@ -673,7 +673,7 @@ public sealed class MainForm : Forms.Form
         agentSleepState.ForeColor = powerHold != null ? PrimaryText : SecondaryText;
         bool paired = agent?.Session.HasPaired == true;
         agentEyebrow.Text = paired ? "SESSION D’ASSISTANCE" : "CODE DE CONNEXION";
-        agentHeading.Text = paired ? "Votre PC est pris en charge" : "Partagez ce code";
+        agentHeading.Text = agent?.Session.State == "reconnecting" ? "La connexion a été interrompue" : paired ? "Votre PC est pris en charge" : "Partagez ce code";
         agentSubtitle.Text = paired ? "L’état de la connexion reste visible pendant toute la session." : "Saisissez-le sur le PC qui vous assiste.";
         copyAgentCode.Visible = !paired;
         float stateFontSize = paired ? 24 : 42;
@@ -725,7 +725,13 @@ public sealed class MainForm : Forms.Form
         else { headerTitle.Text = "Prendre le contrôle"; headerSubtitle.Text = "Choisissez un PC puis saisissez son code"; }
 
         bool connected = onAgent ? agent?.Session is { Connected: true, BinaryMatched: true } : heartbeatHealthy && supportSession;
-        statusPill.BackColor = connected ? ConnectedBack : Color.FromArgb(237, 241, 244); statusDot.ForeColor = connected ? Color.FromArgb(50, 137, 91) : SecondaryText; statusLabel.ForeColor = connected ? ConnectedText : Color.FromArgb(80, 103, 113); statusLabel.Text = connected ? "Connecté" : onController && supportSession ? "Reconnexion…" : "En attente de connexion"; statusPill.AccessibleName = statusLabel.Text; statusPill.Region?.Dispose(); statusPill.Region = RoundedRegion(statusPill.Size, 16);
+        bool reconnecting = onAgent ? agent?.Session.State == "reconnecting" : supportSession && !heartbeatHealthy;
+        bool synchronizing = onAgent && agent?.Session is { Connected: true, BinaryMatched: false };
+        statusPill.BackColor = connected ? ConnectedBack : reconnecting ? Color.FromArgb(255, 244, 222) : Color.FromArgb(237, 241, 244);
+        statusDot.ForeColor = connected ? Color.FromArgb(50, 137, 91) : reconnecting ? WarningText : SecondaryText;
+        statusLabel.ForeColor = connected ? ConnectedText : reconnecting ? WarningText : Color.FromArgb(80, 103, 113);
+        statusLabel.Text = connected ? "Connecté" : reconnecting ? "Reconnexion…" : synchronizing ? "Synchronisation…" : "En attente de connexion";
+        statusPill.AccessibleName = statusLabel.Text; statusPill.Region?.Dispose(); statusPill.Region = RoundedRegion(statusPill.Size, 16);
         terminateSession.Visible = onAgent ? agent?.Session.Connected == true || agent?.Session.State == "reconnecting" : supportSession;
         roleAgent.BackColor = onAgent ? SelectedRail : Rail; roleController.BackColor = onController ? SelectedRail : Rail; navConnection.BackColor = onController && controllerPages.SelectedIndex == 0 ? SelectedRail : Rail; navScreen.BackColor = onController && controllerPages.SelectedIndex == 1 ? SelectedRail : Rail; navProcesses.BackColor = onController && controllerPages.SelectedIndex == 2 ? SelectedRail : Rail; navFiles.BackColor = onController && controllerPages.SelectedIndex == 3 ? SelectedRail : Rail; navDiagnostics.BackColor = onController && controllerPages.SelectedIndex == 4 ? SelectedRail : Rail;
     }
