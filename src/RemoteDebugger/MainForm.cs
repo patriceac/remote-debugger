@@ -174,10 +174,13 @@ public sealed class MainForm : Forms.Form
     public bool AgentNetworkReady => loopbackOnly || agentNetworkPrepared;
     public RemoteClient? Client => client;
 
-    public MainForm(bool startAgent = true, string? dataRoot = null, bool loopbackOnly = false)
+    private readonly string? startupPreparationError;
+
+    public MainForm(bool startAgent = true, string? dataRoot = null, bool loopbackOnly = false, string? startupPreparationError = null)
     {
         root = dataRoot ?? Vault.DefaultRoot;
         this.loopbackOnly = loopbackOnly;
+        this.startupPreparationError = startupPreparationError;
         startAgentOnLaunch = startAgent;
 
         Text = "Remote Debugger";
@@ -600,10 +603,6 @@ public sealed class MainForm : Forms.Form
         if (loopbackOnly) { agentNetworkState.Text = "Local uniquement"; return; }
         try
         {
-            if (await SupportPlatform.TryRelaunchManagedAgentAsync(Environment.GetCommandLineArgs().Skip(1).ToArray()))
-            {
-                OnManagedRelaunchRequested(); return;
-            }
             SupportPlatformStatus status = await SupportPlatform.PrepareAsync(requireFirewall: true);
             if (!ReferenceEquals(agent, preparing) || quitting) return;
             if (status.Available && status.FirewallReady && !agentNetworkPrepared)
@@ -614,6 +613,8 @@ public sealed class MainForm : Forms.Form
                 agentNetworkPrepared = true;
             }
             ApplyPlatformStatus(status);
+            if (startupPreparationError != null)
+                ShowSetupNotice("Le démarrage de l’assistance installée a échoué : " + startupPreparationError);
         }
         catch (Exception ex) { ShowSetupNotice("Préparation automatique impossible : " + ex.Message); }
     }

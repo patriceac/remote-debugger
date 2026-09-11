@@ -15,11 +15,22 @@ public static class Program
         if (args.Length == 2 && args[0] == "--ui-job") { Forms.Application.SetHighDpiMode(Forms.HighDpiMode.PerMonitorV2); return UiAutomationJob.Execute(args[1]); }
         if (args.Length > 0 && args[0] == "cli") return CliAsync(args.Skip(1).ToArray()).GetAwaiter().GetResult();
         WaitForProvisioningParent(args);
+        string? startupPreparationError = null;
+        if (!args.Contains("--loopback-only"))
+        {
+            try
+            {
+                // Resolve an already-provisioned portable launch before any
+                // window displays a code belonging to the departing process.
+                if (SupportPlatform.TryRelaunchManagedAgentAsync(args).GetAwaiter().GetResult()) return 0;
+            }
+            catch (Exception ex) { startupPreparationError = ex.Message; }
+        }
         Native.FreeConsole(); ApplicationConfiguration.Initialize();
         int rootIndex = Array.IndexOf(args, "--data-root");
         string? dataRoot = rootIndex >= 0 && rootIndex + 1 < args.Length ? args[rootIndex + 1] : null;
         bool controllerOnly = args.Contains("--controller");
-        var form = new MainForm(!controllerOnly, dataRoot, args.Contains("--loopback-only"));
+        var form = new MainForm(!controllerOnly, dataRoot, args.Contains("--loopback-only"), startupPreparationError);
         SupportPlatform.ManagedRelaunchRequested += () =>
         {
             if (!form.IsDisposed && form.IsHandleCreated) form.BeginInvoke(Forms.Application.Exit);
