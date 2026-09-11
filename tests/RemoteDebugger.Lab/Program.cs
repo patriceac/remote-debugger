@@ -773,11 +773,13 @@ internal sealed partial class LabForm : Forms.Form
         (int ExitCode, string Stdout, string Stderr) firewall;
         ProvisioningEvidence.GuestObservation? observation = null;
         string? observerError = null;
+        double firewallWaitedSeconds = 0;
         if (brokerProvisioning != null)
         {
-            var observed = await WaitForBrokerObservationAsync();
+            var observed = await WaitForBrokerFirewallReadyAsync();
             observation = observed.Observation;
             observerError = observed.Error;
+            firewallWaitedSeconds = observed.WaitedSeconds;
             firewall = observation == null
                 ? (1, "", observerError ?? "The broker observation was unavailable.")
                 : (observation.Firewall.ExitCode, observation.Firewall.Stdout, observation.Firewall.Stderr);
@@ -789,12 +791,14 @@ internal sealed partial class LabForm : Forms.Form
             firewall = await ReadFirewallAsync();
         }
         bool privateRule = firewall.ExitCode == 0 && HasPrivateFirewallRule(firewall.Stdout);
-        if (privateRule) Pass("agent.private_firewall", "Private/local-subnet firewall access is prepared automatically", new { stdout = firewall.Stdout, observer = observation?.EvidencePath, observerError });
-        else if (brokerProvisioning != null) Block("agent.private_firewall", "Private/local-subnet firewall access is prepared automatically", "The broker's fresh read-only observer did not show the product's Private/local-subnet firewall rule.", new { elevated = guestElevated, exitCode = firewall.ExitCode, stdout = firewall.Stdout, stderr = firewall.Stderr, observer = observation?.EvidencePath, observerError }, required: RequiresProvisioning);
+        if (privateRule) Pass("agent.private_firewall", "Private/local-subnet firewall access is prepared automatically", new { stdout = firewall.Stdout, observer = observation?.EvidencePath, observerError, waitedSeconds = firewallWaitedSeconds });
+        else if (brokerProvisioning != null) Block("agent.private_firewall", "Private/local-subnet firewall access is prepared automatically", "The broker's fresh read-only observer did not show the product's Private/local-subnet firewall rule before the bounded setup wait expired.", new { elevated = guestElevated, exitCode = firewall.ExitCode, stdout = firewall.Stdout, stderr = firewall.Stderr, observer = observation?.EvidencePath, observerError, waitedSeconds = firewallWaitedSeconds }, required: RequiresProvisioning);
         else if (RequiresProvisioning) Block("agent.private_firewall", "Private/local-subnet firewall access is prepared automatically", guestElevated ? "The guest is elevated, but no supported product provisioning operation has been provided to this Lab." : "The executable-testing contract does not provide secure-desktop UAC interaction for first provisioning.", new { elevated = guestElevated, exitCode = firewall.ExitCode, stdout = firewall.Stdout, stderr = firewall.Stderr });
         else Block("agent.private_firewall", "Private/local-subnet firewall access is prepared automatically", "Provisioned firewall evidence is outside the Runtime scope.", new { exitCode = firewall.ExitCode, stdout = firewall.Stdout, stderr = firewall.Stderr }, required: false);
 
-        string[] service = observation == null ? await ReadRemoteDebuggerServicesAsync() : ProvisioningEvidence.FormatServices(observation.Services);
+        string[] service = brokerProvisioning != null
+            ? observation == null ? [] : ProvisioningEvidence.FormatServices(observation.Services)
+            : await ReadRemoteDebuggerServicesAsync();
         string[] serviceErrors = observation?.ServiceErrors ?? [];
         bool localSystemService = brokerProvisioning != null && ProvisioningEvidence.HasLocalSystemService(service, brokerProvisioning.ServiceExecutablePath);
         if (brokerProvisioning != null && localSystemService) Pass("agent.provisioning_receipt", "The guest has a one-time administrator broker installation", new { service = service.Take(8).ToArray(), serviceErrors, observer = observation?.EvidencePath, serviceAccount = "LocalSystem", servicePath = brokerProvisioning.ServiceExecutablePath });
@@ -993,6 +997,28 @@ internal sealed partial class LabForm : Forms.Form
         return (null, error);
     }
 
+    private async Task<(ProvisioningEvidence.GuestObservation? Observation, string Error, double WaitedSeconds)> WaitForBrokerFirewallReadyAsync()
+    {
+        if (brokerProvisioning == null) return (null, "No verified broker provisioning receipt is active.", 0);
+        var elapsed = Stopwatch.StartNew();
+        ProvisioningEvidence.GuestObservation? latest = null;
+        string error = "The broker firewall rule was not ready before the bounded setup wait expired.";
+        while (elapsed.Elapsed < TimeSpan.FromSeconds(150) && !stop.IsCancellationRequested)
+        {
+            var observed = await WaitForBrokerObservationAsync();
+            if (observed.Observation != null)
+            {
+                latest = observed.Observation;
+                bool ready = latest.Firewall.ExitCode == 0 && HasPrivateFirewallRule(latest.Firewall.Stdout);
+                if (ready) return (latest, "", elapsed.Elapsed.TotalSeconds);
+                error = observed.Error.Length == 0 ? error : observed.Error;
+            }
+            else if (observed.Error.Length > 0) error = observed.Error;
+            await Task.Delay(2000, stop.Token);
+        }
+        return (latest, error, elapsed.Elapsed.TotalSeconds);
+    }
+
     private async Task<string[]> ReadRemoteDebuggerServicesAsync()
     {
         if (brokerProvisioning != null)
@@ -1068,11 +1094,14 @@ internal sealed partial class LabForm : Forms.Form
         string controllerHash = await HashFileAsync(application);
 
         var peersControl = Element("peers");
-        bool peerVisible = await WaitForRowsAsync(peersControl, 1, 40);
-        var discovered = await DiscoverAsync();
+        // The agent starts its coordination listener only after its bounded
+        // firewall/setup probe. Give discovery enough time for that startup,
+        // then verify the actual UI row after the authenticated peer appears.
+        var discovered = await DiscoverAsync(240);
         string[] localAddresses = ProvisioningEvidence.LocalIPv4Addresses();
         var peer = discovered.FirstOrDefault(x => ProvisioningEvidence.IsRemoteCoordinationAddress(x.Host, localAddresses, out _));
         if (peer == null) throw new TimeoutException("Controller discovery did not find a remote agent.");
+        bool peerVisible = await WaitForRowsAsync(peersControl, 1, 20);
         peerHost = peer.Host; peerFingerprint = peer.Fingerprint;
         string selectedHost = TryValue("host");
         bool autoSelected = !string.IsNullOrWhiteSpace(selectedHost) && selectedHost == peerHost;
@@ -1243,9 +1272,10 @@ internal sealed partial class LabForm : Forms.Form
         try { await WaitForUiAsync(() => predicate(TryValue(key)), seconds); return true; } catch (TimeoutException) { return false; }
     }
 
-    private async Task<List<Peer>> DiscoverAsync()
+    private async Task<List<Peer>> DiscoverAsync(int seconds = 30)
     {
-        for (int n = 0; n < 20; n++)
+        var deadline = Stopwatch.StartNew();
+        while (deadline.Elapsed < TimeSpan.FromSeconds(seconds))
         {
             try
             {
