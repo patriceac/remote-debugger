@@ -144,6 +144,7 @@ public sealed class MainForm : Forms.Form
     private readonly Forms.NotifyIcon tray = new();
     private RemoteClient? client;
     private AgentServer? agent;
+    private bool agentNetworkPrepared;
     private CancellationTokenSource? action;
     private CancellationTokenSource? heartbeatLifetime;
     private CancellationTokenSource? discoveryLifetime;
@@ -167,6 +168,7 @@ public sealed class MainForm : Forms.Form
 
     public string? CurrentPairingCode { get; private set; }
     public AgentServer? Agent => agent;
+    public bool AgentNetworkReady => loopbackOnly || agentNetworkPrepared;
     public RemoteClient? Client => client;
 
     public MainForm(bool startAgent = true, string? dataRoot = null, bool loopbackOnly = false)
@@ -474,9 +476,8 @@ public sealed class MainForm : Forms.Form
         renderTimer.Start();
         discoveryTimer.Start();
         _ = PumpInputAsync();
-        SelectRole(0);
-        if (startAgentOnLaunch) { StartAgent(); _ = PrepareAgentAsync(); }
-        else _ = DiscoverAsync(false);
+        SelectRole(startAgentOnLaunch ? 0 : 1);
+        if (!startAgentOnLaunch) _ = DiscoverAsync(false);
         await Task.Yield();
     }
 
@@ -509,8 +510,11 @@ public sealed class MainForm : Forms.Form
         if (agent != null) return;
         try
         {
-            agent = new AgentServer(root, loopbackOnly: loopbackOnly);
-            agent.Status += text => PostUi(() => { agentLog.Text = text; footerMessage = text; RefreshFooter(); });
+            // Pairing can appear immediately without triggering the broad Windows
+            // firewall consent dialog. LAN listening starts only after the
+            // provisioned broker has verified the Private/LocalSubnet rules.
+            agent = new AgentServer(root, loopbackOnly: loopbackOnly || !agentNetworkPrepared);
+            agent.Status += text => PostUi(() => { agentLog.Text = text; RefreshFooter(); });
             agent.TerminationRequested += () => { if (!suppressTerminationEvent && !quitting) PostUi(TerminateAgentFromRemote); };
             agent.Start();
             powerHold ??= PowerHold.Acquire();
@@ -547,12 +551,21 @@ public sealed class MainForm : Forms.Form
 
     private async Task PrepareAgentAsync()
     {
-        if (agent == null) return;
+        AgentServer? preparing = agent;
+        if (preparing == null) return;
+        if (loopbackOnly) { agentNetworkState.Text = "Local uniquement"; return; }
         try
         {
-            SupportPlatformStatus status = await SupportPlatform.GetStatusAsync(); ApplyPlatformStatus(status);
-            if (status.RequiresAdministratorConsent) ShowSetupNotice(status.Message);
-            else ApplyPlatformStatus(await SupportPlatform.PrepareAsync(requireFirewall: true));
+            SupportPlatformStatus status = await SupportPlatform.PrepareAsync(requireFirewall: true);
+            if (!ReferenceEquals(agent, preparing) || quitting) return;
+            if (status.Available && status.FirewallReady && !agentNetworkPrepared)
+            {
+                agentNetworkPrepared = true;
+                // No external controller can have paired on the pending
+                // loopback listener. Preserve a planned-update resume record.
+                preparing.Dispose(); agent = null; StartAgent();
+            }
+            ApplyPlatformStatus(status);
         }
         catch (Exception ex) { ShowSetupNotice("Préparation automatique impossible : " + ex.Message); }
     }
@@ -560,25 +573,26 @@ public sealed class MainForm : Forms.Form
     private async Task ProvisionPlatformAsync()
     {
         preparePlatform.Enabled = false;
-        try { ApplyPlatformStatus(await SupportPlatform.ProvisionAsync()); }
+        try { ApplyPlatformStatus(await SupportPlatform.ProvisionAsync()); if (!quitting) await PrepareAgentAsync(); }
         catch (Exception ex) { ShowSetupNotice("Activation impossible : " + ex.Message); }
         finally { preparePlatform.Enabled = true; }
     }
 
     private void ApplyPlatformStatus(SupportPlatformStatus status)
     {
-        agentNetworkState.Text = status.FirewallReady ? "Prêt" : status.RequiresAdministratorConsent ? "Préparation…" : "Indisponible";
+        agentNetworkState.Text = status.FirewallReady ? "Prêt" : status.RequiresAdministratorConsent ? "Activation requise" : "Indisponible";
         agentNetworkState.ForeColor = status.FirewallReady ? ConnectedText : WarningText;
         agentSleepState.Text = powerHold != null ? "Suspendue" : "Active";
         agentSleepState.ForeColor = powerHold != null ? PrimaryText : SecondaryText;
-        if (status.RequiresAdministratorConsent) ShowSetupNotice(status.Message);
+        if (status.RequiresAdministratorConsent) ShowSetupNotice("Activez l’assistance sur ce PC. Une autorisation Windows est nécessaire une seule fois.");
         else if (status.Available || status.Provisioned) HideSetupNotice();
-        if (!string.IsNullOrWhiteSpace(status.Message)) { footerMessage = status.Message; RefreshFooter(); }
+        output.Text = Pretty(status);
+        footerMessage = status.FirewallReady ? "Prêt à recevoir une connexion" : "Activez ce PC pour autoriser le réseau privé"; RefreshFooter();
     }
 
     private void ShowSetupNotice(string message)
     {
-        setupNoticeText.Text = string.IsNullOrWhiteSpace(message) ? "Une autorisation Windows est nécessaire une seule fois sur ce PC." : message + " Une autorisation Windows est nécessaire une seule fois sur ce PC.";
+        setupNoticeText.Text = string.IsNullOrWhiteSpace(message) ? "Une autorisation Windows est nécessaire une seule fois sur ce PC." : message;
         setupNotice.Visible = true;
     }
 
@@ -642,7 +656,7 @@ public sealed class MainForm : Forms.Form
         else { headerTitle.Text = "Prendre le contrôle"; headerSubtitle.Text = "Choisissez un PC puis saisissez son code"; }
 
         bool connected = onAgent ? agent?.Session is { Connected: true, BinaryMatched: true } : heartbeatHealthy && supportSession;
-        statusPill.BackColor = connected ? ConnectedBack : Color.FromArgb(237, 241, 244); statusDot.ForeColor = connected ? Color.FromArgb(50, 137, 91) : SecondaryText; statusLabel.ForeColor = connected ? ConnectedText : Color.FromArgb(80, 103, 113); statusLabel.Text = connected ? "Connecté" : onController && supportSession ? "Reconnexion…" : "En attente de connexion"; statusPill.Region?.Dispose(); statusPill.Region = RoundedRegion(statusPill.Size, 16);
+        statusPill.BackColor = connected ? ConnectedBack : Color.FromArgb(237, 241, 244); statusDot.ForeColor = connected ? Color.FromArgb(50, 137, 91) : SecondaryText; statusLabel.ForeColor = connected ? ConnectedText : Color.FromArgb(80, 103, 113); statusLabel.Text = connected ? "Connecté" : onController && supportSession ? "Reconnexion…" : "En attente de connexion"; statusPill.AccessibleName = statusLabel.Text; statusPill.Region?.Dispose(); statusPill.Region = RoundedRegion(statusPill.Size, 16);
         terminateSession.Visible = onAgent ? agent?.Session.Connected == true || agent?.Session.State == "reconnecting" : supportSession;
         roleAgent.BackColor = onAgent ? SelectedRail : Rail; roleController.BackColor = onController ? SelectedRail : Rail; navConnection.BackColor = onController && controllerPages.SelectedIndex == 0 ? SelectedRail : Rail; navScreen.BackColor = onController && controllerPages.SelectedIndex == 1 ? SelectedRail : Rail; navProcesses.BackColor = onController && controllerPages.SelectedIndex == 2 ? SelectedRail : Rail; navFiles.BackColor = onController && controllerPages.SelectedIndex == 3 ? SelectedRail : Rail; navDiagnostics.BackColor = onController && controllerPages.SelectedIndex == 4 ? SelectedRail : Rail;
     }
@@ -674,7 +688,7 @@ public sealed class MainForm : Forms.Form
         }
         rolePages.SelectedIndex = index;
         controllerNavCaption.Visible = index == 1; navConnection.Visible = index == 1; navScreen.Visible = index == 1; navProcesses.Visible = index == 1; navFiles.Visible = index == 1; navDiagnostics.Visible = index == 1;
-        if (index == 0 && startAgentOnLaunch && agent == null && !quitting) { StartAgent(); _ = PrepareAgentAsync(); }
+        if (index == 0 && agent == null && !quitting) { StartAgent(); _ = PrepareAgentAsync(); }
         UpdateHeader();
     }
 

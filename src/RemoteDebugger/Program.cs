@@ -35,7 +35,7 @@ public static class Program
                 {
                     try
                     {
-                        if (form.Agent is { IsListening: true, Paired: true } agent && agent.Session.HasPaired)
+                    if (form.AgentNetworkReady && form.Agent is { IsListening: true, Paired: true } agent && agent.Session.HasPaired)
                         {
                             await SupportPlatform.ReportStartupHealthyAsync(transactionId, ticket);
                             return;
