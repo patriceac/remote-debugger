@@ -75,13 +75,18 @@ public sealed class AgentServer : IDisposable
     private string controllerBinaryHash = "";
     private readonly SupportSession session = new();
     private readonly SessionResumeStore resumeStore;
+    private readonly AgentUpdateService updates;
+    private readonly SemaphoreSlim updateGate = new(1, 1);
     private ResumableSession? resumed;
     private readonly SemaphoreSlim pairingSlot = new(1, 1);
     private int disposed;
+    private int terminating;
+    private int listening;
     public PairingGate Pairing { get; } = new();
     public Operations Operations { get; }
     public string Fingerprint => certificate.GetCertHashString(HashAlgorithmName.SHA256);
     public int Port { get; }
+    public bool IsListening => Volatile.Read(ref listening) != 0 && Volatile.Read(ref disposed) == 0;
     public bool Paired { get { lock (authLock) return tokenHash.Length != 0; } }
     public event Action<string>? Status;
     public event Action? TerminationRequested;
@@ -114,12 +119,25 @@ public sealed class AgentServer : IDisposable
         }
         else resumeStore.Clear();
         Operations = new Operations(root);
+        updates = new AgentUpdateService(root, (context, ct) =>
+        {
+            ct.ThrowIfCancellationRequested();
+            var reconnect = PrepareUpdateReconnect(context.Controller.Sha256, DateTimeOffset.UtcNow.AddMinutes(10));
+            return Task.FromResult(new UpdateReconnectGrant(reconnect.Ticket, reconnect.ExpiresUtc));
+        });
+        updates.UpdateRestartRequested += () =>
+        {
+            // Planned replacement preserves the bounded reconnect grant. Explicit
+            // termination takes the cancellation path below instead.
+            if (Volatile.Read(ref terminating) != 0) return;
+            Dispose(); TerminationRequested?.Invoke();
+        };
         listener = new TcpListener(loopbackOnly ? IPAddress.Loopback : IPAddress.Any, port);
         discovery = new UdpClient(new IPEndPoint(loopbackOnly ? IPAddress.Loopback : IPAddress.Any, Discovery.Port));
     }
     public void Start()
     {
-        _ = ExecutableIdentity.Sha256; if (!Paired) Pairing.Open(); listener.Start();
+        _ = ExecutableIdentity.Sha256; if (!Paired) Pairing.Open(); listener.Start(); Volatile.Write(ref listening, 1);
         _ = Task.Run(AcceptAsync); _ = Task.Run(DiscoverAsync); _ = Task.Run(WatchSessionAsync);
         Status?.Invoke("Agent ready for pairing; access is visible in this window.");
         if (Paired) _ = StartMaintenanceAsync();
@@ -140,15 +158,35 @@ public sealed class AgentServer : IDisposable
             while (!stop.IsCancellationRequested)
             {
                 await Task.Delay(500, stop.Token); _ = Pairing.CurrentCode;
-                if (session.ShouldExit) { Terminate(); return; }
+                if (session.ShouldExit)
+                {
+                    try { await TerminateAsync(); return; }
+                    catch (Exception ex) when (!stop.IsCancellationRequested)
+                    {
+                        Status?.Invoke("Session ended; retrying update cleanup: " + ex.Message);
+                        await Task.Delay(TimeSpan.FromSeconds(5), stop.Token);
+                    }
+                }
                 if (!Session.Connected && Session.HasPaired) Native.ReleaseAllInput();
             }
         }
         catch (OperationCanceledException) { }
     }
-    public void Terminate()
+    public async Task TerminateAsync(CancellationToken ct = default)
     {
-        session.End(); Revoke(); Dispose(); TerminationRequested?.Invoke();
+        if (Volatile.Read(ref disposed) != 0) return;
+        Interlocked.Exchange(ref terminating, 1);
+        session.End(); Native.ReleaseAllInput();
+        foreach (var job in running.Values) job.Cancel();
+        await updateGate.WaitAsync(ct);
+        try
+        {
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            deadline.CancelAfter(TimeSpan.FromSeconds(35));
+            await updates.CancelActiveAsync(deadline.Token);
+            Revoke(); Dispose(); TerminationRequested?.Invoke();
+        }
+        finally { updateGate.Release(); }
     }
     public void Revoke()
     {
@@ -190,6 +228,8 @@ public sealed class AgentServer : IDisposable
                 Reply reply;
                 if (r.Operation == "pair.v2")
                 {
+                    if (Volatile.Read(ref terminating) != 0 || Volatile.Read(ref disposed) != 0)
+                        throw new AuthenticationException("This support session has ended.");
                     if (!await pairingSlot.WaitAsync(0, handshake.Token)) throw new AuthenticationException("Another pairing attempt is in progress.");
                     try
                     {
@@ -199,6 +239,7 @@ public sealed class AgentServer : IDisposable
                             lock (authLock)
                             {
                                 tokenHash = Safety.Hash(token); controllerBinaryHash = controllerHash; grantLifetime.Cancel(); grantLifetime = new();
+                                updates.ResetControllerSynchronization();
                                 foreach (var job in running.Values) job.Cancel(); requests.Clear();
                                 session.Pair(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
                             }
@@ -212,10 +253,15 @@ public sealed class AgentServer : IDisposable
                 {
                     bool authorized; CancellationToken grant; lock (authLock) { authorized = tokenHash.Length != 0 && Safety.Equal(tokenHash, Safety.Hash(r.Token ?? "")); grant = grantLifetime.Token; }
                     if (authorized && !PairingExchange.ValidHash(r.BinarySha256)) authorized = false;
+                    if (authorized && Volatile.Read(ref terminating) != 0) authorized = false;
                     if (authorized && !Safety.Equal(controllerBinaryHash, r.BinarySha256!.ToUpperInvariant()))
                     {
-                        controllerBinaryHash = r.BinarySha256!.ToUpperInvariant();
-                        session.SetBinaryMatched(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
+                        lock (authLock)
+                        {
+                            controllerBinaryHash = r.BinarySha256!.ToUpperInvariant();
+                            updates.ResetControllerSynchronization();
+                            session.SetBinaryMatched(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
+                        }
                         Native.ReleaseAllInput();
                         foreach (var job in running.Values) job.Cancel();
                     }
@@ -236,9 +282,45 @@ public sealed class AgentServer : IDisposable
                     }
                     else if (r.Operation is "session.end" or "revoke")
                     {
-                        await Wire.WriteAsync(tls, Reply.Success(r.Id, new { ended = true }), timeout.Token); Terminate(); return;
+                        // Keep this socket alive until the controller knows whether
+                        // an armed replacement was safely cancelled.
+                        Interlocked.Exchange(ref terminating, 1); session.End(); Native.ReleaseAllInput();
+                        foreach (var job in running.Values) job.Cancel();
+                        await updateGate.WaitAsync(timeout.Token);
+                        try
+                        {
+                            using var endDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(35));
+                            await updates.CancelActiveAsync(endDeadline.Token);
+                            await Wire.WriteAsync(tls, Reply.Success(r.Id, new { ended = true }), timeout.Token);
+                            Revoke(); Dispose(); TerminationRequested?.Invoke();
+                        }
+                        finally { updateGate.Release(); }
+                        return;
                     }
-                    else if (!Session.BinaryMatched && !r.Operation.StartsWith("update.", StringComparison.Ordinal) && !r.Operation.StartsWith("upload.", StringComparison.Ordinal) && r.Operation is not ("status" or "file.info" or "maintenance.status" or "cancel"))
+                    else if (updates.IsOperation(r.Operation))
+                    {
+                        await updateGate.WaitAsync(timeout.Token);
+                        try
+                        {
+                            if (Volatile.Read(ref terminating) != 0) reply = Reply.Failure(r.Id, "session_ended", "The support session is ending.");
+                            else
+                            {
+                                using var updateDeadline = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, grant);
+                                updateDeadline.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(r.TimeoutSeconds, 1, 120)));
+                                reply = await updates.DispatchAsync(r, updateDeadline.Token);
+                                if (r.Operation == "update.confirm" && reply.Ok)
+                                {
+                                    session.SetBinaryMatched(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
+                                    if (Session.BinaryMatched) { resumeStore.Clear(); resumed = null; }
+                                }
+                            }
+                            await Wire.WriteAsync(tls, reply, timeout.Token);
+                            updates.NotifyReplySent(r, reply);
+                        }
+                        finally { updateGate.Release(); }
+                        return;
+                    }
+                    else if (!Session.BinaryMatched && r.Operation is not ("status" or "maintenance.status" or "cancel"))
                         reply = Reply.Failure(r.Id, "binary_mismatch", "Synchronize the agent with the controller executable before starting support.");
                     else if (r.Operation == "screen.stream") { using var streamGrant = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, grant); await StreamAsync(tls, r, streamGrant.Token); return; }
                     else if (r.Operation == "cancel") { if (running.TryGetValue(r.Args.Str("id"), out var job)) job.Cancel(); reply = Reply.Success(r.Id, new { cancellationRequested = true }); }
@@ -300,7 +382,7 @@ public sealed class AgentServer : IDisposable
         try { await Operations.Maintenance.StartAsync(stop.Token); Status?.Invoke("Administrator maintenance active for this session."); }
         catch (Exception ex) { if (!stop.IsCancellationRequested) Status?.Invoke("Administrator maintenance unavailable: " + ex.Message); }
     }
-    public void Dispose() { if (Interlocked.Exchange(ref disposed, 1) != 0) return; Pairing.Close(); stop.Cancel(); Operations.Maintenance.Dispose(); Native.ReleaseAllInput(); listener.Stop(); discovery.Dispose(); }
+    public void Dispose() { if (Interlocked.Exchange(ref disposed, 1) != 0) return; Volatile.Write(ref listening, 0); Pairing.Close(); stop.Cancel(); Operations.Maintenance.Dispose(); Native.ReleaseAllInput(); listener.Stop(); discovery.Dispose(); updates.Dispose(); }
 }
 
 public sealed class RemoteClient(Connection connection)
@@ -314,7 +396,7 @@ public sealed class RemoteClient(Connection connection)
         Connection = await PairingTransport.PairAsync(Connection, code, ct).ConfigureAwait(false);
     }
     public async Task<JsonElement> HeartbeatAsync(CancellationToken ct = default) => Require(await CallAsync("session.heartbeat", ct: ct, seconds: 5).ConfigureAwait(false));
-    public async Task EndSessionAsync(CancellationToken ct = default) { Require(await CallAsync("session.end", ct: ct, seconds: 5).ConfigureAwait(false)); }
+    public async Task EndSessionAsync(CancellationToken ct = default) { Require(await CallAsync("session.end", ct: ct, seconds: 45).ConfigureAwait(false)); }
     public async Task DisconnectAsync(CancellationToken ct = default) { Require(await CallAsync("session.disconnect", ct: ct, seconds: 5).ConfigureAwait(false)); }
     public async Task<Reply> CallAsync(string operation, object? args = null, CancellationToken ct = default, string? id = null, int seconds = 60)
     {
