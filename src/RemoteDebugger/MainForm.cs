@@ -211,6 +211,7 @@ public sealed class MainForm : Forms.Form
 
         renderTimer.Tick += (_, _) => RefreshUiState();
         discoveryTimer.Tick += async (_, _) => await DiscoverAsync(false);
+        Load += (_, _) => RestoreWindowPlacement();
         Shown += MainFormShown;
         FormClosing += MainFormClosing;
         FormClosed += (_, _) => DisposeResources();
@@ -220,9 +221,9 @@ public sealed class MainForm : Forms.Form
     {
         shell.Padding = Forms.Padding.Empty;
         shell.BackColor = Canvas;
-        shell.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Absolute, 208));
+        shell.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Absolute, 240));
         shell.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
-        shell.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 84));
+        shell.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 96));
         shell.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
         shell.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 40));
         shell.Controls.Add(rail, 0, 0);
@@ -280,7 +281,7 @@ public sealed class MainForm : Forms.Form
         headerTitle.Font = new Font("Segoe UI", 22, FontStyle.Bold); headerSubtitle.Font = new Font("Segoe UI", 10.5F);
         titles.Controls.Add(headerTitle, 0, 0); titles.Controls.Add(headerSubtitle, 0, 1);
         var actions = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.LeftToRight, WrapContents = false, AutoSize = true, Padding = new Forms.Padding(0, 20, 0, 0) };
-        statusPill.Width = 200; statusPill.Height = 30; statusPill.Margin = new Forms.Padding(0, 3, 12, 0);
+        statusPill.Width = 232; statusPill.Height = 30; statusPill.Margin = new Forms.Padding(0, 3, 12, 0);
         terminateSession.Margin = Forms.Padding.Empty;
         statusDot.Location = new Point(12, 7); statusLabel.Location = new Point(28, 6); statusPill.Controls.Add(statusDot); statusPill.Controls.Add(statusLabel); statusPill.Region = RoundedRegion(statusPill.Size, 15);
         actions.Controls.Add(statusPill); actions.Controls.Add(terminateSession);
@@ -318,7 +319,7 @@ public sealed class MainForm : Forms.Form
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 20));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 78));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 96));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 8));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 24));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 38));
@@ -331,7 +332,7 @@ public sealed class MainForm : Forms.Form
         layout.Controls.Add(agentHeading, 0, 1);
         layout.Controls.Add(agentSubtitle, 0, 2);
 
-        var codeRow = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, Height = 78, WrapContents = false, FlowDirection = Forms.FlowDirection.LeftToRight, Padding = new Forms.Padding(0, 10, 0, 0), Margin = Forms.Padding.Empty };
+        var codeRow = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, Height = 96, WrapContents = false, FlowDirection = Forms.FlowDirection.LeftToRight, Padding = new Forms.Padding(0, 10, 0, 0), Margin = Forms.Padding.Empty };
         agentPairCode.Margin = new Forms.Padding(0, 0, 14, 0); copyAgentCode.Margin = new Forms.Padding(0, 4, 0, 0); codeRow.Controls.Add(agentPairCode); codeRow.Controls.Add(copyAgentCode); layout.Controls.Add(codeRow, 0, 3);
         pairingCountdown.Width = 480; pairingCountdown.Height = 4; pairingCountdown.Margin = new Forms.Padding(0, 2, 0, 0); layout.Controls.Add(pairingCountdown, 0, 4);
         pairingCountdownText.AutoSize = false; pairingCountdownText.Dock = Forms.DockStyle.Fill; pairingCountdownText.Margin = Forms.Padding.Empty; layout.Controls.Add(pairingCountdownText, 0, 5);
@@ -1328,6 +1329,7 @@ public sealed class MainForm : Forms.Form
 
     private async void MainFormClosing(object? sender, Forms.FormClosingEventArgs e)
     {
+        SaveWindowPlacement();
         if (shutdownStarted) return;
         if (quitting || agent != null)
         {
@@ -1343,6 +1345,21 @@ public sealed class MainForm : Forms.Form
 
     private void HideToTray() { trayVisible = true; Hide(); tray.Visible = true; footerMessage = "Assistance active dans la zone de notification"; footerDetail = "Ouvrir pour reprendre"; RefreshFooter(); }
     private void RestoreFromTray() { tray.Visible = false; trayVisible = false; Show(); WindowState = Forms.FormWindowState.Normal; Activate(); }
+
+    private void RestoreWindowPlacement()
+    {
+        WindowPlacement? placement = WindowPlacementStore.Load(root, WindowPlacementStore.WorkingAreas());
+        if (placement == null) return;
+        StartPosition = Forms.FormStartPosition.Manual;
+        Bounds = placement.Bounds;
+        if (placement.Maximized) WindowState = Forms.FormWindowState.Maximized;
+    }
+
+    private void SaveWindowPlacement()
+    {
+        Rectangle bounds = WindowState == Forms.FormWindowState.Normal ? Bounds : RestoreBounds;
+        WindowPlacementStore.Save(root, bounds, WindowState == Forms.FormWindowState.Maximized);
+    }
 
     private async Task<bool> ShutdownAsync()
     {
@@ -1426,8 +1443,8 @@ public sealed class MainForm : Forms.Form
         return panel;
     }
     private static Forms.Label RailCaption(string text) => new() { Text = text, AutoSize = true, ForeColor = RailSecondary, Font = new Font("Segoe UI", 8.5F, FontStyle.Bold), Margin = new Forms.Padding(12, 0, 0, 8) };
-    private static Forms.Button RailButton(string text, string name) => new() { Name = name, Text = text, AccessibleName = text, AutoSize = false, Width = 184, Height = 48, FlatStyle = Forms.FlatStyle.Flat, FlatAppearance = { BorderSize = 0 }, ForeColor = Color.White, BackColor = Rail, TextAlign = ContentAlignment.MiddleLeft, Padding = new Forms.Padding(16, 0, 0, 0), Margin = new Forms.Padding(0, 0, 0, 4), UseMnemonic = false };
-    private static Forms.Button RailSubButton(string text, string name) => new() { Name = name, Text = text, AccessibleName = text, AutoSize = false, Width = 168, Height = 42, FlatStyle = Forms.FlatStyle.Flat, FlatAppearance = { BorderSize = 0 }, ForeColor = RailSecondary, BackColor = Rail, TextAlign = ContentAlignment.MiddleLeft, Padding = new Forms.Padding(16, 0, 0, 0), Margin = new Forms.Padding(8, 0, 0, 5), UseMnemonic = false };
+    private static Forms.Button RailButton(string text, string name) => new() { Name = name, Text = text, AccessibleName = text, AutoSize = false, Width = 216, Height = 48, FlatStyle = Forms.FlatStyle.Flat, FlatAppearance = { BorderSize = 0 }, ForeColor = Color.White, BackColor = Rail, TextAlign = ContentAlignment.MiddleLeft, Padding = new Forms.Padding(16, 0, 0, 0), Margin = new Forms.Padding(0, 0, 0, 4), UseMnemonic = false };
+    private static Forms.Button RailSubButton(string text, string name) => new() { Name = name, Text = text, AccessibleName = text, AutoSize = false, Width = 200, Height = 42, FlatStyle = Forms.FlatStyle.Flat, FlatAppearance = { BorderSize = 0 }, ForeColor = RailSecondary, BackColor = Rail, TextAlign = ContentAlignment.MiddleLeft, Padding = new Forms.Padding(16, 0, 0, 0), Margin = new Forms.Padding(8, 0, 0, 5), UseMnemonic = false };
     private static Forms.Button Button(string text, string name, int width = 0, bool primary = false, bool destructive = false) { var button = new Forms.Button { Name = name, Text = text, AccessibleName = text, AutoSize = true, AutoSizeMode = Forms.AutoSizeMode.GrowAndShrink, MinimumSize = new Size(width > 0 ? width : 120, 38), Font = new Font("Segoe UI", 10), FlatStyle = Forms.FlatStyle.Flat, UseMnemonic = false, Padding = new Forms.Padding(10, 0, 10, 0), BackColor = destructive ? DestructiveBack : primary ? Teal : Surface, ForeColor = destructive ? DestructiveText : primary ? Color.White : PrimaryText, FlatAppearance = { BorderSize = 1, BorderColor = destructive ? Color.FromArgb(250, 210, 214) : primary ? Teal : Color.FromArgb(203, 215, 221) } }; button.Region = RoundedRegion(button.Size, 6); button.Resize += (_, _) => { button.Region?.Dispose(); button.Region = RoundedRegion(button.Size, 6); }; button.GotFocus += (_, _) => button.FlatAppearance.BorderColor = Teal; button.LostFocus += (_, _) => button.FlatAppearance.BorderColor = destructive ? Color.FromArgb(250, 210, 214) : primary ? Teal : Color.FromArgb(203, 215, 221); button.MouseEnter += (_, _) => { if (primary) button.BackColor = TealHover; }; button.MouseLeave += (_, _) => { if (primary) button.BackColor = Teal; }; return button; }
     private static Forms.TextBox TextBox(string name) { var box = new Forms.TextBox { Name = name, AccessibleName = name, BorderStyle = Forms.BorderStyle.FixedSingle, BackColor = Surface, ForeColor = PrimaryText, Font = new Font("Segoe UI", 11) }; box.Enter += (_, _) => box.BackColor = Color.FromArgb(248, 253, 253); box.Leave += (_, _) => box.BackColor = Surface; return box; }
     private static Forms.Label Badge(string text, string name) => new() { Name = name, Text = "●  " + text, AutoSize = true, ForeColor = ConnectedText, BackColor = ConnectedBack, Font = new Font("Segoe UI", 8.5F, FontStyle.Bold), Padding = new Forms.Padding(8, 5, 8, 5), Visible = false };
