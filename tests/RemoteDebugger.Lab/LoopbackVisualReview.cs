@@ -63,10 +63,18 @@ internal sealed partial class LabForm
             product = loopbackController;
             ResizeProductWindow(1060, 720);
             await Task.Delay(500, stop.Token);
+            Click("navConnection");
+            await Task.Delay(500, stop.Token);
+            CaptureDesktop("controller-connection-minimum.png");
+            Click("navFiles");
+            await Task.Delay(500, stop.Token);
             CaptureDesktop("controller-files-minimum.png");
             Click("navProcesses");
             await Task.Delay(500, stop.Token);
             CaptureDesktop("controller-processes-minimum.png");
+            Click("navDiagnostics");
+            await Task.Delay(500, stop.Token);
+            CaptureDesktop("controller-diagnostics-minimum.png");
             Click("navScreen");
             var resumed = await WaitForLiveEvidenceAsync(30);
             if (!resumed.BadgeVisible || !resumed.TelemetryVisible) throw new InvalidOperationException("Viewing did not resume on returning to the screen page.");

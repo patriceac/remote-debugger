@@ -240,34 +240,25 @@ public sealed class MainForm : Forms.Form
 
     private void BuildRail()
     {
-        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Forms.Padding(12, 0, 12, 8), BackColor = Rail };
+        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Forms.Padding(12, 16, 12, 8), BackColor = Rail };
         layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 96));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 112));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 44));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 62));
-
-        var brand = new Forms.Panel { Dock = Forms.DockStyle.Fill };
-        var mark = new Forms.Label { Text = "RD", AutoSize = false, Width = 34, Height = 34, TextAlign = ContentAlignment.MiddleCenter, BackColor = Teal, ForeColor = Color.White, Font = new Font("Segoe UI", 10, FontStyle.Bold), Location = new Point(10, 25) };
-        mark.Region = RoundedRegion(mark.Size, 6);
-        var brandName = new Forms.Label { Text = "Remote\nDebugger", AutoSize = false, Width = 128, Height = 54, Location = new Point(54, 18), ForeColor = Color.White, Font = new Font("Segoe UI", 14, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft };
-        brand.Controls.Add(mark); brand.Controls.Add(brandName);
-        layout.Controls.Add(brand, 0, 0);
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 72));
 
         var roles = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false, Padding = new Forms.Padding(0), BackColor = Rail };
         roles.Controls.Add(roleAgent); roles.Controls.Add(roleController);
-        layout.Controls.Add(roles, 0, 1);
+        layout.Controls.Add(roles, 0, 0);
 
         var work = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false, Padding = new Forms.Padding(0, 14, 0, 0), BackColor = Rail };
         work.Controls.Add(controllerNavCaption);
         work.Controls.Add(navConnection); work.Controls.Add(navScreen); work.Controls.Add(navProcesses); work.Controls.Add(navFiles); work.Controls.Add(navDiagnostics);
-        layout.Controls.Add(work, 0, 2);
+        layout.Controls.Add(work, 0, 1);
 
         var local = new Forms.Panel { Dock = Forms.DockStyle.Fill };
         var machine = new Forms.Label { Text = Environment.MachineName, AutoSize = false, Width = 180, Height = 20, ForeColor = RailSecondary, Font = new Font("Segoe UI", 9.5F), Location = new Point(12, 8), AutoEllipsis = true };
         var version = new Forms.Label { Text = "Remote Debugger · " + (typeof(MainForm).Assembly.GetName().Version?.ToString(3) ?? "0.2"), AutoSize = false, Width = 180, Height = 20, ForeColor = Color.FromArgb(116, 143, 154), Font = new Font("Segoe UI", 8.5F), Location = new Point(12, 32), AutoEllipsis = true };
-        local.Controls.Add(machine); local.Controls.Add(version); layout.Controls.Add(local, 0, 4);
+        local.Controls.Add(machine); local.Controls.Add(version); layout.Controls.Add(local, 0, 2);
         rail.Controls.Add(layout);
     }
 
@@ -280,7 +271,7 @@ public sealed class MainForm : Forms.Form
         titles.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize)); titles.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         headerTitle.Font = new Font("Segoe UI", 22, FontStyle.Bold); headerSubtitle.Font = new Font("Segoe UI", 10.5F);
         titles.Controls.Add(headerTitle, 0, 0); titles.Controls.Add(headerSubtitle, 0, 1);
-        var actions = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.LeftToRight, WrapContents = false, AutoSize = true, Padding = new Forms.Padding(0, 20, 0, 0) };
+        var actions = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.LeftToRight, WrapContents = false, AutoSize = true, MinimumSize = new Size(244, 0), Padding = new Forms.Padding(0, 20, 0, 0) };
         statusPill.Width = 232; statusPill.Height = 30; statusPill.Margin = new Forms.Padding(0, 3, 12, 0);
         terminateSession.Margin = Forms.Padding.Empty;
         statusDot.Location = new Point(12, 7); statusLabel.Location = new Point(28, 6); statusPill.Controls.Add(statusDot); statusPill.Controls.Add(statusLabel); statusPill.Region = RoundedRegion(statusPill.Size, 15);
@@ -379,29 +370,25 @@ public sealed class MainForm : Forms.Form
     private PagePanel BuildConnectionPage()
     {
         var page = new PagePanel("Connexion") { BackColor = Canvas, Padding = new Forms.Padding(28) };
-        var title = new Forms.Label { Text = "Prendre le contrôle", AutoSize = true, Font = new Font("Segoe UI", 22, FontStyle.Bold), ForeColor = PrimaryText };
-        var sub = new Forms.Label { Text = "Choisissez un PC puis saisissez son code.", AutoSize = true, ForeColor = SecondaryText, Margin = Forms.Padding.Empty };
         var columns = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
-        columns.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Absolute, 360)); columns.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Absolute, 1)); columns.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
+        columns.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 45)); columns.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Absolute, 1)); columns.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 55));
         columns.Controls.Add(BuildPeerList(), 0, 0); columns.Controls.Add(new Forms.Panel { Dock = Forms.DockStyle.Fill, BackColor = Divider }, 1, 0); columns.Controls.Add(BuildConnectionForm(), 2, 0);
-        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 3 }; layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 34)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 34)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
-        layout.Controls.Add(title, 0, 0); layout.Controls.Add(sub, 0, 1); layout.Controls.Add(columns, 0, 2); page.Controls.Add(layout); return page;
+        page.Controls.Add(columns); return page;
     }
 
     private Forms.Control BuildPeerList()
     {
-        var panel = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Forms.Padding(0, 0, 24, 0) };
-        panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 38)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 28)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
-        var toolbar = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2 }; toolbar.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100)); toolbar.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
-        toolbar.Controls.Add(new Forms.Label { Text = "PC disponibles", AutoSize = true, Font = new Font("Segoe UI", 15, FontStyle.Bold), ForeColor = PrimaryText, Anchor = Forms.AnchorStyles.Left }, 0, 0); toolbar.Controls.Add(discoverButton, 1, 0);
-        panel.Controls.Add(toolbar, 0, 0); panel.Controls.Add(discoveryState, 0, 1);
-        peers.Columns.Add("Nom", 140); peers.Columns.Add("Adresse", 110); peers.Columns.Add("État", 65); peers.Resize += (_, _) => peers.Columns[0].Width = Math.Max(80, peers.ClientSize.Width - Forms.SystemInformation.VerticalScrollBarWidth - 175); panel.Controls.Add(peers, 0, 2);
+        var panel = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Forms.Padding(0, 0, 24, 0) };
+        panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 32)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 42)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 28)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
+        panel.Controls.Add(new Forms.Label { Text = "PC disponibles", AutoSize = true, Font = new Font("Segoe UI", 15, FontStyle.Bold), ForeColor = PrimaryText, Anchor = Forms.AnchorStyles.Left }, 0, 0);
+        discoverButton.Anchor = Forms.AnchorStyles.Left; panel.Controls.Add(discoverButton, 0, 1); panel.Controls.Add(discoveryState, 0, 2);
+        peers.Columns.Add("Nom", 130); peers.Columns.Add("Adresse", 90); peers.Columns.Add("État", 60); peers.Resize += (_, _) => peers.Columns[0].Width = Math.Max(60, peers.ClientSize.Width - Forms.SystemInformation.VerticalScrollBarWidth - 150); panel.Controls.Add(peers, 0, 3);
         return panel;
     }
 
     private Forms.Control BuildConnectionForm()
     {
-        var panel = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 8, Padding = new Forms.Padding(32, 0, 0, 0) };
+        var panel = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 8, Padding = new Forms.Padding(24, 0, 0, 0) };
         panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 30)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 25)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 25)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 46)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 25)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 46)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 50)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
         panel.Controls.Add(selectedPeerName, 0, 0); panel.Controls.Add(selectedPeerAddress, 0, 1); panel.Controls.Add(new Forms.Label { Text = "Adresse IP (ou saisie manuelle)", AutoSize = true, ForeColor = SecondaryText, Margin = Forms.Padding.Empty, Dock = Forms.DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 2);
         host.Height = 40; host.Dock = Forms.DockStyle.Top; panel.Controls.Add(host, 0, 3);
@@ -445,30 +432,29 @@ public sealed class MainForm : Forms.Form
         monitor.Items.Add(new MonitorChoice(0, "Principal")); monitor.SelectedIndex = 0;
         top.Controls.Add(new Forms.Label { Text = "Écran", AutoSize = true, ForeColor = SecondaryText, Anchor = Forms.AnchorStyles.Left, Margin = new Forms.Padding(0, 10, 12, 0) }, 0, 0); top.Controls.Add(monitor, 1, 0); top.Controls.Add(mouseEnabled, 2, 0); top.Controls.Add(new Forms.Label { Text = "", AutoSize = true }, 3, 0); top.Controls.Add(pauseViewing, 4, 0);
         screenSurface.Controls.Add(screen); screenSurface.Controls.Add(liveBadge); screenSurface.Controls.Add(streamOverlay); liveBadge.BringToFront(); streamOverlay.BringToFront(); liveBadge.Location = new Point(16, 14); streamOverlay.Anchor = Forms.AnchorStyles.None; screenSurface.Resize += (_, _) => streamOverlay.Location = new Point(Math.Max(0, (screenSurface.Width - streamOverlay.Width) / 2), Math.Max(0, (screenSurface.Height - streamOverlay.Height) / 2));
-        var view = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 2 }; view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100)); view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 56)); view.Controls.Add(screenSurface, 0, 0);
-        var bottom = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 4, RowCount = 1, Padding = new Forms.Padding(0, 6, 0, 0), Margin = Forms.Padding.Empty };
-        bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100)); for (int column = 1; column < 4; column++) bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
-        remoteText.Dock = Forms.DockStyle.Top; remoteText.PlaceholderText = "Texte à envoyer au PC distant"; streamStatus.Margin = new Forms.Padding(12, 10, 0, 0); bottom.Controls.Add(remoteText, 0, 0); bottom.Controls.Add(typeText, 1, 0); bottom.Controls.Add(enterKey, 2, 0); bottom.Controls.Add(streamStatus, 3, 0); view.Controls.Add(bottom, 0, 1);
+        var view = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 2 }; view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100)); view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 82)); view.Controls.Add(screenSurface, 0, 0);
+        var bottom = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 3, RowCount = 2, Padding = new Forms.Padding(0, 6, 0, 0), Margin = Forms.Padding.Empty };
+        bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100)); bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
+        bottom.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 44)); bottom.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 28));
+        remoteText.Dock = Forms.DockStyle.Top; remoteText.PlaceholderText = "Texte à envoyer au PC distant"; streamStatus.Margin = Forms.Padding.Empty; streamStatus.Dock = Forms.DockStyle.Fill; streamStatus.TextAlign = ContentAlignment.MiddleLeft; bottom.Controls.Add(remoteText, 0, 0); bottom.Controls.Add(typeText, 1, 0); bottom.Controls.Add(enterKey, 2, 0); bottom.Controls.Add(streamStatus, 0, 1); bottom.SetColumnSpan(streamStatus, 3); view.Controls.Add(bottom, 0, 1);
         page.Controls.Add(view); page.Controls.Add(top); return page;
     }
 
     private PagePanel BuildProcessPage()
     {
         var page = new PagePanel("Processus") { BackColor = Canvas, Padding = new Forms.Padding(28) };
-        var title = SectionTitle("Processus", "Mesure CPU, mémoire et activité des applications distantes.");
         refreshResourcesButton = Button("Actualiser", "refreshResources", 100, primary: true);
         var action = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.LeftToRight, WrapContents = false }; action.Controls.Add(refreshResourcesButton); action.Controls.Add(resourceState);
         var summary = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 4, RowCount = 1, Height = 62, Padding = new Forms.Padding(0, 10, 0, 4) };
         for (int i = 0; i < 4; i++) summary.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 25));
         AddSummary(summary, 0, "CPU", cpuSummary); AddSummary(summary, 1, "RAM", ramSummary); AddSummary(summary, 2, "Processus", processSummary); AddSummary(summary, 3, "Mesuré à", resourceMeasuredAt);
         processList.Columns.Add("PID", 80, Forms.HorizontalAlignment.Right); processList.Columns.Add("Application", 240); processList.Columns.Add("CPU %", 100, Forms.HorizontalAlignment.Right); processList.Columns.Add("RAM Mio", 110, Forms.HorizontalAlignment.Right); processList.Columns.Add("Réponse", 100); processList.Columns.Add("Fenêtre", 300);
-        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 5 }; layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 50)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 44)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 62)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 28)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100)); layout.Controls.Add(title, 0, 0); layout.Controls.Add(action, 0, 1); layout.Controls.Add(summary, 0, 2); layout.Controls.Add(volumeSummary, 0, 3); layout.Controls.Add(processList, 0, 4); page.Controls.Add(layout); return page;
+        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 4 }; layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 44)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 62)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 28)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100)); layout.Controls.Add(action, 0, 0); layout.Controls.Add(summary, 0, 1); layout.Controls.Add(volumeSummary, 0, 2); layout.Controls.Add(processList, 0, 3); page.Controls.Add(layout); return page;
     }
 
     private PagePanel BuildFilePage()
     {
         var page = new PagePanel("Fichiers") { BackColor = Canvas, Padding = new Forms.Padding(28) };
-        var title = SectionTitle("Fichiers", "Parcourez l’espace de travail distant et vérifiez les transferts.");
         var pathRow = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 3, RowCount = 2, Height = 82 }; pathRow.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100)); pathRow.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); pathRow.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
         pathRow.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 42)); pathRow.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 40));
         fileDirectory.ReadOnly = false; fileDirectory.PlaceholderText = "Espace de travail"; fileDirectory.Height = 38; fileDirectory.Dock = Forms.DockStyle.Top; pathRow.Controls.Add(fileDirectory, 0, 0); uploadButton = Button("Téléverser un fichier", "upload", 150); var parent = Button("Parent", "parentFolder", 78); var refresh = Button("Actualiser", "browseFiles", 92); pathRow.Controls.Add(parent, 1, 0); pathRow.Controls.Add(refresh, 2, 0);
@@ -482,7 +468,7 @@ public sealed class MainForm : Forms.Form
         var fileButtons = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.LeftToRight, WrapContents = false, AutoSize = true, Margin = Forms.Padding.Empty }; fileButtons.Controls.Add(uploadButton); fileButtons.Controls.Add(uploadFolderButton); fileButtons.Controls.Add(downloadButton); actions.Controls.Add(fileButtons, 0, 0); fileState.Margin = new Forms.Padding(12, 10, 0, 0); actions.Controls.Add(fileState, 1, 0);
         var destinationRow = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Forms.Padding.Empty }; destinationRow.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); destinationRow.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100)); destinationRow.Controls.Add(new Forms.Label { Text = "Destination des téléversements", AutoSize = true, ForeColor = SecondaryText, Margin = new Forms.Padding(0, 7, 12, 0) }, 0, 0); destinationRow.Controls.Add(destination, 1, 0); actions.Controls.Add(destinationRow, 0, 1); actions.SetColumnSpan(destinationRow, 2);
         fileList.Columns.Add("Nom", 330); fileList.Columns.Add("Type", 100); fileList.Columns.Add("Taille", 105, Forms.HorizontalAlignment.Right); fileList.Columns.Add("Modifié", 220);
-        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 5 }; layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 50)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 82)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 82)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 12)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100)); layout.Controls.Add(title, 0, 0); layout.Controls.Add(pathRow, 0, 1); layout.Controls.Add(actions, 0, 2); layout.Controls.Add(new Forms.Panel { Dock = Forms.DockStyle.Fill }, 0, 3); layout.Controls.Add(fileList, 0, 4); page.Controls.Add(layout);
+        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 4 }; layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 82)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 82)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 12)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100)); layout.Controls.Add(pathRow, 0, 0); layout.Controls.Add(actions, 0, 1); layout.Controls.Add(new Forms.Panel { Dock = Forms.DockStyle.Fill }, 0, 2); layout.Controls.Add(fileList, 0, 3); page.Controls.Add(layout);
         parent.Click += async (_, _) => { currentDirectory = ParentPath(currentDirectory); selectedFilePath = null; remotePath.Clear(); fileDirectory.Text = currentDirectory; await BrowseFilesAsync(); }; refresh.Click += async (_, _) => await BrowseFilesAsync(); fileDirectory.KeyDown += async (_, e) => { if (e.KeyCode == Forms.Keys.Enter) { e.SuppressKeyPress = true; currentDirectory = fileDirectory.Text.Trim(); selectedFilePath = null; remotePath.Clear(); await BrowseFilesAsync(); } };
         return page;
     }
@@ -490,12 +476,11 @@ public sealed class MainForm : Forms.Form
     private PagePanel BuildDiagnosticsPage()
     {
         var page = new PagePanel("Diagnostics") { BackColor = Canvas, Padding = new Forms.Padding(28) };
-        var title = SectionTitle("Diagnostics", "Actions avancées, résultats JSON et preuves d’exécution.");
         executeButton = Button("Exécuter", "execute", 92, primary: true); cancelButton = Button("Annuler", "cancel", 82);
-        var top = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.LeftToRight, WrapContents = false, Height = 44 }; top.Controls.Add(new Forms.Label { Text = "Action", AutoSize = true, ForeColor = SecondaryText, Margin = new Forms.Padding(0, 10, 5, 0) }); top.Controls.Add(operations); top.Controls.Add(new Forms.Label { Text = "PID", AutoSize = true, ForeColor = SecondaryText, Margin = new Forms.Padding(12, 10, 5, 0) }); top.Controls.Add(pid); top.Controls.Add(executeButton); top.Controls.Add(cancelButton); top.Controls.Add(diagnosticState);
+        var top = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.LeftToRight, WrapContents = true, Height = 82 }; top.Controls.Add(new Forms.Label { Text = "Action", AutoSize = true, ForeColor = SecondaryText, Margin = new Forms.Padding(0, 10, 5, 0) }); top.Controls.Add(operations); top.Controls.Add(new Forms.Label { Text = "PID", AutoSize = true, ForeColor = SecondaryText, Margin = new Forms.Padding(12, 10, 5, 0) }); top.Controls.Add(pid); top.Controls.Add(executeButton); top.Controls.Add(cancelButton); diagnosticState.Margin = new Forms.Padding(0, 6, 0, 0); top.Controls.Add(diagnosticState);
         var identity = new Forms.Panel { Dock = Forms.DockStyle.Fill, Padding = new Forms.Padding(0, 8, 0, 0) }; technicalIdentity.Text = "Identité technique disponible après connexion."; identity.Controls.Add(technicalIdentity);
         operations.Items.AddRange(Templates.Keys.Cast<object>().ToArray()); operations.SelectedIndex = 0;
-        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 5 }; layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 50)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 44)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 40)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 40)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 60)); layout.Controls.Add(title, 0, 0); layout.Controls.Add(top, 0, 1); layout.Controls.Add(arguments, 0, 2); layout.Controls.Add(identity, 0, 3); layout.Controls.Add(output, 0, 4); page.Controls.Add(layout); return page;
+        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 4 }; layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 82)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 80)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 48)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100)); layout.Controls.Add(top, 0, 0); layout.Controls.Add(arguments, 0, 1); layout.Controls.Add(identity, 0, 2); layout.Controls.Add(output, 0, 3); page.Controls.Add(layout); return page;
     }
 
     private void BuildTray()
@@ -749,16 +734,19 @@ public sealed class MainForm : Forms.Form
         {
             headerTitle.Text = "Donner le contrôle"; headerSubtitle.Text = Environment.MachineName + " · Assistance sur le réseau privé";
         }
-        else if (supportSession && client != null)
+        else
         {
-            headerTitle.Text = selectedPeer?.Name ?? client.Connection.Host;
-            headerSubtitle.Text = client.Connection.Host + " · Session d’assistance";
+            var presentation = ControllerPagePresentation(controllerPages.SelectedIndex);
+            headerTitle.Text = presentation.Title;
+            if (supportSession && client != null)
+                headerSubtitle.Text = selectedPeer == null || selectedPeer.Name == client.Connection.Host
+                    ? client.Connection.Host + " · Session d’assistance"
+                    : selectedPeer.Name + " · " + client.Connection.Host;
+            else if (selectedPeer != null)
+                headerSubtitle.Text = selectedPeer.Name + " · " + selectedPeer.Host;
+            else
+                headerSubtitle.Text = presentation.Subtitle;
         }
-        else if (selectedPeer != null)
-        {
-            headerTitle.Text = selectedPeer.Name; headerSubtitle.Text = selectedPeer.Host + " · Session d’assistance";
-        }
-        else { headerTitle.Text = "Prendre le contrôle"; headerSubtitle.Text = "Choisissez un PC puis saisissez son code"; }
 
         bool connected = onAgent ? agent?.Session is { Connected: true, BinaryMatched: true } : heartbeatHealthy && supportSession;
         bool reconnecting = onAgent ? agent?.Session.State == "reconnecting" : supportSession && !heartbeatHealthy;
@@ -1427,21 +1415,21 @@ public sealed class MainForm : Forms.Form
     private static bool? NullableBool(JsonElement value, string name) => value.TryGetProperty(name, out var item) ? item.ValueKind == JsonValueKind.Null ? null : item.GetBoolean() : null;
     private static DateTimeOffset? NullableDate(JsonElement value, string name) => value.TryGetProperty(name, out var item) && item.ValueKind == JsonValueKind.String && DateTimeOffset.TryParse(item.GetString(), out var date) ? date : null;
     private static string FormatBytes(long bytes) => bytes < 1024 * 1024 ? $"{bytes / 1024d:F0} Kio" : $"{bytes / 1048576d:F1} Mio";
+    internal static (string Title, string Subtitle) ControllerPagePresentation(int index) => index switch
+    {
+        0 => ("Connexion", "Choisissez un PC puis saisissez son code."),
+        1 => ("Écran distant", "Visualisez et contrôlez l’écran du PC distant."),
+        2 => ("Processus", "Mesurez le processeur, la mémoire et l’activité des applications."),
+        3 => ("Fichiers", "Parcourez l’espace de travail distant et vérifiez les transferts."),
+        4 => ("Diagnostics", "Exécutez des actions avancées et consultez leurs résultats."),
+        _ => ("Prendre le contrôle", "Choisissez un PC puis saisissez son code.")
+    };
     private static ProcessSortColumn ProcessColumn(int index) => index switch { 0 => ProcessSortColumn.Pid, 1 => ProcessSortColumn.Name, 2 => ProcessSortColumn.CpuPercentTotalMachine, 3 => ProcessSortColumn.WorkingSetBytes, 4 => ProcessSortColumn.Responding, _ => ProcessSortColumn.Window };
     private static FileSortColumn FileColumn(int index) => index switch { 0 => FileSortColumn.Name, 1 => FileSortColumn.Type, 2 => FileSortColumn.SizeBytes, _ => FileSortColumn.ModifiedUtc };
     private static string Pretty(object value) => JsonSerializer.Serialize(value, new JsonSerializerOptions(Json.Options) { WriteIndented = true });
     private static void AddSummary(Forms.TableLayoutPanel table, int col, string title, Forms.Label value) { var flow = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false }; flow.Controls.Add(new Forms.Label { Text = title, AutoSize = true, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F) }); flow.Controls.Add(value); table.Controls.Add(flow, col, 0); }
     private static Forms.Label SummaryValue(string name) => new() { Name = name, Text = "—", AutoSize = true, ForeColor = PrimaryText, Font = new Font("Segoe UI", 13, FontStyle.Bold) };
     private static Forms.Label Eyebrow(string text) => new WorkspaceLabel() { Name = "agentEyebrow", Text = text, AutoSize = true, ForeColor = Teal, Font = new Font("Segoe UI", 9.5F, FontStyle.Bold) };
-    private static Forms.Control SectionTitle(string title, string subtitle)
-    {
-        var panel = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = new Forms.Padding(0) };
-        panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 25));
-        panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
-        panel.Controls.Add(new Forms.Label { Text = title, AutoSize = true, Dock = Forms.DockStyle.Fill, Font = new Font("Segoe UI", 15, FontStyle.Bold), ForeColor = PrimaryText }, 0, 0);
-        panel.Controls.Add(new Forms.Label { Text = subtitle, AutoSize = true, Dock = Forms.DockStyle.Fill, Font = new Font("Segoe UI", 10.5F), ForeColor = SecondaryText }, 0, 1);
-        return panel;
-    }
     private static Forms.Label RailCaption(string text) => new() { Text = text, AutoSize = true, ForeColor = RailSecondary, Font = new Font("Segoe UI", 8.5F, FontStyle.Bold), Margin = new Forms.Padding(12, 0, 0, 8) };
     private static Forms.Button RailButton(string text, string name) => new() { Name = name, Text = text, AccessibleName = text, AutoSize = false, Width = 216, Height = 48, FlatStyle = Forms.FlatStyle.Flat, FlatAppearance = { BorderSize = 0 }, ForeColor = Color.White, BackColor = Rail, TextAlign = ContentAlignment.MiddleLeft, Padding = new Forms.Padding(16, 0, 0, 0), Margin = new Forms.Padding(0, 0, 0, 4), UseMnemonic = false };
     private static Forms.Button RailSubButton(string text, string name) => new() { Name = name, Text = text, AccessibleName = text, AutoSize = false, Width = 200, Height = 42, FlatStyle = Forms.FlatStyle.Flat, FlatAppearance = { BorderSize = 0 }, ForeColor = RailSecondary, BackColor = Rail, TextAlign = ContentAlignment.MiddleLeft, Padding = new Forms.Padding(16, 0, 0, 0), Margin = new Forms.Padding(8, 0, 0, 5), UseMnemonic = false };
