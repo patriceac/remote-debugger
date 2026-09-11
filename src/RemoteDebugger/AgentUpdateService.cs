@@ -13,6 +13,12 @@ internal sealed record AgentUpdateTransfer(
     bool BrokerStaged = false,
     UpdateReconnectGrant? Reconnect = null);
 
+internal enum UpdateRemoteHealthReadiness
+{
+    PendingStartupHealth,
+    Ready
+}
+
 public sealed class AgentUpdateService : IDisposable
 {
     private static readonly HashSet<string> Operations = new(StringComparer.Ordinal)
@@ -209,9 +215,23 @@ public sealed class AgentUpdateService : IDisposable
     {
         string transactionId = ValidateTransactionId(args.Str("transactionId"));
         string ticket = args.Str("ticket");
+        var status = await SupportPlatform.BrokerCallAsync("update.status", new { transactionId }, ct, 15);
+        if (ClassifyRemoteHealthReadiness(status) == UpdateRemoteHealthReadiness.PendingStartupHealth)
+            return new { transactionId, ready = false, state = status.Str("state") };
         var broker = await SupportPlatform.BrokerCallAsync("update.remoteHealthy", new { transactionId, ticket }, ct, 30);
         var running = await SupportPlatform.CaptureCurrentExecutableAsync(ct);
-        return new { transactionId, ticketAccepted = true, actualRunningSha256 = running.Sha256, running, transaction = broker };
+        return new { transactionId, ready = true, ticketAccepted = true, actualRunningSha256 = running.Sha256, running, transaction = broker };
+    }
+
+    internal static UpdateRemoteHealthReadiness ClassifyRemoteHealthReadiness(JsonElement status)
+    {
+        string state = status.Str("state");
+        return state switch
+        {
+            nameof(UpdateTransactionState.AwaitingStartupHealth) => UpdateRemoteHealthReadiness.PendingStartupHealth,
+            nameof(UpdateTransactionState.RunningPendingRemoteHealth) or nameof(UpdateTransactionState.Completed) => UpdateRemoteHealthReadiness.Ready,
+            _ => throw new InvalidOperationException($"Update cannot complete remote health from broker state '{state}': {status.Str("lastError", "no broker error was reported")}")
+        };
     }
 
     private async Task<object> ConfirmAsync(JsonElement args, CancellationToken ct)
@@ -375,7 +395,20 @@ internal static class AgentUpdateClient
         if (resumed.ValueKind == JsonValueKind.Undefined)
             throw new IOException("Updated agent did not reconnect before the authenticated ticket expired.", lastError);
 
-        var health = RemoteClient.Require(await client.CallAsync("update.health", new { transactionId, ticket }, ct, seconds: 45));
+        JsonElement health = default;
+        while (DateTimeOffset.UtcNow < expires)
+        {
+            ct.ThrowIfCancellationRequested();
+            var candidateHealth = RemoteClient.Require(await client.CallAsync("update.health", new { transactionId, ticket }, ct, seconds: 45));
+            if (candidateHealth.TryGetProperty("ready", out var ready) && ready.GetBoolean())
+            {
+                health = candidateHealth;
+                break;
+            }
+            await Task.Delay(500, ct);
+        }
+        if (health.ValueKind == JsonValueKind.Undefined)
+            throw new IOException("Updated agent did not complete startup health before the authenticated reconnect ticket expired.");
         if (!UpdatePolicy.FixedHexEquals(health.Str("actualRunningSha256"), controller.Sha256))
             throw new InvalidOperationException("Agent rolled back or relaunched bytes that differ from the controller executable.");
         var finalSnapshot = RemoteClient.Require(await client.CallAsync("update.snapshot", ct: ct, seconds: 30));

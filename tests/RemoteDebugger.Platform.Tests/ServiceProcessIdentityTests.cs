@@ -65,3 +65,25 @@ public sealed class SupportOperationTimeoutTests
                     SupportOperationTimeouts.UpdateStartupHealthRollbackSeconds);
     }
 }
+
+public sealed class AgentUpdateHealthTests
+{
+    [Fact]
+    public void StartupHealthStateIsTheOnlyRetryableRemoteHealthState()
+    {
+        Assert.Equal(UpdateRemoteHealthReadiness.PendingStartupHealth,
+            AgentUpdateService.ClassifyRemoteHealthReadiness(Json.Element(new { state = nameof(UpdateTransactionState.AwaitingStartupHealth) })));
+        Assert.Equal(UpdateRemoteHealthReadiness.Ready,
+            AgentUpdateService.ClassifyRemoteHealthReadiness(Json.Element(new { state = nameof(UpdateTransactionState.RunningPendingRemoteHealth) })));
+        Assert.Equal(UpdateRemoteHealthReadiness.Ready,
+            AgentUpdateService.ClassifyRemoteHealthReadiness(Json.Element(new { state = nameof(UpdateTransactionState.Completed) })));
+
+        var failure = Assert.Throws<InvalidOperationException>(() =>
+            AgentUpdateService.ClassifyRemoteHealthReadiness(Json.Element(new
+            {
+                state = nameof(UpdateTransactionState.RolledBack),
+                lastError = "startup validation failed"
+            })));
+        Assert.Contains("startup validation failed", failure.Message);
+    }
+}
