@@ -505,7 +505,10 @@ public sealed class MainForm : Forms.Form
         {
             client = RemoteClient.Load();
             host.Text = client.Connection.Host;
-            selectedFingerprint = client.Connection.Fingerprint;
+            // Reuse the address as a convenience. A new displayed code starts
+            // a new PAKE exchange that authenticates the current certificate;
+            // an old saved pin must not block fresh pairing after reinstall.
+            selectedFingerprint = "";
             selectedPeerName.Text = "Connexion enregistrée";
             selectedPeerAddress.Text = client.Connection.Host;
         }
