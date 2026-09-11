@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Security.AccessControl;
 using System.Security.Cryptography;
 using System.Security.Principal;
+using System.ServiceProcess;
 using System.Text.Json;
 using RemoteDebugger.Core;
 
@@ -97,14 +98,7 @@ internal static class SupportInstaller
             WriteConfiguration(configuration);
             ConfigureService();
             RunSc(true, "start", SupportPlatformPaths.ServiceName);
-            bool running = false;
-            for (int attempt = 0; attempt < 20; attempt++)
-            {
-                Thread.Sleep(100);
-                var query = RunSc(false, "query", SupportPlatformPaths.ServiceName);
-                if (query.ExitCode == 0 && query.Stdout.Contains("RUNNING", StringComparison.OrdinalIgnoreCase)) { running = true; break; }
-            }
-            if (!running) throw new InvalidOperationException("Support service did not reach the RUNNING state after provisioning.");
+            WaitForServiceReady();
             WriteReceipt(new(true, SupportPlatformPaths.ApplicationExecutable, SupportPlatformPaths.ServiceExecutable,
                 enrolled.SignerThumbprint, request.RegisteredUserSid, "demand", DateTimeOffset.UtcNow));
             return 0;
@@ -149,6 +143,23 @@ internal static class SupportInstaller
         string fullControl = "CCDCLCSWRPWPDTLOCRSDRCWDWO";
         string sddl = $"D:(A;;{fullControl};;;SY)(A;;{fullControl};;;BA)(A;;CCLCRPRC;;;{configuration.RegisteredUserSid})";
         RunSc(true, "sdset", SupportPlatformPaths.ServiceName, sddl);
+    }
+
+    private static void WaitForServiceReady()
+    {
+        using var service = new ServiceController(SupportPlatformPaths.ServiceName);
+        var deadline = Stopwatch.StartNew();
+        ServiceControllerStatus? last = null;
+        while (deadline.Elapsed < TimeSpan.FromSeconds(30))
+        {
+            service.Refresh();
+            last = service.Status;
+            if (last == ServiceControllerStatus.Running) return;
+            if (last != ServiceControllerStatus.StartPending)
+                throw new InvalidOperationException($"Support service entered {last} instead of RUNNING during provisioning.");
+            Thread.Sleep(250);
+        }
+        throw new System.TimeoutException($"Support service remained {last?.ToString() ?? "unavailable"} and did not reach RUNNING within 30 seconds.");
     }
 
     private static (int ExitCode, string Stdout, string Stderr) RunSc(bool required, params string[] arguments)
