@@ -1289,6 +1289,14 @@ internal sealed partial class LabForm : Forms.Form
         bool disconnectAccepted = disconnected.TryGetProperty("ok", out var disconnectOk) && disconnectOk.ValueKind == JsonValueKind.True;
         await Task.Delay(1000, stop.Token);
         var heartbeat = await WaitForBinaryMatchAsync(controllerHash, 30);
+        if (FindString(heartbeat, "agentBinarySha256").Equals(controllerHash, StringComparison.OrdinalIgnoreCase))
+        {
+            // Discovery refreshes every 30 seconds. Keep the actual GUI session
+            // alive across a refresh, which previously reselected its own peer
+            // and incorrectly ended support as if the user changed targets.
+            await Task.Delay(TimeSpan.FromSeconds(35), stop.Token);
+            heartbeat = await WaitForBinaryMatchAsync(controllerHash, 10);
+        }
         string remoteHash = FindString(heartbeat, "agentBinarySha256", "binarySha256", "releaseSha256", "executableSha256", "sha256");
         var visibleCode = FindVisibleId(ContractId("pairCode"));
         bool codePrompt = visibleCode != null && visibleCode.Current.IsEnabled && SixDigits.IsMatch(Value(visibleCode));
@@ -1349,8 +1357,9 @@ internal sealed partial class LabForm : Forms.Form
                     bool matched = !latest.TryGetProperty("binaryMatched", out var flag) || flag.GetBoolean();
                     if (matched && remote.Equals(expectedHash, StringComparison.OrdinalIgnoreCase)) return latest;
                 }
+                else latest = Json.Element(new { unavailable = true, error = reply.Str("error"), message = reply.Str("message") });
             }
-            catch (Exception) { }
+            catch (Exception ex) { latest = Json.Element(new { unavailable = true, message = ex.Message }); }
             await Task.Delay(1000, stop.Token);
         }
         return latest;
@@ -1708,7 +1717,9 @@ internal sealed partial class LabForm : Forms.Form
         await Task.Delay(1400, stop.Token);
         product.Refresh();
         TrayContext tray = await OpenTrayContextAsync();
-        bool trayAlive = !product.HasExited && product.MainWindowHandle == IntPtr.Zero && tray.OpenItem != null;
+        // Opening the tray menu creates another window for the same process;
+        // Process.MainWindowHandle can identify that menu rather than the form.
+        bool trayAlive = !product.HasExited && !IsControllerWindowVisible() && tray.OpenItem != null;
         JsonElement? heartbeat = null;
         try { heartbeat = Data(await CallAsync("status")); } catch (Exception) { }
         bool heartbeatAlive = heartbeat.HasValue && heartbeat.Value.ValueKind == JsonValueKind.Object;
@@ -1722,7 +1733,7 @@ internal sealed partial class LabForm : Forms.Form
             try
             {
                 InvokeElement(open);
-                await WaitForUiAsync(() => product.MainWindowHandle != IntPtr.Zero, 15);
+                await WaitForUiAsync(IsControllerWindowVisible, 15);
                 restored = true;
             }
             catch (Exception ex) { restoreError = ex.Message; }

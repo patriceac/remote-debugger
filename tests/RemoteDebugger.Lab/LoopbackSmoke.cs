@@ -628,7 +628,7 @@ internal sealed partial class LabForm
         return null;
     }
 
-    private bool IsLoopbackControllerVisible()
+    private bool IsControllerWindowVisible()
     {
         try { return FindVisibleId(ContractId("terminateSession")) != null; }
         catch (Exception) { return false; }
@@ -657,7 +657,7 @@ internal sealed partial class LabForm
         await Task.Delay(1400, stop.Token);
         product.Refresh();
         TrayContext tray = await OpenTrayContextAsync();
-        bool trayAlive = !product.HasExited && !IsLoopbackControllerVisible() && tray.OpenItem != null;
+        bool trayAlive = !product.HasExited && !IsControllerWindowVisible() && tray.OpenItem != null;
         JsonElement? heartbeat = null;
         try { heartbeat = Data(await CallAsync("status")); } catch (Exception) { }
         bool heartbeatAlive = heartbeat.HasValue && heartbeat.Value.ValueKind == JsonValueKind.Object;
@@ -672,7 +672,7 @@ internal sealed partial class LabForm
             try
             {
                 InvokeElement(open);
-                await WaitForUiAsync(IsLoopbackControllerVisible, 15);
+                await WaitForUiAsync(IsControllerWindowVisible, 15);
                 restored = true;
             }
             catch (Exception ex)
