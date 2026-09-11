@@ -23,6 +23,15 @@ internal static class SupportPlatformPaths
     public static string TransactionsDirectory => Path.Combine(StateDirectory, "transactions");
 }
 
+internal static class SupportOperationTimeouts
+{
+    // A cold NetSecurity/CIM startup can take materially longer than an
+    // ordinary pipe request. Keep the client alive beyond the broker deadline
+    // so the broker can return either the verified result or a truthful error.
+    public const int FirewallEnsureExecutionSeconds = 120;
+    public const int FirewallEnsureRoundTripSeconds = 135;
+}
+
 internal sealed record SupportConfiguration(
     int ProtocolVersion,
     string RegisteredApplicationPath,

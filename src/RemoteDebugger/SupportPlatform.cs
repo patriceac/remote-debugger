@@ -161,7 +161,7 @@ public static class SupportPlatform
     {
         var status = await GetStatusAsync(ct);
         if (!status.Available || !requireFirewall || status.FirewallReady) return status;
-        _ = await BrokerCallAsync("firewall.ensure", new { }, ct);
+        _ = await BrokerCallAsync("firewall.ensure", new { }, ct, SupportOperationTimeouts.FirewallEnsureRoundTripSeconds);
         return await GetStatusAsync(ct);
     }
 

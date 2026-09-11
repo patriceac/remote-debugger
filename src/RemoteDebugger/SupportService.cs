@@ -154,7 +154,7 @@ internal sealed class SupportBrokerHost : IDisposable
                 {
                     "update.stage" => TimeSpan.FromMinutes(3),
                     "update.arm" => TimeSpan.FromMinutes(1),
-                    "firewall.ensure" => TimeSpan.FromMinutes(1),
+                    "firewall.ensure" => TimeSpan.FromSeconds(SupportOperationTimeouts.FirewallEnsureExecutionSeconds),
                     _ => TimeSpan.FromSeconds(35)
                 });
 

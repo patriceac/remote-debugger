@@ -34,3 +34,14 @@ public sealed class ServiceProcessIdentityTests
             serviceCommand: command));
     }
 }
+
+public sealed class SupportOperationTimeoutTests
+{
+    [Fact]
+    public void FirewallClientOutlivesBrokerExecutionDeadline()
+    {
+        Assert.True(SupportOperationTimeouts.FirewallEnsureExecutionSeconds >= 60);
+        Assert.True(SupportOperationTimeouts.FirewallEnsureRoundTripSeconds >
+                    SupportOperationTimeouts.FirewallEnsureExecutionSeconds);
+    }
+}
