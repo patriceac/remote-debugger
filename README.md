@@ -13,7 +13,7 @@ Build with .NET SDK 8 on Windows:
 ./scripts/Build.ps1 -Sign
 ```
 
-Copy `artifacts/release/RemoteDebugger.exe` to each Windows x64 PC. The Release includes its .NET runtime; no runtime installation is required. See [the quick start](docs/GETTING_STARTED.md) for pairing and daily use, and [the CLI reference](docs/CLI.md) for Codex automation. The application interface currently uses French labels; the documentation explains them in English.
+For a normal desktop installation, run `artifacts/installer/RemoteDebugger-<version>-Setup.exe`. It installs for the current user without elevation, creates a Start menu shortcut, and includes its own uninstaller. The portable `artifacts/release/RemoteDebugger.exe` remains available when no installation is wanted. Both forms include the .NET runtime. See [the quick start](docs/GETTING_STARTED.md) for pairing and daily use, and [the CLI reference](docs/CLI.md) for Codex automation. The application interface currently uses French labels; the documentation explains them in English.
 
 The agent opens directly to a six-digit pairing code that rotates every five minutes. The controller discovers PCs on launch, accepts the code with Enter, synchronizes the agent to its own signed executable, and opens the live desktop with mouse and keyboard enabled. Connection and live-frame indicators remain visible throughout support. See [the validation record](docs/VALIDATION.md) for completed test evidence; planned cases are listed separately in [the acceptance matrix](docs/ACCEPTANCE_MATRIX.md).
 
@@ -29,6 +29,7 @@ Closing the controller window keeps it in the system tray. **Terminer l’assist
 ./scripts/Test-Unit.ps1
 ./scripts/Build.ps1 -IncludeLab -Sign
 ./scripts/Package.ps1
+./scripts/Build-Installer.ps1 -Sign
 ```
 
 See [architecture and security](docs/ARCHITECTURE.md), [CLI contract](docs/CLI.md), and [test evidence](docs/VALIDATION.md). Application binaries and integration test scripts must run through the configured Hyper-V SYSTEM broker, not on the physical development host. Unit tests only exercise pure logic.

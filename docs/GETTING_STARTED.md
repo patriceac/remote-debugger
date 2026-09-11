@@ -2,7 +2,7 @@
 
 The interface uses French labels. Use the same signed Release on both Windows x64 PCs.
 
-1. Launch Remote Debugger on the receiving PC. **Donner le contrôle** is the default: the agent starts automatically and displays a six-digit code and its remaining validity. Leading zeroes are significant. The code changes every five minutes until paired.
+1. On each PC, run the per-user installer for a Start menu entry, or copy and launch the portable `RemoteDebugger.exe`. The installer itself needs no elevation. Launch Remote Debugger on the receiving PC. **Donner le contrôle** is the default: the agent starts automatically and displays a six-digit code and its remaining validity. Leading zeroes are significant. The code changes every five minutes until paired.
 2. On first use, **Activer sur ce PC** performs the one-time Windows administrator setup. It installs the protected support application and a local broker, enrolls the publisher, and relaunches the managed copy. Thereafter Private-network authorization and administrator maintenance are automatic. The application does not change a Public network to Private.
 3. On the controlling PC choose **Prendre le contrôle**. Nearby PCs appear automatically. Select the receiving PC, or enter its IP address if discovery is unavailable.
 4. Enter the receiving PC's code and press Enter or **Connecter**. Pairing authenticates the encrypted connection using the code, and subsequent connections pin that identity.

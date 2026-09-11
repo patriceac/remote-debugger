@@ -65,6 +65,20 @@ Request `executable-test-20260911T192255617Z-0d78105e` tested the final signed R
 
 Broker and guest harnesses succeeded, application `TestPassed=true`, worker 2 ended Off before recycling, and process cleanup verified zero survivors. The payload child was deleted, absent on disk and absent from VM attachments; all network adapters were disconnected and no evidence warnings were reported. An early optional live capture requested the connected screenshot before it existed and correctly returned `GuestEvidenceUnavailable`; the later capture and complete terminal evidence succeeded. The final ZIP is assembled from this exact executable. This layout-only run does not repeat the provisioned updater test above.
 
+## Per-user installer
+
+Request `executable-test-20260911T231950149Z-8a3cfa22` tested the signed
+`RemoteDebugger-0.2.0-Setup.exe` with SHA-256
+`1618F77E9947AE727D98A2470C4E70CF71B4D81F796EB9069EDE72D4F049EF4E` in a
+disconnected isolated Windows guest. The installer ran with no user privileges
+and `Administrative install mode: No`, returned exit code zero, installed the
+application beneath the test user's LocalAppData, created the per-user Start
+menu shortcut, and registered the HKCU uninstaller. The declared result-file
+assertion passed. Harness and guest execution succeeded, process cleanup passed,
+the VM ended Off, the disposable payload child was deleted, and there were no
+evidence warnings. This test did not invoke the separate administrator-approved
+**Activer sur ce PC** provisioning flow.
+
 ## Remaining acceptance boundaries
 
 1. Interactive first-time UAC consent is not automated. The dedicated run used the explicitly administrator-provisioned image and verified the protected application and LocalSystem service identities. No UAC bypass or application execution on the development host was used.

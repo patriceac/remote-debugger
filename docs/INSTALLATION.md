@@ -1,5 +1,31 @@
 # Installation, signing, and updates
 
+## Desktop installer
+
+`RemoteDebugger-<version>-Setup.exe` is a per-user installer. It writes beneath
+`%LOCALAPPDATA%\Programs\Remote Debugger`, creates a Start menu shortcut, and
+registers an uninstaller without requesting administrator privileges. Launching
+the shortcut starts the application normally at medium integrity. The portable
+single executable remains supported and behaves the same way.
+
+The desktop installer is deliberately separate from protected support setup.
+Choosing **Activer sur ce PC** still requests one explicit Windows administrator
+approval so the application can provision its Program Files copy, local broker,
+and Private/LocalSubnet firewall rules. Later launches through the Start menu
+automatically redirect an agent to that protected copy without another prompt.
+
+Build the installer after producing a signed Release:
+
+```powershell
+./scripts/Build-Installer.ps1 -Sign
+```
+
+Inno Setup must be installed or its compiler path supplied with
+`-CompilerPath`. Uninstalling the per-user package removes its files and Start
+menu shortcut. Protected support provisioned by **Activer sur ce PC** is managed
+separately because removing a Windows service and Program Files state requires
+administrator authorization.
+
 Remote Debugger runs the visible support agent in the signed-in user's desktop.
 Silent administrator maintenance and protected executable replacement use a
 local privileged broker that must be provisioned once with Windows administrator
