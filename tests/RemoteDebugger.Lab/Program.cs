@@ -56,6 +56,9 @@ internal sealed partial class LabForm : Forms.Form
     private bool rollbackCandidateKilled;
     private bool managedRelaunched;
     private bool sleepRequestObserved;
+    private DateTimeOffset? productExitObservedUtc;
+    private ProvisioningEvidence.BrokerReceipt? brokerProvisioning;
+    private string? brokerProvisioningError;
     private bool IsAgent => role is "agent" or "agent-local";
     private bool IsLoopback => role is "local" or "ui-local";
     private bool IsUpdateVariant => updateVariant is not ("none" or "");
@@ -83,6 +86,9 @@ internal sealed partial class LabForm : Forms.Form
         {
             try
             {
+                guestElevated = Native.IsElevated();
+                if (!IsLoopback)
+                    await PrepareBrokerProvisioningAsync();
                 if (role is "loopback" or "loopback-smoke") await LoopbackSmokeAsync();
                 else if (role is "loopbacktray" or "loopback-tray") await LoopbackTrayAsync();
                 else if (role is "loopback-lifetime" or "loopbacklifetime") await LoopbackLifetimeAsync();
@@ -395,10 +401,83 @@ internal sealed partial class LabForm : Forms.Form
         return new(badgeVisible && IsLiveBadge(badgeText), badgeText, telemetryVisible, telemetryText, elapsed.Elapsed.TotalSeconds);
     }
 
+    private async Task PrepareBrokerProvisioningAsync()
+    {
+        if (!RequiresProvisioning) return;
+
+        string evidencePath = ProvisioningEvidence.EvidencePath(output);
+        string sourcePath;
+        try { sourcePath = ProvisioningEvidence.SourceEvidencePath(output); }
+        catch (Exception ex)
+        {
+            brokerProvisioningError = ex.Message;
+            Fail(role + ".provisioning_bootstrap", "The SYSTEM broker provisioning evidence identifies this Lab request", new { error = brokerProvisioningError }, required: true);
+            return;
+        }
+
+        if (!File.Exists(sourcePath))
+        {
+            // An actually elevated guest may still use the product's supported
+            // interactive provisioner below.  A medium guest cannot simulate
+            // secure-desktop consent, so a dedicated Provisioned/Full run needs
+            // the broker receipt before it launches the product.
+            if (!guestElevated)
+                Block(role + ".provisioning_bootstrap", "The SYSTEM broker provisioning evidence identifies this Lab request", "The broker did not supply a validated RemoteDebuggerProvisionV1 receipt, and the Lab is running with a medium-integrity token so it cannot perform or simulate UAC.", new { sourcePath, collectedPath = evidencePath, elevated = false }, required: true);
+            return;
+        }
+
+        if (ProvisioningEvidence.TryValidate(application, output, out var receipt, out string error))
+        {
+            brokerProvisioning = receipt;
+            application = receipt.ManagedExecutablePath;
+            Pass(role + ".provisioning_bootstrap", "The SYSTEM broker provisioned the exact fixture into the protected managed application path", new
+            {
+                sourceEvidence = sourcePath,
+                collectedEvidence = receipt.EvidencePath,
+                fixture = new { path = ResolveApplicationPath(role, updateVariant), sha256 = receipt.FixtureSha256 },
+                managed = new { path = receipt.ManagedExecutablePath, sha256 = receipt.ManagedExecutableSha256 },
+                service = new { receipt.ServiceName, receipt.ServiceStatus, receipt.ServiceStartMode, receipt.ServiceExecutablePath, receipt.ServiceExecutableSha256 },
+                receipt = new { receipt.ReceiptPath, receipt.PublisherThumbprint, receipt.RegisteredUserSid, receipt.ProvisionedUtc }
+            }, required: true);
+        }
+        else
+        {
+            brokerProvisioningError = error;
+            Fail(role + ".provisioning_bootstrap", "The SYSTEM broker provisioning evidence identifies this Lab request", new { sourceEvidence = sourcePath, collectedEvidence = evidencePath, error }, required: true);
+        }
+
+        await Task.CompletedTask;
+    }
+
+    private void ProbeProductIdentity(string checkPrefix, string requirement)
+    {
+        if (product == null)
+        {
+            Fail(checkPrefix, requirement, new { error = "The product process is missing." }, required: RequiresProvisioning);
+            return;
+        }
+
+        try
+        {
+            string expectedPath = brokerProvisioning?.ManagedExecutablePath ?? application;
+            string registeredSid = brokerProvisioning?.RegisteredUserSid ?? (WindowsIdentity.GetCurrent().User?.Value ?? "");
+            var identity = ProvisioningEvidence.InspectProduct(product, expectedPath, registeredSid);
+            if (identity.Accepted)
+                Pass(checkPrefix, requirement, new { identity }, required: RequiresProvisioning);
+            else
+                Fail(checkPrefix, requirement, new { identity }, required: RequiresProvisioning);
+        }
+        catch (Exception ex)
+        {
+            Fail(checkPrefix, requirement, new { error = ex.Message, pid = SafeProcessId(product) }, required: RequiresProvisioning);
+        }
+    }
+
     private async Task AgentAsync()
     {
         product = LaunchProduct(true);
         await WaitUiAsync();
+        ProbeProductIdentity("agent.managed_process_identity", "The agent runs as the registered interactive user at medium integrity");
         WindowState = Forms.FormWindowState.Minimized;
         CaptureDesktop("agent-pairing.png");
 
@@ -470,6 +549,7 @@ internal sealed partial class LabForm : Forms.Form
             RefreshTrackedProduct();
             if (product?.HasExited == true && !retainCoordinationAfterProductExit)
             {
+                productExitObservedUtc ??= DateTimeOffset.UtcNow;
                 if (sawPairing) Pass("agent.termination", "Terminating support exits the agent and releases its local session", new { exitCode = product.ExitCode });
                 await ProbeSleepReleasedAsync();
                 await FinishAsync();
@@ -528,6 +608,7 @@ internal sealed partial class LabForm : Forms.Form
                 await SendUdpAsync(udp, response, received.RemoteEndPoint);
                 retainCoordinationAfterProductExit = false;
                 await WaitForProductExitAsync(TimeSpan.FromSeconds(20));
+                if (product?.HasExited == true) productExitObservedUtc ??= DateTimeOffset.UtcNow;
                 if (rollbackCandidateHash != null && !rollbackCandidateKilled) Fail("agent.rollback_candidate_killed", "The rollback run kills the verified replacement before its startup health acknowledgement", new { candidateHash = rollbackCandidateHash, killed = false });
                 if (sawPairing && !sawTermination && product != null && !product.HasExited) Fail("agent.termination", "Terminating support exits the agent and releases its local session", new { productStillRunning = true });
                 await ProbeSleepReleasedAsync();
@@ -676,8 +757,11 @@ internal sealed partial class LabForm : Forms.Form
         string[] texts = UiTexts();
         bool visibleActive = texts.Any(x => x.Contains("maintenance", StringComparison.OrdinalIgnoreCase) && (x.Contains("active", StringComparison.OrdinalIgnoreCase) || x.Contains("actif", StringComparison.OrdinalIgnoreCase) || x.Contains("autor", StringComparison.OrdinalIgnoreCase)));
         var service = await ReadRemoteDebuggerServicesAsync();
-        if (visibleActive && service.Any(x => x.Contains("RemoteDebugger", StringComparison.OrdinalIgnoreCase)))
-            Pass("agent.maintenance_after_pairing", "Administrator maintenance is active after pairing through the installed broker", new { visible = texts.Where(x => x.Contains("maintenance", StringComparison.OrdinalIgnoreCase)).Take(5).ToArray(), service = service.Take(8).ToArray() });
+        bool serviceReady = brokerProvisioning != null
+            ? ProvisioningEvidence.HasLocalSystemService(service, brokerProvisioning.ServiceExecutablePath)
+            : service.Any(x => x.Contains("RemoteDebugger", StringComparison.OrdinalIgnoreCase));
+        if (visibleActive && serviceReady)
+            Pass("agent.maintenance_after_pairing", "Administrator maintenance is active after pairing through the installed broker", new { visible = texts.Where(x => x.Contains("maintenance", StringComparison.OrdinalIgnoreCase)).Take(5).ToArray(), service = service.Take(8).ToArray(), serviceAccount = brokerProvisioning == null ? null : "LocalSystem" });
         else if (RequiresProvisioning)
             Block("agent.maintenance_after_pairing", "Administrator maintenance is active after pairing through the installed broker", "The guest lacks a verifiable installed broker/service or the secure-desktop consent was unavailable.", new { visible = texts.Where(x => x.Contains("maintenance", StringComparison.OrdinalIgnoreCase)).Take(5).ToArray(), service = service.Take(8).ToArray() });
         else
@@ -686,19 +770,35 @@ internal sealed partial class LabForm : Forms.Form
 
     private async Task ProbeFirewallAndProvisioningAsync()
     {
-        var firewall = await ReadFirewallAsync();
-        for (int attempt = 0; attempt < 20 && !HasPrivateFirewallRule(firewall.Stdout); attempt++)
+        (int ExitCode, string Stdout, string Stderr) firewall;
+        ProvisioningEvidence.GuestObservation? observation = null;
+        string? observerError = null;
+        if (brokerProvisioning != null)
+        {
+            var observed = await WaitForBrokerObservationAsync();
+            observation = observed.Observation;
+            observerError = observed.Error;
+            firewall = observation == null
+                ? (1, "", observerError ?? "The broker observation was unavailable.")
+                : (observation.Firewall.ExitCode, observation.Firewall.Stdout, observation.Firewall.Stderr);
+        }
+        else firewall = await ReadFirewallAsync();
+        for (int attempt = 0; brokerProvisioning == null && attempt < 20 && !HasPrivateFirewallRule(firewall.Stdout); attempt++)
         {
             await Task.Delay(500, stop.Token);
             firewall = await ReadFirewallAsync();
         }
         bool privateRule = firewall.ExitCode == 0 && HasPrivateFirewallRule(firewall.Stdout);
-        if (privateRule) Pass("agent.private_firewall", "Private/local-subnet firewall access is prepared automatically", new { stdout = firewall.Stdout });
+        if (privateRule) Pass("agent.private_firewall", "Private/local-subnet firewall access is prepared automatically", new { stdout = firewall.Stdout, observer = observation?.EvidencePath, observerError });
+        else if (brokerProvisioning != null) Block("agent.private_firewall", "Private/local-subnet firewall access is prepared automatically", "The broker's fresh read-only observer did not show the product's Private/local-subnet firewall rule.", new { elevated = guestElevated, exitCode = firewall.ExitCode, stdout = firewall.Stdout, stderr = firewall.Stderr, observer = observation?.EvidencePath, observerError }, required: RequiresProvisioning);
         else if (RequiresProvisioning) Block("agent.private_firewall", "Private/local-subnet firewall access is prepared automatically", guestElevated ? "The guest is elevated, but no supported product provisioning operation has been provided to this Lab." : "The executable-testing contract does not provide secure-desktop UAC interaction for first provisioning.", new { elevated = guestElevated, exitCode = firewall.ExitCode, stdout = firewall.Stdout, stderr = firewall.Stderr });
         else Block("agent.private_firewall", "Private/local-subnet firewall access is prepared automatically", "Provisioned firewall evidence is outside the Runtime scope.", new { exitCode = firewall.ExitCode, stdout = firewall.Stdout, stderr = firewall.Stderr }, required: false);
 
-        var service = await ReadRemoteDebuggerServicesAsync();
-        if (service.Length == 0 && RequiresProvisioning) Block("agent.provisioning_receipt", "The guest has a one-time administrator broker installation", guestElevated ? "The guest is elevated, but no supported product provisioning operation has been provided to this Lab." : "No RemoteDebugger service was visible and the Hyper-V contract cannot drive the UAC secure desktop.", new { elevated = guestElevated, firewall = firewall.Stdout });
+        string[] service = observation == null ? await ReadRemoteDebuggerServicesAsync() : ProvisioningEvidence.FormatServices(observation.Services);
+        bool localSystemService = brokerProvisioning != null && ProvisioningEvidence.HasLocalSystemService(service, brokerProvisioning.ServiceExecutablePath);
+        if (brokerProvisioning != null && localSystemService) Pass("agent.provisioning_receipt", "The guest has a one-time administrator broker installation", new { service = service.Take(8).ToArray(), observer = observation?.EvidencePath, serviceAccount = "LocalSystem", servicePath = brokerProvisioning.ServiceExecutablePath });
+        else if (brokerProvisioning != null) Block("agent.provisioning_receipt", "The guest has a one-time administrator broker installation", "The broker's fresh service observer did not attest the protected RemoteDebuggerSupport service as LocalSystem.", new { service = service.Take(8).ToArray(), observer = observation?.EvidencePath, observerError, expectedServicePath = brokerProvisioning.ServiceExecutablePath }, required: RequiresProvisioning);
+        else if (service.Length == 0 && RequiresProvisioning) Block("agent.provisioning_receipt", "The guest has a one-time administrator broker installation", guestElevated ? "The guest is elevated, but no supported product provisioning operation has been provided to this Lab." : "No RemoteDebugger service was visible and the Hyper-V contract cannot drive the UAC secure desktop.", new { elevated = guestElevated, firewall = firewall.Stdout });
         else if (service.Length > 0) Pass("agent.provisioning_receipt", "The guest has a one-time administrator broker installation", new { service = service.Take(8).ToArray() }, required: RequiresProvisioning);
         else Block("agent.provisioning_receipt", "The guest has a one-time administrator broker installation", "The Runtime guest was not pre-provisioned.", new { service }, required: false);
     }
@@ -719,6 +819,36 @@ internal sealed partial class LabForm : Forms.Form
         }
         else
             Block("agent.platform_status_before", "The product reports its pre-provisioning platform state through its own CLI", "The Release CLI did not expose platform-status in this artifact.", required: false);
+
+        if (brokerProvisioning != null)
+        {
+            // The privileged bootstrap has already completed before the Lab
+            // process starts.  Keep the Lab medium-integrity and attest the
+            // managed status through the product CLI; never invoke UAC again.
+            Pass("agent.provisioning_command", "The SYSTEM broker completed the supported one-time broker setup before the medium user launch", new
+            {
+                elevated = guestElevated,
+                broker = brokerProvisioning,
+                consentObservedByLab = false
+            }, required: RequiresProvisioning);
+            Pass("agent.managed_relaunch", "The Lab launches the broker-validated managed application before pairing", new
+            {
+                managedPath = brokerProvisioning.ManagedExecutablePath,
+                managedHash = brokerProvisioning.ManagedExecutableSha256,
+                launchedPath = application,
+                launchedBeforePairing = true,
+                processId = product?.Id
+            }, required: RequiresProvisioning);
+            Block("agent.first_interactive_uac", "The first administrator consent remains a separate secure-desktop acceptance gate", "The broker supplied validated post-consent evidence, while the Lab did not observe or simulate the secure desktop.", new { consentObservedByLab = false, elevated = guestElevated }, required: false);
+            JsonElement? managedStatus = await TryPlatformStatusAsync();
+            bool managedReady = managedStatus.HasValue && managedStatus.Value.TryGetProperty("status", out var managedStatusValue)
+                && managedStatusValue.Str("availability").Equals("Ready", StringComparison.OrdinalIgnoreCase)
+                && managedStatusValue.TryGetProperty("available", out var managedAvailable)
+                && managedAvailable.ValueKind == JsonValueKind.True && managedAvailable.GetBoolean();
+            if (managedReady) Pass("agent.platform_status_ready", "The protected managed application sees the LocalSystem support broker without another consent flow", new { status = managedStatus, brokerProvisioning });
+            else if (RequiresProvisioning) Fail("agent.platform_status_ready", "The protected managed application sees the LocalSystem support broker without another consent flow", new { status = managedStatus, brokerProvisioning });
+            return;
+        }
 
         if (!guestElevated)
         {
@@ -849,9 +979,27 @@ internal sealed partial class LabForm : Forms.Form
         return (p.ExitCode, stdout, stderr);
     }
 
+    private async Task<(ProvisioningEvidence.GuestObservation? Observation, string Error)> WaitForBrokerObservationAsync(DateTimeOffset? capturedAfterUtc = null)
+    {
+        if (brokerProvisioning == null) return (null, "No verified broker provisioning receipt is active.");
+        var deadline = Stopwatch.StartNew();
+        string error = "The broker observation was not available.";
+        while (deadline.Elapsed < TimeSpan.FromSeconds(15) && !stop.IsCancellationRequested)
+        {
+            if (ProvisioningEvidence.TryReadObservation(output, out var observation, out error, capturedAfterUtc)) return (observation, "");
+            await Task.Delay(500, stop.Token);
+        }
+        return (null, error);
+    }
+
     private async Task<string[]> ReadRemoteDebuggerServicesAsync()
     {
-        var result = await RunGuestPowerShellAsync("Get-CimInstance Win32_Service -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'RemoteDebugger' -or $_.DisplayName -match 'Remote Debugger' } | ForEach-Object { \"$($_.Name)|$($_.State)|$($_.StartMode)|$($_.PathName)\" }");
+        if (brokerProvisioning != null)
+        {
+            var observed = await WaitForBrokerObservationAsync();
+            return observed.Observation == null ? [] : ProvisioningEvidence.FormatServices(observed.Observation.Services);
+        }
+        var result = await RunGuestPowerShellAsync("Get-CimInstance Win32_Service -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'RemoteDebugger' -or $_.DisplayName -match 'Remote Debugger' } | ForEach-Object { \"$($_.Name)|$($_.State)|$($_.StartMode)|$($_.StartName)|$($_.PathName)\" }");
         return result.Stdout.Split(["`r`n", "`n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 
@@ -861,14 +1009,26 @@ internal sealed partial class LabForm : Forms.Form
     private async Task ProbeSleepRequestAsync()
     {
         string[] texts = UiTexts();
-        var request = await RunGuestPowerShellAsync("powercfg /requests");
+        (int ExitCode, string Stdout, string Stderr) request;
+        ProvisioningEvidence.GuestObservation? observation = null;
+        string? observerError = null;
+        if (brokerProvisioning != null)
+        {
+            var observed = await WaitForBrokerObservationAsync();
+            observation = observed.Observation;
+            observerError = observed.Error;
+            request = observation == null
+                ? (1, "", observerError ?? "The broker observation was unavailable.")
+                : (observation.PowerRequests.ExitCode, observation.PowerRequests.Stdout, observation.PowerRequests.Stderr);
+        }
+        else request = await RunGuestPowerShellAsync("powercfg /requests");
         bool osHeld = request.ExitCode == 0 && (request.Stdout.Contains("RemoteDebugger", StringComparison.OrdinalIgnoreCase) || request.Stdout.Contains("Remote Debugger", StringComparison.OrdinalIgnoreCase));
         bool visible = texts.Any(ContainsSleepHeld);
         sleepRequestObserved = osHeld;
         if (osHeld)
-            Pass("agent.sleep_request", "The agent holds a Windows system power request while it is running", new { osEvidence = request.Stdout, visible = texts.Where(ContainsSleepHeld).Take(4).ToArray() });
+            Pass("agent.sleep_request", "The agent holds a Windows system power request while it is running", new { osEvidence = request.Stdout, observer = observation?.EvidencePath, visible = texts.Where(ContainsSleepHeld).Take(4).ToArray() });
         else
-            Block("agent.sleep_request", "The agent holds a Windows system power request while it is running", "No product-owned power request was visible in the read-only powercfg output.", new { commandExitCode = request.ExitCode, osEvidence = request.Stdout, stderr = request.Stderr, visible }, required: false);
+            Block("agent.sleep_request", "The agent holds a Windows system power request while it is running", brokerProvisioning == null ? "No product-owned power request was visible in the read-only powercfg output." : "The broker's fresh read-only observer did not show a product-owned power request.", new { commandExitCode = request.ExitCode, osEvidence = request.Stdout, stderr = request.Stderr, observer = observation?.EvidencePath, observerError, visible }, required: false);
     }
 
     private async Task ProbeSleepReleasedAsync()
@@ -876,6 +1036,20 @@ internal sealed partial class LabForm : Forms.Form
         if (!sleepRequestObserved)
         {
             Block("agent.sleep_release", "The Windows power request is released after the agent exits", "The pre-exit power request was not observable, so release cannot be claimed.", required: false);
+            return;
+        }
+        if (brokerProvisioning != null)
+        {
+            var observed = await WaitForBrokerObservationAsync(productExitObservedUtc);
+            if (observed.Observation == null)
+            {
+                Block("agent.sleep_release", "The Windows power request is released after the agent exits", "The broker did not provide a fresh observer snapshot captured after the product exit.", new { observerError = observed.Error, exitedUtc = productExitObservedUtc }, required: false);
+                return;
+            }
+            var brokerRequest = observed.Observation.PowerRequests;
+            bool brokerReleased = brokerRequest.ExitCode == 0 && !brokerRequest.Stdout.Contains("RemoteDebugger", StringComparison.OrdinalIgnoreCase) && !brokerRequest.Stdout.Contains("Remote Debugger", StringComparison.OrdinalIgnoreCase);
+            if (brokerReleased) Pass("agent.sleep_release", "The Windows power request is released after the agent exits", new { osEvidence = brokerRequest.Stdout, observer = observed.Observation.EvidencePath, capturedUtc = observed.Observation.CapturedUtc, exitedUtc = productExitObservedUtc });
+            else Fail("agent.sleep_release", "The Windows power request is released after the agent exits", new { commandExitCode = brokerRequest.ExitCode, osEvidence = brokerRequest.Stdout, stderr = brokerRequest.Stderr, observer = observed.Observation.EvidencePath, capturedUtc = observed.Observation.CapturedUtc, exitedUtc = productExitObservedUtc });
             return;
         }
         var request = await RunGuestPowerShellAsync("powercfg /requests");
@@ -888,20 +1062,22 @@ internal sealed partial class LabForm : Forms.Form
     {
         product = LaunchProduct(false);
         await WaitUiAsync();
+        ProbeProductIdentity("controller.managed_process_identity", "The controller runs as the registered interactive user at medium integrity");
         WindowState = Forms.FormWindowState.Minimized;
         string controllerHash = await HashFileAsync(application);
 
         var peersControl = Element("peers");
         bool peerVisible = await WaitForRowsAsync(peersControl, 1, 40);
         var discovered = await DiscoverAsync();
-        string localMachine = Environment.MachineName;
-        var peer = discovered.FirstOrDefault(x => !x.Name.Equals(localMachine, StringComparison.OrdinalIgnoreCase));
+        string[] localAddresses = ProvisioningEvidence.LocalIPv4Addresses();
+        var peer = discovered.FirstOrDefault(x => ProvisioningEvidence.IsRemoteCoordinationAddress(x.Host, localAddresses, out _));
         if (peer == null) throw new TimeoutException("Controller discovery did not find a remote agent.");
         peerHost = peer.Host; peerFingerprint = peer.Fingerprint;
         string selectedHost = TryValue("host");
         bool autoSelected = !string.IsNullOrWhiteSpace(selectedHost) && selectedHost == peerHost;
-        if (peerVisible && autoSelected) Pass("controller.discovery_on_launch", "Controller discovery starts on launch and excludes the local machine", new { uiRows = peerVisible, selectedHost, peer = new { peer.Name, peer.Host }, localMachine });
-        else Fail("controller.discovery_on_launch", "Controller discovery starts on launch and excludes the local machine", new { uiRows = peerVisible, selectedHost, peer = new { peer.Name, peer.Host }, localMachine });
+        bool displayNameMatchesLocal = peer.Name.Equals(Environment.MachineName, StringComparison.OrdinalIgnoreCase);
+        if (peerVisible && autoSelected) Pass("controller.discovery_on_launch", "Controller discovery starts on launch and excludes the local machine by coordination address", new { uiRows = peerVisible, selectedHost, peer = new { peer.Name, peer.Host }, localAddresses, displayNameMatchesLocal });
+        else Fail("controller.discovery_on_launch", "Controller discovery starts on launch and excludes the local machine by coordination address", new { uiRows = peerVisible, selectedHost, peer = new { peer.Name, peer.Host }, localAddresses, displayNameMatchesLocal });
         if (!autoSelected) Set("host", peerHost);
 
         JsonElement bootstrap = await LabMessageAsync(peerHost, "RD_LAB_BOOTSTRAP");
