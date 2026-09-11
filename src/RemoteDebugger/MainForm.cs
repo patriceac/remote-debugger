@@ -57,6 +57,9 @@ public sealed class MainForm : Forms.Form
     private readonly Forms.Button navDiagnostics = RailSubButton("Diagnostics", "navDiagnostics");
 
     // Agent screen.
+    private readonly Forms.Label agentEyebrow = Eyebrow("CODE DE CONNEXION");
+    private readonly Forms.Label agentHeading = new() { Text = "Partagez ce code", AutoSize = false, Dock = Forms.DockStyle.Fill, Font = new Font("Segoe UI", 32, FontStyle.Bold), ForeColor = PrimaryText, TextAlign = ContentAlignment.MiddleLeft };
+    private readonly Forms.Label agentSubtitle = new() { Text = "Saisissez-le sur le PC qui vous assiste.", AutoSize = false, Dock = Forms.DockStyle.Fill, Font = new Font("Segoe UI", 13), ForeColor = SecondaryText, TextAlign = ContentAlignment.MiddleLeft };
     private readonly Forms.Label agentPairCode = new() { Name = "agentPairCode", AutoSize = true, Text = "— — —", Font = new Font("Consolas", 42, FontStyle.Bold), ForeColor = PrimaryText };
     private readonly Forms.Button copyAgentCode = Button("Copier", "copyAgentCode", 86);
     private readonly Forms.ProgressBar pairingCountdown = new() { Name = "pairingCountdown", Minimum = 0, Maximum = 300, Value = 0, Height = 4, Style = Forms.ProgressBarStyle.Continuous };
@@ -314,11 +317,9 @@ public sealed class MainForm : Forms.Form
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 30));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
 
-        var eyebrow = Eyebrow("CODE DE CONNEXION"); eyebrow.Dock = Forms.DockStyle.Fill; layout.Controls.Add(eyebrow, 0, 0);
-        var title = new Forms.Label { Text = "Partagez ce code", AutoSize = false, Dock = Forms.DockStyle.Fill, Font = new Font("Segoe UI", 32, FontStyle.Bold), ForeColor = PrimaryText, TextAlign = ContentAlignment.MiddleLeft };
-        layout.Controls.Add(title, 0, 1);
-        var subtitle = new Forms.Label { Text = "Saisissez-le sur le PC qui vous assiste.", AutoSize = false, Dock = Forms.DockStyle.Fill, Font = new Font("Segoe UI", 13), ForeColor = SecondaryText, TextAlign = ContentAlignment.MiddleLeft };
-        layout.Controls.Add(subtitle, 0, 2);
+        agentEyebrow.Dock = Forms.DockStyle.Fill; layout.Controls.Add(agentEyebrow, 0, 0);
+        layout.Controls.Add(agentHeading, 0, 1);
+        layout.Controls.Add(agentSubtitle, 0, 2);
 
         var codeRow = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, Height = 78, WrapContents = false, FlowDirection = Forms.FlowDirection.LeftToRight, Padding = new Forms.Padding(0, 10, 0, 0), Margin = Forms.Padding.Empty };
         agentPairCode.Margin = new Forms.Padding(0, 0, 14, 0); copyAgentCode.Margin = new Forms.Padding(0, 4, 0, 0); codeRow.Controls.Add(agentPairCode); codeRow.Controls.Add(copyAgentCode); layout.Controls.Add(codeRow, 0, 3);
@@ -346,7 +347,7 @@ public sealed class MainForm : Forms.Form
 
     private static void AddAgentStateRow(Forms.TableLayoutPanel table, int row, string label, Forms.Label value)
     {
-        var dot = new Forms.Label { AutoSize = true, Text = "●", ForeColor = Color.FromArgb(50, 137, 91), Margin = new Forms.Padding(0, 3, 0, 0) };
+        var dot = new Forms.Label { AutoSize = true, Text = "●", ForeColor = SecondaryText, Margin = new Forms.Padding(0, 3, 0, 0) };
         var name = new Forms.Label { AutoSize = true, Text = label, ForeColor = SecondaryText, Margin = new Forms.Padding(0, 3, 0, 0) };
         value.Margin = new Forms.Padding(0, 3, 0, 0); value.Anchor = Forms.AnchorStyles.Left;
         table.Controls.Add(dot, 0, row); table.Controls.Add(name, 1, row); table.Controls.Add(value, 2, row);
@@ -407,8 +408,10 @@ public sealed class MainForm : Forms.Form
         monitor.Items.Add(new MonitorChoice(0, "Principal")); monitor.SelectedIndex = 0;
         top.Controls.Add(new Forms.Label { Text = "Écran", AutoSize = true, ForeColor = SecondaryText, Anchor = Forms.AnchorStyles.Left, Margin = new Forms.Padding(0, 10, 12, 0) }, 0, 0); top.Controls.Add(monitor, 1, 0); top.Controls.Add(mouseEnabled, 2, 0); top.Controls.Add(new Forms.Label { Text = "", AutoSize = true }, 3, 0); top.Controls.Add(pauseViewing, 4, 0);
         screenSurface.Controls.Add(screen); screenSurface.Controls.Add(liveBadge); screenSurface.Controls.Add(streamOverlay); liveBadge.BringToFront(); streamOverlay.BringToFront(); liveBadge.Location = new Point(16, 14); streamOverlay.Anchor = Forms.AnchorStyles.None; screenSurface.Resize += (_, _) => streamOverlay.Location = new Point(Math.Max(0, (screenSurface.Width - streamOverlay.Width) / 2), Math.Max(0, (screenSurface.Height - streamOverlay.Height) / 2));
-        var view = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 2 }; view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100)); view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 42)); view.Controls.Add(screenSurface, 0, 0);
-        var bottom = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.LeftToRight, WrapContents = false, Padding = new Forms.Padding(0, 8, 0, 0) }; remoteText.Width = 390; remoteText.Height = 32; bottom.Controls.Add(remoteText); bottom.Controls.Add(typeText); bottom.Controls.Add(enterKey); bottom.Controls.Add(streamStatus); view.Controls.Add(bottom, 0, 1);
+        var view = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 2 }; view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100)); view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 56)); view.Controls.Add(screenSurface, 0, 0);
+        var bottom = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 4, RowCount = 1, Padding = new Forms.Padding(0, 6, 0, 0), Margin = Forms.Padding.Empty };
+        bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100)); for (int column = 1; column < 4; column++) bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
+        remoteText.Dock = Forms.DockStyle.Top; remoteText.PlaceholderText = "Texte à envoyer au PC distant"; streamStatus.Margin = new Forms.Padding(12, 10, 0, 0); bottom.Controls.Add(remoteText, 0, 0); bottom.Controls.Add(typeText, 1, 0); bottom.Controls.Add(enterKey, 2, 0); bottom.Controls.Add(streamStatus, 3, 0); view.Controls.Add(bottom, 0, 1);
         page.Controls.Add(view); page.Controls.Add(top); return page;
     }
 
@@ -430,12 +433,19 @@ public sealed class MainForm : Forms.Form
         var page = new PagePanel("Fichiers") { BackColor = Canvas, Padding = new Forms.Padding(28) };
         var title = SectionTitle("Fichiers", "Parcourez l’espace de travail distant et vérifiez les transferts.");
         var pathRow = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 3, RowCount = 2, Height = 82 }; pathRow.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100)); pathRow.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); pathRow.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
-        fileDirectory.ReadOnly = false; fileDirectory.Height = 38; fileDirectory.Dock = Forms.DockStyle.Top; pathRow.Controls.Add(fileDirectory, 0, 0); uploadButton = Button("Téléverser un fichier", "upload", 150); var parent = Button("Parent", "parentFolder", 78); var refresh = Button("Actualiser", "browseFiles", 92); pathRow.Controls.Add(parent, 1, 0); pathRow.Controls.Add(refresh, 2, 0); pathRow.Controls.Add(new Forms.Label { Text = "Fichier sélectionné", AutoSize = true, ForeColor = SecondaryText, Margin = new Forms.Padding(0, 9, 8, 0) }, 0, 1); remotePath.ReadOnly = true; remotePath.Dock = Forms.DockStyle.Fill; pathRow.Controls.Add(remotePath, 1, 1); pathRow.SetColumnSpan(remotePath, 2);
-        destination.Text = "deployments/"; destination.Width = 240; destination.Height = 32; destination.Dock = Forms.DockStyle.None;
+        pathRow.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 42)); pathRow.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 40));
+        fileDirectory.ReadOnly = false; fileDirectory.PlaceholderText = "Espace de travail"; fileDirectory.Height = 38; fileDirectory.Dock = Forms.DockStyle.Top; pathRow.Controls.Add(fileDirectory, 0, 0); uploadButton = Button("Téléverser un fichier", "upload", 150); var parent = Button("Parent", "parentFolder", 78); var refresh = Button("Actualiser", "browseFiles", 92); pathRow.Controls.Add(parent, 1, 0); pathRow.Controls.Add(refresh, 2, 0);
+        var selectionRow = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Forms.Padding.Empty };
+        selectionRow.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); selectionRow.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
+        selectionRow.Controls.Add(new Forms.Label { Text = "Fichier sélectionné", AutoSize = true, ForeColor = SecondaryText, Margin = new Forms.Padding(0, 7, 12, 0) }, 0, 0); remotePath.ReadOnly = true; remotePath.PlaceholderText = "Sélectionnez un fichier dans la liste"; remotePath.Dock = Forms.DockStyle.Top; selectionRow.Controls.Add(remotePath, 1, 0); pathRow.Controls.Add(selectionRow, 0, 1); pathRow.SetColumnSpan(selectionRow, 3);
+        destination.Text = "deployments/"; destination.Height = 32; destination.Dock = Forms.DockStyle.Top;
         uploadFolderButton = Button("Téléverser un dossier", "uploadFolder", 160); downloadButton = Button("Télécharger", "download", 102);
-        var actions = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.LeftToRight, WrapContents = false, Height = 42 }; actions.Controls.Add(uploadButton); actions.Controls.Add(uploadFolderButton); actions.Controls.Add(downloadButton); actions.Controls.Add(new Forms.Label { Text = "Destination", AutoSize = true, ForeColor = SecondaryText, Margin = new Forms.Padding(16, 10, 4, 0) }); actions.Controls.Add(destination); actions.Controls.Add(fileState);
+        var actions = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 2, Margin = Forms.Padding.Empty };
+        actions.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); actions.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100)); actions.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 44)); actions.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 34));
+        var fileButtons = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.LeftToRight, WrapContents = false, AutoSize = true, Margin = Forms.Padding.Empty }; fileButtons.Controls.Add(uploadButton); fileButtons.Controls.Add(uploadFolderButton); fileButtons.Controls.Add(downloadButton); actions.Controls.Add(fileButtons, 0, 0); fileState.Margin = new Forms.Padding(12, 10, 0, 0); actions.Controls.Add(fileState, 1, 0);
+        var destinationRow = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Forms.Padding.Empty }; destinationRow.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); destinationRow.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100)); destinationRow.Controls.Add(new Forms.Label { Text = "Destination des téléversements", AutoSize = true, ForeColor = SecondaryText, Margin = new Forms.Padding(0, 7, 12, 0) }, 0, 0); destinationRow.Controls.Add(destination, 1, 0); actions.Controls.Add(destinationRow, 0, 1); actions.SetColumnSpan(destinationRow, 2);
         fileList.Columns.Add("Nom", 330); fileList.Columns.Add("Type", 100); fileList.Columns.Add("Taille", 105, Forms.HorizontalAlignment.Right); fileList.Columns.Add("Modifié", 220);
-        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 5 }; layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 50)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 82)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 48)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 12)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100)); layout.Controls.Add(title, 0, 0); layout.Controls.Add(pathRow, 0, 1); layout.Controls.Add(actions, 0, 2); layout.Controls.Add(new Forms.Panel { Dock = Forms.DockStyle.Fill }, 0, 3); layout.Controls.Add(fileList, 0, 4); page.Controls.Add(layout);
+        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 5 }; layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 50)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 82)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 82)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 12)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100)); layout.Controls.Add(title, 0, 0); layout.Controls.Add(pathRow, 0, 1); layout.Controls.Add(actions, 0, 2); layout.Controls.Add(new Forms.Panel { Dock = Forms.DockStyle.Fill }, 0, 3); layout.Controls.Add(fileList, 0, 4); page.Controls.Add(layout);
         parent.Click += async (_, _) => { currentDirectory = ParentPath(currentDirectory); selectedFilePath = null; remotePath.Clear(); fileDirectory.Text = currentDirectory; await BrowseFilesAsync(); }; refresh.Click += async (_, _) => await BrowseFilesAsync(); fileDirectory.KeyDown += async (_, e) => { if (e.KeyCode == Forms.Keys.Enter) { e.SuppressKeyPress = true; currentDirectory = fileDirectory.Text.Trim(); selectedFilePath = null; remotePath.Clear(); await BrowseFilesAsync(); } };
         return page;
     }
@@ -656,6 +666,18 @@ public sealed class MainForm : Forms.Form
 
     private void UpdateAgentState()
     {
+        bool paired = agent?.Session.HasPaired == true;
+        agentEyebrow.Text = paired ? "SESSION D’ASSISTANCE" : "CODE DE CONNEXION";
+        agentHeading.Text = paired ? "Votre PC est pris en charge" : "Partagez ce code";
+        agentSubtitle.Text = paired ? "L’état de la connexion reste visible pendant toute la session." : "Saisissez-le sur le PC qui vous assiste.";
+        copyAgentCode.Visible = !paired;
+        float stateFontSize = paired ? 24 : 42;
+        if (agentPairCode.Font.Size != stateFontSize)
+        {
+            var previousFont = agentPairCode.Font;
+            agentPairCode.Font = new Font(paired ? "Segoe UI" : "Consolas", stateFontSize, FontStyle.Bold);
+            previousFont.Dispose();
+        }
         if (agent == null) { agentPairCode.Text = "— — —"; CurrentPairingCode = null; agentState.Text = "Agent en attente de préparation"; agentSessionNote.Text = "L’agent démarrera avec cette application lorsqu’elle est lancée en mode assistance."; setupNotice.Visible = false; return; }
         var session = agent.Session;
         if (session.Connected && session.BinaryMatched)
@@ -1071,6 +1093,7 @@ public sealed class MainForm : Forms.Form
 
     private void RenderProcesses(int? selectedPid = null)
     {
+        SetSortIndicator(processList, (int)processSort.Column, processSort.Descending);
         int? keep = selectedPid ?? (processList.SelectedItems.Count > 0 && processList.SelectedItems[0].Tag is ProcessSortRow selectedRow ? selectedRow.Pid : null); var sorted = UiSorting.SortProcesses(processRows, processSort); processList.BeginUpdate(); processList.Items.Clear(); foreach (var row in sorted) { var item = new Forms.ListViewItem(row.Pid.ToString()); item.SubItems.Add(row.Name); item.SubItems.Add(row.CpuPercentTotalMachine is { } cpu ? cpu.ToString("F1") : "—"); item.SubItems.Add(row.WorkingSetBytes is { } bytes ? (bytes / 1048576d).ToString("F1") : "—"); item.SubItems.Add(row.Responding is null ? "—" : row.Responding.Value ? "Oui" : "Bloqué"); item.SubItems.Add(string.IsNullOrWhiteSpace(row.Window) ? "—" : row.Window); item.Tag = row; if (keep == row.Pid) item.Selected = true; processList.Items.Add(item); } processList.EndUpdate();
     }
 
@@ -1086,7 +1109,18 @@ public sealed class MainForm : Forms.Form
 
     private void RenderFiles(string? selectedPath = null)
     {
+        SetSortIndicator(fileList, (int)fileSort.Column, fileSort.Descending);
         string keep = selectedPath ?? selectedFilePath ?? ""; var sorted = UiSorting.SortFiles(fileRows, fileSort); fileList.BeginUpdate(); fileList.Items.Clear(); foreach (var row in sorted) { var item = new Forms.ListViewItem(row.Name); item.SubItems.Add(row.IsDirectory ? "Dossier" : "Fichier"); item.SubItems.Add(row.SizeBytes is { } bytes ? FormatBytes(bytes) : "—"); item.SubItems.Add(row.ModifiedUtc is { } date ? date.ToLocalTime().ToString("yyyy-MM-dd HH:mm") : "—"); item.Tag = row; if (!row.IsDirectory && row.Path == keep) item.Selected = true; fileList.Items.Add(item); } fileList.EndUpdate(); remotePath.Text = selectedFilePath ?? "";
+    }
+
+    private static void SetSortIndicator(Forms.ListView table, int selectedColumn, bool descending)
+    {
+        for (int index = 0; index < table.Columns.Count; index++)
+        {
+            var column = table.Columns[index];
+            column.Tag ??= column.Text;
+            column.Text = (string)column.Tag + (index == selectedColumn ? descending ? "  ▼" : "  ▲" : "");
+        }
     }
 
     private async Task ExecuteSelectedAsync()
