@@ -296,7 +296,7 @@ internal sealed partial class LabForm
     {
         try
         {
-            var matches = new List<AutomationElement>();
+            var matches = new List<(AutomationElement Element, int Priority)>();
             foreach (var element in FindExplorerShellElements())
             {
                 try
@@ -306,31 +306,35 @@ internal sealed partial class LabForm
                     string type = current.ControlType.ProgrammaticName;
                     string id = current.AutomationId.ToLowerInvariant();
                     string className = current.ClassName.ToLowerInvariant();
-                    bool nameHint = name.Contains("hidden", StringComparison.Ordinal)
-                        || name.Contains("masqu", StringComparison.Ordinal)
-                        || name.Contains("icône", StringComparison.Ordinal)
-                        || name.Contains("icones", StringComparison.Ordinal)
-                        || name.Contains("icônes", StringComparison.Ordinal)
-                        || name.Contains("icon", StringComparison.Ordinal)
-                        || name.Contains("overflow", StringComparison.Ordinal)
-                        || name.Contains("chevron", StringComparison.Ordinal)
-                        || name.Contains("plus", StringComparison.Ordinal)
-                        || name.Contains("notification area", StringComparison.Ordinal)
-                        || name.Contains("zone de notification", StringComparison.Ordinal)
+                    bool supportedType = type is "ControlType.Button" or "ControlType.SplitButton";
+                    if (current.IsOffscreen || !supportedType) continue;
+                    bool hiddenName = name.Contains("afficher les ic", StringComparison.Ordinal)
                         || name.Contains("show hidden", StringComparison.Ordinal)
-                        || name.Contains("afficher les ic", StringComparison.Ordinal);
-                    bool shellHint = id.Contains("tray", StringComparison.Ordinal)
-                        || id.Contains("overflow", StringComparison.Ordinal)
-                        || className.Contains("tray", StringComparison.Ordinal)
+                        || name.Contains("hidden icon", StringComparison.Ordinal)
+                        || name.Contains("icônes cachées", StringComparison.Ordinal)
+                        || name.Contains("icones cachees", StringComparison.Ordinal)
+                        || name.Contains("masquer les ic", StringComparison.Ordinal);
+                    bool chevronName = name.Contains("chevron", StringComparison.Ordinal);
+                    bool legacyId = id.Equals("overflownotificationareabutton", StringComparison.Ordinal)
+                        || id.Contains("overflownotificationareabutton", StringComparison.Ordinal);
+                    bool shellClass = className.Contains("tray", StringComparison.Ordinal)
                         || className.Contains("notify", StringComparison.Ordinal)
-                        || className.Contains("overflow", StringComparison.Ordinal)
-                        || className.Contains("toolbar", StringComparison.Ordinal);
-                    bool supportedType = type is "ControlType.Button" or "ControlType.Custom" or "ControlType.Pane" or "ControlType.SplitButton";
-                    if (!current.IsOffscreen && supportedType && (nameHint || shellHint)) matches.Add(element);
+                        || className.Contains("overflow", StringComparison.Ordinal);
+                    if (!shellClass && !legacyId) continue;
+                    if (!hiddenName && !chevronName && !legacyId) continue;
+                    // Win11's SystemTrayIcon with the localized hidden-icons
+                    // name is the exact overflow control.  Keep legacy IDs and
+                    // explicit chevrons as lower-priority compatibility paths.
+                    int priority = id.Equals("systemtrayicon", StringComparison.Ordinal)
+                        && name.Contains("afficher les ic", StringComparison.Ordinal) ? 100
+                        : legacyId ? 90
+                        : chevronName ? 80
+                        : 70;
+                    matches.Add((element, priority));
                 }
                 catch (Exception) { }
             }
-            return matches.ToArray();
+            return matches.OrderByDescending(match => match.Priority).Select(match => match.Element).ToArray();
         }
         catch (Exception) { return []; }
     }
