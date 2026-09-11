@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "product": "RemoteDebugger",
+  "pairing": {
+    "digits": 6,
+    "rotationSeconds": 300,
+    "rotationEarlyToleranceSeconds": 2,
+    "rotationLateToleranceSeconds": 15,
+    "disconnectGraceSeconds": 600
+  },
+  "stream": {
+    "maximumFps": 5,
+    "minimumDistinctFrames": 3
+  },
+  "uiAutomationIds": {
+    "agentPairCode": "agentPairCode",
+    "pairingCountdown": "pairingCountdownText",
+    "agentState": "agentState",
+    "peers": "peers",
+    "host": "host",
+    "pairCode": "pairCode",
+    "pair": "pair",
+    "connectionStatus": "connectionStatus",
+    "terminateSession": "terminateSession",
+    "processList": "processList",
+    "remoteFiles": "remoteFiles",
+    "remoteScreen": "remoteScreen",
+    "streamStatus": "streamStatus",
+    "refreshResources": "refreshResources",
+    "browseFiles": "browseFiles"
+  },
+  "forbiddenNormalPairingIds": [
+    "fingerprint",
+    "fingerprintVerified",
+    "openPairing",
+    "agentStart",
+    "revokeAccess"
+  ],
+  "fixtures": {
+    "v1": "fixtures/v1/Fixture.exe",
+    "v2": "fixtures/v2/Fixture.exe",
+    "rollback": "fixtures/rollback/RemoteDebugger.previous.exe"
+  },
+  "provisioning": {
+    "serviceNamePattern": "RemoteDebugger",
+    "supportedVerb": "--support-provision",
+    "requiresPreProvisionedGuest": true,
+    "secureDesktopUacSupportedByHarness": false
+  }
+}
