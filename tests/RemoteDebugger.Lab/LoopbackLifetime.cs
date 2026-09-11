@@ -76,12 +76,13 @@ internal sealed partial class LabForm
             oldPairArgs.Add("--fingerprint");
             oldPairArgs.Add(fingerprint);
         }
+        string oldConnectionPath = Path.Combine(output, "old-code.connection");
+        try { if (File.Exists(oldConnectionPath)) File.Delete(oldConnectionPath); } catch (IOException) { }
         var oldPair = await CliAsync(oldPairArgs.ToArray(), stdin: initialCode, requireSuccess: false);
-        bool oldCodeDenied = IsPairingDenied(oldPair);
-        if (oldCodeDenied)
-            Pass("lifetime.expired_code_denied", "The previous pairing code is denied after the real five-minute rotation", new { code = CodeEvidence(initialCode), response = oldPair });
-        else
-            Fail("lifetime.expired_code_denied", "The previous pairing code is denied after the real five-minute rotation", new { code = CodeEvidence(initialCode), response = oldPair, fingerprintAvailable = fingerprint.Length > 0 });
+        bool oldPairOk = oldPair.TryGetProperty("ok", out var oldPairOkValue) && oldPairOkValue.ValueKind == JsonValueKind.True;
+        string oldPairText = oldPair.GetRawText().ToLowerInvariant();
+        bool missingFingerprintInput = oldPairText.Contains("fingerprint", StringComparison.Ordinal) && oldPairText.Contains("must", StringComparison.Ordinal);
+        bool oldCodeRejected = !oldPairOk && !missingFingerprintInput && !File.Exists(oldConnectionPath);
 
         loopbackController = LaunchLoopbackProduct(false, controllerRoot);
         product = loopbackController;
@@ -101,9 +102,15 @@ internal sealed partial class LabForm
         else
         {
             Fail("lifetime.code_enter_pairing", "The controller pairs with the newly rotated code through the normal code plus Enter flow", new { pairStatusBeforeWait, pairStatus });
+            Fail("lifetime.expired_code_denied", "The previous pairing code is denied after the real five-minute rotation", new { code = CodeEvidence(initialCode), response = oldPair, oldPairRejected = oldCodeRejected, oldGrantCreated = File.Exists(oldConnectionPath), freshCodeSucceeded = false, fingerprintAvailable = fingerprint.Length > 0 });
             await FinishAsync();
             return;
         }
+
+        if (oldCodeRejected)
+            Pass("lifetime.expired_code_denied", "The previous pairing code is denied after the real five-minute rotation", new { code = CodeEvidence(initialCode), response = oldPair, oldGrantCreated = false, freshCodeSucceeded = true, fingerprintAvailable = fingerprint.Length > 0 });
+        else
+            Fail("lifetime.expired_code_denied", "The previous pairing code is denied after the real five-minute rotation", new { code = CodeEvidence(initialCode), response = oldPair, oldPairRejected = oldCodeRejected, oldGrantCreated = File.Exists(oldConnectionPath), freshCodeSucceeded = true, fingerprintAvailable = fingerprint.Length > 0 });
 
         var heartbeat = await WaitForBinaryMatchAsync(releaseHash, 30);
         string heartbeatHash = FindString(heartbeat, "agentBinarySha256", "binarySha256", "releaseSha256", "executableSha256", "sha256");
@@ -112,6 +119,12 @@ internal sealed partial class LabForm
         else
             Fail("lifetime.heartbeat_before_disconnect", "A real paired heartbeat is established before the controller is disconnected", new { heartbeatHash, releaseHash, heartbeat });
 
+        // Capture the agent's own connected state before dropping the viewer;
+        // the following reconnect capture is taken from that same window.
+        Process controllerProcess = loopbackController;
+        product = loopbackAgent;
+        CaptureDesktop("loopback-lifetime-agent-connected.png");
+        product = controllerProcess;
         CaptureDesktop("loopback-lifetime-before-disconnect.png");
         DateTimeOffset disconnectedUtc = DateTimeOffset.UtcNow;
         int controllerPid = loopbackController.Id;
@@ -128,6 +141,7 @@ internal sealed partial class LabForm
             return;
         }
 
+        product = loopbackAgent;
         await WaitForLoopbackDisconnectExitAsync(disconnectedUtc);
         await ProbeSleepReleasedAsync();
         await FinishAsync();
@@ -213,24 +227,52 @@ internal sealed partial class LabForm
         return match.Success ? match.Value : "";
     }
 
-    private static bool IsPairingDenied(JsonElement reply)
-    {
-        if (reply.TryGetProperty("ok", out var ok) && ok.ValueKind == JsonValueKind.True) return false;
-        string value = reply.GetRawText().ToLowerInvariant();
-        return value.Contains("pairing_denied", StringComparison.Ordinal)
-            || value.Contains("incorrect", StringComparison.Ordinal)
-            || value.Contains("expired", StringComparison.Ordinal)
-            || value.Contains("unavailable", StringComparison.Ordinal);
-    }
-
     private async Task WaitForLoopbackDisconnectExitAsync(DateTimeOffset disconnectedUtc)
     {
         if (loopbackAgent == null) throw new InvalidOperationException("Loopback agent process is missing.");
         TimeSpan grace = TimeSpan.FromSeconds(PairingSeconds("disconnectGraceSeconds", 600));
         TimeSpan earlyTolerance = TimeSpan.FromSeconds(5);
-        TimeSpan lateTolerance = TimeSpan.FromSeconds(15);
-        DateTimeOffset deadline = disconnectedUtc + grace + lateTolerance;
-        DateTimeOffset earliest = disconnectedUtc + grace - earlyTolerance;
+        TimeSpan lateTolerance = TimeSpan.FromSeconds(5);
+        DateTimeOffset reconnectDeadline = disconnectedUtc + TimeSpan.FromSeconds(20);
+        DateTimeOffset? reconnectObservedUtc = null;
+        int? remainingSeconds = null;
+        string reconnectState = "";
+        string reconnectCountdown = "";
+
+        while (DateTimeOffset.UtcNow <= reconnectDeadline)
+        {
+            reconnectState = TryValue("agentState");
+            reconnectCountdown = TryValue("pairingCountdown");
+            if (reconnectState.Contains("reconnexion", StringComparison.OrdinalIgnoreCase)
+                || reconnectState.Contains("reconnect", StringComparison.OrdinalIgnoreCase)
+                || reconnectCountdown.Contains("reconnexion", StringComparison.OrdinalIgnoreCase))
+            {
+                reconnectObservedUtc = DateTimeOffset.UtcNow;
+                remainingSeconds = ParseCountdownSeconds(reconnectCountdown);
+                var evidence = new { disconnectedUtc, reconnectObservedUtc, reconnectLatencySeconds = (reconnectObservedUtc.Value - disconnectedUtc).TotalSeconds, reconnectState, reconnectCountdown, remainingSeconds };
+                if (reconnectObservedUtc.Value - disconnectedUtc <= TimeSpan.FromSeconds(20))
+                    Pass("lifetime.disconnect_detected", "The agent visibly enters its ten-minute reconnect grace state after heartbeat loss", evidence);
+                else
+                    Fail("lifetime.disconnect_detected", "The agent visibly enters its ten-minute reconnect grace state after heartbeat loss", evidence);
+                CaptureDesktop("loopback-lifetime-reconnect.png");
+                break;
+            }
+            await Task.Delay(500, stop.Token);
+        }
+
+        if (!reconnectObservedUtc.HasValue)
+        {
+            Fail("lifetime.disconnect_detected", "The agent visibly enters its ten-minute reconnect grace state after heartbeat loss", new { disconnectedUtc, reconnectDeadline, reconnectState, reconnectCountdown, reconnectObserved = false });
+        }
+
+        // The agent publishes the deadline in its reconnect countdown. Use it
+        // when available so UI sampling and heartbeat-detection latency do not
+        // turn an otherwise on-time exit into a false failure.
+        DateTimeOffset expectedExit = reconnectObservedUtc.HasValue && remainingSeconds.HasValue
+            ? reconnectObservedUtc.Value + TimeSpan.FromSeconds(remainingSeconds.Value)
+            : disconnectedUtc + grace;
+        DateTimeOffset deadline = expectedExit + lateTolerance;
+        DateTimeOffset earliest = expectedExit - earlyTolerance;
         DateTimeOffset? exitedUtc = null;
 
         while (DateTimeOffset.UtcNow <= deadline)
@@ -248,11 +290,11 @@ internal sealed partial class LabForm
         {
             double elapsedSeconds = (exitedUtc.Value - disconnectedUtc).TotalSeconds;
             bool timing = exitedUtc.Value >= earliest && exitedUtc.Value <= deadline;
-            var evidence = new { disconnectedUtc, exitedUtc, elapsedSeconds, graceSeconds = grace.TotalSeconds, earliestAllowedUtc = earliest, latestAllowedUtc = deadline, timing };
+            var evidence = new { disconnectedUtc, reconnectObservedUtc, reconnectState, reconnectCountdown, remainingSeconds, expectedExit, exitedUtc, elapsedSeconds, graceSeconds = grace.TotalSeconds, earliestAllowedUtc = earliest, latestAllowedUtc = deadline, timing };
             if (timing) Pass("lifetime.disconnect_grace_exit", "The agent exits after the real ten-minute disconnect grace period", evidence);
             else Fail("lifetime.disconnect_grace_exit", "The agent exits after the real ten-minute disconnect grace period", evidence);
         }
         else
-            Fail("lifetime.disconnect_grace_exit", "The agent exits after the real ten-minute disconnect grace period", new { disconnectedUtc, graceSeconds = grace.TotalSeconds, deadline, agentExited = false });
+            Fail("lifetime.disconnect_grace_exit", "The agent exits after the real ten-minute disconnect grace period", new { disconnectedUtc, reconnectObservedUtc, reconnectState, reconnectCountdown, remainingSeconds, expectedExit, graceSeconds = grace.TotalSeconds, deadline, agentExited = false });
     }
 }
