@@ -141,12 +141,11 @@ public sealed class MainForm : Forms.Form
     private readonly bool startAgentOnLaunch;
     private readonly Forms.Timer renderTimer = new() { Interval = 250 };
     private readonly Forms.Timer discoveryTimer = new() { Interval = 30000 };
-    private readonly Forms.NotifyIcon tray;
+    private readonly Forms.NotifyIcon tray = new();
     private RemoteClient? client;
     private AgentServer? agent;
     private CancellationTokenSource? action;
     private CancellationTokenSource? heartbeatLifetime;
-    private CancellationTokenSource? shutdownLifetime;
     private CancellationTokenSource? discoveryLifetime;
     private CancellationTokenSource? pairingLifetime;
     private Task? heartbeatTask;
@@ -159,7 +158,6 @@ public sealed class MainForm : Forms.Form
     private bool shutdownStarted;
     private bool suppressTerminationEvent;
     private bool trayVisible;
-    private bool maintenanceStarted;
     private int operationGeneration;
     private int sessionGeneration;
     private string? operationId;
@@ -422,7 +420,7 @@ public sealed class MainForm : Forms.Form
 
     private void BuildTray()
     {
-        tray = new Forms.NotifyIcon { Icon = Icon, Text = "Remote Debugger", Visible = false };
+        tray.Icon = Icon; tray.Text = "Remote Debugger"; tray.Visible = false;
         var menu = new Forms.ContextMenuStrip(); menu.Items.Add("Ouvrir", null, (_, _) => RestoreFromTray()); menu.Items.Add("Terminer l’assistance", null, async (_, _) => await TerminateSupportAsync()); menu.Items.Add(new Forms.ToolStripSeparator()); menu.Items.Add("Quitter", null, (_, _) => RequestQuit()); tray.ContextMenuStrip = menu; tray.DoubleClick += (_, _) => RestoreFromTray();
     }
 
@@ -443,7 +441,7 @@ public sealed class MainForm : Forms.Form
         pauseViewing.Click += (_, _) => { if (liveStream == null) _ = StartStreamAsync(); else StopStream("Vision en pause"); };
         monitor.SelectedIndexChanged += (_, _) => { if (liveStream != null) { StopStream("Moniteur modifié"); _ = StartStreamAsync(); } };
         mouseEnabled.CheckedChanged += (_, _) => { if (!mouseEnabled.Checked) QueueInput(new { kind = "release" }); };
-        screen.MouseDown += (_, e) => { screen.Focus(); QueueMouse("down", e); }; screen.MouseUp += (_, e) => QueueMouse("up", e); screen.MouseMove += (_, e) => { long now = Environment.TickCount64; if (now - lastMove < 33) return; lastMove = now; QueueMouse("move", e); }; screen.MouseWheel += (_, e) => QueueMouse("wheel", e); screen.PreviewKeyDown += (_, e) => e.IsInputKey = true; screen.KeyDown += (_, e) => { if (e.KeyCode == Forms.Keys.Tab) e.IsInputKey = true; if (!CanSendInput()) return; e.SuppressKeyPress = true; QueueInput(new { kind = "keyDown", virtualKey = (int)e.KeyCode }); }; screen.KeyUp += (_, e) => { if (!CanSendInput()) return; e.SuppressKeyPress = true; QueueInput(new { kind = "keyUp", virtualKey = (int)e.KeyCode }); }; screen.LostFocus += (_, _) => ReleaseHeldInputForCurrentSession();
+        screen.MouseDown += (_, e) => { screen.Focus(); QueueMouse("down", e); }; screen.MouseUp += (_, e) => QueueMouse("up", e); screen.MouseMove += (_, e) => { long now = Environment.TickCount64; if (now - lastMove < 33) return; lastMove = now; QueueMouse("move", e); }; screen.MouseWheel += (_, e) => QueueMouse("wheel", e); screen.PreviewKeyDown += (_, e) => e.IsInputKey = true; screen.KeyDown += (_, e) => { if (!CanSendInput()) return; e.SuppressKeyPress = true; QueueInput(new { kind = "keyDown", virtualKey = (int)e.KeyCode }); }; screen.KeyUp += (_, e) => { if (!CanSendInput()) return; e.SuppressKeyPress = true; QueueInput(new { kind = "keyUp", virtualKey = (int)e.KeyCode }); }; screen.LostFocus += (_, _) => ReleaseHeldInputForCurrentSession();
         typeText.Click += async (_, _) => await ExecuteAsync("ui.text", new { pid = (int)pid.Value, text = remoteText.Text }); enterKey.Click += async (_, _) => await ExecuteAsync("ui.key", new { pid = (int)pid.Value, key = "ENTER" });
         processList.ColumnClick += (_, e) => { processSort = processSort.Toggle(ProcessColumn(e.Column)); RenderProcesses(); }; processList.SelectedIndexChanged += (_, _) => { if (processList.SelectedItems.Count > 0 && processList.SelectedItems[0].Tag is ProcessSortRow row) { pid.Value = row.Pid; } };
         fileList.ColumnClick += (_, e) => { fileSort = fileSort.Toggle(FileColumn(e.Column)); RenderFiles(); }; fileList.SelectedIndexChanged += (_, _) => { if (fileList.SelectedItems.Count > 0 && fileList.SelectedItems[0].Tag is FileSortRow row && !row.IsDirectory) { selectedFilePath = row.Path; remotePath.Text = row.Path; } }; fileList.DoubleClick += async (_, _) => { if (fileList.SelectedItems.Count == 0 || fileList.SelectedItems[0].Tag is not FileSortRow row) return; if (row.IsDirectory) { currentDirectory = row.Path; selectedFilePath = null; remotePath.Clear(); fileDirectory.Text = currentDirectory; await BrowseFilesAsync(); } };
@@ -604,7 +602,6 @@ public sealed class MainForm : Forms.Form
             var state = Json.Element(maintenance.Status); bool active = state.TryGetProperty("active", out var a) && a.GetBoolean(); bool brokerAvailable = !state.TryGetProperty("brokerAvailable", out var broker) || broker.GetBoolean(); bool requiresProvisioning = state.TryGetProperty("requiresProvisioning", out var provisioning) && provisioning.GetBoolean();
             agentMaintenanceState.Text = active ? "Active" : !brokerAvailable || requiresProvisioning ? "Indisponible" : agent?.Session.HasPaired == true ? "Préparation…" : "Après connexion";
             agentMaintenanceState.ForeColor = active ? ConnectedText : !brokerAvailable || requiresProvisioning ? WarningText : SecondaryText;
-            if (active) maintenanceStarted = true;
         }
     }
 
@@ -755,7 +752,7 @@ public sealed class MainForm : Forms.Form
         RemoteClient? pairedClient = null;
         try
         {
-            connectionState.Text = "Appairage…"; footerMessage = "Appairage…"; RefreshFooter(); pairedClient = new RemoteClient(new Connection(host.Text.Trim(), 45832, selectedFingerprint, "")); client = pairedClient; await pairedClient.PairAsync(code, ct); pairedClient.Save(); connectionState.Text = "Synchronisation de l’agent…"; await SupportPlatform.SynchronizeAgentAsync(pairedClient, ct); if (generation != operationGeneration) return; supportSession = true; heartbeatHealthy = false; powerHold ??= PowerHold.Acquire(); StartHeartbeat(); SelectRole(1); SelectControllerPage(1); connectionState.Text = "Session établie."; footerMessage = "Session active · versions synchronisées"; footerDetail = "Chargement des mesures…"; RefreshFooter(); _ = LoadInitialRemoteStateAsync(generation);
+            connectionState.Text = "Appairage…"; footerMessage = "Appairage…"; RefreshFooter(); pairedClient = new RemoteClient(new Connection(host.Text.Trim(), 45832, selectedFingerprint, "")); client = pairedClient; await pairedClient.PairAsync(code.Text, ct); pairedClient.Save(); connectionState.Text = "Synchronisation de l’agent…"; await SupportPlatform.SynchronizeAgentAsync(pairedClient, ct); if (generation != operationGeneration) return; supportSession = true; heartbeatHealthy = false; powerHold ??= PowerHold.Acquire(); StartHeartbeat(); SelectRole(1); SelectControllerPage(1); connectionState.Text = "Session établie."; footerMessage = "Session active · versions synchronisées"; footerDetail = "Chargement des mesures…"; RefreshFooter(); _ = LoadInitialRemoteStateAsync(generation);
         }
         catch (OperationCanceledException) { if (pairedClient != null) _ = EndSessionBestEffortAsync(pairedClient); if (generation == operationGeneration) connectionState.Text = "Connexion annulée."; }
         catch (Exception ex) { if (pairedClient != null) _ = EndSessionBestEffortAsync(pairedClient); if (generation == operationGeneration) { connectionState.Text = "Échec : " + ex.Message; footerMessage = "Connexion impossible"; footerDetail = ex.Message; RefreshFooter(); } }
@@ -993,7 +990,7 @@ public sealed class MainForm : Forms.Form
 
     private void RenderProcesses(int? selectedPid = null)
     {
-        int? keep = selectedPid ?? (processList.SelectedItems.Count > 0 && processList.SelectedItems[0].Tag is ProcessSortRow row ? row.Pid : null); var sorted = UiSorting.SortProcesses(processRows, processSort); processList.BeginUpdate(); processList.Items.Clear(); foreach (var row in sorted) { var item = new Forms.ListViewItem(row.Pid.ToString()); item.SubItems.Add(row.Name); item.SubItems.Add(row.CpuPercentTotalMachine is { } cpu ? cpu.ToString("F1") : "—"); item.SubItems.Add(row.WorkingSetBytes is { } bytes ? (bytes / 1048576d).ToString("F1") : "—"); item.SubItems.Add(row.Responding is null ? "—" : row.Responding.Value ? "Oui" : "Bloqué"); item.SubItems.Add(string.IsNullOrWhiteSpace(row.Window) ? "—" : row.Window); item.Tag = row; if (keep == row.Pid) item.Selected = true; processList.Items.Add(item); } processList.EndUpdate();
+        int? keep = selectedPid ?? (processList.SelectedItems.Count > 0 && processList.SelectedItems[0].Tag is ProcessSortRow selectedRow ? selectedRow.Pid : null); var sorted = UiSorting.SortProcesses(processRows, processSort); processList.BeginUpdate(); processList.Items.Clear(); foreach (var row in sorted) { var item = new Forms.ListViewItem(row.Pid.ToString()); item.SubItems.Add(row.Name); item.SubItems.Add(row.CpuPercentTotalMachine is { } cpu ? cpu.ToString("F1") : "—"); item.SubItems.Add(row.WorkingSetBytes is { } bytes ? (bytes / 1048576d).ToString("F1") : "—"); item.SubItems.Add(row.Responding is null ? "—" : row.Responding.Value ? "Oui" : "Bloqué"); item.SubItems.Add(string.IsNullOrWhiteSpace(row.Window) ? "—" : row.Window); item.Tag = row; if (keep == row.Pid) item.Selected = true; processList.Items.Add(item); } processList.EndUpdate();
     }
 
     private async Task BrowseFilesAsync()
@@ -1124,7 +1121,7 @@ public sealed class MainForm : Forms.Form
 
     private async Task<bool> ShutdownAsync()
     {
-        renderTimer.Stop(); discoveryTimer.Stop(); discoveryLifetime?.Cancel(); heartbeatLifetime?.Cancel(); shutdownLifetime?.Cancel(); pairingLifetime?.Cancel(); liveStream?.Cancel(); action?.Cancel();
+        renderTimer.Stop(); discoveryTimer.Stop(); discoveryLifetime?.Cancel(); heartbeatLifetime?.Cancel(); pairingLifetime?.Cancel(); liveStream?.Cancel(); action?.Cancel();
         RemoteClient? oldClient = client;
         AgentServer? localAgent = agent;
         sessionGeneration++;
@@ -1158,7 +1155,7 @@ public sealed class MainForm : Forms.Form
     private void DisposeResources()
     {
         SupportPlatform.ManagedRelaunchRequested -= OnManagedRelaunchRequested;
-        renderTimer.Dispose(); discoveryTimer.Dispose(); discoveryLifetime?.Dispose(); heartbeatLifetime?.Dispose(); shutdownLifetime?.Dispose(); pairingLifetime?.Dispose(); liveStream?.Dispose(); action?.Dispose(); powerHold?.Dispose(); tray.Dispose();
+        renderTimer.Dispose(); discoveryTimer.Dispose(); discoveryLifetime?.Dispose(); heartbeatLifetime?.Dispose(); pairingLifetime?.Dispose(); liveStream?.Dispose(); action?.Dispose(); powerHold?.Dispose(); tray.Dispose();
     }
 
     private void RequireClient() { if (client == null || !supportSession) throw new InvalidOperationException("Connectez-vous à un PC distant avant cette action."); }

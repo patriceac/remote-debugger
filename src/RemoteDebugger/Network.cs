@@ -78,6 +78,7 @@ public sealed class AgentServer : IDisposable
     private readonly AgentUpdateService updates;
     private readonly SemaphoreSlim updateGate = new(1, 1);
     private ResumableSession? resumed;
+    private bool resumeAccepted;
     private readonly SemaphoreSlim pairingSlot = new(1, 1);
     private int disposed;
     private int terminating;
@@ -129,7 +130,7 @@ public sealed class AgentServer : IDisposable
         {
             // Planned replacement preserves the bounded reconnect grant. Explicit
             // termination takes the cancellation path below instead.
-            if (Volatile.Read(ref terminating) != 0) return;
+            if (Interlocked.CompareExchange(ref terminating, 2, 0) != 0) return;
             Dispose(); TerminationRequested?.Invoke();
         };
         listener = new TcpListener(loopbackOnly ? IPAddress.Loopback : IPAddress.Any, port);
@@ -175,12 +176,13 @@ public sealed class AgentServer : IDisposable
     public async Task TerminateAsync(CancellationToken ct = default)
     {
         if (Volatile.Read(ref disposed) != 0) return;
-        Interlocked.Exchange(ref terminating, 1);
+        if (Interlocked.CompareExchange(ref terminating, 1, 0) == 2) return;
         session.End(); Native.ReleaseAllInput();
         foreach (var job in running.Values) job.Cancel();
         await updateGate.WaitAsync(ct);
         try
         {
+            if (Volatile.Read(ref disposed) != 0) return;
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
             deadline.CancelAfter(TimeSpan.FromSeconds(35));
             await updates.CancelActiveAsync(deadline.Token);
@@ -190,7 +192,7 @@ public sealed class AgentServer : IDisposable
     }
     public void Revoke()
     {
-        resumeStore.Clear(); resumed = null;
+        resumeStore.Clear(); resumed = null; resumeAccepted = false;
         lock (authLock) { tokenHash = ""; grantLifetime.Cancel(); grantLifetime = new(); Vault.Save(authPath, []); Pairing.Close(); }
         foreach (var job in running.Values) job.Cancel();
         Native.ReleaseAllInput();
@@ -256,17 +258,30 @@ public sealed class AgentServer : IDisposable
                     if (authorized && Volatile.Read(ref terminating) != 0) authorized = false;
                     if (authorized && !Safety.Equal(controllerBinaryHash, r.BinarySha256!.ToUpperInvariant()))
                     {
-                        lock (authLock)
+                        await updateGate.WaitAsync(timeout.Token);
+                        try
                         {
-                            controllerBinaryHash = r.BinarySha256!.ToUpperInvariant();
-                            updates.ResetControllerSynchronization();
-                            session.SetBinaryMatched(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
+                            if (Volatile.Read(ref terminating) != 0 || updates.PendingExitPlan != null) authorized = false;
+                            else
+                            {
+                                lock (authLock)
+                                {
+                                    controllerBinaryHash = r.BinarySha256!.ToUpperInvariant();
+                                    updates.ResetControllerSynchronization();
+                                    session.SetBinaryMatched(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
+                                }
+                                Native.ReleaseAllInput();
+                                foreach (var job in running.Values) job.Cancel();
+                            }
                         }
-                        Native.ReleaseAllInput();
-                        foreach (var job in running.Values) job.Cancel();
+                        finally { updateGate.Release(); }
                     }
-                    if (authorized && r.Operation != "session.disconnect") session.Observe();
+                    bool resumePending = resumed != null && !Volatile.Read(ref resumeAccepted);
+                    if (resumePending && resumed!.ExpiresUtc <= DateTimeOffset.UtcNow) { session.End(); authorized = false; }
+                    if (authorized && !resumePending && r.Operation != "session.disconnect") session.Observe();
                     if (!authorized || session.ShouldExit) reply = Reply.Failure(r.Id, "access_denied", "This support session is not authorized or has ended.");
+                    else if (resumePending && r.Operation is not ("update.resume" or "session.end" or "revoke"))
+                        reply = Reply.Failure(r.Id, "resume_required", "Present the bounded update reconnect ticket before resuming support.");
                     else if (r.Operation == "session.heartbeat")
                     {
                         session.Observe();
@@ -278,13 +293,18 @@ public sealed class AgentServer : IDisposable
                         if (resumed == null || resumed.ExpiresUtc <= DateTimeOffset.UtcNow ||
                             !Safety.Equal(resumed.TicketHash, Safety.Hash(r.Args.Str("ticket"))))
                             reply = Reply.Failure(r.Id, "resume_denied", "Update reconnect authorization is invalid or expired.");
-                        else reply = Reply.Success(r.Id, new { resumed = true, agentBinarySha256 = ExecutableIdentity.Sha256, binaryMatched = Session.BinaryMatched });
+                        else
+                        {
+                            Volatile.Write(ref resumeAccepted, true); session.Observe();
+                            reply = Reply.Success(r.Id, new { resumed = true, agentBinarySha256 = ExecutableIdentity.Sha256, binaryMatched = Session.BinaryMatched });
+                        }
                     }
                     else if (r.Operation is "session.end" or "revoke")
                     {
                         // Keep this socket alive until the controller knows whether
                         // an armed replacement was safely cancelled.
-                        Interlocked.Exchange(ref terminating, 1); session.End(); Native.ReleaseAllInput();
+                        if (Interlocked.CompareExchange(ref terminating, 1, 0) == 2) return;
+                        session.End(); Native.ReleaseAllInput();
                         foreach (var job in running.Values) job.Cancel();
                         await updateGate.WaitAsync(timeout.Token);
                         try
@@ -315,8 +335,23 @@ public sealed class AgentServer : IDisposable
                                 }
                                 if (r.Operation == "update.cancel" && reply.Ok) { resumeStore.Clear(); resumed = null; }
                             }
-                            await Wire.WriteAsync(tls, reply, timeout.Token);
-                            updates.NotifyReplySent(r, reply);
+                            try
+                            {
+                                await Wire.WriteAsync(tls, reply, timeout.Token);
+                                updates.NotifyReplySent(r, reply);
+                            }
+                            catch when (r.Operation == "update.commit" && reply.Ok)
+                            {
+                                resumeStore.Clear(); resumed = null; resumeAccepted = false;
+                                using var abortDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(35));
+                                try { await updates.CancelActiveAsync(abortDeadline.Token); }
+                                catch (Exception ex)
+                                {
+                                    Interlocked.CompareExchange(ref terminating, 1, 0); session.End();
+                                    Status?.Invoke("Update reply failed; retrying protected cancellation: " + ex.Message);
+                                }
+                                throw;
+                            }
                         }
                         finally { updateGate.Release(); }
                         return;
