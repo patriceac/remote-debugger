@@ -271,7 +271,7 @@ public sealed class MainForm : Forms.Form
         titles.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize)); titles.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         headerTitle.Font = new Font("Segoe UI", 22, FontStyle.Bold); headerSubtitle.Font = new Font("Segoe UI", 10.5F);
         titles.Controls.Add(headerTitle, 0, 0); titles.Controls.Add(headerSubtitle, 0, 1);
-        var actions = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.LeftToRight, WrapContents = false, AutoSize = true, MinimumSize = new Size(244, 0), Padding = new Forms.Padding(0, 20, 0, 0) };
+        var actions = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.LeftToRight, WrapContents = false, AutoSize = true, Padding = new Forms.Padding(0, 20, 0, 0) };
         statusPill.Width = 232; statusPill.Height = 30; statusPill.Margin = new Forms.Padding(0, 3, 12, 0);
         terminateSession.Margin = Forms.Padding.Empty;
         statusDot.Location = new Point(12, 7); statusLabel.Location = new Point(28, 6); statusPill.Controls.Add(statusDot); statusPill.Controls.Add(statusLabel); statusPill.Region = RoundedRegion(statusPill.Size, 15);
@@ -294,7 +294,7 @@ public sealed class MainForm : Forms.Form
     private void BuildAgentPage()
     {
         var page = new PagePanel("Donner le contrôle") { BackColor = Canvas, Padding = new Forms.Padding(0) };
-        var content = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 1, Padding = new Forms.Padding(28, 48, 28, 20), Margin = Forms.Padding.Empty };
+        var content = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 1, Padding = new Forms.Padding(28, 36, 28, 20), Margin = Forms.Padding.Empty };
         content.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
         var heroHost = new Forms.Panel { Dock = Forms.DockStyle.Fill, BackColor = Canvas, Margin = Forms.Padding.Empty };
         var hero = BuildAgentContent(); hero.Dock = Forms.DockStyle.Top; hero.Width = 760; hero.Anchor = Forms.AnchorStyles.Top | Forms.AnchorStyles.Left;
