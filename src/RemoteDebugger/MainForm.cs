@@ -87,7 +87,7 @@ public sealed class MainForm : Forms.Form
     private string selectedFingerprint = "";
 
     // Live screen.
-    private readonly Forms.PictureBox screen = new() { Name = "remoteScreen", Dock = Forms.DockStyle.Fill, SizeMode = Forms.PictureBoxSizeMode.Zoom, BackColor = Rail, TabStop = true };
+    private readonly RemoteScreenView screen = new() { Name = "remoteScreen", Dock = Forms.DockStyle.Fill, SizeMode = Forms.PictureBoxSizeMode.Zoom, BackColor = Rail };
     private readonly Forms.Panel screenSurface = new() { Dock = Forms.DockStyle.Fill, BackColor = Rail, Padding = new Forms.Padding(0) };
     private readonly Forms.Label liveBadge = Badge("EN DIRECT", "liveBadge");
     private readonly Forms.Label streamOverlay = new() { Name = "streamOverlay", AutoSize = true, ForeColor = Color.White, BackColor = Color.FromArgb(190, 20, 38, 48), Padding = new Forms.Padding(10, 7, 10, 7), Text = "En attente d’une image fraîche…", Visible = true };
@@ -406,7 +406,7 @@ public sealed class MainForm : Forms.Form
         top.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); top.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); top.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); top.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100)); top.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
         monitor.Items.Add(new MonitorChoice(0, "Principal")); monitor.SelectedIndex = 0;
         top.Controls.Add(new Forms.Label { Text = "Écran", AutoSize = true, ForeColor = SecondaryText, Anchor = Forms.AnchorStyles.Left, Margin = new Forms.Padding(0, 10, 12, 0) }, 0, 0); top.Controls.Add(monitor, 1, 0); top.Controls.Add(mouseEnabled, 2, 0); top.Controls.Add(new Forms.Label { Text = "", AutoSize = true }, 3, 0); top.Controls.Add(pauseViewing, 4, 0);
-        screenSurface.Controls.Add(screen); screenSurface.Controls.Add(liveBadge); screenSurface.Controls.Add(streamOverlay); liveBadge.Location = new Point(16, 14); streamOverlay.Anchor = Forms.AnchorStyles.None; screenSurface.Resize += (_, _) => streamOverlay.Location = new Point(Math.Max(0, (screenSurface.Width - streamOverlay.Width) / 2), Math.Max(0, (screenSurface.Height - streamOverlay.Height) / 2));
+        screenSurface.Controls.Add(screen); screenSurface.Controls.Add(liveBadge); screenSurface.Controls.Add(streamOverlay); liveBadge.BringToFront(); streamOverlay.BringToFront(); liveBadge.Location = new Point(16, 14); streamOverlay.Anchor = Forms.AnchorStyles.None; screenSurface.Resize += (_, _) => streamOverlay.Location = new Point(Math.Max(0, (screenSurface.Width - streamOverlay.Width) / 2), Math.Max(0, (screenSurface.Height - streamOverlay.Height) / 2));
         var view = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 2 }; view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100)); view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 42)); view.Controls.Add(screenSurface, 0, 0);
         var bottom = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.LeftToRight, WrapContents = false, Padding = new Forms.Padding(0, 8, 0, 0) }; remoteText.Width = 390; remoteText.Height = 32; bottom.Controls.Add(remoteText); bottom.Controls.Add(typeText); bottom.Controls.Add(enterKey); bottom.Controls.Add(streamStatus); view.Controls.Add(bottom, 0, 1);
         page.Controls.Add(view); page.Controls.Add(top); return page;
@@ -724,6 +724,12 @@ public sealed class MainForm : Forms.Form
         rolePages.SelectedIndex = index;
         controllerNavCaption.Visible = index == 1; navConnection.Visible = index == 1; navScreen.Visible = index == 1; navProcesses.Visible = index == 1; navFiles.Visible = index == 1; navDiagnostics.Visible = index == 1;
         if (index == 0 && agent == null && !quitting) { StartAgent(); _ = PrepareAgentAsync(); }
+        if (index == 1 && !supportSession)
+        {
+            footerMessage = "Choisissez un PC ou saisissez son adresse IP";
+            footerDetail = "Fermer la fenêtre conserve l’application dans la zone de notification";
+            RefreshFooter();
+        }
         UpdateHeader();
     }
 
