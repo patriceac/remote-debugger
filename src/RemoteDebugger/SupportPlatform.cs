@@ -8,6 +8,7 @@ using RemoteDebugger.Core;
 
 namespace RemoteDebugger;
 
+[System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<SupportPlatformAvailability>))]
 public enum SupportPlatformAvailability
 {
     NotProvisioned,
