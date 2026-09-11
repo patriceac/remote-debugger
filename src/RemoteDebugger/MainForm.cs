@@ -684,6 +684,11 @@ public sealed class MainForm : Forms.Form
         {
             headerTitle.Text = "Donner le contrôle"; headerSubtitle.Text = Environment.MachineName + " · Assistance sur le réseau privé";
         }
+        else if (supportSession && client != null)
+        {
+            headerTitle.Text = selectedPeer?.Name ?? client.Connection.Host;
+            headerSubtitle.Text = client.Connection.Host + " · Session d’assistance";
+        }
         else if (selectedPeer != null)
         {
             headerTitle.Text = selectedPeer.Name; headerSubtitle.Text = selectedPeer.Host + " · Session d’assistance";
