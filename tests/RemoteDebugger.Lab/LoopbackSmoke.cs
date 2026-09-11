@@ -359,7 +359,8 @@ internal sealed partial class LabForm
     {
         bool overflowOpened = false;
         string failure = "";
-        for (int attempt = 0; attempt < 2; attempt++)
+        var deadline = Stopwatch.StartNew();
+        while (deadline.Elapsed < TimeSpan.FromSeconds(8))
         {
             AutomationElement[] icons = FindSystemTrayIcons();
             if (icons.Length == 0 && !overflowOpened)
@@ -376,15 +377,22 @@ internal sealed partial class LabForm
                     }
                     catch (Exception) { }
                 }
-                if (overflowOpened) continue;
-                failure = "tray_icon_and_overflow_not_found";
+                if (!overflowOpened) failure = "tray_icon_and_overflow_not_found";
             }
-            if (icons.Length == 0) break;
+            if (icons.Length == 0)
+            {
+                // Windows 11 creates the overflow XAML island and its
+                // NotifyItemIcon asynchronously.  Refresh the Explorer
+                // roots on each poll instead of treating one empty query as
+                // proof that the tray icon is absent.
+                await Task.Delay(250, stop.Token);
+                continue;
+            }
             foreach (var icon in icons)
             {
                 string iconName = Safe(() => icon.Current.Name);
                 if (!RightClickTrayIcon(icon)) continue;
-                for (int n = 0; n < 20; n++)
+                while (deadline.Elapsed < TimeSpan.FromSeconds(8))
                 {
                     var open = FindLoopbackTrayMenuItem("Ouvrir") ?? FindLoopbackTrayMenuItem("Open");
                     if (open != null) return new TrayContext(open, iconName, overflowOpened);
@@ -392,7 +400,7 @@ internal sealed partial class LabForm
                 }
                 failure = "tray_context_menu_missing";
             }
-            break;
+            await Task.Delay(250, stop.Token);
         }
         DumpTrayDiagnostics(failure.Length == 0 ? "tray_lookup_failed" : failure);
         return new TrayContext(null, "", overflowOpened);
