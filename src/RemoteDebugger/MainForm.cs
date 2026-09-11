@@ -727,7 +727,7 @@ public sealed class MainForm : Forms.Form
         if (index == 1 && !supportSession)
         {
             footerMessage = "Choisissez un PC ou saisissez son adresse IP";
-            footerDetail = "Fermer la fenêtre conserve l’application dans la zone de notification";
+            footerDetail = "Fermeture : zone de notification";
             RefreshFooter();
         }
         UpdateHeader();
