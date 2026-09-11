@@ -1183,6 +1183,29 @@ internal sealed partial class LabForm : Forms.Form
             else
                 Fail("controller.code_enter_pairing", "Entering the six-digit code and pressing Enter starts the authenticated pairing flow before the rollback handoff", new { pairText, outcomeText, codeLength = code.Length, connected, visible = UiTexts().Take(35).ToArray(), rollbackHandoff = true });
         }
+        else if (IsUpdateVariant)
+        {
+            // Updating can transfer and stage a large replacement after PAKE
+            // succeeds. Record the actual status transition from Enter first,
+            // then give the managed handoff a bounded 240 seconds to become
+            // connected. The later binary-hash assertion remains required.
+            bool pairingAttempted = await WaitForTextAsync("connectionStatus", IsPairingAttempt, 30);
+            string transitionText = TryValue("connectionStatus");
+            if (pairingAttempted)
+                Pass("controller.code_enter_pairing", "Entering the six-digit code and pressing Enter starts authenticated update pairing", new { pairText, transitionText, codeLength = code.Length, updateVariant });
+            else
+                Fail("controller.code_enter_pairing", "Entering the six-digit code and pressing Enter starts authenticated update pairing", new { pairText, transitionText, codeLength = code.Length, updateVariant, visible = UiTexts().Take(35).ToArray() });
+
+            var connectedWait = Stopwatch.StartNew();
+            connected = await WaitForTextAsync("connectionStatus", IsConnected, 240);
+            double connectedWaitedSeconds = connectedWait.Elapsed.TotalSeconds;
+            string connectedText = TryValue("connectionStatus");
+            if (connected)
+                Pass("controller.code_enter_connected", "The update pairing flow reaches a connected state after the staged handoff", new { transitionText, connectedText, updateVariant, waitedSeconds = connectedWaitedSeconds, timeoutSeconds = 240 });
+            else
+                Fail("controller.code_enter_connected", "The update pairing flow reaches a connected state after the staged handoff", new { transitionText, connectedText, updateVariant, waitedSeconds = connectedWaitedSeconds, timeoutSeconds = 240, visible = UiTexts().Take(35).ToArray() });
+            if (!connected) throw new InvalidOperationException("Controller did not reach connected state after update pairing and handoff.");
+        }
         else
         {
             connected = await WaitForTextAsync("connectionStatus", IsConnected, 60);
