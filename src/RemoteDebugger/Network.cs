@@ -313,6 +313,7 @@ public sealed class AgentServer : IDisposable
                                     session.SetBinaryMatched(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
                                     if (Session.BinaryMatched) { resumeStore.Clear(); resumed = null; }
                                 }
+                                if (r.Operation == "update.cancel" && reply.Ok) { resumeStore.Clear(); resumed = null; }
                             }
                             await Wire.WriteAsync(tls, reply, timeout.Token);
                             updates.NotifyReplySent(r, reply);

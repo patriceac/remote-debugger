@@ -8,14 +8,17 @@ Run the same Release executable on the controlling PC. It talks to the interacti
 ./RemoteDebugger.exe cli discover
 ```
 
-The reply contains `ok` and `peers` with `name`, `host`, `port`, `fingerprint`. Discovery is not authentication. Obtain and compare the fingerprint from **Donner le contrôle** on the remote PC, then open its temporary pairing code.
+The reply contains `ok` and `peers` with `name`, `host`, `port`, `fingerprint`. Discovery is an untrusted hint. Obtain the current six-digit code from **Donner le contrôle** on the receiving PC. Code-authenticated pairing binds the TLS certificate; manual fingerprint confirmation is not required.
 
 ```powershell
 # Supply the code on standard input; do not embed it in a process argument or log.
-$pairingCode | ./RemoteDebugger.exe cli pair --host 192.168.1.42 --fingerprint VERIFIED_64_HEX_CHARACTERS
+$pairingCode | ./RemoteDebugger.exe cli pair --host 192.168.1.42
+./RemoteDebugger.exe cli sync
 ```
 
-The pairing token is never printed. GUI and CLI share `%LOCALAPPDATA%\RemoteDebugger\controller.connection`, encrypted for the Windows user. `--connection FILE` selects a different DPAPI-protected controller profile. `--port` can be specified when pairing; the GUI uses 45832. An IP change requires discovering the endpoint again; the saved controller can be updated by pairing through the GUI. Certificate identity must still be compared.
+The pairing token is never printed. GUI and CLI share `%LOCALAPPDATA%\RemoteDebugger\controller.connection`, encrypted for the Windows user. `--connection FILE` selects a different DPAPI-protected controller profile. `--port` can be specified when pairing; the GUI uses 45832. An optional `--fingerprint SHA256` enforces a previously verified certificate pin. `sync` uses the executable actually running this CLI as the required agent binary, including downgrades and different builds with the same version. Normal support operations reject mismatched binaries. A normal agent restart requires fresh pairing; only a bounded planned-update grant resumes automatically.
+
+`cli platform-status` reports installed broker readiness and the provisioning receipt path. `cli platform-provision` performs the one-time administrator setup and may require local Windows consent.
 
 ## Structured call
 
@@ -38,7 +41,7 @@ Write an ordinary UTF-8 JSON request, for example `status.json`:
 `id` is optional; when supplied it must be a UUID. `timeoutSeconds` is clamped to 1–300. The response is one JSON object:
 
 ```json
-{"id":"c8b30df4-bd10-4cba-99fc-ae8114fe87be","ok":true,"data":{"version":"0.1.0"},"error":null,"message":null}
+{"id":"c8b30df4-bd10-4cba-99fc-ae8114fe87be","ok":true,"data":{"version":"0.2.0"},"error":null,"message":null}
 ```
 
 Exit codes: **0** success, **1** remote operation failure, **2** transport/input/cancellation failure. Error codes include `access_denied`, `pairing_denied`, `permission_denied`, `operation_failed`, `cancelled_or_timeout`, `id_conflict`, and `session_limit`. Preserve the JSON message for the operator. Do not report command success without checking both RPC `ok` and `data.exitCode`.
@@ -71,14 +74,16 @@ Ctrl+C attempts cancellation of an in-flight `call`. Another controller process 
 | `services` | `{}` | Service names, states and start types as JSON in `stdout` |
 | `events` | `{"log":"Application","count":30}` | Application/System events, 1–100, JSON in `stdout` |
 | `command` | `{"file":"whoami.exe","arguments":[]}` | Exit code and bounded stdout/stderr; no implicit shell |
-| `maintenance.status` | `{}` | Whether the locally approved admin session is active, and its expiry |
-| `maintenance.session` | Same as command | Admin command after one local UAC approval for a visible one-hour session |
-| `maintenance.elevated` | Same as command | Alternative helper requiring local UAC approval for every call |
+| `maintenance.status` | `{}` | Actual administrator maintenance availability for this support session |
+| `maintenance.session` | Same as command | Administrator command through the provisioned local broker |
+| `maintenance.elevated` | Same as command | Compatibility operation using the provisioned broker |
 | `debug.attach` | `{"pid":1234,"seconds":3}` | Real native attach, breakpoint, events, detach; 1–30 seconds |
 | `debug.dump` | `{"pid":1234}` | MiniDumpWriteDump output under workspace/diagnostics |
 | `history` | `{}` | Last 200 intervention metadata records with relevant version evidence |
 | `cancel` | `{"id":"ORIGINAL-UUID"}` | Request cancellation of a running operation |
-| `revoke` | `{}` | Revoke the controller, cancel work, require local pairing again |
+| `session.heartbeat` | `{}` | Current session, actual binary hashes, maintenance and agent PID |
+| `session.disconnect` | `{}` | Release input and begin the ten-minute reconnect deadline |
+| `session.end` | `{}` | Cancel update replacement, end maintenance and access, then exit the agent |
 
 CPU values are percentages of total logical-processor capacity, not a single core. `null` means unavailable/newly created/inaccessible, never zero. Check `sampleStartUtc`, `sampleEndUtc` and `intervalMs`. A process without a main window has no GUI response state (`responding: null`). System and process requests are independent samples.
 

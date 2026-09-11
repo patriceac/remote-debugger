@@ -1,39 +1,27 @@
 # Getting started
 
-The application currently uses French interface labels. This guide keeps those labels so you can find the corresponding controls.
+The interface uses French labels. Use the same signed Release on both Windows x64 PCs.
 
-1. Copy `RemoteDebugger.exe` to both Windows x64 PCs.
-2. On the remote PC, open **Donner le contrôle** (give control). On first use, click **Autoriser le réseau privé…** (allow the private network) and approve UAC locally. This allows connections only from the local subnet on the Private network profile. Then click **Démarrer l’agent** (start the agent). The agent uses TCP 45832 and UDP 45833. No router configuration or Internet port forwarding is required. If Windows displays a broader public/private network prompt, cancel it and use the dedicated button.
-3. Click **Ouvrir l’appairage** (open pairing). An eight-digit code and the TLS certificate fingerprint appear.
-4. On the controlling PC, open **Prendre le contrôle** (take control), then **Découvrir les PC** (discover PCs). Select the remote PC. If Wi-Fi blocks discovery, enter its IP address directly.
-5. Compare all 64 fingerprint characters with the value shown on the remote PC, check the confirmation box, enter the code and click **Appairer** (pair). The code expires after three minutes or five incorrect attempts. Only one controller can be paired at a time.
+1. Launch Remote Debugger on the receiving PC. **Donner le contrôle** is the default: the agent starts automatically and displays a six-digit code and its remaining validity. Leading zeroes are significant. The code changes every five minutes until paired.
+2. On first use, **Activer sur ce PC** performs the one-time Windows administrator setup. It installs the protected support application and a local broker, enrolls the publisher, and relaunches the managed copy. Thereafter Private-network authorization and administrator maintenance are automatic. The application does not change a Public network to Private.
+3. On the controlling PC choose **Prendre le contrôle**. Nearby PCs appear automatically. Select the receiving PC, or enter its IP address if discovery is unavailable.
+4. Enter the receiving PC's code and press Enter or **Connecter**. Pairing authenticates the encrypted connection using the code, and subsequent connections pin that identity.
+5. Wait for binary synchronization. If necessary, the agent silently receives and restarts into the exact signed executable running on the controller. A brief planned restart does not require another code. The controller then opens **Écran distant** automatically.
 
-The connection is saved for your Windows account. **Couper l’agent** (stop the agent) or closing its window ends access and cancels active operations. Applications already launched remain open. **Révoquer l’accès** (revoke access) invalidates the controller and requires pairing again. No automatic startup is installed.
+The agent uses TCP 45832 and UDP 45833 on the local subnet. No router configuration, port forwarding, or Internet service is needed.
 
-## View and control the remote desktop
+## During support
 
-In **Écran distant** (remote screen), start the live stream. It targets 5 frames per second; the status bar shows the measured frame rate and bandwidth. Monitor indices start at 0; -1 shows the entire virtual desktop. Stop streaming before changing monitors.
+The header shows connection state. **EN DIRECT** appears only while fresh frames arrive. The viewer enables mouse and keyboard by default; click inside it to direct input to the remote desktop. Moving focus away returns keyboard input to the local PC. Pause, lost connection, target changes, and termination release held input. The monitor selector changes the viewed desktop. Secure-desktop prompts and Ctrl+Alt+Delete remain Windows-controlled.
 
-Enable **Souris et clavier distants** (remote mouse and keyboard), then click inside the image. Pointer movement, buttons, dragging, scrolling and keys are forwarded to the remote PC. Clicking outside the image returns keyboard control to the local PC. Coordinates follow the remote desktop geometry even when the image is scaled; a resolution change invalidates old coordinates. Key combinations intercepted locally by Windows can be sent through `ui.key`. Ctrl+Alt+Delete and the UAC secure desktop are not supported.
+**Processus** loads CPU, memory and process measurements after connection. Click a column header to sort; click again to reverse direction. Unavailable values remain unavailable instead of appearing as zero. CPU values represent total logical-processor capacity. **Fichiers** loads the remote workspace and storage information automatically, supports typed sorting, and keeps the current directory separate from the selected file.
 
-**Actualiser l’écran** (refresh the screen) captures a new image on the remote PC. Codex can request the same fresh screenshot through the CLI independently of the live viewer.
+The controller's close button hides it to the system tray and keeps the session running. Its tray menu offers Open, End support, and Exit. **Terminer l’assistance** is the explicit session-ending action on both PCs. Closing the receiving agent ends it. A lost controller starts a ten-minute reconnect countdown; reconnecting cancels the countdown. Expiry ends the agent, cancels support work, closes administrator maintenance, and releases the temporary sleep request. Saved Windows power settings are never modified.
 
-## Deploy and repeat
+## Files and diagnostics
 
-In **Fichiers** (files), use a separate directory for each version, such as `deployments/MyApp/1.2.3`, then upload a file or a complete folder. The destination is beneath `%LOCALAPPDATA%\RemoteDebugger\workspace` on the remote PC. Writes are verified with SHA-256. After an interruption, repeating the upload resumes accepted chunks if the source file is unchanged.
+Use versioned upload destinations such as `deployments/MyApp/1.2.3`. Upload writes stay beneath the remote workspace and use resumable chunks plus complete SHA-256 verification. File reads and downloads may use paths accessible to the receiving Windows user. A changed download fails verification instead of replacing the destination with unverified data.
 
-In **Actions et diagnostics** (actions and diagnostics), `start` launches the specified relative or absolute path and returns a PID plus the binary hash and version. Use `process.info` to verify the executable associated with the running process. `stop` requests a graceful close; `mode: "force"` explicitly terminates the process tree. `restart` applies to processes launched by the current agent.
+**Diagnostics** exposes structured operations, bounded command output, process launch/stop/restart, event and service information, native debugger attachment, minidumps, and intervention history. `maintenance.session` runs through the administrator broker for the paired session. `maintenance.status` reports actual availability. No one-hour maintenance button or recurring elevation dialog is required after setup.
 
-In **Processus & système** (processes and system), inspect CPU, memory and volumes. Selecting a process sets the target PID. Unavailable values are not displayed as zero. Measurements are timestamped, and CPU percentages represent a share of total logical-processor capacity.
-
-To retrieve a log, select its path in **Fichiers**, then choose **Récupérer un fichier** (download a file). A file changed during download causes a hash verification error.
-
-## Debugging and maintenance
-
-`debug.attach` uses the Windows debugging API to attach, request a breakpoint, collect events and detach. `debug.dump` produces a minidump that can be downloaded. For a full interactive session, deploy an external debugger and launch it with `start`; its interface can be used through the live viewer. Remote Debugger does not include a symbol analysis engine.
-
-`command` launches an executable with explicit arguments and returns output and an exit code, with timeout and cancellation support. To prepare a maintenance session, click **Maintenance admin (1 h)…** on the agent and approve UAC once locally with the same administrator account. A separate window shows the remaining time. The controller can then issue `maintenance.session` commands for up to one hour; `maintenance.status` reports whether authorization is active. Closing the helper, stopping the agent or revoking access cancels the session and its commands. No permanent service is installed.
-
-`maintenance.elevated` remains a per-operation alternative: every call requires its own local UAC confirmation on the remote PC. Personal confirmations, the secure desktop and elevation under another account require local interaction. See [the validation record](VALIDATION.md) for the scope of elevation testing.
-
-The history records operations, timestamps, success or failure and relevant binary identities. It does not retain command arguments, file contents, keystrokes, images or pairing codes. Requested output and dumps may contain sensitive information; select what you retrieve and share.
+See [the CLI reference](CLI.md) for automation and [the validation record](VALIDATION.md) for the behavior actually exercised in isolated Release tests.
