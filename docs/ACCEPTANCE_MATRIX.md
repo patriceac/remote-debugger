@@ -14,6 +14,21 @@ The normal network run is two concurrent Release requests in the same
 ./scripts/Test-HyperV.ps1 -Role Both -Scope Runtime -Cohort remote-debugger-acceptance
 ```
 
+The bounded single-guest smoke run exercises the independent product flow when
+the guest cannot provide secure-desktop consent for provisioning. It launches
+the signed Release agent and controller inside one disconnected guest, binds
+both to loopback, and still requires real code entry, exact-byte sync, fresh
+frame/live telemetry, resources, input, regression, tray, and termination
+evidence:
+
+```powershell
+./scripts/Test-HyperV.ps1 -Role Loopback -Scope Runtime -UpdateVariant None -Cohort remote-debugger-acceptance
+```
+
+Loopback results explicitly block LAN discovery, Private firewall, installed
+broker, and UAC claims. Those gates remain owned by the two-VM `Both` run; the
+loopback run does not turn local transport into LAN evidence.
+
 The signed update fixtures are built separately and are used only by the
 provisioned update runs:
 
@@ -63,7 +78,8 @@ The Lab uses native UI Automation and these IDs from `docs/UI_DESIGN.md`:
 | Shared connection state | `connectionStatus` | Text plus connected/disconnected state; colour is not used alone |
 | Session termination | `terminateSession` | Ends support and releases input/session state |
 | Remote screen | `remoteScreen` | Fresh displayed frame after pairing |
-| Stream state | `streamStatus` | `Live` only after a fresh frame; actual fps/bitrate/latency |
+| Live badge | `liveBadge` | Visible `EN DIRECT` badge only after a fresh frame is presented |
+| Stream state | `streamStatus` | Actual frame telemetry (fps/bitrate/capture latency) after a fresh frame |
 | Process table | `processList` | Auto-loaded rows and sortable numeric columns |
 | File table | `remoteFiles` | Auto-loaded remote workspace rows and sortable columns |
 | Resource refresh | `refreshResources` | Explicit refresh remains available |
@@ -113,8 +129,8 @@ prompt or a guessed service as proof.
 | `controller.no_fingerprint_gate` | No fingerprint checkbox is required | No `fingerprintVerified` control or fingerprint verification step; successful pair proves the normal path | Runtime |
 | `controller.sync_before_live` | Agent matches the controller’s exact Release binary before live viewing | Controller and remote status hashes are equal; synchronization state is complete before `Live` | Runtime |
 | `controller.sync_reconnect` | Restart/reconnect preserves pairing | Agent restart is induced through the test coordination channel; controller becomes connected again without a new code | Runtime |
-| `controller.sync_rollback` | Failed update leaves a recoverable previous agent | Mismatched Release fixture, interrupted update, rollback receipt, and reconnect with the previous hash | Provisioned-fixture |
-| `controller.live_auto_start` | Direct viewing starts automatically after pairing | `remoteScreen` displays a fresh frame and `streamStatus` enters `Live` without clicking Start | Runtime |
+| `controller.sync_rollback` | Failed update leaves a recoverable previous agent | Mismatched Release fixture, interrupted update, rollback receipt, and reconnect with the previous hash; the normal pre-live hash-match gate is intentionally not applicable while the replacement is being interrupted | Provisioned-fixture |
+| `controller.live_auto_start` | Direct viewing starts automatically after pairing | `remoteScreen` receives a fresh frame, `liveBadge` says `EN DIRECT`, and `streamStatus` reports actual frame telemetry without clicking Start | Runtime |
 | `controller.input_default` | Mouse and keyboard are enabled by default and release on focus loss | `remoteInputEnabled` is on; fixture receives a real mapped click/key; release evidence is recorded | Runtime |
 | `controller.connection_pill` | Connection status is truthful and persistent | `connectionStatus` says Connected with the remote name only while heartbeat/frame evidence is current | Runtime |
 | `controller.close_to_tray` | Close keeps the controller alive in the tray | Main window closes, controller process remains alive, heartbeat still succeeds, and tray Open restores it | Runtime |

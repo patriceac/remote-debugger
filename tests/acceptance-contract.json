@@ -25,6 +25,7 @@
     "processList": "processList",
     "remoteFiles": "remoteFiles",
     "remoteScreen": "remoteScreen",
+    "liveBadge": "liveBadge",
     "streamStatus": "streamStatus",
     "refreshResources": "refreshResources",
     "browseFiles": "browseFiles"
