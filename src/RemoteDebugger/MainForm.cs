@@ -203,6 +203,8 @@ public sealed class MainForm : Forms.Form
 
     private void BuildShell()
     {
+        shell.Padding = Forms.Padding.Empty;
+        shell.BackColor = Canvas;
         shell.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Absolute, 208));
         shell.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
         shell.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 84));
@@ -222,18 +224,18 @@ public sealed class MainForm : Forms.Form
 
     private void BuildRail()
     {
-        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Forms.Padding(12, 0, 12, 0), BackColor = Rail };
+        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Forms.Padding(12, 0, 12, 8), BackColor = Rail };
         layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 90));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 96));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 112));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 74));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 46));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 44));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 62));
 
         var brand = new Forms.Panel { Dock = Forms.DockStyle.Fill };
-        var mark = new Forms.Label { Text = "RD", AutoSize = false, Width = 34, Height = 34, TextAlign = ContentAlignment.MiddleCenter, BackColor = Teal, ForeColor = Color.White, Font = new Font("Segoe UI", 10, FontStyle.Bold), Location = new Point(10, 27) };
+        var mark = new Forms.Label { Text = "RD", AutoSize = false, Width = 34, Height = 34, TextAlign = ContentAlignment.MiddleCenter, BackColor = Teal, ForeColor = Color.White, Font = new Font("Segoe UI", 10, FontStyle.Bold), Location = new Point(10, 25) };
         mark.Region = RoundedRegion(mark.Size, 6);
-        var brandName = new Forms.Label { Text = "Remote\r\nDebugger", AutoSize = false, Width = 110, Height = 42, Location = new Point(54, 25), ForeColor = Color.White, Font = new Font("Segoe UI", 14, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft };
+        var brandName = new Forms.Label { Text = "Remote\nDebugger", AutoSize = false, Width = 128, Height = 54, Location = new Point(54, 18), ForeColor = Color.White, Font = new Font("Segoe UI", 14, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft };
         brand.Controls.Add(mark); brand.Controls.Add(brandName);
         layout.Controls.Add(brand, 0, 0);
 
@@ -247,8 +249,8 @@ public sealed class MainForm : Forms.Form
         layout.Controls.Add(work, 0, 2);
 
         var local = new Forms.Panel { Dock = Forms.DockStyle.Fill };
-        var machine = new Forms.Label { Text = Environment.MachineName, AutoSize = true, ForeColor = RailSecondary, Font = new Font("Segoe UI", 9.5F), Location = new Point(12, 10), MaximumSize = new Size(180, 0) };
-        var version = new Forms.Label { Text = "Remote Debugger · " + (typeof(MainForm).Assembly.GetName().Version?.ToString(3) ?? "0.2"), AutoSize = true, ForeColor = Color.FromArgb(116, 143, 154), Font = new Font("Segoe UI", 8.5F), Location = new Point(12, 34) };
+        var machine = new Forms.Label { Text = Environment.MachineName, AutoSize = false, Width = 180, Height = 20, ForeColor = RailSecondary, Font = new Font("Segoe UI", 9.5F), Location = new Point(12, 8), AutoEllipsis = true };
+        var version = new Forms.Label { Text = "Remote Debugger · " + (typeof(MainForm).Assembly.GetName().Version?.ToString(3) ?? "0.2"), AutoSize = false, Width = 180, Height = 20, ForeColor = Color.FromArgb(116, 143, 154), Font = new Font("Segoe UI", 8.5F), Location = new Point(12, 32), AutoEllipsis = true };
         local.Controls.Add(machine); local.Controls.Add(version); layout.Controls.Add(local, 0, 4);
         rail.Controls.Add(layout);
     }
@@ -258,12 +260,14 @@ public sealed class MainForm : Forms.Form
         var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 1, Padding = new Forms.Padding(28, 0, 28, 0) };
         layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
         layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
-        var titles = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = new Forms.Padding(0, 15, 0, 0) };
+        var titles = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = new Forms.Padding(0, 14, 0, 0) };
         titles.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 34)); titles.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 24));
         headerTitle.Font = new Font("Segoe UI", 22, FontStyle.Bold); headerSubtitle.Font = new Font("Segoe UI", 10.5F);
         titles.Controls.Add(headerTitle, 0, 0); titles.Controls.Add(headerSubtitle, 0, 1);
-        var actions = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.LeftToRight, WrapContents = false, Anchor = Forms.AnchorStyles.Right, AutoSize = true, Padding = new Forms.Padding(0, 23, 0, 0) };
-        statusPill.Controls.Add(statusDot); statusPill.Controls.Add(statusLabel); statusPill.Region = RoundedRegion(statusPill.Size, 16);
+        var actions = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.LeftToRight, WrapContents = false, Anchor = Forms.AnchorStyles.Right, AutoSize = true, Padding = new Forms.Padding(0, 20, 0, 0) };
+        statusPill.Width = 200; statusPill.Height = 30; statusPill.Margin = new Forms.Padding(0, 3, 12, 0);
+        terminateSession.Margin = Forms.Padding.Empty;
+        statusPill.Controls.Add(statusDot); statusPill.Controls.Add(statusLabel); statusPill.Region = RoundedRegion(statusPill.Size, 15);
         actions.Controls.Add(statusPill); actions.Controls.Add(terminateSession);
         layout.Controls.Add(titles, 0, 0); layout.Controls.Add(actions, 1, 0);
         header.Controls.Add(layout);
@@ -275,39 +279,66 @@ public sealed class MainForm : Forms.Form
         var line = new Forms.Panel { Dock = Forms.DockStyle.Top, Height = 1, BackColor = Divider }; footer.Controls.Add(line);
         var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
         layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 58)); layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 42));
+        footerLeft.Margin = Forms.Padding.Empty; footerRight.Margin = Forms.Padding.Empty;
+        footerLeftFlow.Padding = new Forms.Padding(24, 8, 0, 0); footerRightFlow.Padding = new Forms.Padding(0, 8, 24, 0);
         footerLeftFlow.Controls.Add(footerLeft); footerRightFlow.Controls.Add(footerRight); layout.Controls.Add(footerLeftFlow, 0, 0); layout.Controls.Add(footerRightFlow, 1, 0); footer.Controls.Add(layout);
     }
 
     private void BuildAgentPage()
     {
         var page = new PagePanel("Donner le contrôle") { BackColor = Canvas, Padding = new Forms.Padding(0) };
-        var content = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 1, Padding = new Forms.Padding(64, 74, 28, 40) };
-        content.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Absolute, 620)); content.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
-        content.Controls.Add(BuildAgentContent(), 0, 0);
+        var content = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 1, Padding = new Forms.Padding(28, 48, 28, 20) };
+        content.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
+        var heroHost = new Forms.Panel { Dock = Forms.DockStyle.Fill, BackColor = Canvas };
+        var hero = BuildAgentContent(); hero.Dock = Forms.DockStyle.Top; hero.Width = 760; hero.Anchor = Forms.AnchorStyles.Top | Forms.AnchorStyles.Left;
+        heroHost.Controls.Add(hero); content.Controls.Add(heroHost, 0, 0);
         page.Controls.Add(content); rolePages.TabPages.Add(page);
     }
 
     private Forms.Control BuildAgentContent()
     {
-        var panel = new Forms.Panel { Dock = Forms.DockStyle.Fill };
-        var flow = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
-        flow.Controls.Add(Eyebrow("CODE DE CONNEXION"));
-        flow.Controls.Add(new Forms.Label { Text = "Partagez ce code", AutoSize = true, Font = new Font("Segoe UI", 32, FontStyle.Bold), ForeColor = PrimaryText, Margin = new Forms.Padding(0, 11, 0, 0) });
-        flow.Controls.Add(new Forms.Label { Text = "Saisissez-le sur le PC qui vous assiste.", AutoSize = true, Font = new Font("Segoe UI", 13), ForeColor = SecondaryText, Margin = new Forms.Padding(2, 3, 0, 0) });
+        var panel = new Forms.Panel { Dock = Forms.DockStyle.Top, Width = 760, AutoSize = true, AutoSizeMode = Forms.AutoSizeMode.GrowAndShrink };
+        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Top, Width = 760, AutoSize = true, AutoSizeMode = Forms.AutoSizeMode.GrowAndShrink, ColumnCount = 1, RowCount = 11, Margin = Forms.Padding.Empty, Padding = Forms.Padding.Empty };
+        layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 20));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 50));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 26));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 78));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 8));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 24));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 38));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 90));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 66));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 30));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
 
-        var codeRow = new Forms.FlowLayoutPanel { Width = 620, Height = 88, WrapContents = false, FlowDirection = Forms.FlowDirection.LeftToRight, Margin = new Forms.Padding(-5, 35, 0, 0) };
-        agentPairCode.Margin = new Forms.Padding(0, 0, 14, 0); codeRow.Controls.Add(agentPairCode); codeRow.Controls.Add(copyAgentCode); flow.Controls.Add(codeRow);
-        pairingCountdown.Width = 480; pairingCountdown.Margin = new Forms.Padding(0, 2, 0, 0); flow.Controls.Add(pairingCountdown);
-        pairingCountdownText.Margin = new Forms.Padding(0, 8, 0, 0); flow.Controls.Add(pairingCountdownText);
+        var eyebrow = Eyebrow("CODE DE CONNEXION"); eyebrow.Dock = Forms.DockStyle.Fill; layout.Controls.Add(eyebrow, 0, 0);
+        var title = new Forms.Label { Text = "Partagez ce code", AutoSize = false, Dock = Forms.DockStyle.Fill, Font = new Font("Segoe UI", 32, FontStyle.Bold), ForeColor = PrimaryText, TextAlign = ContentAlignment.MiddleLeft };
+        layout.Controls.Add(title, 0, 1);
+        var subtitle = new Forms.Label { Text = "Saisissez-le sur le PC qui vous assiste.", AutoSize = false, Dock = Forms.DockStyle.Fill, Font = new Font("Segoe UI", 13), ForeColor = SecondaryText, TextAlign = ContentAlignment.MiddleLeft };
+        layout.Controls.Add(subtitle, 0, 2);
 
-        var divider = new Forms.Panel { Width = 620, Height = 1, BackColor = Divider, Margin = new Forms.Padding(0, 38, 0, 22) }; flow.Controls.Add(divider);
-        var states = new Forms.TableLayoutPanel { Width = 620, Height = 126, ColumnCount = 3, RowCount = 3, Margin = new Forms.Padding(0) };
+        var codeRow = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, Height = 78, WrapContents = false, FlowDirection = Forms.FlowDirection.LeftToRight, Padding = new Forms.Padding(0, 10, 0, 0), Margin = Forms.Padding.Empty };
+        agentPairCode.Margin = new Forms.Padding(0, 0, 14, 0); copyAgentCode.Margin = new Forms.Padding(0, 4, 0, 0); codeRow.Controls.Add(agentPairCode); codeRow.Controls.Add(copyAgentCode); layout.Controls.Add(codeRow, 0, 3);
+        pairingCountdown.Width = 480; pairingCountdown.Height = 4; pairingCountdown.Margin = new Forms.Padding(0, 2, 0, 0); layout.Controls.Add(pairingCountdown, 0, 4);
+        pairingCountdownText.AutoSize = false; pairingCountdownText.Dock = Forms.DockStyle.Fill; pairingCountdownText.Margin = Forms.Padding.Empty; layout.Controls.Add(pairingCountdownText, 0, 5);
+
+        var divider = new Forms.Panel { Dock = Forms.DockStyle.Top, Height = 1, BackColor = Divider, Margin = new Forms.Padding(0, 18, 0, 0) }; layout.Controls.Add(divider, 0, 6);
+        var states = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, Height = 90, ColumnCount = 3, RowCount = 3, Margin = Forms.Padding.Empty };
         states.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Absolute, 22)); states.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 65)); states.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 35));
-        AddAgentStateRow(states, 0, "Réseau privé", agentNetworkState); AddAgentStateRow(states, 1, "Mise en veille", agentSleepState); AddAgentStateRow(states, 2, "Maintenance admin", agentMaintenanceState); flow.Controls.Add(states);
-        setupNotice.Controls.Add(setupNoticeText); setupNotice.Controls.Add(preparePlatform); preparePlatform.Margin = new Forms.Padding(12, 0, 0, 0); setupNotice.Width = 620; flow.Controls.Add(setupNotice);
-        agentState.Margin = new Forms.Padding(0, 22, 0, 0); flow.Controls.Add(agentState);
-        agentSessionNote.Margin = new Forms.Padding(0, 9, 0, 0); flow.Controls.Add(agentSessionNote);
-        panel.Controls.Add(flow);
+        for (int row = 0; row < 3; row++) states.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 33.333F));
+        AddAgentStateRow(states, 0, "Réseau privé", agentNetworkState); AddAgentStateRow(states, 1, "Mise en veille", agentSleepState); AddAgentStateRow(states, 2, "Maintenance admin", agentMaintenanceState); layout.Controls.Add(states, 0, 7);
+
+        setupNotice.AutoSize = false; setupNotice.Dock = Forms.DockStyle.Fill; setupNotice.Width = 760; setupNotice.Height = 66; setupNotice.Padding = new Forms.Padding(8); setupNotice.Controls.Clear();
+        var noticeLayout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Forms.Padding.Empty, Padding = Forms.Padding.Empty };
+        noticeLayout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100)); noticeLayout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Absolute, 160));
+        setupNoticeText.AutoSize = false; setupNoticeText.Dock = Forms.DockStyle.Fill; setupNoticeText.MaximumSize = Size.Empty; setupNoticeText.Margin = Forms.Padding.Empty; setupNoticeText.TextAlign = ContentAlignment.MiddleLeft;
+        preparePlatform.Dock = Forms.DockStyle.Top; preparePlatform.Margin = new Forms.Padding(12, 4, 0, 0);
+        noticeLayout.Controls.Add(setupNoticeText, 0, 0); noticeLayout.Controls.Add(preparePlatform, 1, 0); setupNotice.Controls.Add(noticeLayout); layout.Controls.Add(setupNotice, 0, 8);
+
+        agentState.AutoSize = false; agentState.Dock = Forms.DockStyle.Fill; agentState.Margin = Forms.Padding.Empty; agentState.TextAlign = ContentAlignment.MiddleLeft; layout.Controls.Add(agentState, 0, 9);
+        agentSessionNote.Dock = Forms.DockStyle.Top; agentSessionNote.MaximumSize = new Size(760, 0); agentSessionNote.Margin = Forms.Padding.Empty; layout.Controls.Add(agentSessionNote, 0, 10);
+        panel.Controls.Add(layout);
         return panel;
     }
 
@@ -578,7 +609,7 @@ public sealed class MainForm : Forms.Form
 
     private void ShowSetupNotice(string message)
     {
-        setupNoticeText.Text = string.IsNullOrWhiteSpace(message) ? "Une autorisation Windows est nécessaire une seule fois sur ce PC." : message + " Une autorisation Windows est nécessaire une seule fois sur ce PC.";
+        setupNoticeText.Text = "Une autorisation Windows est nécessaire une seule fois pour activer l’assistance privée sur ce PC.";
         setupNotice.Visible = true;
     }
 
