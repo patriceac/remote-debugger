@@ -9,13 +9,60 @@ public static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        if (args.Length == 1 && args[0] == "--platform-service") return SupportService.Run();
+        if (args.Length == 2 && args[0] == "--support-provision") return SupportInstaller.ExecuteElevated(args[1]);
         if (args.Length == 2 && args[0] == "--elevated-job") return ElevatedJob.ExecuteAsync(args[1]).GetAwaiter().GetResult();
-        if (args.Length == 3 && args[0] == "--maintenance-session") return MaintenanceHelper.Run(args[1], args[2]);
         if (args.Length == 2 && args[0] == "--ui-job") { Forms.Application.SetHighDpiMode(Forms.HighDpiMode.PerMonitorV2); return UiAutomationJob.Execute(args[1]); }
         if (args.Length > 0 && args[0] == "cli") return CliAsync(args.Skip(1).ToArray()).GetAwaiter().GetResult();
+        WaitForProvisioningParent(args);
         Native.FreeConsole(); ApplicationConfiguration.Initialize();
         int rootIndex = Array.IndexOf(args, "--data-root");
-        Forms.Application.Run(new MainForm(args.Contains("--agent"), rootIndex >= 0 && rootIndex + 1 < args.Length ? args[rootIndex + 1] : null, args.Contains("--loopback-only"))); return 0;
+        string? dataRoot = rootIndex >= 0 && rootIndex + 1 < args.Length ? args[rootIndex + 1] : null;
+        bool controllerOnly = args.Contains("--controller");
+        var form = new MainForm(!controllerOnly, dataRoot, args.Contains("--loopback-only"));
+        SupportPlatform.ManagedRelaunchRequested += () =>
+        {
+            if (!form.IsDisposed && form.IsHandleCreated) form.BeginInvoke(Forms.Application.Exit);
+        };
+        int transactionIndex = Array.IndexOf(args, "--update-transaction"), ticketIndex = Array.IndexOf(args, "--resume-update");
+        if (transactionIndex >= 0 && transactionIndex + 1 < args.Length && ticketIndex >= 0 && ticketIndex + 1 < args.Length)
+        {
+            string transactionId = args[transactionIndex + 1], ticket = args[ticketIndex + 1];
+            form.Shown += async (_, _) =>
+            {
+                Exception? last = null;
+                for (int attempt = 0; attempt < 60; attempt++)
+                {
+                    try
+                    {
+                        if (form.Agent is { IsListening: true, Paired: true } agent && agent.Session.HasPaired)
+                        {
+                            await SupportPlatform.ReportStartupHealthyAsync(transactionId, ticket);
+                            return;
+                        }
+                    }
+                    catch (Exception ex) { last = ex; }
+                    await Task.Delay(500);
+                }
+                System.Diagnostics.Trace.WriteLine("Update startup health report failed before the listener became ready: " + last?.Message);
+            };
+        }
+        Forms.Application.Run(form); return 0;
+    }
+
+    private static void WaitForProvisioningParent(string[] args)
+    {
+        int index = Array.IndexOf(args, "--wait-for-process-exit");
+        if (index < 0 || index + 2 >= args.Length || !int.TryParse(args[index + 1], out int pid) || !long.TryParse(args[index + 2], out long startTicks)) return;
+        try
+        {
+            using var parent = System.Diagnostics.Process.GetProcessById(pid);
+            if (parent.StartTime.ToUniversalTime().Ticks != startTicks) return;
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+            parent.WaitForExitAsync(timeout.Token).GetAwaiter().GetResult();
+        }
+        catch (ArgumentException) { }
+        catch (OperationCanceledException) { throw new TimeoutException("The provisioning source application did not exit; managed launch was cancelled to avoid a duplicate agent listener."); }
     }
 
     private static async Task<int> CliAsync(string[] args)
@@ -25,19 +72,37 @@ public static class Program
         try
         {
             string verb = args.FirstOrDefault() ?? "help", config = Option("--connection", RemoteClient.DefaultPath);
+            if (verb == "platform-status")
+            {
+                var status = await SupportPlatform.GetStatusAsync(ct.Token);
+                Console.WriteLine(Json.Text(new { ok = true, status, receipt = SupportPlatformPaths.ProvisioningReceiptPath }));
+                return 0;
+            }
+            if (verb == "platform-provision")
+            {
+                var status = await SupportPlatform.ProvisionAsync(ct.Token);
+                Console.WriteLine(Json.Text(new { ok = status.Provisioned, status, receipt = SupportPlatformPaths.ProvisioningReceiptPath }));
+                return status.Provisioned ? 0 : 1;
+            }
             if (verb == "discover") { Console.WriteLine(Json.Text(new { ok = true, peers = await Discovery.FindAsync(2500, ct.Token) })); return 0; }
             if (verb == "pair")
             {
-                string fingerprint = Option("--fingerprint"); if (fingerprint.Replace(":", "").Length != 64) throw new ArgumentException("--fingerprint must be verified from the agent screen.");
+                string fingerprint = Option("--fingerprint"); if (fingerprint.Length != 0 && fingerprint.Replace(":", "").Length != 64) throw new ArgumentException("When supplied, --fingerprint must be a SHA-256 certificate fingerprint.");
                 var client = new RemoteClient(new Connection(Option("--host"), int.Parse(Option("--port", "45832")), fingerprint, ""));
                 string code = (await Console.In.ReadLineAsync(ct.Token) ?? "").Trim(); await client.PairAsync(code, ct.Token); client.Save(config);
                 Console.WriteLine(Json.Text(new { ok = true, paired = true, connection = config })); return 0;
             }
             if (verb == "help")
             {
-                Console.WriteLine("RemoteDebugger cli discover | pair --host IP --fingerprint SHA256 (code on stdin) | call --request FILE | upload --file FILE --path RELATIVE | download --path REMOTE --file LOCAL | screenshot --file IMAGE | stream --seconds 10 --fps 5\nOptional: --connection FILE. Request JSON: {\"operation\":\"status\",\"args\":{},\"timeoutSeconds\":60,\"id\":\"UUID\"}. Exit 0=success, 1=operation failure, 2=transport/input failure. See docs/CLI.md."); return 0;
+                Console.WriteLine("RemoteDebugger cli discover | pair --host IP [--fingerprint SHA256] (code on stdin) | sync | platform-status | platform-provision | call --request FILE | upload --file FILE --path RELATIVE | download --path REMOTE --file LOCAL | screenshot --file IMAGE | stream --seconds 10 --fps 5\nOptional: --connection FILE. Request JSON: {\"operation\":\"status\",\"args\":{},\"timeoutSeconds\":60,\"id\":\"UUID\"}. Exit 0=success, 1=operation failure, 2=transport/input failure. See docs/CLI.md."); return 0;
             }
             var remote = RemoteClient.Load(config);
+            if (verb == "sync")
+            {
+                var result = await SupportPlatform.SynchronizeAgentAsync(remote, ct.Token);
+                Console.WriteLine(Json.Text(new { ok = true, synchronization = result }));
+                return 0;
+            }
             if (verb == "screenshot")
             {
                 var elapsed = System.Diagnostics.Stopwatch.StartNew(); var data = RemoteClient.Require(await remote.CallAsync("screenshot", new { monitor = int.Parse(Option("--monitor", "0")) }, ct.Token));
