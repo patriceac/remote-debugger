@@ -3,7 +3,6 @@ using System.IO.Pipes;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Principal;
-using System.Text;
 using Microsoft.Win32.SafeHandles;
 using RemoteDebugger.Core;
 
@@ -121,9 +120,11 @@ internal static class SupportPipeIdentity
 /// <summary>
 /// Verifies a privileged broker from a medium-integrity desktop process without
 /// requesting access to the LocalSystem process token. The SCM attests the
-/// registered service account, command line, state, and PID; the pipe PID must
-/// be that exact service process. PROCESS_QUERY_LIMITED_INFORMATION is enough to
-/// obtain the image path across the integrity boundary.
+/// registered service account, protected command line, state, and PID; the pipe
+/// PID must be that exact own-process service. It deliberately does not open the
+/// LocalSystem process, whose process DACL need not grant a desktop user query
+/// access. The configured protected executable is signature-checked by the
+/// caller after this attestation succeeds.
 /// </summary>
 internal static class ServiceProcessIdentity
 {
@@ -133,7 +134,6 @@ internal static class ServiceProcessIdentity
     private const int ScStatusProcessInfo = 0;
     private const uint ServiceRunning = 0x00000004;
     private const uint ServiceWin32OwnProcess = 0x00000010;
-    private const uint ProcessQueryLimitedInformation = 0x1000;
     private const int ErrorInsufficientBuffer = 122;
 
     public static string VerifyRunningService(int pipeServerProcessId)
@@ -147,20 +147,9 @@ internal static class ServiceProcessIdentity
             try
             {
                 var status = QueryStatus(service);
-                if (status.CurrentState != ServiceRunning || status.ProcessId == 0 ||
-                    status.ProcessId != checked((uint)pipeServerProcessId) ||
-                    (status.ServiceType & ServiceWin32OwnProcess) == 0)
-                    throw new UnauthorizedAccessException("The local support pipe PID does not match the running protected service.");
-
                 var config = QueryConfiguration(service);
-                if (!string.Equals(config.StartName, "LocalSystem", StringComparison.OrdinalIgnoreCase))
-                    throw new UnauthorizedAccessException("The local support service is not configured for LocalSystem.");
-                ValidateServiceCommand(config.BinaryPath);
-
-                string actualPath = QueryProcessImagePath(pipeServerProcessId);
-                if (!PathsEqual(actualPath, SupportPlatformPaths.ServiceExecutable))
-                    throw new UnauthorizedAccessException("The local support service process is not running the provisioned executable.");
-                return actualPath;
+                return ValidateScmAttestation(pipeServerProcessId, status.CurrentState, status.ProcessId,
+                    status.ServiceType, config.StartName, config.BinaryPath);
             }
             finally
             {
@@ -213,7 +202,24 @@ internal static class ServiceProcessIdentity
         }
     }
 
-    private static void ValidateServiceCommand(string command)
+    internal static string ValidateScmAttestation(
+        int pipeServerProcessId,
+        uint serviceState,
+        uint serviceProcessId,
+        uint serviceType,
+        string serviceStartName,
+        string serviceCommand)
+    {
+        if (serviceState != ServiceRunning || serviceProcessId == 0 ||
+            serviceProcessId != checked((uint)pipeServerProcessId) ||
+            (serviceType & ServiceWin32OwnProcess) == 0)
+            throw new UnauthorizedAccessException("The local support pipe PID does not match the running protected service.");
+        if (!string.Equals(serviceStartName, "LocalSystem", StringComparison.OrdinalIgnoreCase))
+            throw new UnauthorizedAccessException("The local support service is not configured for LocalSystem.");
+        return ValidateServiceCommand(serviceCommand);
+    }
+
+    private static string ValidateServiceCommand(string command)
     {
         nint arguments = CommandLineToArgvW(command, out int count);
         if (arguments == 0) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
@@ -225,22 +231,12 @@ internal static class ServiceProcessIdentity
             if (!PathsEqual(executable, SupportPlatformPaths.ServiceExecutable) ||
                 !string.Equals(mode, "--platform-service", StringComparison.Ordinal))
                 throw new UnauthorizedAccessException("The local support service command line is not the provisioned command.");
+            return Path.GetFullPath(executable);
         }
         finally
         {
             _ = LocalFree(arguments);
         }
-    }
-
-    private static string QueryProcessImagePath(int processId)
-    {
-        using SafeFileHandle process = OpenProcess(ProcessQueryLimitedInformation, false, processId);
-        if (process.IsInvalid) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
-        var path = new StringBuilder(32768);
-        uint capacity = checked((uint)path.Capacity);
-        if (!QueryFullProcessImageName(process, 0, path, ref capacity))
-            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
-        return Path.GetFullPath(path.ToString());
     }
 
     private static bool PathsEqual(string left, string right) =>
@@ -291,13 +287,6 @@ internal static class ServiceProcessIdentity
     [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool QueryServiceConfig(nint service, nint config, int bufferSize, out int bytesNeeded);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern SafeFileHandle OpenProcess(uint desiredAccess, [MarshalAs(UnmanagedType.Bool)] bool inheritHandle, int processId);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool QueryFullProcessImageName(SafeFileHandle process, uint flags, StringBuilder executableName, ref uint size);
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern nint CommandLineToArgvW(string commandLine, out int argumentCount);
