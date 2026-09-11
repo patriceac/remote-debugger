@@ -159,44 +159,95 @@ internal sealed partial class LabForm
     private const uint MouseEventRightDown = 0x0008;
     private const uint MouseEventRightUp = 0x0010;
 
-    private static AutomationElement? FindSystemTrayIcon()
+    private static AutomationElement[] FindSystemTrayIcons()
     {
         try
         {
-            return AutomationElement.RootElement.FindAll(TreeScope.Descendants, Condition.TrueCondition).Cast<AutomationElement>().FirstOrDefault(element =>
-            {
-                try
+            return AutomationElement.RootElement.FindAll(TreeScope.Descendants, Condition.TrueCondition).Cast<AutomationElement>()
+                .Where(element =>
                 {
-                    var current = element.Current;
-                    string name = current.Name;
-                    string type = current.ControlType.ProgrammaticName;
-                    return !current.IsOffscreen && (type == "ControlType.Button" || type == "ControlType.ListItem")
-                        && name.Contains("Remote Debugger", StringComparison.OrdinalIgnoreCase);
-                }
-                catch (ElementNotAvailableException) { return false; }
-            });
+                    try
+                    {
+                        var current = element.Current;
+                        // Windows 11 exposes overflow notification icons as
+                        // Custom/Pane/Image providers, while older shells use
+                        // Button/ListItem.  Keep the name anchored to the
+                        // product and exclude a top-level window title.
+                        return !current.IsOffscreen
+                            && current.ControlType.ProgrammaticName != "ControlType.Window"
+                            && current.Name.Contains("Remote Debugger", StringComparison.OrdinalIgnoreCase);
+                    }
+                    catch (ElementNotAvailableException) { return false; }
+                })
+                .OrderByDescending(TrayElementScore)
+                .ToArray();
         }
-        catch (Exception) { return null; }
+        catch (Exception) { return []; }
     }
 
-    private static AutomationElement? FindTrayOverflowButton()
+    private static AutomationElement? FindSystemTrayIcon() => FindSystemTrayIcons().FirstOrDefault();
+
+    private static AutomationElement[] FindTrayOverflowButtons()
     {
         try
         {
-            return AutomationElement.RootElement.FindAll(TreeScope.Descendants, Condition.TrueCondition).Cast<AutomationElement>().FirstOrDefault(element =>
-            {
-                try
+            return AutomationElement.RootElement.FindAll(TreeScope.Descendants, Condition.TrueCondition).Cast<AutomationElement>()
+                .Where(element =>
                 {
-                    var current = element.Current;
-                    string name = current.Name.ToLowerInvariant();
-                    string type = current.ControlType.ProgrammaticName;
-                    return !current.IsOffscreen && type == "ControlType.Button"
-                        && (name.Contains("hidden", StringComparison.Ordinal) || name.Contains("masqu", StringComparison.Ordinal) || name.Contains("icône", StringComparison.Ordinal));
-                }
-                catch (ElementNotAvailableException) { return false; }
-            });
+                    try
+                    {
+                        var current = element.Current;
+                        string name = current.Name.ToLowerInvariant();
+                        string type = current.ControlType.ProgrammaticName;
+                        string id = current.AutomationId.ToLowerInvariant();
+                        string className = current.ClassName.ToLowerInvariant();
+                        bool nameHint = name.Contains("hidden", StringComparison.Ordinal)
+                            || name.Contains("masqu", StringComparison.Ordinal)
+                            || name.Contains("icône", StringComparison.Ordinal)
+                            || name.Contains("icon", StringComparison.Ordinal)
+                            || name.Contains("overflow", StringComparison.Ordinal)
+                            || name.Contains("chevron", StringComparison.Ordinal)
+                            || name.Contains("plus", StringComparison.Ordinal);
+                        bool shellHint = id.Contains("tray", StringComparison.Ordinal)
+                            || id.Contains("overflow", StringComparison.Ordinal)
+                            || className.Contains("tray", StringComparison.Ordinal)
+                            || className.Contains("notify", StringComparison.Ordinal)
+                            || className.Contains("overflow", StringComparison.Ordinal);
+                        bool supportedType = type is "ControlType.Button" or "ControlType.Custom" or "ControlType.Pane";
+                        return !current.IsOffscreen && supportedType && (nameHint || shellHint);
+                    }
+                    catch (ElementNotAvailableException) { return false; }
+                })
+                .OrderByDescending(TrayElementScore)
+                .ToArray();
         }
-        catch (Exception) { return null; }
+        catch (Exception) { return []; }
+    }
+
+    private static AutomationElement? FindTrayOverflowButton() => FindTrayOverflowButtons().FirstOrDefault();
+
+    private static int TrayElementScore(AutomationElement element)
+    {
+        try
+        {
+            var current = element.Current;
+            string type = current.ControlType.ProgrammaticName;
+            string id = current.AutomationId.ToLowerInvariant();
+            string className = current.ClassName.ToLowerInvariant();
+            int score = type switch
+            {
+                "ControlType.Button" => 8,
+                "ControlType.ListItem" => 7,
+                "ControlType.Image" => 5,
+                "ControlType.Custom" => 4,
+                "ControlType.Pane" => 3,
+                _ => 1
+            };
+            if (id.Contains("tray", StringComparison.Ordinal) || className.Contains("tray", StringComparison.Ordinal)) score += 4;
+            if (className.Contains("notify", StringComparison.Ordinal) || className.Contains("overflow", StringComparison.Ordinal)) score += 3;
+            return score;
+        }
+        catch (ElementNotAvailableException) { return 0; }
     }
 
     private static bool RightClickTrayIcon(AutomationElement icon)
@@ -215,32 +266,90 @@ internal sealed partial class LabForm
     private async Task<TrayContext> OpenTrayContextAsync()
     {
         bool overflowOpened = false;
+        string failure = "";
         for (int attempt = 0; attempt < 2; attempt++)
         {
-            AutomationElement? icon = FindSystemTrayIcon();
-            if (icon == null && !overflowOpened)
+            AutomationElement[] icons = FindSystemTrayIcons();
+            if (icons.Length == 0 && !overflowOpened)
             {
-                var overflow = FindTrayOverflowButton();
-                if (overflow != null)
+                AutomationElement[] overflows = FindTrayOverflowButtons();
+                foreach (var overflow in overflows)
                 {
-                    InvokeElement(overflow);
-                    overflowOpened = true;
-                    await Task.Delay(500, stop.Token);
-                    continue;
+                    try
+                    {
+                        InvokeElement(overflow);
+                        overflowOpened = true;
+                        await Task.Delay(500, stop.Token);
+                        break;
+                    }
+                    catch (Exception) { }
                 }
+                if (overflowOpened) continue;
+                failure = "tray_icon_and_overflow_not_found";
             }
-            if (icon == null) break;
-            string iconName = Safe(() => icon.Current.Name);
-            if (!RightClickTrayIcon(icon)) break;
-            for (int n = 0; n < 20; n++)
+            if (icons.Length == 0) break;
+            foreach (var icon in icons)
             {
-                var open = FindDesktopMenuItem("Ouvrir") ?? FindDesktopMenuItem("Open");
-                if (open != null) return new TrayContext(open, iconName, overflowOpened);
-                await Task.Delay(250, stop.Token);
+                string iconName = Safe(() => icon.Current.Name);
+                if (!RightClickTrayIcon(icon)) continue;
+                for (int n = 0; n < 20; n++)
+                {
+                    var open = FindDesktopMenuItem("Ouvrir") ?? FindDesktopMenuItem("Open");
+                    if (open != null) return new TrayContext(open, iconName, overflowOpened);
+                    await Task.Delay(250, stop.Token);
+                }
+                failure = "tray_context_menu_missing";
             }
-            return new TrayContext(null, iconName, overflowOpened);
+            break;
         }
+        DumpTrayDiagnostics(failure.Length == 0 ? "tray_lookup_failed" : failure);
         return new TrayContext(null, "", overflowOpened);
+    }
+
+    private void DumpTrayDiagnostics(string reason)
+    {
+        try
+        {
+            var inventory = AutomationElement.RootElement.FindAll(TreeScope.Descendants, Condition.TrueCondition).Cast<AutomationElement>()
+                .Select(element =>
+                {
+                    try
+                    {
+                        var current = element.Current;
+                        string name = current.Name;
+                        string id = current.AutomationId;
+                        string className = current.ClassName;
+                        string type = current.ControlType.ProgrammaticName;
+                        string lower = (name + " " + id + " " + className + " " + type).ToLowerInvariant();
+                        var bounds = current.BoundingRectangle;
+                        bool nearTaskbar = !bounds.IsEmpty && bounds.Bottom >= Forms.Screen.PrimaryScreen!.Bounds.Bottom - 220;
+                        bool trayHint = lower.Contains("remote debugger", StringComparison.Ordinal)
+                            || lower.Contains("tray", StringComparison.Ordinal)
+                            || lower.Contains("notify", StringComparison.Ordinal)
+                            || lower.Contains("overflow", StringComparison.Ordinal)
+                            || lower.Contains("hidden", StringComparison.Ordinal)
+                            || lower.Contains("masqu", StringComparison.Ordinal)
+                            || lower.Contains("icône", StringComparison.Ordinal)
+                            || lower.Contains("icon", StringComparison.Ordinal)
+                            || nearTaskbar;
+                        return trayHint ? new { name, id, className, type, processId = current.ProcessId, offscreen = current.IsOffscreen, bounds = new { left = bounds.Left, top = bounds.Top, width = bounds.Width, height = bounds.Height } } : null;
+                    }
+                    catch (ElementNotAvailableException) { return null; }
+                })
+                .Where(value => value != null)
+                .Take(300)
+                .ToArray();
+            File.WriteAllText(Path.Combine(output, "tray-ui-inventory.json"), Json.Text(new { reason, capturedUtc = DateTimeOffset.UtcNow, elements = inventory }));
+        }
+        catch (Exception ex)
+        {
+            try { File.AppendAllText(Path.Combine(output, "capture-warnings.txt"), "tray-ui-inventory: " + ex.Message + Environment.NewLine); } catch (IOException) { }
+        }
+
+        // The tray icon can remain visible only in the shell overflow window
+        // after the controller hides. Retain the desktop image beside the
+        // bounded UIA inventory so a selector miss is reviewable.
+        CaptureDesktop("loopback-tray-lookup.png");
     }
 
     private bool IsLoopbackControllerVisible()
@@ -291,9 +400,16 @@ internal sealed partial class LabForm
         if (terminate == null)
         {
             Fail("loopback.terminate", "The controller terminate action ends the loopback session and exits the agent", new { id = ContractId("terminateSession") });
+            await AttemptLoopbackSessionEndCleanupAsync("terminate_control_missing");
             return;
         }
-        InvokeElement(terminate);
+        try { InvokeElement(terminate); }
+        catch (Exception ex)
+        {
+            Fail("loopback.terminate", "The controller terminate action ends the loopback session and exits the agent", new { id = ContractId("terminateSession"), invokeError = ex.Message });
+            await AttemptLoopbackSessionEndCleanupAsync("terminate_control_invoke_failed");
+            return;
+        }
         bool disconnected = await WaitForTextAsync("connectionStatus", text => !IsConnected(text), 30);
         bool agentExited = false;
         for (int n = 0; n < 30; n++)
@@ -308,6 +424,8 @@ internal sealed partial class LabForm
             Pass("loopback.terminate", "The controller terminate action ends the loopback session and exits the agent", new { disconnected, agentPid = loopbackAgent.Id, agentExited });
         }
         else Fail("loopback.terminate", "The controller terminate action ends the loopback session and exits the agent", new { disconnected, agentExited, agentPid = loopbackAgent.Id });
+        if (!agentExited)
+            await AttemptLoopbackSessionEndCleanupAsync("terminate_action_did_not_exit_agent", includeAccessDenied: false);
         JsonElement denied = Json.Element(new { ok = false, error = "transport_after_termination" });
         try { denied = await CallAsync("status", requireSuccess: false, seconds: 15); } catch (Exception ex) { denied = Json.Element(new { ok = false, error = ex.Message }); }
         bool accessClosed = !denied.TryGetProperty("ok", out var accessOk) || accessOk.ValueKind != JsonValueKind.True;
@@ -315,6 +433,47 @@ internal sealed partial class LabForm
         else Fail("loopback.terminated_access_denied", "The loopback support token no longer authorizes requests after termination", denied);
         await ProbeSleepReleasedAsync();
         CaptureDesktop("loopback-controller-terminated.png");
+    }
+
+    private async Task AttemptLoopbackSessionEndCleanupAsync(string reason, bool includeAccessDenied = true)
+    {
+        JsonElement endReply;
+        try { endReply = await CallAsync("session.end", requireSuccess: false, seconds: 50); }
+        catch (Exception ex) { endReply = Json.Element(new { ok = false, error = ex.Message }); }
+
+        bool endAccepted = endReply.TryGetProperty("ok", out var endOk) && endOk.ValueKind == JsonValueKind.True;
+        bool agentExited = false;
+        if (loopbackAgent != null)
+        {
+            for (int n = 0; n < 30; n++)
+            {
+                try
+                {
+                    loopbackAgent.Refresh();
+                    if (loopbackAgent.HasExited) { agentExited = true; break; }
+                }
+                catch (InvalidOperationException) { agentExited = true; break; }
+                await Task.Delay(1000, stop.Token);
+            }
+        }
+
+        // This is cleanup evidence only. It never upgrades the GUI terminate
+        // check: a missing or unusable terminate control remains a failure.
+        if (endAccepted && agentExited)
+            Pass("loopback.termination_cleanup", "The saved authenticated session.end operation is available as bounded cleanup and the real agent process exits", new { reason, endAccepted, agentExited }, required: false);
+        else
+            Fail("loopback.termination_cleanup", "The saved authenticated session.end operation is available as bounded cleanup and the real agent process exits", new { reason, endAccepted, agentExited, endReply }, required: false);
+
+        if (includeAccessDenied)
+        {
+            JsonElement denied;
+            try { denied = await CallAsync("status", requireSuccess: false, seconds: 15); }
+            catch (Exception ex) { denied = Json.Element(new { ok = false, error = ex.Message }); }
+            bool accessClosed = !denied.TryGetProperty("ok", out var accessOk) || accessOk.ValueKind != JsonValueKind.True;
+            if (accessClosed) Pass("loopback.terminated_access_denied", "The loopback support token no longer authorizes requests after cleanup termination", denied, required: false);
+            else Fail("loopback.terminated_access_denied", "The loopback support token no longer authorizes requests after cleanup termination", denied, required: false);
+        }
+        await ProbeSleepReleasedAsync();
     }
 
     private void ProbeLoopbackRemoteScreenInput()
