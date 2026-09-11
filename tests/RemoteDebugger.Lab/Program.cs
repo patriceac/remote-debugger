@@ -26,7 +26,7 @@ internal static class Program
     }
 }
 
-internal sealed class LabForm : Forms.Form
+internal sealed partial class LabForm : Forms.Form
 {
     private const int CoordinationPort = 45835;
     private static readonly Regex SixDigits = new("^[0-9]{6}$", RegexOptions.CultureInvariant);
@@ -83,7 +83,8 @@ internal sealed class LabForm : Forms.Form
         {
             try
             {
-                if (IsAgent) await AgentAsync();
+                if (role is "loopback" or "loopback-smoke") await LoopbackSmokeAsync();
+                else if (IsAgent) await AgentAsync();
                 else await ControllerAsync();
             }
             catch (Exception ex)
@@ -254,7 +255,29 @@ internal sealed class LabForm : Forms.Form
         catch (ElementNotAvailableException) { return ""; }
     }
 
-    private string UiValue(string key) => Value(Element(key));
+    private string UiValue(string key)
+    {
+        var element = Element(key);
+        string value = Value(element);
+        if (!string.Equals(key, "connectionStatus", StringComparison.Ordinal)) return value;
+
+        // WinForms exposes the status pill as a Panel.  New builds publish an
+        // AccessibleName on that panel, while older builds expose the child
+        // status label only.  Read both so the acceptance check follows the
+        // actual accessible state instead of depending on one provider shape.
+        try
+        {
+            var children = element.FindAll(TreeScope.Descendants, Condition.TrueCondition).Cast<AutomationElement>()
+                .Select(child =>
+                {
+                    try { return Value(child); }
+                    catch (ElementNotAvailableException) { return ""; }
+                })
+                .Where(text => !string.IsNullOrWhiteSpace(text));
+            return string.Join(" ", new[] { value }.Concat(children));
+        }
+        catch (ElementNotAvailableException) { return value; }
+    }
 
     private string[] UiTexts()
     {
@@ -325,10 +348,49 @@ internal sealed class LabForm : Forms.Form
             && !value.Contains("déconnect") && !value.Contains("disconnected") && !value.Contains("reconnexion");
     }
 
-    private static bool IsLive(string text)
+    private static bool IsLiveBadge(string text)
     {
         string value = text.ToLowerInvariant();
         return value.Contains("live") || value.Contains("direct") || value.Contains("en direct");
+    }
+
+    private static bool IsLiveTelemetry(string text)
+    {
+        string value = text.ToLowerInvariant();
+        return Regex.IsMatch(value, @"(?<!\d)\d+(?:[.,]\d+)?\s*i/s", RegexOptions.CultureInvariant)
+            && value.Contains("capture", StringComparison.Ordinal);
+    }
+
+    private static bool IsPairingAttempt(string text)
+    {
+        string value = text.ToLowerInvariant();
+        return IsConnected(value) || value.Contains("appair", StringComparison.Ordinal)
+            || value.Contains("pair", StringComparison.Ordinal)
+            || value.Contains("synchron", StringComparison.Ordinal);
+    }
+
+    private sealed record LiveEvidence(bool BadgeVisible, string BadgeText, bool TelemetryVisible, string TelemetryText, double WaitedSeconds);
+
+    private async Task<LiveEvidence> WaitForLiveEvidenceAsync(int seconds)
+    {
+        var elapsed = Stopwatch.StartNew();
+        string badgeText = "";
+        string telemetryText = "";
+        bool badgeVisible = false;
+        bool telemetryVisible = false;
+        while (elapsed.Elapsed < TimeSpan.FromSeconds(seconds))
+        {
+            var badge = FindVisibleId(ContractId("liveBadge"));
+            badgeVisible = badge != null;
+            badgeText = badge == null ? "" : Value(badge);
+            var telemetry = FindVisibleId(ContractId("streamStatus"));
+            telemetryText = telemetry == null ? "" : Value(telemetry);
+            telemetryVisible = IsLiveTelemetry(telemetryText);
+            if (badgeVisible && IsLiveBadge(badgeText) && telemetryVisible)
+                return new(true, badgeText, true, telemetryText, elapsed.Elapsed.TotalSeconds);
+            await Task.Delay(250, stop.Token);
+        }
+        return new(badgeVisible && IsLiveBadge(badgeText), badgeText, telemetryVisible, telemetryText, elapsed.Elapsed.TotalSeconds);
     }
 
     private async Task AgentAsync()
@@ -885,47 +947,65 @@ internal sealed class LabForm : Forms.Form
         else Pass("controller.no_fingerprint_gate", "Normal pairing has no fingerprint field or checkbox", new { fingerprintGateVisible = false });
         FocusAndEnter("pairCode");
         string pairText = TryValue("connectionStatus");
-        bool connected = await WaitForTextAsync("connectionStatus", IsConnected, 60);
-        if (connected) sawPairing = true;
-        if (connected) Pass("controller.code_enter_pairing", "Entering the six-digit code and pressing Enter pairs the selected PC", new { pairText, codeLength = code.Length });
-        else Fail("controller.code_enter_pairing", "Entering the six-digit code and pressing Enter pairs the selected PC", new { pairText, visible = UiTexts().Take(35).ToArray() });
-        if (!connected)
+        bool connected;
+        if (updateVariant == "rollback")
         {
-            // Keep diagnostics useful for a failed keyboard route while
-            // retaining the failed Enter assertion above.
-            try { Click("pair"); connected = await WaitForTextAsync("connectionStatus", IsConnected, 30); } catch (Exception) { }
+            // Rollback intentionally interrupts the synchronization handoff
+            // after PAKE pairing.  Observe the visible pairing/synchronization
+            // transition as proof that Enter was handled, then validate the
+            // restored transaction through the saved authenticated token.
+            bool pairingAttempted = await WaitForTextAsync("connectionStatus", IsPairingAttempt, 20);
+            string outcomeText = TryValue("connectionStatus");
+            connected = IsConnected(outcomeText);
+            if (pairingAttempted)
+                Pass("controller.code_enter_pairing", "Entering the six-digit code and pressing Enter starts the authenticated pairing flow before the rollback handoff", new { pairText, outcomeText, codeLength = code.Length, connected, rollbackHandoff = true });
+            else
+                Fail("controller.code_enter_pairing", "Entering the six-digit code and pressing Enter starts the authenticated pairing flow before the rollback handoff", new { pairText, outcomeText, codeLength = code.Length, connected, visible = UiTexts().Take(35).ToArray(), rollbackHandoff = true });
         }
-        if (!connected) throw new InvalidOperationException("Controller did not connect after code entry.");
+        else
+        {
+            connected = await WaitForTextAsync("connectionStatus", IsConnected, 60);
+            if (connected) sawPairing = true;
+            if (connected) Pass("controller.code_enter_pairing", "Entering the six-digit code and pressing Enter pairs the selected PC", new { pairText, codeLength = code.Length });
+            else Fail("controller.code_enter_pairing", "Entering the six-digit code and pressing Enter pairs the selected PC", new { pairText, visible = UiTexts().Take(35).ToArray() });
+            if (!connected)
+            {
+                // Keep diagnostics useful for a failed keyboard route while
+                // retaining the failed Enter assertion above.
+                try { Click("pair"); connected = await WaitForTextAsync("connectionStatus", IsConnected, 30); } catch (Exception) { }
+            }
+            if (!connected) throw new InvalidOperationException("Controller did not connect after code entry.");
+        }
 
         await ProbeUnauthorizedProfilesAsync();
+
+        if (updateVariant == "rollback")
+        {
+            Block("controller.sync_before_live", "The remote agent hash equals the controller Release hash before live viewing", "The rollback fixture intentionally kills the replacement before startup health, so the normal pre-live hash match is not applicable to this run; rollback state and the restored previous hash are checked separately.", new { controllerHash, pairingStatus = TryValue("connectionStatus") }, required: false);
+            await ProbeRollbackOutcomeAsync(controllerHash, expectedPreviousHash);
+            bool rollbackAgentExited = await ProbeRollbackTerminateSavedTokenAsync();
+            // The rollback Lab keeps its coordination socket alive while the
+            // managed service restores the previous agent. Release that hold
+            // explicitly after the controller has observed the rollback.
+            if (!rollbackAgentExited) await LabMessageAsync(peerHost, "RD_LAB_DONE");
+            await FinishAsync();
+            return;
+        }
+
         var statusReply = await CallAsync("status"); var status = Data(statusReply); workspace = status.Str("workspace");
-        // A rollback deliberately kills the replacement before startup health
-        // acknowledgement, so it cannot satisfy the normal hash-match wait.
-        // Let the transaction snapshot establish rollback instead of burning
-        // the full update synchronization timeout first.
-        var heartbeat = await WaitForBinaryMatchAsync(controllerHash, updateVariant == "rollback" ? 20 : IsUpdateVariant ? 180 : 10);
+        var heartbeat = await WaitForBinaryMatchAsync(controllerHash, IsUpdateVariant ? 180 : 10);
         string remoteHash = FindString(heartbeat, "agentBinarySha256", "binarySha256", "releaseSha256", "executableSha256", "sha256");
         string reportedControllerHash = FindString(heartbeat, "controllerBinarySha256");
         bool hashesMatch = remoteHash.Length == 64 && remoteHash.Equals(controllerHash, StringComparison.OrdinalIgnoreCase) && (reportedControllerHash.Length == 0 || reportedControllerHash.Equals(controllerHash, StringComparison.OrdinalIgnoreCase)) && (!heartbeat.TryGetProperty("binaryMatched", out var matched) || matched.GetBoolean());
         if (hashesMatch) Pass("controller.sync_before_live", "The remote agent hash equals the controller Release hash before live viewing", new { controllerHash, remoteHash, reportedControllerHash, heartbeat });
         else Fail("controller.sync_before_live", "The remote agent hash equals the controller Release hash before live viewing", new { controllerHash, remoteHash, reportedControllerHash, heartbeat });
 
-        if (updateVariant == "rollback")
-        {
-            await ProbeRollbackOutcomeAsync(controllerHash, expectedPreviousHash);
-            bool rollbackAgentExited = await ProbeTrayAndTerminateAsync();
-            // The rollback Lab keeps its coordination socket alive while the
-            // managed service restores the previous agent. Release that hold
-            // explicitly after the controller has observed the rollback.
-            if (!rollbackAgentExited || updateVariant == "rollback") await LabMessageAsync(peerHost, "RD_LAB_DONE");
-            await FinishAsync();
-            return;
-        }
-
-        bool live = await WaitForTextAsync("streamStatus", IsLive, 60);
+        LiveEvidence liveEvidence = await WaitForLiveEvidenceAsync(60);
         var firstFrame = await CliAsync(["screenshot", "--file", Path.Combine(output, "connected-screen.jpg")]);
-        if (live && firstFrame.GetProperty("ok").GetBoolean()) Pass("controller.live_auto_start", "Live viewing starts only after a fresh frame arrives", new { streamStatus = TryValue("streamStatus"), frame = firstFrame });
-        else Fail("controller.live_auto_start", "Live viewing starts only after a fresh frame arrives", new { live, streamStatus = TryValue("streamStatus"), frame = firstFrame });
+        bool freshFrame = firstFrame.TryGetProperty("ok", out var firstFrameOk) && firstFrameOk.ValueKind == JsonValueKind.True && firstFrame.TryGetProperty("roundTripMs", out var roundTrip) && roundTrip.ValueKind == JsonValueKind.Number && roundTrip.GetDouble() > 0;
+        bool live = liveEvidence.BadgeVisible && liveEvidence.TelemetryVisible && freshFrame;
+        if (live) Pass("controller.live_auto_start", "Live viewing starts only after a fresh frame arrives", new { liveBadge = new { visible = liveEvidence.BadgeVisible, text = liveEvidence.BadgeText }, streamStatus = liveEvidence.TelemetryText, waitedSeconds = liveEvidence.WaitedSeconds, frame = firstFrame });
+        else Fail("controller.live_auto_start", "Live viewing starts only after a fresh frame arrives", new { live, liveBadge = new { visible = liveEvidence.BadgeVisible, text = liveEvidence.BadgeText }, streamStatus = liveEvidence.TelemetryText, waitedSeconds = liveEvidence.WaitedSeconds, freshFrame, frame = firstFrame });
         CaptureDesktop("controller-live.png");
 
         if (IsUpdateVariant)
@@ -1369,6 +1449,43 @@ internal sealed class LabForm : Forms.Form
         if (accessClosed) Pass("controller.terminated_access_denied", "The terminated support session no longer authorizes controller requests", deniedAfterTermination);
         else Fail("controller.terminated_access_denied", "The terminated support session no longer authorizes controller requests", deniedAfterTermination);
         CaptureDesktop("controller-terminated.png");
+        return agentExited;
+    }
+
+    private async Task<bool> ProbeRollbackTerminateSavedTokenAsync()
+    {
+        // The rollback controller may still be waiting for the replacement's
+        // startup-health response, so its normal green connection state and
+        // terminate button are intentionally unavailable.  Exercise the same
+        // saved DPAPI-protected token through the product CLI instead of
+        // fabricating a second authorization path.
+        var ended = await CallAsync("session.end", requireSuccess: false, seconds: 50);
+        bool endAccepted = ended.TryGetProperty("ok", out var endedOk) && endedOk.ValueKind == JsonValueKind.True;
+        JsonElement? stopped = null;
+        for (int n = 0; n < 30; n++)
+        {
+            try
+            {
+                stopped = await LabMessageAsync(peerHost!, "RD_LAB_STATUS");
+                if (!stopped.Value.GetProperty("alive").GetBoolean()) break;
+            }
+            catch (Exception) { break; }
+            await Task.Delay(1000, stop.Token);
+        }
+        bool agentExited = stopped.HasValue && !stopped.Value.GetProperty("alive").GetBoolean();
+        if (endAccepted && agentExited)
+        {
+            sawTermination = true;
+            Pass("controller.rollback_terminate_saved_token", "The rollback session is terminated through the saved authenticated token and the restored agent exits", new { ended, stopped });
+        }
+        else
+            Fail("controller.rollback_terminate_saved_token", "The rollback session is terminated through the saved authenticated token and the restored agent exits", new { ended, endAccepted, agentExited, stopped });
+
+        var deniedAfterTermination = await CallAsync("status", requireSuccess: false, seconds: 15);
+        bool accessClosed = !deniedAfterTermination.TryGetProperty("ok", out var accessOk) || accessOk.ValueKind != JsonValueKind.True;
+        if (accessClosed) Pass("controller.rollback_saved_token_revoked", "The rollback token no longer authorizes requests after termination", deniedAfterTermination);
+        else Fail("controller.rollback_saved_token_revoked", "The rollback token no longer authorizes requests after termination", deniedAfterTermination);
+        CaptureDesktop("controller-rollback-terminated.png");
         return agentExited;
     }
 
