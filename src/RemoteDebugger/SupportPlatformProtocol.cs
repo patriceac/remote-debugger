@@ -25,9 +25,11 @@ internal static class SupportPlatformPaths
 
 internal static class SupportOperationTimeouts
 {
-    // A cold NetSecurity/CIM startup can take materially longer than an
-    // ordinary pipe request. Keep the client alive beyond the broker deadline
-    // so the broker can return either the verified result or a truthful error.
+    // Cold signature validation and NetSecurity/CIM startup can take materially
+    // longer than an ordinary pipe request. Keep each client alive beyond its
+    // broker deadline so the broker returns a verified result or truthful error.
+    public const int PlatformStatusExecutionSeconds = 60;
+    public const int PlatformStatusRoundTripSeconds = 75;
     public const int FirewallEnsureExecutionSeconds = 120;
     public const int FirewallEnsureRoundTripSeconds = 135;
 }

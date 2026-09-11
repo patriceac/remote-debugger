@@ -38,8 +38,11 @@ public sealed class ServiceProcessIdentityTests
 public sealed class SupportOperationTimeoutTests
 {
     [Fact]
-    public void FirewallClientOutlivesBrokerExecutionDeadline()
+    public void ColdPlatformOperationsKeepClientPastBrokerDeadline()
     {
+        Assert.True(SupportOperationTimeouts.PlatformStatusExecutionSeconds >= 60);
+        Assert.True(SupportOperationTimeouts.PlatformStatusRoundTripSeconds >
+                    SupportOperationTimeouts.PlatformStatusExecutionSeconds);
         Assert.True(SupportOperationTimeouts.FirewallEnsureExecutionSeconds >= 60);
         Assert.True(SupportOperationTimeouts.FirewallEnsureRoundTripSeconds >
                     SupportOperationTimeouts.FirewallEnsureExecutionSeconds);

@@ -130,7 +130,7 @@ public static class SupportPlatform
         _ = await TryStartServiceAsync(ct);
         try
         {
-            JsonElement data = await BrokerCallAsync("platform.status", new { }, ct, 4);
+            JsonElement data = await BrokerCallAsync("platform.status", new { }, ct, SupportOperationTimeouts.PlatformStatusRoundTripSeconds);
             int protocol = data.Int("protocolVersion");
             if (protocol != SupportPlatformPaths.ProtocolVersion)
                 return new(SupportPlatformAvailability.Incompatible, true, true, true, false, true,
@@ -217,19 +217,26 @@ public static class SupportPlatform
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
         using var pipe = new NamedPipeClientStream(".", SupportPlatformPaths.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-        try { await pipe.ConnectAsync(timeout.Token); }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { throw new TimeoutException("The privileged local support service did not answer."); }
-        SupportPipeIdentity.VerifyServer(pipe);
-        string id = Guid.NewGuid().ToString();
-        await Wire.WriteAsync(pipe, new Request(id, "", operation, args is JsonElement element ? element : Json.Element(args)), timeout.Token);
-        var reply = await Wire.ReadAsync<Reply>(pipe, timeout.Token);
-        if (!reply.Ok)
+        try
         {
-            if (reply.Error == "broker_identity_rejected") throw new UnauthorizedAccessException(reply.Message);
-            throw new InvalidOperationException($"{reply.Error}: {reply.Message}");
+            await pipe.ConnectAsync(timeout.Token);
+            SupportPipeIdentity.VerifyServer(pipe);
+            timeout.Token.ThrowIfCancellationRequested();
+            string id = Guid.NewGuid().ToString();
+            await Wire.WriteAsync(pipe, new Request(id, "", operation, args is JsonElement element ? element : Json.Element(args)), timeout.Token);
+            var reply = await Wire.ReadAsync<Reply>(pipe, timeout.Token);
+            if (!reply.Ok)
+            {
+                if (reply.Error == "broker_identity_rejected") throw new UnauthorizedAccessException(reply.Message);
+                throw new InvalidOperationException($"{reply.Error}: {reply.Message}");
+            }
+            if (!string.Equals(reply.Id, id, StringComparison.Ordinal)) throw new InvalidDataException("The privileged broker reply id did not match the request.");
+            return reply.Data;
         }
-        if (!string.Equals(reply.Id, id, StringComparison.Ordinal)) throw new InvalidDataException("The privileged broker reply id did not match the request.");
-        return reply.Data;
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new TimeoutException($"The privileged local support operation '{operation}' did not complete within {timeoutSeconds} seconds.");
+        }
     }
 
     internal static async Task<NamedPipeClientStream> OpenMaintenancePipeAsync(CancellationToken ct)
