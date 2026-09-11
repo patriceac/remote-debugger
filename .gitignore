@@ -1,0 +1,19 @@
+**/bin/
+**/obj/
+artifacts/
+dist/
+TestResults/
+*.user
+
+# Local sessions and diagnostic captures
+evidence/
+.tmp*
+
+# Local credentials and editor state
+.env
+.env.*
+*.pfx
+*.p12
+*.key
+.vs/
+.idea/

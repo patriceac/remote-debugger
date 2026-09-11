@@ -1,0 +1,5 @@
+[
+  { "type": "wait_window", "timeoutMs": 60000 },
+  { "type": "wait_result_file", "path": "{OUTDIR}\\lab-result.json", "timeoutMs": 650000 },
+  { "type": "screenshot", "name": "final-desktop.png" }
+]

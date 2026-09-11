@@ -1,0 +1,129 @@
+# Controller CLI for Codex
+
+Run the same Release executable on the controlling PC. It talks to the interactive agent through the same `RemoteClient` implementation as **Prendre le contrôle**. No remote action is executed by the local harness or a side channel.
+
+## Discover and pair
+
+```powershell
+./RemoteDebugger.exe cli discover
+```
+
+The reply contains `ok` and `peers` with `name`, `host`, `port`, `fingerprint`. Discovery is not authentication. Obtain and compare the fingerprint from **Donner le contrôle** on the remote PC, then open its temporary pairing code.
+
+```powershell
+# Supply the code on standard input; do not embed it in a process argument or log.
+$pairingCode | ./RemoteDebugger.exe cli pair --host 192.168.1.42 --fingerprint VERIFIED_64_HEX_CHARACTERS
+```
+
+The pairing token is never printed. GUI and CLI share `%LOCALAPPDATA%\RemoteDebugger\controller.connection`, encrypted for the Windows user. `--connection FILE` selects a different DPAPI-protected controller profile. `--port` can be specified when pairing; the GUI uses 45832. An IP change requires discovering the endpoint again; the saved controller can be updated by pairing through the GUI. Certificate identity must still be compared.
+
+## Structured call
+
+Write an ordinary UTF-8 JSON request, for example `status.json`:
+
+```json
+{
+  "id": "c8b30df4-bd10-4cba-99fc-ae8114fe87be",
+  "operation": "status",
+  "args": {},
+  "timeoutSeconds": 60
+}
+```
+
+```powershell
+./RemoteDebugger.exe cli call --request status.json
+# --request - reads JSON from standard input.
+```
+
+`id` is optional; when supplied it must be a UUID. `timeoutSeconds` is clamped to 1–300. The response is one JSON object:
+
+```json
+{"id":"c8b30df4-bd10-4cba-99fc-ae8114fe87be","ok":true,"data":{"version":"0.1.0"},"error":null,"message":null}
+```
+
+Exit codes: **0** success, **1** remote operation failure, **2** transport/input/cancellation failure. Error codes include `access_denied`, `pairing_denied`, `permission_denied`, `operation_failed`, `cancelled_or_timeout`, `id_conflict`, and `session_limit`. Preserve the JSON message for the operator. Do not report command success without checking both RPC `ok` and `data.exitCode`.
+
+Ctrl+C attempts cancellation of an in-flight `call`. Another controller process can send `cancel` with the original request UUID. A dropped connection can leave an operation in progress; reconnect and inspect state, or retry the same UUID while the same agent process is still running. Do not blindly retry consequential operations with a new UUID. The agent retains up to 2,048 mutation replies per process lifetime. After restart this cache is empty.
+
+## Operation arguments
+
+| Operation | `args` | Result / effect |
+|---|---|---|
+| `status` | `{}` | Machine/user, tool version, agent PID, workspace, elevation status |
+| `system` | `{}` | Timestamped CPU sample, available/total RAM, volumes/free space, uptime |
+| `processes` | `{}` | Timestamped sampled process CPU/memory, window title, response state |
+| `process.info` | `{"pid":1234}` | Process start time, actual image path/SHA-256/file version, thread count |
+| `files` | `{"path":"deployments"}` | Up to 1,000 immediate children; blank path means workspace |
+| `file.info` | `{"path":"deployments/v1/App.exe"}` | Size, SHA-256, file version |
+| `start` | `{"path":"deployments/v1/App.exe","arguments":[]}` | PID and launched binary identity |
+| `stop` | `{"pid":1234,"mode":"graceful"}` | Close main window and wait; `force` explicitly kills the process tree |
+| `restart` | `{"pid":1234,"mode":"graceful","arguments":[]}` | Stop/start an application previously launched by this agent process |
+| `windows` | `{"pid":1234}` or `{}` | Window handles, owning PIDs and names |
+| `ui.inspect` | `{"pid":1234}` | Up to 250 UI Automation controls, IDs/names/types; no password values |
+| `ui.click` | `{"pid":1234,"automationId":"saveButton"}` | Invoke a unique control; `name` is an alternative selector |
+| `ui.text` | `{"pid":1234,"text":"test"}` | Focus target and type Unicode text; PID 0 uses current foreground |
+| `ui.key` | `{"pid":1234,"key":"CTRL+A"}` | Named key/chord, such as ENTER, TAB, ESCAPE, F1–F12, letters |
+| `ui.mouse` | `{"pid":1234,"x":500,"y":300}` | Focus target and left-click absolute desktop pixels |
+| `monitors` | `{}` | Monitor indices, bounds, device and primary flag |
+| `screenshot` | `{"monitor":0,"quality":85}` | Fresh JPEG in base64, capture time, geometry and capture/encode duration |
+| `ui.input` | See below | Explicit pointer/key transitions without changing foreground |
+| `network` | `{}` | Network IP configuration and adapter counters as JSON in `stdout` |
+| `services` | `{}` | Service names, states and start types as JSON in `stdout` |
+| `events` | `{"log":"Application","count":30}` | Application/System events, 1–100, JSON in `stdout` |
+| `command` | `{"file":"whoami.exe","arguments":[]}` | Exit code and bounded stdout/stderr; no implicit shell |
+| `maintenance.status` | `{}` | Whether the locally approved admin session is active, and its expiry |
+| `maintenance.session` | Same as command | Admin command after one local UAC approval for a visible one-hour session |
+| `maintenance.elevated` | Same as command | Alternative helper requiring local UAC approval for every call |
+| `debug.attach` | `{"pid":1234,"seconds":3}` | Real native attach, breakpoint, events, detach; 1–30 seconds |
+| `debug.dump` | `{"pid":1234}` | MiniDumpWriteDump output under workspace/diagnostics |
+| `history` | `{}` | Last 200 intervention metadata records with relevant version evidence |
+| `cancel` | `{"id":"ORIGINAL-UUID"}` | Request cancellation of a running operation |
+| `revoke` | `{}` | Revoke the controller, cancel work, require local pairing again |
+
+CPU values are percentages of total logical-processor capacity, not a single core. `null` means unavailable/newly created/inaccessible, never zero. Check `sampleStartUtc`, `sampleEndUtc` and `intervalMs`. A process without a main window has no GUI response state (`responding: null`). System and process requests are independent samples.
+
+File reads accept absolute paths visible to the agent user. Upload writes are confined to the agent workspace. Namespaces and drive letters belong to the remote PC.
+
+## Files
+
+```powershell
+./RemoteDebugger.exe cli upload --file ./App.exe --path deployments/App/1.2.3/App.exe
+./RemoteDebugger.exe cli download --path 'deployments/App/logs/app.log' --file ./app.log
+```
+
+Repeat the same upload after transport interruption to resume the accepted offset when the source hash is unchanged. The controller's resume metadata is DPAPI protected. Uploads use 256 KiB chunks, at most 16 GiB per file, and verify the complete SHA-256 before promotion. Downloads use a temporary local file and verify SHA-256 before replacing the destination; retry if the source changed.
+
+Low-level resumable upload operations are also available for automation:
+
+| Operation | Arguments |
+|---|---|
+| `upload.begin` | `transfer` (32 hex UUID), `path` (workspace-relative), `size`, `sha256` |
+| `upload.status` | `transfer`; returns accepted `offset` and `size` |
+| `upload.chunk` | `transfer`, `offset`, `data` (base64, max 256 KiB decoded) |
+| `upload.commit` | `transfer`; requires full size/hash, then promotes file |
+| `upload.abort` | `transfer`; deletes this transfer's uncommitted files |
+
+Identical repeated chunks are accepted; conflicting/overlapping data is rejected. There is no implicit archive extraction or remote execution during upload.
+
+## Fresh screenshots and continuous stream
+
+```powershell
+./RemoteDebugger.exe cli screenshot --file ./remote-now.jpg --monitor 0
+./RemoteDebugger.exe cli stream --seconds 10 --fps 5 --monitor 0 --report ./stream.json --last-frame ./last.jpg
+```
+
+`screenshot` always asks the remote machine for a fresh frame, writes it locally, and returns capture metadata plus measured request round-trip time. It does not reuse the human viewer's image.
+
+`stream` consumes continuous frames and reports actual received FPS, distinct frame count, application payload bitrate estimate, remote capture/encode time, inter-frame p95 and controller CPU. CLI measurements exclude GUI decode/presentation; the GUI measures its own presented cadence. The stream is JPEG over TLS with one presentation-acknowledged frame in flight, target up to 5 FPS, not a video recording. Monitor -1 is the full virtual desktop. No audio, clipboard sync, hardware codec or secure desktop control is included.
+
+Pointer events bind to the `geometry.layoutId` returned by a fresh frame:
+
+```json
+{"operation":"ui.input","args":{"kind":"down","button":"left","x":600,"y":400,"layoutId":"VALUE_FROM_FRAME"}}
+```
+
+`kind`: `move`, `down`, `up`, `wheel` (with signed `delta`), `keyDown`/`keyUp` (with Windows `virtualKey` integer), or `release`. Send releases; the agent also has a three-second stuck-input watchdog. Coordinates are source desktop pixels including negative monitor origins. The GUI handles image scaling and letterboxing automatically. Stale geometry is rejected before pointer input.
+
+## Practical debugging loop
+
+Deploy to a unique version directory, call `start`, then `process.info` to confirm actual image/hash/version. Inspect controls or request a fresh screenshot. Send input, retrieve result/log files, record the result alongside the returned identity, then stop and deploy the next version. Use `debug.attach` for native event evidence or `debug.dump` to collect a dump; use an explicitly installed external debugger for symbol/source-level stepping. Authentication that requires personal approval stays interactive on the remote PC.

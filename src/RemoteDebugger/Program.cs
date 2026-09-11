@@ -1,0 +1,77 @@
+using System.Text.Json;
+using RemoteDebugger.Core;
+using Forms = System.Windows.Forms;
+
+namespace RemoteDebugger;
+
+public static class Program
+{
+    [STAThread]
+    public static int Main(string[] args)
+    {
+        if (args.Length == 2 && args[0] == "--elevated-job") return ElevatedJob.ExecuteAsync(args[1]).GetAwaiter().GetResult();
+        if (args.Length == 3 && args[0] == "--maintenance-session") return MaintenanceHelper.Run(args[1], args[2]);
+        if (args.Length == 2 && args[0] == "--ui-job") { Forms.Application.SetHighDpiMode(Forms.HighDpiMode.PerMonitorV2); return UiAutomationJob.Execute(args[1]); }
+        if (args.Length > 0 && args[0] == "cli") return CliAsync(args.Skip(1).ToArray()).GetAwaiter().GetResult();
+        Native.FreeConsole(); ApplicationConfiguration.Initialize();
+        int rootIndex = Array.IndexOf(args, "--data-root");
+        Forms.Application.Run(new MainForm(args.Contains("--agent"), rootIndex >= 0 && rootIndex + 1 < args.Length ? args[rootIndex + 1] : null, args.Contains("--loopback-only"))); return 0;
+    }
+
+    private static async Task<int> CliAsync(string[] args)
+    {
+        using var ct = new CancellationTokenSource(); Console.CancelKeyPress += (_, e) => { e.Cancel = true; ct.Cancel(); };
+        string Option(string key, string fallback = "") { int i = Array.IndexOf(args, key); return i >= 0 && i + 1 < args.Length ? args[i + 1] : fallback; }
+        try
+        {
+            string verb = args.FirstOrDefault() ?? "help", config = Option("--connection", RemoteClient.DefaultPath);
+            if (verb == "discover") { Console.WriteLine(Json.Text(new { ok = true, peers = await Discovery.FindAsync(2500, ct.Token) })); return 0; }
+            if (verb == "pair")
+            {
+                string fingerprint = Option("--fingerprint"); if (fingerprint.Replace(":", "").Length != 64) throw new ArgumentException("--fingerprint must be verified from the agent screen.");
+                var client = new RemoteClient(new Connection(Option("--host"), int.Parse(Option("--port", "45832")), fingerprint, ""));
+                string code = (await Console.In.ReadLineAsync(ct.Token) ?? "").Trim(); await client.PairAsync(code, ct.Token); client.Save(config);
+                Console.WriteLine(Json.Text(new { ok = true, paired = true, connection = config })); return 0;
+            }
+            if (verb == "help")
+            {
+                Console.WriteLine("RemoteDebugger cli discover | pair --host IP --fingerprint SHA256 (code on stdin) | call --request FILE | upload --file FILE --path RELATIVE | download --path REMOTE --file LOCAL | screenshot --file IMAGE | stream --seconds 10 --fps 5\nOptional: --connection FILE. Request JSON: {\"operation\":\"status\",\"args\":{},\"timeoutSeconds\":60,\"id\":\"UUID\"}. Exit 0=success, 1=operation failure, 2=transport/input failure. See docs/CLI.md."); return 0;
+            }
+            var remote = RemoteClient.Load(config);
+            if (verb == "screenshot")
+            {
+                var elapsed = System.Diagnostics.Stopwatch.StartNew(); var data = RemoteClient.Require(await remote.CallAsync("screenshot", new { monitor = int.Parse(Option("--monitor", "0")) }, ct.Token));
+                var frame = data.Deserialize<ScreenFrame>(Json.Options)!; string file = Option("--file"); await File.WriteAllBytesAsync(file, Convert.FromBase64String(frame.Data), ct.Token);
+                Console.WriteLine(Json.Text(new { ok = true, file, frame.CapturedUtc, frame.Geometry, frame.EncodedWidth, frame.EncodedHeight, frame.CaptureEncodeMs, frame.CopyMs, frame.JpegMs, roundTripMs = elapsed.Elapsed.TotalMilliseconds })); return 0;
+            }
+            if (verb == "stream")
+            {
+                int seconds = Math.Clamp(int.Parse(Option("--seconds", "10")), 1, 290), fps = StreamPolicy.ClampFps(int.Parse(Option("--fps", StreamPolicy.MaximumFps.ToString())));
+                int frames = 0; long bytes = 0; var capture = new List<double>(); var copies = new List<double>(); var jpegs = new List<double>(); var arrivals = new List<double>(); var hashes = new HashSet<string>(); ScreenFrame? last = null;
+                var elapsed = System.Diagnostics.Stopwatch.StartNew(); using var duration = CancellationTokenSource.CreateLinkedTokenSource(ct.Token); duration.CancelAfter(TimeSpan.FromSeconds(seconds));
+                using var self = System.Diagnostics.Process.GetCurrentProcess(); var cpu = self.TotalProcessorTime;
+                try
+                {
+                    await remote.StreamAsync(frame => { last = frame; frames++; bytes += frame.Data.Length + 400; capture.Add(frame.CaptureEncodeMs); copies.Add(frame.CopyMs); jpegs.Add(frame.JpegMs); arrivals.Add(elapsed.Elapsed.TotalMilliseconds); hashes.Add(Safety.Hash(frame.Data)); return Task.CompletedTask; }, fps, int.Parse(Option("--monitor", "0")), seconds + 2, duration.Token);
+                }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested && frames > 0) { }
+                if (last == null) throw new IOException("No stream frame received.");
+                string framePath = Option("--last-frame"); if (framePath.Length > 0) await File.WriteAllBytesAsync(framePath, Convert.FromBase64String(last.Data), ct.Token);
+                var gaps = arrivals.Zip(arrivals.Skip(1), (a, b) => b - a).OrderBy(x => x).ToArray();
+                var report = new { ok = true, transport = "TLS framed JPEG, one frame in flight with presentation ACK", requestedFps = fps, frames, distinctFrames = hashes.Count, durationSeconds = elapsed.Elapsed.TotalSeconds, receivedFps = frames / elapsed.Elapsed.TotalSeconds, estimatedApplicationMbitPerSecond = bytes * 8 / elapsed.Elapsed.TotalSeconds / 1e6, meanCaptureEncodeMs = capture.Average(), meanCopyMs = copies.Average(), meanJpegMs = jpegs.Average(), interFrameP95Ms = gaps.Length == 0 ? 0 : gaps[(int)((gaps.Length - 1) * .95)], controllerCpuPercentTotalMachine = (self.TotalProcessorTime - cpu).TotalMilliseconds / elapsed.Elapsed.TotalMilliseconds / Environment.ProcessorCount * 100, last.Geometry, last.EncodedWidth, last.EncodedHeight, decodeAndDisplayMeasured = false };
+                string reportPath = Option("--report"); if (reportPath.Length > 0) await File.WriteAllTextAsync(reportPath, Json.Text(report), ct.Token); Console.WriteLine(Json.Text(report)); return 0;
+            }
+            if (verb == "upload") { var result = await remote.UploadAsync(Option("--file"), Option("--path"), ct.Token); Console.WriteLine(Json.Text(new { ok = true, data = result })); return 0; }
+            if (verb == "download") { await remote.DownloadAsync(Option("--path"), Option("--file"), ct.Token); Console.WriteLine(Json.Text(new { ok = true, file = Option("--file") })); return 0; }
+            if (verb != "call") throw new ArgumentException("Unknown CLI verb.");
+            string requestPath = Option("--request"); var request = JsonSerializer.Deserialize<JsonElement>(requestPath == "-" ? await Console.In.ReadToEndAsync(ct.Token) : await File.ReadAllTextAsync(requestPath, ct.Token));
+            string op = request.Str("operation"), id = request.Str("id", Guid.NewGuid().ToString());
+            if (op is "pair" or "screen.stream") throw new ArgumentException("Use the dedicated pair or stream CLI verb.");
+            var pending = remote.CallAsync(op, request.TryGetProperty("args", out var a) ? a : Json.Element(new { }), ct.Token, id, request.Int("timeoutSeconds", 60)); Reply reply;
+            try { reply = await pending; }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { try { await remote.CallAsync("cancel", new { id }, seconds: 5); } catch (Exception) { } throw; }
+            Console.WriteLine(Json.Text(reply)); return reply.Ok ? 0 : 1;
+        }
+        catch (Exception ex) { Console.WriteLine(Json.Text(new { ok = false, error = ex is OperationCanceledException ? "cancelled" : "transport_or_input", message = ex.Message })); return 2; }
+    }
+}
