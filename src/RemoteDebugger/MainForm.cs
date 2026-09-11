@@ -46,13 +46,20 @@ public sealed class MainForm : Forms.Form
     public MainForm(bool startAgent = false, string? dataRoot = null, bool loopbackOnly = false)
     {
         root = dataRoot ?? Vault.DefaultRoot; this.loopbackOnly = loopbackOnly;
-        Text = "Remote Debugger — 0.1.0"; Name = "RemoteDebuggerMain"; Width = 1180; Height = 820; MinimumSize = new Size(980, 680); StartPosition = Forms.FormStartPosition.CenterScreen;
+        Text = "Remote Debugger — 0.1.0"; Name = "RemoteDebuggerMain"; Icon = LoadApplicationIcon(); Width = 1180; Height = 820; MinimumSize = new Size(980, 680); StartPosition = Forms.FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI", 10); BackColor = Color.WhiteSmoke;
         var header = new Forms.Label { Text = "Remote Debugger     /     Piloter, tester et dépanner un autre PC", Height = 54, Dock = Forms.DockStyle.Top, Padding = new Forms.Padding(18, 12, 0, 0), ForeColor = Color.White, BackColor = Color.FromArgb(27, 42, 61), Font = new Font("Segoe UI", 14, FontStyle.Bold) };
         Controls.Add(tabs); Controls.Add(header); var take = new PagePanel("Prendre le contrôle"); take.Controls.Add(controllerTabs); tabs.TabPages.Add(take); BuildController(); BuildScreen(); controllerTabs.TabPages.Add(BuildResources()); if (pendingFiles != null) controllerTabs.TabPages.Add(pendingFiles); BuildAgent();
         try { client = RemoteClient.Load(); host.Text = client.Connection.Host; fingerprint.Text = client.Connection.Fingerprint; controllerState.Text = "Connexion enregistrée. Exécute État pour la vérifier."; } catch (Exception) { }
         Shown += (_, _) => { _ = PumpInputAsync(); if (startAgent) { tabs.SelectedIndex = 1; StartAgent(); } };
         FormClosed += (_, _) => { action?.Cancel(); liveStream?.Cancel(); inputQueue.Writer.TryComplete(); agent?.Dispose(); screen.Image?.Dispose(); };
+    }
+    private static Icon LoadApplicationIcon()
+    {
+        using Stream stream = typeof(MainForm).Assembly.GetManifestResourceStream("RemoteDebugger.Assets.RemoteDebugger.ico")
+            ?? throw new InvalidOperationException("The application icon resource is missing.");
+        using var icon = new Icon(stream);
+        return (Icon)icon.Clone();
     }
     private static Forms.Button Button(string text, string name) => new() { Text = text, Name = name, AutoSize = true, Padding = new Forms.Padding(5), Margin = new Forms.Padding(4) };
     private static Forms.TextBox Box(string name, string value) => new() { Name = name, Text = value, Dock = Forms.DockStyle.Fill };
