@@ -8,12 +8,14 @@ param(
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$')]
     [string]$Cohort = 'remote-debugger-acceptance',
     [int]$ExecutionTimeoutSeconds = 1200,
-    [string]$BrokerRoot
+    [string]$BrokerRoot,
+    [string]$RunnerPath
 )
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot
-$runner = Join-Path $env:USERPROFILE '.agents\skills\hyperv-test-executables\scripts\Invoke-HyperVExecutableTest.ps1'
+$defaultRunner = Join-Path $env:USERPROFILE '.agents\skills\hyperv-test-executables\scripts\Invoke-HyperVExecutableTest.ps1'
+$runner = if ([string]::IsNullOrWhiteSpace($RunnerPath)) { $defaultRunner } else { (Resolve-Path -LiteralPath $RunnerPath -ErrorAction Stop).Path }
 $actions = Join-Path $projectRoot 'tests\hyperv-actions.json'
 $artifact = Join-Path $projectRoot 'artifacts'
 
@@ -24,6 +26,15 @@ if (-not (Test-Path -LiteralPath (Join-Path $artifact 'lab\RemoteDebugger.Lab.ex
 if ($ExecutionTimeoutSeconds -lt 300 -or $ExecutionTimeoutSeconds -gt 1800) { throw 'ExecutionTimeoutSeconds must be between 300 and 1800 seconds.' }
 if ($UpdateVariant -ne 'None' -and $Scope -notin @('Provisioned', 'Full')) { throw 'UpdateVariant requires a Provisioned or Full scope.' }
 if ($Role -in @('Loopback', 'LoopbackTray', 'LoopbackLifetime') -and ($Scope -ne 'Runtime' -or $UpdateVariant -ne 'None')) { throw 'Loopback roles require Runtime scope and None update variant.' }
+if ($Scope -in @('Provisioned', 'Full')) {
+    if ([string]::IsNullOrWhiteSpace($BrokerRoot)) { throw 'Provisioned and Full scopes require -BrokerRoot for the dedicated SYSTEM broker.' }
+    if ([string]::IsNullOrWhiteSpace($RunnerPath)) { throw 'Provisioned and Full scopes require -RunnerPath for the dedicated runner that supports RemoteDebuggerProvisionV1.' }
+    if (-not (Test-Path -LiteralPath $BrokerRoot -PathType Container)) { throw "Dedicated broker root not found: $BrokerRoot" }
+    $runnerCommand = Get-Command -Name $runner -ErrorAction Stop
+    foreach ($parameterName in @('GuestSetupProfile', 'GuestSetupExecutableRelativePath', 'GuestSetupExecutableSha256')) {
+        if (-not $runnerCommand.Parameters.ContainsKey($parameterName)) { throw "Runner does not support -$parameterName; pass the dedicated provisioned Hyper-V runner with the RemoteDebuggerProvisionV1 contract: $runner" }
+    }
+}
 if ($UpdateVariant -ne 'None') {
     foreach ($fixture in @('older', 'newer', 'same-version')) {
         if (-not (Test-Path -LiteralPath (Join-Path $artifact "update-fixtures\$fixture\RemoteDebugger.exe") -PathType Leaf)) {
@@ -44,6 +55,21 @@ function New-RoleRequest([string]$roleName) {
         AssertResultEqualsJson = 'true'
         ExecutionTimeoutSeconds = $ExecutionTimeoutSeconds
         ThrowOnFailure = $true
+    }
+    if ($Scope -in @('Provisioned', 'Full') -and -not [string]::IsNullOrWhiteSpace($BrokerRoot)) {
+        $setupRelativePath = switch ($UpdateVariant.ToLowerInvariant()) {
+            'upgrade' { if ($roleName -eq 'Agent') { 'update-fixtures\older\RemoteDebugger.exe' } else { 'update-fixtures\newer\RemoteDebugger.exe' } }
+            'downgrade' { if ($roleName -eq 'Agent') { 'update-fixtures\newer\RemoteDebugger.exe' } else { 'update-fixtures\older\RemoteDebugger.exe' } }
+            'sameversion' { if ($roleName -eq 'Agent') { 'update-fixtures\same-version\RemoteDebugger.exe' } else { 'release\RemoteDebugger.exe' } }
+            'rollback' { if ($roleName -eq 'Agent') { 'update-fixtures\older\RemoteDebugger.exe' } else { 'update-fixtures\newer\RemoteDebugger.exe' } }
+            default { 'release\RemoteDebugger.exe' }
+        }
+        $setupPath = Join-Path $artifact $setupRelativePath
+        if (-not (Test-Path -LiteralPath $setupPath -PathType Leaf)) { throw "Guest setup fixture is missing: $setupRelativePath" }
+        $setupHash = (Get-FileHash -LiteralPath $setupPath -Algorithm SHA256).Hash.ToUpperInvariant()
+        $request.GuestSetupProfile = 'RemoteDebuggerProvisionV1'
+        $request.GuestSetupExecutableRelativePath = $setupRelativePath
+        $request.GuestSetupExecutableSha256 = $setupHash
     }
     if ($roleName -notin @('Local', 'Loopback', 'LoopbackTray', 'LoopbackLifetime')) {
         $request.NetworkProfile = 'IsolatedTestNet'
