@@ -1093,32 +1093,45 @@ internal sealed partial class LabForm : Forms.Form
             if (armed.TryGetProperty("armed", out var armedValue) && armedValue.GetBoolean()) Pass("controller.rollback_failure_arm", "The rollback run arms a bounded candidate-startup failure against the controller fixture", new { controllerHash, expectedPreviousHash });
             else Fail("controller.rollback_failure_arm", "The rollback run arms a bounded candidate-startup failure against the controller fixture", armed);
         }
-        // Wait for the real five-minute rotation before pairing. The agent
-        // remains unpaired during this wait, so the old value can be rejected
-        // over the actual TLS pairing operation below.
-        JsonElement rotated = await LabMessageAsync(peerHost, "RD_LAB_ROTATE", retry: false);
-        string code = rotated.Str("code");
-        bool rotatedAtBoundary = rotated.TryGetProperty("rotated", out var rotatedFlag) && rotatedFlag.GetBoolean()
-            && rotated.TryGetProperty("timing", out var timingFlag) && timingFlag.GetBoolean()
-            && SixDigits.IsMatch(code);
-        if (rotatedAtBoundary) Pass("controller.rotation_observed", "Controller receives the currently valid code after the agent stays on the old code until its five-minute expiry", new { initialCountdown, oldCode = CodeEvidence(oldCode), code = CodeEvidence(code), waitedSeconds = rotated.TryGetProperty("waitedSeconds", out var waited) ? waited.GetDouble() : 0, unchangedSamples = rotated.Int("unchangedSamples"), timing = true });
-        else Fail("controller.rotation_observed", "Controller receives the currently valid code after the agent stays on the old code until its five-minute expiry", new { initialCountdown, oldCode = CodeEvidence(oldCode), code = CodeEvidence(code), rotated });
-        if (!SixDigits.IsMatch(code)) throw new InvalidDataException("The rotated code is not six digits.");
-
-        var oldPairConnection = Path.Combine(output, "expired-pair.connection");
-        JsonElement oldPair;
-        try
+        string code;
+        if (IsUpdateVariant)
         {
-            oldPair = await CliAsync(["pair", "--host", peerHost, "--port", "45832", "--fingerprint", peerFingerprint!, "--connection", oldPairConnection], stdin: oldCode, requireSuccess: false);
+            // Update variants stay short and pair with the code currently
+            // advertised by the agent. The dedicated Runtime lifetime run
+            // owns the wall-clock rotation and expired-code proof.
+            code = initialCode;
+            Block("controller.rotation_observed", "Controller receives the currently valid code after its five-minute expiry", "The update variant uses the currently advertised code; wall-clock rotation is covered by the dedicated lifetime run.", new { updateVariant, initialCountdown, code = CodeEvidence(code), timingCoveredBy = "loopback-lifetime" }, required: false);
+            Block("controller.expired_code_denied", "The previous pairing code is rejected after the five-minute rotation", "Expired-code denial is covered by the dedicated lifetime run; this update variant does not wait five minutes before pairing.", new { updateVariant, code = CodeEvidence(code), timingCoveredBy = "loopback-lifetime" }, required: false);
         }
-        finally { try { File.Delete(oldPairConnection); } catch (IOException) { } }
-        bool oldPairSucceeded = oldPair.TryGetProperty("ok", out var oldPairOk) && oldPairOk.ValueKind == JsonValueKind.True;
-        bool oldPairDenied = !oldPairSucceeded && (oldPair.Str("message").Contains("incorrect", StringComparison.OrdinalIgnoreCase)
-            || oldPair.Str("message").Contains("expired", StringComparison.OrdinalIgnoreCase)
-            || oldPair.Str("message").Contains("unavailable", StringComparison.OrdinalIgnoreCase)
-            || oldPair.Str("error").Contains("transport", StringComparison.OrdinalIgnoreCase));
-        if (oldPairDenied) Pass("controller.expired_code_denied", "The previous pairing code is rejected after the five-minute rotation", new { code = CodeEvidence(oldCode), response = oldPair });
-        else Fail("controller.expired_code_denied", "The previous pairing code is rejected after the five-minute rotation", new { code = CodeEvidence(oldCode), response = oldPair });
+        else
+        {
+            // Wait for the real five-minute rotation before pairing. The agent
+            // remains unpaired during this wait, so the old value can be
+            // rejected over the actual TLS pairing operation below.
+            JsonElement rotated = await LabMessageAsync(peerHost, "RD_LAB_ROTATE", retry: false);
+            code = rotated.Str("code");
+            bool rotatedAtBoundary = rotated.TryGetProperty("rotated", out var rotatedFlag) && rotatedFlag.GetBoolean()
+                && rotated.TryGetProperty("timing", out var timingFlag) && timingFlag.GetBoolean()
+                && SixDigits.IsMatch(code);
+            if (rotatedAtBoundary) Pass("controller.rotation_observed", "Controller receives the currently valid code after the agent stays on the old code until its five-minute expiry", new { initialCountdown, oldCode = CodeEvidence(oldCode), code = CodeEvidence(code), waitedSeconds = rotated.TryGetProperty("waitedSeconds", out var waited) ? waited.GetDouble() : 0, unchangedSamples = rotated.Int("unchangedSamples"), timing = true });
+            else Fail("controller.rotation_observed", "Controller receives the currently valid code after the agent stays on the old code until its five-minute expiry", new { initialCountdown, oldCode = CodeEvidence(oldCode), code = CodeEvidence(code), rotated });
+            if (!SixDigits.IsMatch(code)) throw new InvalidDataException("The rotated code is not six digits.");
+
+            var oldPairConnection = Path.Combine(output, "expired-pair.connection");
+            JsonElement oldPair;
+            try
+            {
+                oldPair = await CliAsync(["pair", "--host", peerHost, "--port", "45832", "--fingerprint", peerFingerprint!, "--connection", oldPairConnection], stdin: oldCode, requireSuccess: false);
+            }
+            finally { try { File.Delete(oldPairConnection); } catch (IOException) { } }
+            bool oldPairSucceeded = oldPair.TryGetProperty("ok", out var oldPairOk) && oldPairOk.ValueKind == JsonValueKind.True;
+            bool oldPairDenied = !oldPairSucceeded && (oldPair.Str("message").Contains("incorrect", StringComparison.OrdinalIgnoreCase)
+                || oldPair.Str("message").Contains("expired", StringComparison.OrdinalIgnoreCase)
+                || oldPair.Str("message").Contains("unavailable", StringComparison.OrdinalIgnoreCase)
+                || oldPair.Str("error").Contains("transport", StringComparison.OrdinalIgnoreCase));
+            if (oldPairDenied) Pass("controller.expired_code_denied", "The previous pairing code is rejected after the five-minute rotation", new { code = CodeEvidence(oldCode), response = oldPair });
+            else Fail("controller.expired_code_denied", "The previous pairing code is rejected after the five-minute rotation", new { code = CodeEvidence(oldCode), response = oldPair });
+        }
 
         Set("pairCode", code);
         bool hasFingerprintGate = FindVisibleId("fingerprintVerified") != null || FindVisibleId("fingerprint") != null;
