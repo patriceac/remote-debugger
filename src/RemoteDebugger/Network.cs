@@ -72,12 +72,18 @@ public sealed class AgentServer : IDisposable
     private CancellationTokenSource grantLifetime = new();
     private readonly string authPath;
     private string tokenHash = "";
+    private string controllerBinaryHash = "";
+    private readonly SupportSession session = new();
+    private readonly SemaphoreSlim pairingSlot = new(1, 1);
+    private int disposed;
     public PairingGate Pairing { get; } = new();
     public Operations Operations { get; }
     public string Fingerprint => certificate.GetCertHashString(HashAlgorithmName.SHA256);
     public int Port { get; }
     public bool Paired { get { lock (authLock) return tokenHash.Length != 0; } }
     public event Action<string>? Status;
+    public event Action? TerminationRequested;
+    public SupportSessionSnapshot Session => session.Snapshot;
     public AgentServer(string root, int port = 45832, bool loopbackOnly = false)
     {
         Directory.CreateDirectory(root); Port = port; authPath = Path.Combine(root, "agent.auth");
@@ -92,12 +98,36 @@ public sealed class AgentServer : IDisposable
             // Schannel needs a Windows user key container; EphemeralKeySet fails TLS on Windows.
             certificate = new X509Certificate2(pfx, (string?)null, X509KeyStorageFlags.UserKeySet);
         }
-        if (File.Exists(authPath)) tokenHash = Encoding.UTF8.GetString(Vault.Read(authPath));
+        // A normal launch always starts a new support session. Persisted grants from
+        // older versions must never silently grant access on a fresh launch.
+        if (File.Exists(authPath)) Vault.Save(authPath, []);
         Operations = new Operations(root);
         listener = new TcpListener(loopbackOnly ? IPAddress.Loopback : IPAddress.Any, port);
         discovery = new UdpClient(new IPEndPoint(loopbackOnly ? IPAddress.Loopback : IPAddress.Any, Discovery.Port));
     }
-    public void Start() { listener.Start(); _ = Task.Run(AcceptAsync); _ = Task.Run(DiscoverAsync); Status?.Invoke("Agent listening; access is visible in this window."); }
+    public void Start()
+    {
+        _ = ExecutableIdentity.Sha256; Pairing.Open(); listener.Start();
+        _ = Task.Run(AcceptAsync); _ = Task.Run(DiscoverAsync); _ = Task.Run(WatchSessionAsync);
+        Status?.Invoke("Agent ready for pairing; access is visible in this window.");
+    }
+    private async Task WatchSessionAsync()
+    {
+        try
+        {
+            while (!stop.IsCancellationRequested)
+            {
+                await Task.Delay(500, stop.Token); _ = Pairing.CurrentCode;
+                if (session.ShouldExit) { Terminate(); return; }
+                if (!Session.Connected && Session.HasPaired) Native.ReleaseAllInput();
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+    public void Terminate()
+    {
+        session.End(); Revoke(); Dispose(); TerminationRequested?.Invoke();
+    }
     public void Revoke()
     {
         lock (authLock) { tokenHash = ""; grantLifetime.Cancel(); grantLifetime = new(); Vault.Save(authPath, []); Pairing.Close(); }
@@ -135,26 +165,42 @@ public sealed class AgentServer : IDisposable
                 await tls.AuthenticateAsServerAsync(new SslServerAuthenticationOptions { ServerCertificate = certificate, EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13, ClientCertificateRequired = false }, handshake.Token);
                 var r = await Wire.ReadAsync<Request>(tls, handshake.Token);
                 Reply reply;
-                if (r.Operation == "pair")
+                if (r.Operation == "pair.v2")
                 {
-                    lock (authLock)
+                    if (!await pairingSlot.WaitAsync(0, handshake.Token)) throw new AuthenticationException("Another pairing attempt is in progress.");
+                    try
                     {
-                        if (!Pairing.TryConsume(r.Args.Str("code"))) reply = Reply.Failure(r.Id, "pairing_denied", "Open pairing on the agent. Code expires after 3 minutes or 5 attempts.");
-                        else
+                        handshake.CancelAfter(TimeSpan.FromSeconds(30));
+                        var result = await PairingTransport.AcceptAsync(tls, r, Pairing, Fingerprint, handshake.Token);
+                        lock (authLock)
                         {
-                            string token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)); tokenHash = Safety.Hash(token); grantLifetime.Cancel(); grantLifetime = new(); Vault.Save(authPath, Encoding.UTF8.GetBytes(tokenHash));
+                            tokenHash = Safety.Hash(result.Token); controllerBinaryHash = result.ControllerHash; grantLifetime.Cancel(); grantLifetime = new();
                             foreach (var job in running.Values) job.Cancel(); requests.Clear();
-                            reply = Reply.Success(r.Id, new { token }); Status?.Invoke("Controller paired. Full access to this Windows user session is enabled.");
+                            session.Pair(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
                         }
+                        _ = StartMaintenanceAsync(); Status?.Invoke("Controller paired. Synchronizing the support session.");
                     }
+                    finally { pairingSlot.Release(); }
+                    return;
                 }
                 else
                 {
                     bool authorized; CancellationToken grant; lock (authLock) { authorized = tokenHash.Length != 0 && Safety.Equal(tokenHash, Safety.Hash(r.Token ?? "")); grant = grantLifetime.Token; }
-                    if (!authorized) reply = Reply.Failure(r.Id, "access_denied", "This controller is not paired, or access was revoked.");
+                    if (!authorized || session.ShouldExit) reply = Reply.Failure(r.Id, "access_denied", "This support session is not authorized or has ended.");
+                    else if (r.Operation == "session.heartbeat")
+                    {
+                        session.Observe();
+                        reply = Reply.Success(r.Id, new { session = Session, agentBinarySha256 = ExecutableIdentity.Sha256, controllerBinarySha256 = controllerBinaryHash, binaryMatched = Session.BinaryMatched, processId = Environment.ProcessId, maintenance = Operations.Maintenance.Status });
+                    }
+                    else if (r.Operation == "session.disconnect") { Native.ReleaseAllInput(); session.Disconnect(); reply = Reply.Success(r.Id, new { session = Session }); }
+                    else if (r.Operation is "session.end" or "revoke")
+                    {
+                        await Wire.WriteAsync(tls, Reply.Success(r.Id, new { ended = true }), timeout.Token); Terminate(); return;
+                    }
+                    else if (!Session.BinaryMatched && !r.Operation.StartsWith("update.", StringComparison.Ordinal) && !r.Operation.StartsWith("upload.", StringComparison.Ordinal) && r.Operation is not ("status" or "file.info" or "maintenance.status" or "cancel"))
+                        reply = Reply.Failure(r.Id, "binary_mismatch", "Synchronize the agent with the controller executable before starting support.");
                     else if (r.Operation == "screen.stream") { using var streamGrant = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, grant); await StreamAsync(tls, r, streamGrant.Token); return; }
                     else if (r.Operation == "cancel") { if (running.TryGetValue(r.Args.Str("id"), out var job)) job.Cancel(); reply = Reply.Success(r.Id, new { cancellationRequested = true }); }
-                    else if (r.Operation == "revoke") { Revoke(); reply = Reply.Success(r.Id, new { revoked = true }); }
                     else if (!Guid.TryParse(r.Id, out _)) reply = Reply.Failure(r.Id, "invalid_id", "Request id must be a UUID.");
                     else if (r.Operation is "screenshot" or "monitors" or "status" or "file.info" or "file.read" or "files" or "processes" or "process.info" or "system" or "network" or "services" or "events" or "history" or "windows" or "ui.inspect" or "upload.chunk" or "upload.status" or "ui.input") reply = await ExecuteAsync(r, grant);
                     else if (requests.Count >= 2048 && !requests.ContainsKey(r.Id)) reply = Reply.Failure(r.Id, "session_limit", "Restart the agent to clear its 2048-mutation retry cache.");
@@ -188,6 +234,7 @@ public sealed class AgentServer : IDisposable
                 using var ackTimeout = CancellationTokenSource.CreateLinkedTokenSource(cts.Token); ackTimeout.CancelAfter(5000);
                 var ack = await Wire.ReadAsync<System.Text.Json.JsonElement>(tls, ackTimeout.Token);
                 if (ack.Long("sequence", -1) != frame.Sequence) throw new InvalidDataException("Invalid stream acknowledgement.");
+                session.Observe();
                 double wait = 1000.0 / fps - started.Elapsed.TotalMilliseconds; if (wait > 0) await Task.Delay(TimeSpan.FromMilliseconds(wait), cts.Token);
             }
         }
@@ -207,7 +254,12 @@ public sealed class AgentServer : IDisposable
         finally { running.TryRemove(r.Id, out _); }
         if (!noisy) Operations.Record(r.Id, r.Operation, begin, reply.Ok, reply.Error, reply.Data); return reply;
     }
-    public void Dispose() { Pairing.Close(); stop.Cancel(); Operations.Maintenance.Dispose(); Native.ReleaseAllInput(); listener.Stop(); discovery.Dispose(); }
+    private async Task StartMaintenanceAsync()
+    {
+        try { await Operations.Maintenance.StartAsync(stop.Token); Status?.Invoke("Administrator maintenance active for this session."); }
+        catch (Exception ex) { if (!stop.IsCancellationRequested) Status?.Invoke("Administrator maintenance unavailable: " + ex.Message); }
+    }
+    public void Dispose() { if (Interlocked.Exchange(ref disposed, 1) != 0) return; Pairing.Close(); stop.Cancel(); Operations.Maintenance.Dispose(); Native.ReleaseAllInput(); listener.Stop(); discovery.Dispose(); }
 }
 
 public sealed class RemoteClient(Connection connection)
@@ -218,8 +270,11 @@ public sealed class RemoteClient(Connection connection)
     public void Save(string? path = null) => Vault.Save(path ?? DefaultPath, JsonSerializer.SerializeToUtf8Bytes(Connection, Json.Options));
     public async Task PairAsync(string code, CancellationToken ct = default)
     {
-        var reply = await CallAsync("pair", new { code }, ct); Require(reply); Connection = Connection with { Token = reply.Data.Str("token") };
+        Connection = await PairingTransport.PairAsync(Connection, code, ct).ConfigureAwait(false);
     }
+    public async Task<JsonElement> HeartbeatAsync(CancellationToken ct = default) => Require(await CallAsync("session.heartbeat", ct: ct, seconds: 5).ConfigureAwait(false));
+    public async Task EndSessionAsync(CancellationToken ct = default) { Require(await CallAsync("session.end", ct: ct, seconds: 5).ConfigureAwait(false)); }
+    public async Task DisconnectAsync(CancellationToken ct = default) { Require(await CallAsync("session.disconnect", ct: ct, seconds: 5).ConfigureAwait(false)); }
     public async Task<Reply> CallAsync(string operation, object? args = null, CancellationToken ct = default, string? id = null, int seconds = 60)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(seconds, 1, 300) + 15));

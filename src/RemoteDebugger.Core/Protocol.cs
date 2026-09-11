@@ -57,23 +57,54 @@ public static class Safety
 }
 public sealed class PairingGate(TimeProvider? clock = null)
 {
+    public static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(5);
     private readonly TimeProvider time = clock ?? TimeProvider.System;
     private readonly object sync = new();
     private string? code;
     private DateTimeOffset expires;
     private int failures;
+    private bool open;
+    private readonly Queue<DateTimeOffset> attempts = new();
+    public string? CurrentCode { get { lock (sync) { RotateIfExpired(); return code; } } }
+    public DateTimeOffset ExpiresUtc { get { lock (sync) { RotateIfExpired(); return expires; } } }
+    public int AttemptsRemaining { get { lock (sync) { RotateIfExpired(); return Math.Max(0, 5 - failures); } } }
     public string Open()
     {
-        lock (sync) { code = RandomNumberGenerator.GetInt32(0, 100000000).ToString("D8"); expires = time.GetUtcNow().AddMinutes(3); failures = 0; return code; }
+        lock (sync) { open = true; Rotate(); return code!; }
     }
-    public void Close() { lock (sync) code = null; }
-    public bool TryConsume(string candidate)
+    private void Rotate()
+    {
+        string? previous = code;
+        do { code = RandomNumberGenerator.GetInt32(0, 1000000).ToString("D6"); } while (code == previous);
+        expires = time.GetUtcNow() + Lifetime; failures = 0;
+    }
+    private void RotateIfExpired() { if (open && time.GetUtcNow() >= expires) Rotate(); }
+    public void Close() { lock (sync) { open = false; code = null; } }
+
+    // Reserve a bounded attempt before expensive PAKE work. The rolling allowance
+    // survives code rotation/reopening so rotating the UI cannot defeat throttling.
+    public string? BeginAttempt()
     {
         lock (sync)
         {
-            if (code == null || time.GetUtcNow() >= expires || failures >= 5) return false;
-            if (!Safety.Equal(code, candidate)) { failures++; return false; }
-            code = null; return true;
+            RotateIfExpired(); var now = time.GetUtcNow();
+            while (attempts.TryPeek(out var at) && now - at >= TimeSpan.FromMinutes(15)) attempts.Dequeue();
+            if (!open || code == null || failures >= 5 || attempts.Count >= 15) return null;
+            attempts.Enqueue(now); failures++; return code;
         }
+    }
+    public bool CompleteAttempt(string reservedCode)
+    {
+        lock (sync)
+        {
+            // Do not rotate here: an exchange started with an expired code must fail.
+            if (!open || code == null || time.GetUtcNow() >= expires || !Safety.Equal(code, reservedCode)) return false;
+            open = false; code = null; return true;
+        }
+    }
+    public bool TryConsume(string candidate)
+    {
+        string? expected = BeginAttempt();
+        return expected != null && Safety.Equal(expected, candidate) && CompleteAttempt(expected);
     }
 }
