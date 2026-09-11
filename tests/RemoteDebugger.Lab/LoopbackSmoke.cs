@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows.Automation;
 using RemoteDebugger;
@@ -148,6 +149,104 @@ internal sealed partial class LabForm
         try { return process.Id; } catch (InvalidOperationException) { return null; }
     }
 
+    private sealed record TrayContext(AutomationElement? OpenItem, string IconName, bool OverflowOpened);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern void mouse_event(uint flags, uint x, uint y, uint data, UIntPtr extraInfo);
+
+    private const uint MouseEventRightDown = 0x0008;
+    private const uint MouseEventRightUp = 0x0010;
+
+    private static AutomationElement? FindSystemTrayIcon()
+    {
+        try
+        {
+            return AutomationElement.RootElement.FindAll(TreeScope.Descendants, Condition.TrueCondition).Cast<AutomationElement>().FirstOrDefault(element =>
+            {
+                try
+                {
+                    var current = element.Current;
+                    string name = current.Name;
+                    string type = current.ControlType.ProgrammaticName;
+                    return !current.IsOffscreen && (type == "ControlType.Button" || type == "ControlType.ListItem")
+                        && name.Contains("Remote Debugger", StringComparison.OrdinalIgnoreCase);
+                }
+                catch (ElementNotAvailableException) { return false; }
+            });
+        }
+        catch (Exception) { return null; }
+    }
+
+    private static AutomationElement? FindTrayOverflowButton()
+    {
+        try
+        {
+            return AutomationElement.RootElement.FindAll(TreeScope.Descendants, Condition.TrueCondition).Cast<AutomationElement>().FirstOrDefault(element =>
+            {
+                try
+                {
+                    var current = element.Current;
+                    string name = current.Name.ToLowerInvariant();
+                    string type = current.ControlType.ProgrammaticName;
+                    return !current.IsOffscreen && type == "ControlType.Button"
+                        && (name.Contains("hidden", StringComparison.Ordinal) || name.Contains("masqu", StringComparison.Ordinal) || name.Contains("icône", StringComparison.Ordinal));
+                }
+                catch (ElementNotAvailableException) { return false; }
+            });
+        }
+        catch (Exception) { return null; }
+    }
+
+    private static bool RightClickTrayIcon(AutomationElement icon)
+    {
+        try
+        {
+            var point = icon.GetClickablePoint();
+            Forms.Cursor.Position = new System.Drawing.Point((int)Math.Round(point.X), (int)Math.Round(point.Y));
+            mouse_event(MouseEventRightDown, 0, 0, 0, UIntPtr.Zero);
+            mouse_event(MouseEventRightUp, 0, 0, 0, UIntPtr.Zero);
+            return true;
+        }
+        catch (Exception) { return false; }
+    }
+
+    private async Task<TrayContext> OpenTrayContextAsync()
+    {
+        bool overflowOpened = false;
+        for (int attempt = 0; attempt < 2; attempt++)
+        {
+            AutomationElement? icon = FindSystemTrayIcon();
+            if (icon == null && !overflowOpened)
+            {
+                var overflow = FindTrayOverflowButton();
+                if (overflow != null)
+                {
+                    InvokeElement(overflow);
+                    overflowOpened = true;
+                    await Task.Delay(500, stop.Token);
+                    continue;
+                }
+            }
+            if (icon == null) break;
+            string iconName = Safe(() => icon.Current.Name);
+            if (!RightClickTrayIcon(icon)) break;
+            for (int n = 0; n < 20; n++)
+            {
+                var open = FindDesktopMenuItem("Ouvrir") ?? FindDesktopMenuItem("Open");
+                if (open != null) return new TrayContext(open, iconName, overflowOpened);
+                await Task.Delay(250, stop.Token);
+            }
+            return new TrayContext(null, iconName, overflowOpened);
+        }
+        return new TrayContext(null, "", overflowOpened);
+    }
+
+    private bool IsLoopbackControllerVisible()
+    {
+        try { return FindVisibleId(ContractId("terminateSession")) != null; }
+        catch (Exception) { return false; }
+    }
+
     private Process LaunchLoopbackProduct(bool agent, string dataRoot)
     {
         var psi = new ProcessStartInfo(application)
@@ -170,20 +269,21 @@ internal sealed partial class LabForm
         product.CloseMainWindow();
         await Task.Delay(1400, stop.Token);
         product.Refresh();
-        bool trayAlive = !product.HasExited && product.MainWindowHandle == IntPtr.Zero;
+        TrayContext tray = await OpenTrayContextAsync();
+        bool trayAlive = !product.HasExited && !IsLoopbackControllerVisible() && tray.OpenItem != null;
         JsonElement? heartbeat = null;
         try { heartbeat = Data(await CallAsync("status")); } catch (Exception) { }
         bool heartbeatAlive = heartbeat.HasValue && heartbeat.Value.ValueKind == JsonValueKind.Object;
-        if (trayAlive && heartbeatAlive) Pass("loopback.close_to_tray", "Closing the loopback controller keeps its session alive in the tray", new { pid = product.Id, heartbeat = heartbeat!.Value });
-        else Fail("loopback.close_to_tray", "Closing the loopback controller keeps its session alive in the tray", new { trayAlive, heartbeatAlive, pid = product.Id, exited = product.HasExited });
+        if (trayAlive && heartbeatAlive) Pass("loopback.close_to_tray", "Closing the loopback controller keeps its session alive in the tray", new { pid = product.Id, trayIcon = tray.IconName, overflowOpened = tray.OverflowOpened, heartbeat = heartbeat!.Value });
+        else Fail("loopback.close_to_tray", "Closing the loopback controller keeps its session alive in the tray", new { trayAlive, heartbeatAlive, trayIcon = tray.IconName, overflowOpened = tray.OverflowOpened, pid = product.Id, exited = product.HasExited });
 
-        var open = FindDesktopMenuItem("Ouvrir");
+        var open = tray.OpenItem;
         if (open != null)
         {
             InvokeElement(open);
-            await WaitForUiAsync(() => product.MainWindowHandle != IntPtr.Zero, 15);
+            await WaitForUiAsync(IsLoopbackControllerVisible, 15);
         }
-        else Fail("loopback.tray_restore", "The loopback controller tray Open action restores its window", new { menu = "Ouvrir missing" });
+        else Fail("loopback.tray_restore", "The loopback controller tray Open action restores its window", new { menu = "Ouvrir missing", trayIcon = tray.IconName, overflowOpened = tray.OverflowOpened });
 
         var terminate = FindVisibleId(ContractId("terminateSession"));
         if (terminate == null)

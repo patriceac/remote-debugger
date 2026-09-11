@@ -1224,22 +1224,48 @@ internal sealed partial class LabForm : Forms.Form
 
     private async Task ProbeAutoDataAsync()
     {
-        var processes = Element("processList"); var files = Element("remoteFiles");
+        NavigateControllerPage("navProcesses");
+        var processes = Element("processList");
         bool processRows = await WaitForRowsAsync(processes, 2, 45);
-        bool fileRows = await WaitForRowsAsync(files, 1, 45);
         string[] texts = UiTexts();
         bool resourceTimestamp = texts.Any(x => x.Contains("CPU", StringComparison.OrdinalIgnoreCase) || x.Contains("RAM", StringComparison.OrdinalIgnoreCase)) && texts.Any(x => x.Contains(":", StringComparison.Ordinal));
-        if (processRows && fileRows && resourceTimestamp) Pass("controller.resources_on_connect", "CPU, RAM, processes and the remote workspace load automatically after connection", new { processRows = TableRows(processes).Count, fileRows = TableRows(files).Count, resourceTimestamp });
-        else Fail("controller.resources_on_connect", "CPU, RAM, processes and the remote workspace load automatically after connection", new { processRows, fileRows, resourceTimestamp, texts = texts.Take(60).ToArray() });
 
         bool processSorted = ClickAndCheckSort(processes, "PID", numeric: true);
         if (processSorted) Pass("controller.process_sort", "Process headers sort rows with numeric ordering", new { rows = TableRows(processes).Take(12).ToArray() });
         else Fail("controller.process_sort", "Process headers sort rows with numeric ordering", new { rows = TableRows(processes).Take(12).ToArray() });
+
+        CaptureDesktop("controller-processes-auto.png");
+        await CreateFileSortFixturesAsync();
+        NavigateControllerPage("navFiles");
+        var files = Element("remoteFiles");
+        bool fileRows = await WaitForRowsAsync(files, 2, 45);
+        if (processRows && fileRows && resourceTimestamp) Pass("controller.resources_on_connect", "CPU, RAM, processes and the remote workspace load automatically after connection", new { processRows = TableRows(processes).Count, fileRows = TableRows(files).Count, resourceTimestamp });
+        else Fail("controller.resources_on_connect", "CPU, RAM, processes and the remote workspace load automatically after connection", new { processRows, fileRows, resourceTimestamp, texts = texts.Take(60).ToArray(), files = TableRows(files).Take(12).ToArray() });
         bool fileSorted = ClickAndCheckSort(files, "Nom", numeric: false);
         if (fileSorted) Pass("controller.file_sort", "File headers sort rows with typed ordering", new { rows = TableRows(files).Take(12).ToArray() });
         else Fail("controller.file_sort", "File headers sort rows with typed ordering", new { rows = TableRows(files).Take(12).ToArray() });
+        CaptureDesktop("controller-files-auto.png");
         try { Click("refreshResources"); } catch (Exception) { }
         try { Click("browseFiles"); } catch (Exception) { }
+    }
+
+    private void NavigateControllerPage(string key)
+    {
+        AutomationElement navigation = Element(key);
+        InvokeElement(navigation);
+        Thread.Sleep(350);
+    }
+
+    private async Task CreateFileSortFixturesAsync()
+    {
+        string root = Path.Combine(output, "file-sort-fixtures");
+        Directory.CreateDirectory(root);
+        foreach (string name in new[] { "acceptance-sort-02.txt", "acceptance-sort-10.txt" })
+        {
+            string local = Path.Combine(root, name);
+            await File.WriteAllTextAsync(local, "acceptance sorting fixture " + name, stop.Token);
+            await CliAsync(["upload", "--file", local, "--path", name]);
+        }
     }
 
     private bool ClickAndCheckSort(AutomationElement table, string headerName, bool numeric)

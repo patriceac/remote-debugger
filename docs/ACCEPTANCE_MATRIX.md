@@ -77,6 +77,7 @@ The Lab uses native UI Automation and these IDs from `docs/UI_DESIGN.md`:
 | Pair action | `pair` | Pairing/synchronization action state |
 | Shared connection state | `connectionStatus` | Text plus connected/disconnected state; colour is not used alone |
 | Session termination | `terminateSession` | Ends support and releases input/session state |
+| Controller screen navigation | `navScreen`, `navProcesses`, `navFiles` | Selects the visible page before row, focus, or screenshot assertions |
 | Remote screen | `remoteScreen` | Fresh displayed frame after pairing |
 | Live badge | `liveBadge` | Visible `EN DIRECT` badge only after a fresh frame is presented |
 | Stream state | `streamStatus` | Actual frame telemetry (fps/bitrate/capture latency) after a fresh frame |
