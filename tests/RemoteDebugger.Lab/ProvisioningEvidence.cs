@@ -65,7 +65,10 @@ internal static class ProvisioningEvidence
 
     internal sealed record GuestCommandObservation(int ExitCode, string Stdout, string Stderr);
 
-    internal sealed record GuestServiceObservation(string Name, string State, string StartMode, string StartName, string PathName);
+    internal sealed record GuestServiceObservation(string Name, string State, string StartMode, string StartName, string PathName, string Error = "")
+    {
+        public bool HasError => !string.IsNullOrWhiteSpace(Error);
+    }
 
     internal sealed record GuestObservation(
         int FormatVersion,
@@ -77,6 +80,7 @@ internal static class ProvisioningEvidence
         string EvidencePath)
     {
         public bool Fresh => DateTimeOffset.UtcNow - CapturedUtc >= TimeSpan.Zero && DateTimeOffset.UtcNow - CapturedUtc <= TimeSpan.FromSeconds(10);
+        public string[] ServiceErrors => Services.Where(service => service.HasError).Select(service => service.Error).ToArray();
     }
 
     public static string EvidencePath(string output) => Path.Combine(output, EvidenceFileName);
@@ -190,6 +194,11 @@ internal static class ProvisioningEvidence
             }
             var info = new FileInfo(sourcePath);
             if (info.Length <= 0 || info.Length > 256 * 1024) throw new InvalidDataException("The guest observation file is outside the bounded size limit.");
+            // Preserve the raw snapshot before parsing. A service query can
+            // fail independently of power/firewall collection, and its raw
+            // error object must remain reviewable in the guest evidence.
+            string collectedPath = Path.Combine(output, "remote-debugger-observation.json");
+            File.Copy(sourcePath, collectedPath, true);
             JsonElement value = JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(sourcePath));
             int formatVersion = RequiredInt(value, "FormatVersion");
             string requestId = RequiredString(value, "RequestId");
@@ -206,8 +215,6 @@ internal static class ProvisioningEvidence
                 throw new InvalidDataException("The guest observation is older than the ten-second freshness bound.");
             if (capturedAfterUtc.HasValue && capturedUtc <= capturedAfterUtc.Value)
                 throw new InvalidDataException("The guest observation predates the observed product exit.");
-            string collectedPath = Path.Combine(output, "remote-debugger-observation.json");
-            File.Copy(sourcePath, collectedPath, true);
             observation = new GuestObservation(formatVersion, requestId, capturedUtc, power, firewall, services, collectedPath);
             return true;
         }
@@ -274,7 +281,9 @@ internal static class ProvisioningEvidence
     }
 
     public static string[] FormatServices(IEnumerable<GuestServiceObservation> services)
-        => services.Select(service => string.Join('|', service.Name, service.State, service.StartMode, service.StartName, service.PathName)).ToArray();
+        => services.Select(service => service.HasError
+            ? "[observer service error] " + service.Error
+            : string.Join('|', service.Name, service.State, service.StartMode, service.StartName, service.PathName)).ToArray();
 
     private static void ValidateProductReceipt(string path, string managedPath, string servicePath, string publisher, string registeredSid)
     {
@@ -309,7 +318,17 @@ internal static class ProvisioningEvidence
         foreach (var item in value.EnumerateArray())
         {
             if (item.ValueKind != JsonValueKind.Object) throw new InvalidDataException("Services contains a non-object value.");
-            if (TryGetBoolean(item, "HasError", out bool hasError) && hasError) throw new InvalidDataException("The guest observer reported a service query error.");
+            if (TryGetBoolean(item, "HasError", out bool hasError) && hasError)
+            {
+                string error = TryGetString(item, "Error", out var detail) && detail.Length > 0 ? detail : "The guest observer reported a service query error.";
+                services.Add(new GuestServiceObservation("", "", "", "", "", error));
+                continue;
+            }
+            if (TryGetString(item, "Error", out var serviceError) && serviceError.Length > 0 && !TryGetProperty(item, "Name", out _))
+            {
+                services.Add(new GuestServiceObservation("", "", "", "", "", serviceError));
+                continue;
+            }
             services.Add(new GuestServiceObservation(RequiredString(item, "Name"), RequiredString(item, "State"), RequiredString(item, "StartMode"), RequiredString(item, "StartName"), RequiredString(item, "PathName")));
         }
         return services.ToArray();
