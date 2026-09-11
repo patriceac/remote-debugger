@@ -393,7 +393,8 @@ internal sealed class LabForm : Forms.Form
         return text.Contains("écout", StringComparison.Ordinal) || text.Contains("ecout", StringComparison.Ordinal)
             || text.Contains("listen", StringComparison.Ordinal) || text.Contains("pair", StringComparison.Ordinal)
             || text.Contains("appair", StringComparison.Ordinal) || text.Contains("prépar", StringComparison.Ordinal)
-            || text.Contains("prepar", StringComparison.Ordinal) || text.Contains("ready", StringComparison.Ordinal);
+            || text.Contains("prepar", StringComparison.Ordinal) || text.Contains("ready", StringComparison.Ordinal)
+            || text.Contains("attente", StringComparison.Ordinal) || text.Contains("connexion", StringComparison.Ordinal);
     }
 
     private async Task AgentCoordinationAsync(string initialCode)
@@ -797,7 +798,7 @@ internal sealed class LabForm : Forms.Form
     {
         string[] texts = UiTexts();
         var request = await RunGuestPowerShellAsync("powercfg /requests");
-        bool osHeld = request.ExitCode == 0 && request.Stdout.Contains("RemoteDebugger", StringComparison.OrdinalIgnoreCase);
+        bool osHeld = request.ExitCode == 0 && (request.Stdout.Contains("RemoteDebugger", StringComparison.OrdinalIgnoreCase) || request.Stdout.Contains("Remote Debugger", StringComparison.OrdinalIgnoreCase));
         bool visible = texts.Any(ContainsSleepHeld);
         sleepRequestObserved = osHeld;
         if (osHeld)
@@ -814,7 +815,7 @@ internal sealed class LabForm : Forms.Form
             return;
         }
         var request = await RunGuestPowerShellAsync("powercfg /requests");
-        bool released = request.ExitCode == 0 && !request.Stdout.Contains("RemoteDebugger", StringComparison.OrdinalIgnoreCase);
+        bool released = request.ExitCode == 0 && !request.Stdout.Contains("RemoteDebugger", StringComparison.OrdinalIgnoreCase) && !request.Stdout.Contains("Remote Debugger", StringComparison.OrdinalIgnoreCase);
         if (released) Pass("agent.sleep_release", "The Windows power request is released after the agent exits", new { osEvidence = request.Stdout });
         else Fail("agent.sleep_release", "The Windows power request is released after the agent exits", new { commandExitCode = request.ExitCode, osEvidence = request.Stdout, stderr = request.Stderr });
     }
