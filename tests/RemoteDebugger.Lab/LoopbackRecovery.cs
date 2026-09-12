@@ -1,11 +1,33 @@
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows.Automation;
 using RemoteDebugger;
+using RemoteDebugger.Core;
 
 namespace RemoteDebugger.Lab;
 
 internal sealed partial class LabForm
 {
+    private async Task ProbeLatestFramesAsync()
+    {
+        Click("pauseViewing");
+        try
+        {
+            var report = await CliAsync(["stream", "--seconds", "6", "--fps", "5", "--present-delay-ms", "1200",
+                "--report", Path.Combine(output, "slow-presentation-stream.json")]);
+            long[] sequences = report.GetProperty("presentedSequences").EnumerateArray().Select(value => value.GetInt64()).ToArray();
+            bool skipped = report.Int("frames") >= 3 && report.Long("framesSkipped") >= 2 &&
+                sequences.Zip(sequences.Skip(1), (previous, current) => current - previous).Any(gap => gap > 1);
+            if (skipped) Pass("loopback.latest_frame", "A slow presenter skips stale frames while the Release receiver keeps receiving", report);
+            else Fail("loopback.latest_frame", "A slow presenter skips stale frames while the Release receiver keeps receiving", report);
+        }
+        finally
+        {
+            Click("pauseViewing");
+            await WaitForLiveEvidenceAsync(30);
+        }
+    }
+
     [DllImport("user32.dll", EntryPoint = "PostMessageW")]
     private static extern bool PostWindowMessage(IntPtr handle, uint message, IntPtr wParam, IntPtr lParam);
 

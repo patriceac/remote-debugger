@@ -487,7 +487,8 @@ public sealed class AgentServer : IDisposable
                 var started = System.Diagnostics.Stopwatch.StartNew();
                 var frame = DesktopCapture.Capture(request.Args.Int("monitor"), request.Args.Int("maxWidth", 1920), request.Args.Int("quality", 65), sequence++);
                 await Wire.WriteAsync(tls, Reply.Success(request.Id, frame), cts.Token);
-                // One frame in flight: presenter acknowledgement prevents a stale video queue.
+                // One frame in flight; the next capture starts only after receipt.
+                // The controller independently replaces any unrendered older frame.
                 using var ackTimeout = CancellationTokenSource.CreateLinkedTokenSource(cts.Token); ackTimeout.CancelAfter(5000);
                 var ack = await Wire.ReadAsync<System.Text.Json.JsonElement>(tls, ackTimeout.Token);
                 if (ack.Long("sequence", -1) != frame.Sequence) throw new InvalidDataException("Invalid stream acknowledgement.");
@@ -573,6 +574,12 @@ public sealed class RemoteClient(Connection connection)
     }
     public async Task StreamAsync(Func<ScreenFrame, Task> present, int fps = StreamPolicy.MaximumFps, int monitor = 0, int seconds = 300, CancellationToken ct = default)
     {
+        await LatestFrameStream.RunAsync<ScreenFrame>(
+            (publish, receiveToken) => ReceiveFramesAsync(publish, fps, monitor, seconds, receiveToken), present, ct);
+    }
+
+    private async Task ReceiveFramesAsync(Action<ScreenFrame> publish, int fps, int monitor, int seconds, CancellationToken ct)
+    {
         using var tcp = new TcpClient(); await tcp.ConnectAsync(Connection.Host, Connection.Port, ct); tcp.NoDelay = true;
         using var tls = new SslStream(tcp.GetStream(), false, (_, cert, _, _) => cert != null && Safety.Equal(Convert.ToHexString(SHA256.HashData(cert.GetRawCertData())), Connection.Fingerprint.ToUpperInvariant().Replace(":", "")));
         await tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions { TargetHost = "RemoteDebugger", EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13 }, ct);
@@ -582,7 +589,7 @@ public sealed class RemoteClient(Connection connection)
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(10000);
             var reply = await Wire.ReadAsync<Reply>(tls, timeout.Token); Require(reply);
             var frame = reply.Data.Deserialize<ScreenFrame>(Json.Options) ?? throw new IOException("Missing frame.");
-            await present(frame); await Wire.WriteAsync(tls, new { sequence = frame.Sequence }, ct);
+            publish(frame); await Wire.WriteAsync(tls, new { sequence = frame.Sequence }, ct);
         }
     }
     public static JsonElement Require(Reply reply) => reply.Ok ? reply.Data : throw new RemoteOperationException(reply.Error ?? "operation_failed", reply.Message ?? "Remote operation failed.");

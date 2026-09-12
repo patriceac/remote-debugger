@@ -1,5 +1,19 @@
 # Validation record
 
+## 0.2.2 — discard stale pending frames
+
+September 12, 2026: **127/127 unit tests passed** (96 Core and 31 platform). Five new regression tests verify replacement of 1,000 pending frames by the newest frame, selection only after a blocked UI context resumes, cancellation without replay, transport-error propagation for reconnect, and receiver shutdown when presentation fails.
+
+The signed Release executable has SHA-256 `D03C003C402F2B9D58818DCEE60EE5161A89C170E55581FB232E6A98C746E14E`. Its receiver now acknowledges receipt independently of presentation and retains one pending frame with replacement of older frames. The sender still captures only after the previous receipt, so there is no sender-side capture queue. A JPEG already in transit is not interrupted midway; the five-fps cap and image encoding are unchanged.
+
+The Release CLI provides a bounded `--present-delay-ms` diagnostic using the same stream-delivery implementation as the GUI. Presented sequence numbers and skipped-frame counts provide direct evidence that a slow consumer receives the newest pending frame instead of draining historical images. This does not claim that every source of network or rendering latency is eliminated.
+
+The live evidence for request `executable-test-20260912T093614110Z-db329403` recorded a six-second, five-fps stream with a 1200 ms presenter delay. It presented sequence numbers **0, 6, 12, 18, 23**, skipping **19 intermediate frames**. Mean capture/encode time was 39.8 ms. This used the exact Release executable for agent and CLI inside one disconnected guest; it is a slow-consumer test rather than a physical-network latency measurement.
+
+The terminal result for that request **passed all required assertions, with 29 passing checks and no failures**. Existing pairing, live viewing, input preference, tray restoration, termination and second-session recovery also passed. The actual Release live-view screenshot was visually inspected. The three optional blocked checks remain LAN/provisioning and privileged OS power-request acquisition/release. Broker and guest harnesses succeeded, worker 1 ended Off before recycling, process cleanup verified no survivors, all adapters were disconnected, and no evidence warnings occurred. Payload and read-only Release-input children were reported deleted and independently absent on disk; input cleanup succeeded. As in the prior run, independent host disk-attachment enumeration is unavailable to the development token, so that part relies on the broker cleanup result. Physical-PC latency and multiple-DPI behavior were not revalidated.
+
+Installer request `executable-test-20260912T093643402Z-c65d2766` passed for `RemoteDebugger-0.2.2-Setup.exe`, SHA-256 `E7A7598F31C5FC13E7BAB58E1C3FD2509979B4DABE94DFB04F819FA481BF23E9`. The log confirms non-administrative installation beneath LocalAppData, the Start menu shortcut, HKCU uninstall registration, and successful completion. Broker and guest harnesses succeeded; application assertions passed; worker 2 ended Off before recycling; process cleanup had no survivors; the payload child was deleted and independently absent on disk; adapters were disconnected; no evidence warnings were reported.
+
 ## 0.2.1 — input, window lifetime, and session recovery
 
 September 12, 2026: **122/122 unit tests passed** (91 Core and 31 platform), with a Release build producing zero warnings and zero errors. New regression tests cover pointer coalescing, click/key ordering, pending-input release, preference preservation after transport failure, repeated native window closure, explicit Quit, Windows shutdown, and the distinction between ending support and exiting for an update.

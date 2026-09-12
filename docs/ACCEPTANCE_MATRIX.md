@@ -154,6 +154,7 @@ prompt or a guessed service as proof.
 | `loopback.input_preference` | Input preference survives pauses and page changes | Both the enabled and disabled checkbox states remain unchanged across pause/resume and navigation | Runtime |
 | `loopback.agent_tray` | The receiving PC can hide and restore without ending support | Repeated window closes keep the process alive and tray Open restores a connected session after 21 seconds | Runtime |
 | `loopback.tray_restores_live` | Restoring the controller resumes viewing | A fresh live frame appears automatically after a 21-second tray interval | Runtime |
+| `loopback.latest_frame` | A slow presenter skips old frames | The Release CLI receives a 5 fps stream with a 1200 ms presenter delay; presented sequence numbers skip intermediate frames | Runtime |
 | `loopback.second_session` | Support can restart without relaunching either application | Nouvelle assistance creates a code and the same two process IDs pair and display a fresh frame | Runtime |
 | `loopback.agent_ends_session` | The receiving PC can end support | Both processes stay open; the agent returns to idle and the controller returns to connection | Runtime |
 | `controller.resources_on_connect` | CPU, RAM, process, and file data load on connection | `processList` and `remoteFiles` contain rows; resource/file summaries have timestamps and non-placeholder values | Runtime |

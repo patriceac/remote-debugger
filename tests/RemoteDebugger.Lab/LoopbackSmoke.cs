@@ -134,6 +134,7 @@ internal sealed partial class LabForm
             await ProbeAutoDataAsync();
             await CaptureLoopbackMinimumSizeAsync();
             await ProbeInputPreferenceAsync();
+            await ProbeLatestFramesAsync();
             await ProbeAgentTrayAsync();
             await ProbeLoopbackTrayAndTerminateAsync();
             await ProbeSecondSessionAsync();

@@ -119,7 +119,9 @@ Identical repeated chunks are accepted; conflicting/overlapping data is rejected
 
 `screenshot` always asks the remote machine for a fresh frame, writes it locally, and returns capture metadata plus measured request round-trip time. It does not reuse the human viewer's image.
 
-`stream` consumes continuous frames and reports actual received FPS, distinct frame count, application payload bitrate estimate, remote capture/encode time, inter-frame p95 and controller CPU. CLI measurements exclude GUI decode/presentation; the GUI measures its own presented cadence. The stream is JPEG over TLS with one presentation-acknowledged frame in flight, target up to 5 FPS, not a video recording. Monitor -1 is the full virtual desktop. No audio, clipboard sync, hardware codec or secure desktop control is included.
+`stream` reports consumed FPS, distinct frame count, consumed payload bitrate estimate, remote capture/encode time, inter-frame p95 and controller CPU. CLI measurements exclude GUI decode/presentation; the GUI measures its own presented cadence. The stream is JPEG over TLS with one receipt-acknowledged frame in flight and only the newest pending frame retained for presentation, target up to 5 FPS. Slow consumers skip frames instead of replaying a backlog. Monitor -1 is the full virtual desktop. No audio, clipboard sync, hardware codec or secure desktop control is included.
+
+For a bounded slow-consumer diagnostic, add `--present-delay-ms 1200` (0–5000 ms; zero by default). The report includes `presentedSequences` and `framesSkipped`; its legacy `receivedFps` and payload-rate fields measure frames delivered to the consumer, excluding skipped frames. This diagnostic uses the same receiver and latest-frame delivery path as the GUI; it does not measure GUI rendering.
 
 Pointer events bind to the `geometry.layoutId` returned by a fresh frame:
 

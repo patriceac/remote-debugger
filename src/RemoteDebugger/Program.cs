@@ -124,18 +124,24 @@ public static class Program
             if (verb == "stream")
             {
                 int seconds = Math.Clamp(int.Parse(Option("--seconds", "10")), 1, 290), fps = StreamPolicy.ClampFps(int.Parse(Option("--fps", StreamPolicy.MaximumFps.ToString())));
+                int presentationDelayMs = Math.Clamp(int.Parse(Option("--present-delay-ms", "0")), 0, 5000);
+                var presentedSequences = new List<long>();
                 int frames = 0; long bytes = 0; var capture = new List<double>(); var copies = new List<double>(); var jpegs = new List<double>(); var arrivals = new List<double>(); var hashes = new HashSet<string>(); ScreenFrame? last = null;
                 var elapsed = System.Diagnostics.Stopwatch.StartNew(); using var duration = CancellationTokenSource.CreateLinkedTokenSource(ct.Token); duration.CancelAfter(TimeSpan.FromSeconds(seconds));
                 using var self = System.Diagnostics.Process.GetCurrentProcess(); var cpu = self.TotalProcessorTime;
                 try
                 {
-                    await remote.StreamAsync(frame => { last = frame; frames++; bytes += frame.Data.Length + 400; capture.Add(frame.CaptureEncodeMs); copies.Add(frame.CopyMs); jpegs.Add(frame.JpegMs); arrivals.Add(elapsed.Elapsed.TotalMilliseconds); hashes.Add(Safety.Hash(frame.Data)); return Task.CompletedTask; }, fps, int.Parse(Option("--monitor", "0")), seconds + 2, duration.Token);
+                    await remote.StreamAsync(async frame =>
+                    {
+                        last = frame; frames++; bytes += frame.Data.Length + 400; capture.Add(frame.CaptureEncodeMs); copies.Add(frame.CopyMs); jpegs.Add(frame.JpegMs); arrivals.Add(elapsed.Elapsed.TotalMilliseconds); hashes.Add(Safety.Hash(frame.Data)); presentedSequences.Add(frame.Sequence);
+                        if (presentationDelayMs > 0) await Task.Delay(presentationDelayMs, duration.Token);
+                    }, fps, int.Parse(Option("--monitor", "0")), seconds + 2, duration.Token);
                 }
                 catch (OperationCanceledException) when (!ct.IsCancellationRequested && frames > 0) { }
                 if (last == null) throw new IOException("No stream frame received.");
                 string framePath = Option("--last-frame"); if (framePath.Length > 0) await File.WriteAllBytesAsync(framePath, Convert.FromBase64String(last.Data), ct.Token);
                 var gaps = arrivals.Zip(arrivals.Skip(1), (a, b) => b - a).OrderBy(x => x).ToArray();
-                var report = new { ok = true, transport = "TLS framed JPEG, one frame in flight with presentation ACK", requestedFps = fps, frames, distinctFrames = hashes.Count, durationSeconds = elapsed.Elapsed.TotalSeconds, receivedFps = frames / elapsed.Elapsed.TotalSeconds, estimatedApplicationMbitPerSecond = bytes * 8 / elapsed.Elapsed.TotalSeconds / 1e6, meanCaptureEncodeMs = capture.Average(), meanCopyMs = copies.Average(), meanJpegMs = jpegs.Average(), interFrameP95Ms = gaps.Length == 0 ? 0 : gaps[(int)((gaps.Length - 1) * .95)], controllerCpuPercentTotalMachine = (self.TotalProcessorTime - cpu).TotalMilliseconds / elapsed.Elapsed.TotalMilliseconds / Environment.ProcessorCount * 100, last.Geometry, last.EncodedWidth, last.EncodedHeight, decodeAndDisplayMeasured = false };
+                var report = new { ok = true, transport = "TLS framed JPEG, receipt ACK, newest pending frame only", requestedFps = fps, frames, presentationDelayMs, presentedSequences, framesSkipped = last.Sequence + 1 - frames, distinctFrames = hashes.Count, durationSeconds = elapsed.Elapsed.TotalSeconds, receivedFps = frames / elapsed.Elapsed.TotalSeconds, estimatedApplicationMbitPerSecond = bytes * 8 / elapsed.Elapsed.TotalSeconds / 1e6, meanCaptureEncodeMs = capture.Average(), meanCopyMs = copies.Average(), meanJpegMs = jpegs.Average(), interFrameP95Ms = gaps.Length == 0 ? 0 : gaps[(int)((gaps.Length - 1) * .95)], controllerCpuPercentTotalMachine = (self.TotalProcessorTime - cpu).TotalMilliseconds / elapsed.Elapsed.TotalMilliseconds / Environment.ProcessorCount * 100, last.Geometry, last.EncodedWidth, last.EncodedHeight, decodeAndDisplayMeasured = false };
                 string reportPath = Option("--report"); if (reportPath.Length > 0) await File.WriteAllTextAsync(reportPath, Json.Text(report), ct.Token); Console.WriteLine(Json.Text(report)); return 0;
             }
             if (verb == "upload") { var result = await remote.UploadAsync(Option("--file"), Option("--path"), ct.Token); Console.WriteLine(Json.Text(new { ok = true, data = result })); return 0; }
