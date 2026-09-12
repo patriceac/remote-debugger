@@ -29,6 +29,18 @@ Loopback results explicitly block LAN discovery, Private firewall, installed
 broker, and UAC claims. Those gates remain owned by the two-VM `Both` run; the
 loopback run does not turn local transport into LAN evidence.
 
+For the complete workspace review, use `-Role LoopbackUi -Scope Runtime
+-UpdateVariant None`. This extends the tray/session checks with all five tabs
+before pairing, while connected, and after termination; invalid pairing input;
+diagnostic templates, JSON validation, remote errors and cancellation; and recovery from an
+invalid file path. It records tab screenshots and checks control availability,
+visible bounds, connection identity, and scoped footers. It also changes the
+disposable guest's Windows display setting to 150 percent and verifies the
+Release window actually reports 144 DPI before recording scaled screenshots.
+It checks that the assisted-PC explanation remains reachable by scrolling.
+An unavailable scaling selector is reported as blocked, never a DPI pass.
+Rendered screenshots require human/model visual review in addition to assertions.
+
 The elapsed-time run is separate so its five-minute rotation and ten-minute
 disconnect interval do not get confused with the shorter interaction checks:
 

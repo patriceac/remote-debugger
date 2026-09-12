@@ -1,6 +1,6 @@
 # Support interface specification
 
-Design owner: root agent. Implementation owner: Luna Max. This specification is the visual and behavioral target for the native Windows application; the SVGs are composition references, not screenshots of working software.
+This specification is the visual and behavioral target for the native Windows application; the SVGs are composition references, not screenshots of working software.
 
 ## Visual thesis
 
@@ -60,7 +60,9 @@ Processes header + status/action remain unchanged. Top one horizontal summary ro
 
 Files: compact path breadcrumb/input + Parent/Actualiser; below full table Nom / Type / Taille / Modifie with typed sorting and folders grouped where appropriate. Actions Televerser un fichier, Televerser un dossier, Telecharger are a compact toolbar. Separate current directory from selected file so selecting a file does not overwrite the browsing path. Initial remote workspace listing loads upon connection. Inaccessible/empty/loading states are distinct.
 
-Diagnostics: retain all existing operations, JSON arguments/results, deployment verification, cancellation and advanced troubleshooting; place them in an explicit technical workspace with labels. Do not make raw JSON the default landing page.
+Diagnostics: retain all existing operations, JSON arguments/results, deployment verification, cancellation and advanced troubleshooting. Label the arguments and result editors, load the selected operation's template, and enable PID only for operations that accept it. Identity comes from the current authenticated connection. Show validation errors, execution, cancellation and remote failures inline. Do not make raw JSON the default landing page.
+
+Every workspace owns its footer: connection and selected PC, frame status, resource measurements, file count and directory, or diagnostic state and selected action. Saved credentials never enable remote actions. Disable pairing while a session exists, disable unavailable remote actions before connecting, and clear stale results and selections after termination. The minimum window scales with Windows DPI but is capped to the display's working area; smaller agent workspaces scroll.
 
 ## Accessibility and interaction
 

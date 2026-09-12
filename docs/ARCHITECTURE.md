@@ -12,7 +12,7 @@ TLS 1.2/1.3 protects transport. Subsequent RPCs and streams pin the code-authent
 
 One logical session spans independent RPC sockets and rolling screen streams. Heartbeats run every five seconds; fifteen seconds without activity detects loss. A monotonic ten-minute grace then allows reconnection before the session ends. Stream acknowledgements also prove activity. Termination releases input, cancels normal work and any armed update, ends the maintenance lease, and revokes the agent grant. The unauthorized idle listener remains available to report access denial to the controller. No code is available until the local user starts a new assistance session, which replaces the idle server. The power request lasts through pairing, support, and reconnect grace, without changing saved power settings.
 
-The controller window can hide to the tray while its session continues. The agent remains visible. Neither role is registered to start with Windows. The local broker starts on demand and becomes dormant when its work is finished.
+Either window can hide to the tray while its session continues and restore from its notification icon. Ending assistance leaves both applications open; a new session requires a new agent code. Neither role is registered to start with Windows. The local broker starts on demand and becomes dormant when its work is finished.
 
 ## Privilege and executable synchronization
 

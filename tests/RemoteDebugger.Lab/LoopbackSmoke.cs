@@ -91,6 +91,7 @@ internal sealed partial class LabForm
         WindowState = Forms.FormWindowState.Minimized;
 
         bool fingerprintGateVisible = FindVisibleId("fingerprintVerified") != null || FindVisibleId("fingerprint") != null;
+        if (IsWorkspaceAudit) { await AuditTabsAsync("disconnected", false); await AuditPairingErrorAsync(); }
         if (fingerprintGateVisible)
             Fail("loopback.no_fingerprint_gate", "Loopback pairing has no visible fingerprint checkbox or fingerprint entry step", new { fingerprintGateVisible });
         else
@@ -133,10 +134,18 @@ internal sealed partial class LabForm
             finally { product = loopbackController; Native.FocusWindow(loopbackController.Id); }
             await ProbeAutoDataAsync();
             await CaptureLoopbackMinimumSizeAsync();
+            if (IsWorkspaceAudit) { await AuditTabsAsync("connected", true); await AuditDiagnosticsAndFileErrorsAsync(); }
             await ProbeInputPreferenceAsync();
             await ProbeLatestFramesAsync();
             await ProbeAgentTrayAsync();
+            if (IsWorkspaceAudit && await TrySetGuestScaleAsync())
+            {
+                await AuditTabsAsync("connected-scaled", true);
+                await AuditScaledAgentAsync();
+                Click("navScreen"); await WaitForLiveEvidenceAsync(30);
+            }
             await ProbeLoopbackTrayAndTerminateAsync();
+            if (IsWorkspaceAudit) { await AuditTabsAsync("ended", false); Click("navConnection"); }
             await ProbeSecondSessionAsync();
             await FinishAsync();
             return;

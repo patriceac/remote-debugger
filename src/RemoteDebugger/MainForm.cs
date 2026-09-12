@@ -10,7 +10,7 @@ namespace RemoteDebugger;
 /// The visible support workspace. The form deliberately keeps the safety-critical
 /// session state in the header and footer while each page owns its working surface.
 /// </summary>
-public sealed class MainForm : Forms.Form
+public sealed partial class MainForm : Forms.Form
 {
     private static readonly Color Canvas = Color.FromArgb(247, 249, 250);
     private static readonly Color Surface = Color.White;
@@ -41,10 +41,8 @@ public sealed class MainForm : Forms.Form
     private readonly Forms.Label statusDot = new() { AutoSize = true, Text = "●", Font = new Font("Segoe UI", 9), Margin = new Forms.Padding(10, 7, 4, 0) };
     private readonly Forms.Label statusLabel = new() { AutoSize = true, Font = new Font("Segoe UI", 9.5F), Margin = new Forms.Padding(0, 7, 8, 0) };
     private readonly Forms.Button terminateSession = Button("Terminer l’assistance", "terminateSession", destructive: true);
-    private readonly Forms.Label footerLeft = new() { AutoSize = true, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F) };
-    private readonly Forms.Label footerRight = new() { AutoSize = true, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F) };
-    private readonly Forms.FlowLayoutPanel footerLeftFlow = new() { Dock = Forms.DockStyle.Fill, WrapContents = false, Padding = new Forms.Padding(24, 0, 0, 0), FlowDirection = Forms.FlowDirection.LeftToRight };
-    private readonly Forms.FlowLayoutPanel footerRightFlow = new() { Dock = Forms.DockStyle.Fill, WrapContents = false, Padding = new Forms.Padding(0, 0, 24, 0), FlowDirection = Forms.FlowDirection.RightToLeft };
+    private readonly Forms.Label footerLeft = new() { Name = "footerStatus", Dock = Forms.DockStyle.Fill, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F) };
+    private readonly Forms.Label footerRight = new() { Name = "footerDetail", Dock = Forms.DockStyle.Fill, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleRight, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F) };
 
     private readonly Forms.Button roleAgent = RailButton("Donner le contrôle", "roleAgent");
     private readonly Forms.Button roleController = RailButton("Prendre le contrôle", "roleController");
@@ -69,7 +67,7 @@ public sealed class MainForm : Forms.Form
     private readonly Forms.Label agentNetworkState = new() { Name = "agentNetworkState", AutoSize = true, ForeColor = SecondaryText };
     private readonly Forms.Label agentSleepState = new() { Name = "agentSleepState", AutoSize = true, ForeColor = SecondaryText };
     private readonly Forms.Label agentMaintenanceState = new() { Name = "agentMaintenanceState", AutoSize = true, ForeColor = SecondaryText };
-    private readonly Forms.Label agentSessionNote = new WorkspaceLabel() { AutoSize = true, ForeColor = SecondaryText, MaximumSize = new Size(620, 0) };
+    private readonly Forms.Label agentSessionNote = new WorkspaceLabel() { Name = "agentSessionNote", AutoSize = true, ForeColor = SecondaryText, MaximumSize = new Size(620, 0) };
     private readonly Forms.Panel setupNotice = new() { Name = "agentSetupNotice", AutoSize = true, Visible = false, Padding = new Forms.Padding(12), BackColor = WarningBack };
     private readonly Forms.Label setupNoticeText = new() { AutoSize = true, ForeColor = WarningText, MaximumSize = new Size(440, 0) };
     private readonly Forms.Button preparePlatform = Button("Activer sur ce PC", "preparePlatform", 148);
@@ -206,12 +204,14 @@ public sealed class MainForm : Forms.Form
         Font = new Font("Segoe UI", 10.5F);
         BackColor = Canvas;
         AutoScaleMode = Forms.AutoScaleMode.Dpi;
+        AutoScaleDimensions = new SizeF(96, 96);
 
         BuildShell();
         BuildAgentPage();
         BuildControllerPages();
         BuildTray();
         WireEvents();
+        InitializeWorkspaceState();
         LoadSavedConnection();
         SupportPlatform.ManagedRelaunchRequested += OnManagedRelaunchRequested;
 
@@ -253,13 +253,13 @@ public sealed class MainForm : Forms.Form
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 72));
 
-        var roles = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false, Padding = new Forms.Padding(0), BackColor = Rail };
+        var roles = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false, Margin = Forms.Padding.Empty, Padding = new Forms.Padding(0), BackColor = Rail };
         roles.Controls.Add(roleAgent); roles.Controls.Add(roleController);
         var brand = new WorkspaceLabel { Name = "appBrand", Text = "Remote\nDebugger", ForeColor = Color.White, Font = new Font("Segoe UI", 17, FontStyle.Bold), Dock = Forms.DockStyle.Fill, Padding = new Forms.Padding(14, 0, 0, 0) };
         layout.Controls.Add(brand, 0, 0);
         layout.Controls.Add(roles, 0, 1);
 
-        var work = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false, Padding = new Forms.Padding(0, 14, 0, 0), BackColor = Rail };
+        var work = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false, Margin = Forms.Padding.Empty, Padding = new Forms.Padding(0, 14, 0, 0), BackColor = Rail };
         work.Controls.Add(controllerNavCaption);
         work.Controls.Add(navConnection); work.Controls.Add(navScreen); work.Controls.Add(navProcesses); work.Controls.Add(navFiles); work.Controls.Add(navDiagnostics);
         layout.Controls.Add(work, 0, 2);
@@ -281,7 +281,7 @@ public sealed class MainForm : Forms.Form
         headerTitle.Font = new Font("Segoe UI", 22, FontStyle.Bold); headerSubtitle.Font = new Font("Segoe UI", 10.5F);
         titles.Controls.Add(headerTitle, 0, 0); titles.Controls.Add(headerSubtitle, 0, 1);
         var actions = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.LeftToRight, WrapContents = false, AutoSize = true, Padding = new Forms.Padding(0, 20, 0, 0) };
-        statusPill.Width = 152; statusPill.Height = 30; statusPill.Margin = new Forms.Padding(0, 3, 12, 0);
+        statusPill.Width = 176; statusPill.Height = 30; statusPill.Margin = new Forms.Padding(0, 3, 12, 0);
         terminateSession.Margin = Forms.Padding.Empty;
         statusDot.Location = new Point(12, 7); statusLabel.Location = new Point(28, 6); statusPill.Controls.Add(statusDot); statusPill.Controls.Add(statusLabel); statusPill.Region = RoundedRegion(statusPill.Size, 15);
         actions.Controls.Add(statusPill); actions.Controls.Add(terminateSession);
@@ -293,11 +293,10 @@ public sealed class MainForm : Forms.Form
     private void BuildFooter()
     {
         var line = new Forms.Panel { Dock = Forms.DockStyle.Top, Height = 1, BackColor = Divider }; footer.Controls.Add(line);
-        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
+        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 1, Padding = new Forms.Padding(24, 0, 24, 0) };
         layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 58)); layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 42));
         footerLeft.Margin = Forms.Padding.Empty; footerRight.Margin = Forms.Padding.Empty;
-        footerLeftFlow.Padding = new Forms.Padding(24, 8, 0, 0); footerRightFlow.Padding = new Forms.Padding(0, 8, 24, 0);
-        footerLeftFlow.Controls.Add(footerLeft); footerRightFlow.Controls.Add(footerRight); layout.Controls.Add(footerLeftFlow, 0, 0); layout.Controls.Add(footerRightFlow, 1, 0); footer.Controls.Add(layout);
+        layout.Controls.Add(footerLeft, 0, 0); layout.Controls.Add(footerRight, 1, 0); footer.Controls.Add(layout);
     }
 
     private void BuildAgentPage()
@@ -305,8 +304,12 @@ public sealed class MainForm : Forms.Form
         var page = new PagePanel("Donner le contrôle") { BackColor = Canvas, Padding = new Forms.Padding(0) };
         var content = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 1, Padding = new Forms.Padding(28, 36, 28, 20), Margin = Forms.Padding.Empty };
         content.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
-        var heroHost = new Forms.Panel { Dock = Forms.DockStyle.Fill, BackColor = Canvas, Margin = Forms.Padding.Empty };
+        content.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
+        var heroHost = new Forms.Panel { Name = "agentWorkspace", Dock = Forms.DockStyle.Fill, BackColor = Canvas, Margin = Forms.Padding.Empty, AutoScroll = true };
         var hero = BuildAgentContent(); hero.Dock = Forms.DockStyle.Top; hero.Width = 760; hero.Anchor = Forms.AnchorStyles.Top | Forms.AnchorStyles.Left;
+        // Docked content is excluded from WinForms' automatic scroll extent.
+        // Preserve access to the final explanation on short/high-DPI displays.
+        hero.SizeChanged += (_, _) => heroHost.AutoScrollMinSize = new Size(0, hero.Height);
         heroHost.Controls.Add(hero); content.Controls.Add(heroHost, 0, 0);
         page.Controls.Add(content); rolePages.TabPages.Add(page);
     }
@@ -398,6 +401,11 @@ public sealed class MainForm : Forms.Form
     private Forms.Control BuildConnectionForm()
     {
         var panel = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 8, Padding = new Forms.Padding(24, 0, 0, 0) };
+        panel.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
+        selectedPeerName.AutoSize = selectedPeerAddress.AutoSize = connectionState.AutoSize = false;
+        selectedPeerName.Dock = selectedPeerAddress.Dock = connectionState.Dock = Forms.DockStyle.Fill;
+        selectedPeerName.AutoEllipsis = selectedPeerAddress.AutoEllipsis = connectionState.AutoEllipsis = true;
+        connectionState.MaximumSize = Size.Empty;
         panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 30)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 25)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 25)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 46)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 25)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 46)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 50)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
         panel.Controls.Add(selectedPeerName, 0, 0); panel.Controls.Add(selectedPeerAddress, 0, 1); panel.Controls.Add(new Forms.Label { Text = "Adresse IP (ou saisie manuelle)", AutoSize = true, ForeColor = SecondaryText, Margin = Forms.Padding.Empty, Dock = Forms.DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 2);
         host.Height = 40; host.Dock = Forms.DockStyle.Top; panel.Controls.Add(host, 0, 3);
@@ -441,7 +449,11 @@ public sealed class MainForm : Forms.Form
         monitor.Items.Add(new MonitorChoice(0, "Principal")); monitor.SelectedIndex = 0;
         top.Controls.Add(new Forms.Label { Text = "Écran", AutoSize = true, ForeColor = SecondaryText, Anchor = Forms.AnchorStyles.Left, Margin = new Forms.Padding(0, 10, 12, 0) }, 0, 0); top.Controls.Add(monitor, 1, 0); top.Controls.Add(mouseEnabled, 2, 0); top.Controls.Add(new Forms.Label { Text = "", AutoSize = true }, 3, 0); top.Controls.Add(pauseViewing, 4, 0);
         screenSurface.Controls.Add(screen); screenSurface.Controls.Add(liveBadge); screenSurface.Controls.Add(streamOverlay); liveBadge.BringToFront(); streamOverlay.BringToFront(); liveBadge.Location = new Point(16, 14); streamOverlay.Anchor = Forms.AnchorStyles.None; screenSurface.Resize += (_, _) => streamOverlay.Location = new Point(Math.Max(0, (screenSurface.Width - streamOverlay.Width) / 2), Math.Max(0, (screenSurface.Height - streamOverlay.Height) / 2));
-        var view = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 2 }; view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100)); view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 78)); view.Controls.Add(screenSurface, 0, 0);
+        var view = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+        // An automatic column can grow to the bitmap's preferred width when DPI
+        // changes. Keep both the viewer and its input row inside the workspace.
+        view.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
+        view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100)); view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 78)); view.Controls.Add(screenSurface, 0, 0);
         var bottom = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 3, RowCount = 2, Padding = new Forms.Padding(0, 6, 0, 0), Margin = Forms.Padding.Empty };
         bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100)); bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
         bottom.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 44)); bottom.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 28));
@@ -472,7 +484,7 @@ public sealed class MainForm : Forms.Form
         var page = new PagePanel("Fichiers") { BackColor = Canvas, Padding = new Forms.Padding(28) };
         var pathRow = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 3, RowCount = 2, Height = 82 }; pathRow.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100)); pathRow.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); pathRow.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
         pathRow.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 42)); pathRow.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 40));
-        fileDirectory.ReadOnly = false; fileDirectory.PlaceholderText = "Espace de travail"; fileDirectory.Height = 38; fileDirectory.Dock = Forms.DockStyle.Top; pathRow.Controls.Add(fileDirectory, 0, 0); uploadButton = Button("Téléverser un fichier", "upload", 150); var parent = Button("Parent", "parentFolder", 78); var refresh = Button("Actualiser", "browseFiles", 92); pathRow.Controls.Add(parent, 1, 0); pathRow.Controls.Add(refresh, 2, 0);
+        fileDirectory.ReadOnly = false; fileDirectory.PlaceholderText = "Espace de travail"; fileDirectory.Height = 38; fileDirectory.Dock = Forms.DockStyle.Top; pathRow.Controls.Add(fileDirectory, 0, 0); uploadButton = Button("Téléverser un fichier", "upload", 150); var parent = parentFolderButton = Button("Parent", "parentFolder", 78); var refresh = browseFilesButton = Button("Actualiser", "browseFiles", 92); pathRow.Controls.Add(parent, 1, 0); pathRow.Controls.Add(refresh, 2, 0);
         var selectionRow = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Forms.Padding.Empty };
         selectionRow.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); selectionRow.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
         selectionRow.Controls.Add(new Forms.Label { Text = "Fichier sélectionné", AutoSize = true, ForeColor = SecondaryText, Margin = new Forms.Padding(0, 7, 12, 0) }, 0, 0); remotePath.ReadOnly = true; remotePath.PlaceholderText = "Sélectionnez un fichier dans la liste"; remotePath.Dock = Forms.DockStyle.Top; selectionRow.Controls.Add(remotePath, 1, 0); pathRow.Controls.Add(selectionRow, 0, 1); pathRow.SetColumnSpan(selectionRow, 3);
@@ -492,10 +504,19 @@ public sealed class MainForm : Forms.Form
     {
         var page = new PagePanel("Diagnostics") { BackColor = Canvas, Padding = new Forms.Padding(28) };
         executeButton = Button("Exécuter", "execute", 92, primary: true); cancelButton = Button("Annuler", "cancel", 82);
-        var top = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.LeftToRight, WrapContents = true, Height = 82 }; top.Controls.Add(new Forms.Label { Text = "Action", AutoSize = true, ForeColor = SecondaryText, Margin = new Forms.Padding(0, 10, 5, 0) }); top.Controls.Add(operations); top.Controls.Add(new Forms.Label { Text = "PID", AutoSize = true, ForeColor = SecondaryText, Margin = new Forms.Padding(12, 10, 5, 0) }); top.Controls.Add(pid); top.Controls.Add(executeButton); top.Controls.Add(cancelButton); diagnosticState.Margin = new Forms.Padding(0, 6, 0, 0); top.Controls.Add(diagnosticState);
-        var identity = new Forms.Panel { Dock = Forms.DockStyle.Fill, Padding = new Forms.Padding(0, 8, 0, 0) }; technicalIdentity.Text = "Identité technique disponible après connexion."; identity.Controls.Add(technicalIdentity);
+        var top = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.LeftToRight, WrapContents = false, Margin = Forms.Padding.Empty }; top.Controls.Add(new Forms.Label { Text = "Action", AutoSize = true, ForeColor = SecondaryText, Margin = new Forms.Padding(0, 10, 5, 0) }); top.Controls.Add(operations); top.Controls.Add(new Forms.Label { Text = "PID", AutoSize = true, ForeColor = SecondaryText, Margin = new Forms.Padding(12, 10, 5, 0) }); top.Controls.Add(pid); top.Controls.Add(executeButton); top.Controls.Add(cancelButton);
+        technicalIdentity.AutoSize = false; technicalIdentity.Dock = Forms.DockStyle.Fill; technicalIdentity.AutoEllipsis = true; technicalIdentity.TextAlign = ContentAlignment.MiddleLeft;
+        diagnosticState.AutoSize = false; diagnosticState.Dock = Forms.DockStyle.Fill; diagnosticState.AutoEllipsis = true; diagnosticState.TextAlign = ContentAlignment.MiddleLeft; diagnosticState.Margin = Forms.Padding.Empty;
         operations.Items.AddRange(Templates.Keys.Cast<object>().ToArray()); operations.SelectedIndex = 0;
-        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 4 }; layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 82)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 80)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 48)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100)); layout.Controls.Add(top, 0, 0); layout.Controls.Add(arguments, 0, 1); layout.Controls.Add(identity, 0, 2); layout.Controls.Add(output, 0, 3); page.Controls.Add(layout); return page;
+        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 6, Margin = Forms.Padding.Empty };
+        layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 32)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 46));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 148)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 32));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 12)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
+        layout.Controls.Add(technicalIdentity, 0, 0); layout.Controls.Add(top, 0, 1);
+        layout.Controls.Add(DiagnosticSection("Arguments JSON", "argumentsLabel", arguments, "Adaptez les paramètres avant d’exécuter l’action."), 0, 2);
+        layout.Controls.Add(diagnosticState, 0, 3); layout.Controls.Add(new Forms.Panel(), 0, 4);
+        layout.Controls.Add(DiagnosticSection("Résultat", "resultLabel", output), 0, 5); page.Controls.Add(layout); return page;
     }
 
     private void BuildTray()
@@ -526,7 +547,7 @@ public sealed class MainForm : Forms.Form
         screen.MouseDown += (_, e) => { screen.Focus(); QueueMouse("down", e); }; screen.MouseUp += (_, e) => QueueMouse("up", e); screen.MouseMove += (_, e) => { long now = Environment.TickCount64; if (now - lastMove < 33) return; lastMove = now; QueueMouse("move", e); }; screen.MouseWheel += (_, e) => QueueMouse("wheel", e); screen.PreviewKeyDown += (_, e) => e.IsInputKey = true; screen.KeyDown += (_, e) => { if (!CanSendInput()) return; e.SuppressKeyPress = true; QueueInput(new { kind = "keyDown", virtualKey = (int)e.KeyCode }); }; screen.KeyUp += (_, e) => { if (!CanSendInput()) return; e.SuppressKeyPress = true; QueueInput(new { kind = "keyUp", virtualKey = (int)e.KeyCode }); }; screen.LostFocus += (_, _) => ReleaseHeldInputForCurrentSession();
         typeText.Click += async (_, _) => await ExecuteAsync("ui.text", new { pid = (int)pid.Value, text = remoteText.Text }); enterKey.Click += async (_, _) => await ExecuteAsync("ui.key", new { pid = (int)pid.Value, key = "ENTER" });
         processList.ColumnClick += (_, e) => { processSort = processSort.Toggle(ProcessColumn(e.Column)); RenderProcesses(); }; processList.SelectedIndexChanged += (_, _) => { if (processList.SelectedItems.Count > 0 && processList.SelectedItems[0].Tag is ProcessSortRow row) { pid.Value = row.Pid; } };
-        fileList.ColumnClick += (_, e) => { fileSort = fileSort.Toggle(FileColumn(e.Column)); RenderFiles(); }; fileList.SelectedIndexChanged += (_, _) => { if (fileList.SelectedItems.Count > 0 && fileList.SelectedItems[0].Tag is FileSortRow row && !row.IsDirectory) { selectedFilePath = row.Path; remotePath.Text = row.Path; } }; fileList.DoubleClick += async (_, _) => { if (fileList.SelectedItems.Count == 0 || fileList.SelectedItems[0].Tag is not FileSortRow row) return; if (row.IsDirectory) { currentDirectory = row.Path; selectedFilePath = null; remotePath.Clear(); fileDirectory.Text = currentDirectory; await BrowseFilesAsync(); } };
+        fileList.ColumnClick += (_, e) => { fileSort = fileSort.Toggle(FileColumn(e.Column)); RenderFiles(); }; fileList.SelectedIndexChanged += (_, _) => { selectedFilePath = fileList.SelectedItems.Count > 0 && fileList.SelectedItems[0].Tag is FileSortRow row && !row.IsDirectory ? row.Path : null; remotePath.Text = selectedFilePath ?? ""; RefreshControllerControls(); }; fileList.DoubleClick += async (_, _) => { if (fileList.SelectedItems.Count == 0 || fileList.SelectedItems[0].Tag is not FileSortRow row) return; if (row.IsDirectory) { currentDirectory = row.Path; selectedFilePath = null; remotePath.Clear(); fileDirectory.Text = currentDirectory; await BrowseFilesAsync(); } };
         refreshResourcesButton.Click += async (_, _) => await RefreshResourcesAsync(); executeButton.Click += async (_, _) => await ExecuteSelectedAsync(); cancelButton.Click += async (_, _) => await CancelActionAsync(); uploadButton.Click += async (_, _) => await UploadFileAsync(); uploadFolderButton.Click += async (_, _) => await UploadFolderAsync(); downloadButton.Click += async (_, _) => await DownloadFileAsync();
     }
 
@@ -612,7 +633,6 @@ public sealed class MainForm : Forms.Form
             };
             agent.Start();
             powerHold ??= PowerHold.Acquire();
-            technicalIdentity.Text = "Empreinte technique de cet agent : " + agent.Fingerprint;
             agentFingerprint.Text = agent.Fingerprint;
             footerDetail = "Fermer réduit dans la zone de notification";
             RefreshUiState();
@@ -698,7 +718,7 @@ public sealed class MainForm : Forms.Form
     private void RefreshUiState()
     {
         if (IsDisposed) return;
-        UpdateAgentState(); UpdateHeader(); RefreshFooter(); RefreshInputStatus();
+        UpdateAgentState(); UpdateHeader(); RefreshControllerControls(); RefreshFooter(); RefreshInputStatus();
         if (supportSession && liveStream != null && lastFrameUtc is { } presented && DateTimeOffset.UtcNow - presented > TimeSpan.FromSeconds(3))
         {
             // A frozen bitmap must never continue to look like a live view or
@@ -709,7 +729,7 @@ public sealed class MainForm : Forms.Form
             streamOverlay.Text = "Image figée · en attente d’une capture fraîche…";
             streamOverlay.Visible = true;
         }
-        if (agent?.Operations.Maintenance is { } maintenance)
+        if (!agentIdle && agent?.Operations.Maintenance is { } maintenance)
         {
             var state = Json.Element(maintenance.Status); bool active = state.TryGetProperty("active", out var a) && a.GetBoolean(); bool brokerAvailable = !state.TryGetProperty("brokerAvailable", out var broker) || broker.GetBoolean(); bool requiresProvisioning = state.TryGetProperty("requiresProvisioning", out var provisioning) && provisioning.GetBoolean();
             agentMaintenanceState.Text = active ? "Active" : !brokerAvailable || requiresProvisioning ? "Indisponible" : agent?.Session.HasPaired == true ? "Préparation…" : "Après connexion";
@@ -807,15 +827,13 @@ public sealed class MainForm : Forms.Form
 
     private void RefreshFooter()
     {
-        footerLeft.Text = footerMessage;
-        footerRight.Text = rolePages.SelectedIndex == 1 && supportSession && heartbeatHealthy && !terminating
-            ? controllerPages.SelectedIndex switch
-            {
-                2 => lastMeasurementUtc is { } measured ? $"{processRows.Count} processus · mesuré à {measured.ToLocalTime():HH:mm:ss}" : resourceState.Text,
-                3 => "Fichiers · " + fileState.Text,
-                _ => footerDetail
-            }
-            : footerDetail;
+        if (rolePages.SelectedIndex != 1 || terminating) { footerLeft.Text = footerMessage; footerRight.Text = footerDetail; return; }
+        var text = WorkspacePresentation.Footer(controllerPages.SelectedIndex, connectionState.Text, streamStatus.Text,
+            resourceState.Text, fileState.Text, diagnosticState.Text, host.Text,
+            lastMeasurementUtc is { } measured ? $"{processRows.Count} processus · mesuré à {measured.ToLocalTime():HH:mm:ss}" : "Aucune mesure",
+            currentDirectory, operations.SelectedItem?.ToString() ?? "");
+        footerLeft.Text = supportSession && !heartbeatHealthy ? "Reconnexion en cours…" : text.Status;
+        footerRight.Text = text.Detail;
     }
 
     private void SelectRole(int index)
@@ -871,10 +889,10 @@ public sealed class MainForm : Forms.Form
     private void SelectControllerPage(int index)
     {
         if (liveStream != null && controllerPages.SelectedIndex == 1 && index != 1) StopStream("Vision suspendue");
-        controllerPages.SelectedIndex = index; UpdateHeader();
+        controllerPages.SelectedIndex = index; UpdateHeader(); RefreshControllerControls(); RefreshFooter();
         if (index == 1 && supportSession && client != null && liveStream == null) _ = StartStreamAsync();
-        if (index == 2 && processRows.Count == 0 && client != null) _ = RefreshResourcesAsync();
-        if (index == 3 && fileRows.Count == 0 && client != null) _ = BrowseFilesAsync();
+        if (index == 2 && processRows.Count == 0 && supportSession && heartbeatHealthy) _ = RefreshResourcesAsync();
+        if (index == 3 && fileRows.Count == 0 && supportSession && heartbeatHealthy) _ = BrowseFilesAsync();
     }
 
     private async Task DiscoverAsync(bool explicitRefresh)
@@ -989,7 +1007,7 @@ public sealed class MainForm : Forms.Form
                 synchronizingAgent = false;
                 pairingCts.Dispose();
             }
-            if (ownsPairing || generation == operationGeneration) { pairingBusy = false; pairButton.Enabled = true; discoverButton.Enabled = true; code.Enabled = true; host.Enabled = true; UpdateHeader(); RefreshFooter(); }
+            if (ownsPairing || generation == operationGeneration) { pairingBusy = false; discoverButton.Enabled = true; UpdateHeader(); RefreshControllerControls(); RefreshFooter(); }
         }
     }
 
@@ -1253,12 +1271,15 @@ public sealed class MainForm : Forms.Form
 
     private async Task RefreshResourcesAsync()
     {
+        if (resourcesLoading) return;
+        resourcesLoading = true; RefreshControllerControls();
         int generation = sessionGeneration; RemoteClient? target = client;
         try
         {
             RequireClient(); resourceState.Text = "Mesure en cours…"; volumeSummary.Text = "Volumes · mesure en cours…"; int? selected = processList.SelectedItems.Count > 0 && processList.SelectedItems[0].Tag is ProcessSortRow row ? row.Pid : null; var data = RemoteClient.Require(await target!.CallAsync("processes", seconds: 30)); var system = RemoteClient.Require(await target.CallAsync("system", seconds: 30)); if (generation != sessionGeneration || !ReferenceEquals(target, client)) return; processRows.Clear(); foreach (var p in data.GetProperty("processes").EnumerateArray()) processRows.Add(new ProcessSortRow(p.Int("pid"), p.Str("name", "Indisponible"), NullableDouble(p, "cpuPercentTotalMachine"), NullableLong(p, "workingSetBytes"), NullableBool(p, "responding"), p.Str("window"), NullableDate(p, "startUtc"))); lastMeasurementUtc = NullableDate(data, "sampleEndUtc") ?? DateTimeOffset.UtcNow; RenderProcesses(selected); var cpu = NullableDouble(system, "cpuPercentTotalMachine"); cpuSummary.Text = cpu is { } c ? $"{c:F1} %" : "Indisponible"; long? total = NullableLong(system, "physicalMemoryTotalBytes"); long? available = NullableLong(system, "physicalMemoryAvailableBytes"); ramSummary.Text = total is > 0 && available is >= 0 ? FormatBytes(total.Value - available.Value) : "Indisponible"; processSummary.Text = processRows.Count.ToString("N0"); resourceMeasuredAt.Text = lastMeasurementUtc.Value.ToLocalTime().ToString("HH:mm:ss"); volumeSummary.Text = FormatVolumes(system); resourceState.Text = "Mesure terminée"; footerDetail = $"Mesuré à {resourceMeasuredAt.Text}"; RefreshFooter();
         }
         catch (Exception ex) { if (generation != sessionGeneration) return; resourceState.Text = "Mesure indisponible"; footerMessage = "Ressources indisponibles"; footerDetail = ex.Message; RefreshFooter(); }
+        finally { resourcesLoading = false; RefreshControllerControls(); }
     }
 
     private void RenderProcesses(int? selectedPid = null)
@@ -1269,12 +1290,15 @@ public sealed class MainForm : Forms.Form
 
     private async Task BrowseFilesAsync()
     {
+        if (filesLoading) return;
+        filesLoading = true; RefreshControllerControls();
         int generation = sessionGeneration; RemoteClient? target = client; string directory = currentDirectory;
         try
         {
             RequireClient(); fileState.Text = "Chargement…"; string keep = selectedFilePath ?? ""; var data = RemoteClient.Require(await target!.CallAsync("files", new { path = directory }, seconds: 30)); if (generation != sessionGeneration || !ReferenceEquals(target, client) || directory != currentDirectory) return; fileRows.Clear(); foreach (var entry in data.EnumerateArray()) fileRows.Add(new FileSortRow(entry.Str("name"), entry.TryGetProperty("directory", out var d) && d.GetBoolean(), NullableLong(entry, "size"), NullableDate(entry, "modifiedUtc"), entry.Str("path"))); RenderFiles(keep); fileState.Text = fileRows.Count == 0 ? "Dossier vide" : $"{fileRows.Count} élément(s)"; fileDirectory.Text = currentDirectory; footerDetail = $"Fichiers · {fileRows.Count} élément(s)"; RefreshFooter();
         }
-        catch (Exception ex) { if (generation != sessionGeneration || directory != currentDirectory) return; fileState.Text = "Fichiers indisponibles"; footerMessage = "Lecture du dossier impossible"; footerDetail = ex.Message; RefreshFooter(); }
+        catch (Exception ex) { if (generation != sessionGeneration || directory != currentDirectory) return; fileRows.Clear(); fileList.Items.Clear(); selectedFilePath = null; remotePath.Clear(); fileState.Text = "Lecture impossible · vérifiez le chemin"; footerMessage = "Lecture du dossier impossible"; footerDetail = ex.Message; RefreshFooter(); }
+        finally { filesLoading = false; RefreshControllerControls(); }
     }
 
     private void RenderFiles(string? selectedPath = null)
@@ -1295,7 +1319,14 @@ public sealed class MainForm : Forms.Form
 
     private async Task ExecuteSelectedAsync()
     {
-        if (operations.SelectedItem is not string op) return; try { var args = JsonSerializer.Deserialize<JsonElement>(arguments.Text); await ExecuteAsync(op, args); } catch (Exception ex) { diagnosticState.Text = "Arguments JSON invalides : " + ex.Message; }
+        if (operations.SelectedItem is not string op) return;
+        try
+        {
+            var args = JsonSerializer.Deserialize<JsonElement>(arguments.Text);
+            if (args.ValueKind != JsonValueKind.Object) throw new JsonException("Les arguments doivent être un objet JSON.");
+            await ExecuteAsync(op, args);
+        }
+        catch (JsonException ex) { diagnosticState.Text = "Arguments JSON invalides · corrigez les paramètres."; output.Text = ex.Message; RefreshFooter(); }
     }
 
     public async Task ExecuteAsync(string op, object args) => await ExecuteAsync(op, Json.Element(args));
@@ -1303,12 +1334,18 @@ public sealed class MainForm : Forms.Form
     private async Task ExecuteAsync(string op, JsonElement args)
     {
         if (action != null) { diagnosticState.Text = "Une action est déjà en cours."; return; }
+        int generation = sessionGeneration;
+        RemoteClient? target = client;
         try
         {
-            RequireClient(); using var cts = new CancellationTokenSource(); action = cts; operationId = Guid.NewGuid().ToString(); diagnosticState.Text = "En cours…"; var reply = await client!.CallAsync(op, args, cts.Token, operationId, 120); output.Text = Pretty(reply); RemoteClient.Require(reply); diagnosticState.Text = "Terminé · " + DateTime.Now.ToString("HH:mm:ss");
+            RequireClient(); using var cts = new CancellationTokenSource(); action = cts; operationId = Guid.NewGuid().ToString(); diagnosticState.Text = "En cours…"; output.Clear(); RefreshControllerControls(); RefreshFooter();
+            var reply = await target!.CallAsync(op, args, cts.Token, operationId, 120);
+            if (generation != sessionGeneration || !ReferenceEquals(target, client)) return;
+            output.Text = Pretty(reply); RemoteClient.Require(reply); diagnosticState.Text = "Terminé · " + DateTime.Now.ToString("HH:mm:ss");
         }
-        catch (Exception ex) { diagnosticState.Text = "Échec : " + ex.Message; output.Text = Pretty(new { ok = false, message = ex.Message }); }
-        finally { action = null; operationId = null; }
+        catch (OperationCanceledException) { if (generation == sessionGeneration) { diagnosticState.Text = "Action annulée."; output.Text = "L’exécution a été interrompue."; } }
+        catch (Exception ex) { if (generation == sessionGeneration) { diagnosticState.Text = "Échec de l’action · consultez le résultat."; output.Text = Pretty(new { ok = false, message = ex.Message }); } }
+        finally { action = null; operationId = null; RefreshControllerControls(); RefreshFooter(); }
     }
 
     private async Task CancelActionAsync()
@@ -1391,12 +1428,17 @@ public sealed class MainForm : Forms.Form
     private void ClearControllerSession()
     {
         client = null; selectedPeer = null; selectedFingerprint = ""; selectedFilePath = null;
+        selectedPeerName.Text = "Nouvelle connexion"; selectedPeerAddress.Text = "Saisissez le code affiché sur le PC distant.";
         geometry = null; lastFrameUtc = null; inputState.Released(); code.Clear();
         processRows.Clear(); fileRows.Clear(); processList.Items.Clear(); fileList.Items.Clear();
         screen.Image?.Dispose(); screen.Image = null; currentDirectory = ""; fileDirectory.Clear(); remotePath.Clear();
         cpuSummary.Text = ramSummary.Text = processSummary.Text = resourceMeasuredAt.Text = "—";
         lastMeasurementUtc = null; powerHold?.Dispose(); powerHold = null;
+        resourceState.Text = fileState.Text = diagnosticState.Text = ConnectToContinue;
+        volumeSummary.Text = "Aucune mesure disponible"; output.Clear(); remoteText.Clear(); pid.Value = 0;
+        streamStatus.Text = "Aucune connexion active";
         connectionState.Text = "Assistance terminée. Saisissez un nouveau code pour vous reconnecter.";
+        RefreshControllerControls();
     }
 
     private void RequestQuit()

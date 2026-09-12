@@ -37,7 +37,22 @@
     "liveBadge": "liveBadge",
     "streamStatus": "streamStatus",
     "refreshResources": "refreshResources",
-    "browseFiles": "browseFiles"
+    "browseFiles": "browseFiles",
+    "operation": "operation",
+    "arguments": "arguments",
+    "output": "output",
+    "execute": "execute",
+    "cancel": "cancel",
+    "diagnosticState": "diagnosticState",
+    "technicalIdentity": "technicalIdentity",
+    "footerStatus": "footerStatus",
+    "footerDetail": "footerDetail",
+    "inputStatus": "inputStatus",
+    "upload": "upload",
+    "download": "download",
+    "fileState": "fileState",
+    "remoteDirectory": "remoteDirectory",
+    "resourceState": "resourceState"
   },
   "forbiddenNormalPairingIds": [
     "fingerprint",
