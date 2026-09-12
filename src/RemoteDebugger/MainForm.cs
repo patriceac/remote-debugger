@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Drawing.Drawing2D;
 using System.Text.Json;
-using System.Threading.Channels;
 using RemoteDebugger.Core;
 using Forms = System.Windows.Forms;
 
@@ -13,14 +12,14 @@ namespace RemoteDebugger;
 /// </summary>
 public sealed class MainForm : Forms.Form
 {
-    private static readonly Color Canvas = Color.FromArgb(246, 248, 250);
+    private static readonly Color Canvas = Color.FromArgb(247, 249, 250);
     private static readonly Color Surface = Color.White;
-    private static readonly Color Rail = Color.FromArgb(20, 38, 48);
+    private static readonly Color Rail = Color.FromArgb(24, 33, 43);
     private static readonly Color RailSecondary = Color.FromArgb(168, 186, 194);
     private static readonly Color PrimaryText = Color.FromArgb(24, 48, 57);
     private static readonly Color SecondaryText = Color.FromArgb(99, 119, 128);
     private static readonly Color Divider = Color.FromArgb(223, 230, 234);
-    private static readonly Color SelectedRail = Color.FromArgb(36, 68, 78);
+    private static readonly Color SelectedRail = Color.FromArgb(39, 60, 70);
     private static readonly Color Teal = Color.FromArgb(8, 127, 131);
     private static readonly Color TealHover = Color.FromArgb(7, 108, 112);
     private static readonly Color ConnectedText = Color.FromArgb(32, 107, 69);
@@ -62,6 +61,8 @@ public sealed class MainForm : Forms.Form
     private readonly Forms.Label agentSubtitle = new WorkspaceLabel() { Name = "agentSubtitle", Text = "Saisissez-le sur le PC qui vous assiste.", AutoSize = true, Dock = Forms.DockStyle.Fill, Font = new Font("Segoe UI", 13), ForeColor = SecondaryText };
     private readonly Forms.Label agentPairCode = new WorkspaceLabel() { Name = "agentPairCode", AutoSize = true, Text = "— — —", Font = new Font("Consolas", 42, FontStyle.Bold), ForeColor = PrimaryText };
     private readonly Forms.Button copyAgentCode = Button("Copier", "copyAgentCode", 86);
+    private readonly Forms.Button restartAgent = Button("Nouvelle assistance", "restartAgent", primary: true);
+    private bool agentIdle;
     private readonly Forms.ProgressBar pairingCountdown = new() { Name = "pairingCountdown", Minimum = 0, Maximum = 300, Value = 0, Height = 4, Style = Forms.ProgressBarStyle.Continuous };
     private readonly Forms.Label pairingCountdownText = new WorkspaceLabel() { Name = "pairingCountdownText", AutoSize = true, ForeColor = SecondaryText };
     private readonly Forms.Label agentState = new WorkspaceLabel() { Name = "agentState", AutoSize = true, ForeColor = PrimaryText };
@@ -104,6 +105,8 @@ public sealed class MainForm : Forms.Form
     private readonly Forms.ComboBox monitor = new() { Name = "monitor", DropDownStyle = Forms.ComboBoxStyle.DropDownList, Width = 130 };
     private readonly Forms.CheckBox mouseEnabled = new() { Name = "mouseKeyboard", Text = "Contrôle souris et clavier", Checked = true, AutoSize = true, ForeColor = PrimaryText, Margin = new Forms.Padding(12, 10, 0, 0) };
     private readonly Forms.Label streamStatus = new() { Name = "streamStatus", AutoSize = true, ForeColor = SecondaryText };
+    private readonly Forms.Label inputStatus = new() { Name = "inputStatus", AutoSize = false, Dock = Forms.DockStyle.Fill, ForeColor = SecondaryText, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleRight };
+    private readonly RemoteInputState inputState = new();
     private readonly Forms.TextBox remoteText = TextBox("remoteText");
     private readonly Forms.Button typeText = Button("Saisir", "typeText", 76);
     private readonly Forms.Button enterKey = Button("Entrée", "enterKey", 76);
@@ -143,7 +146,7 @@ public sealed class MainForm : Forms.Form
     private readonly Forms.Label diagnosticState = new() { Name = "diagnosticState", AutoSize = true, ForeColor = SecondaryText };
     private readonly Forms.Label technicalIdentity = new() { Name = "technicalIdentity", AutoSize = true, ForeColor = SecondaryText, MaximumSize = new Size(900, 0) };
 
-    private readonly Channel<QueuedInput> inputQueue = Channel.CreateBounded<QueuedInput>(new BoundedChannelOptions(128) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
+    private readonly RemoteInputQueue<QueuedInput> inputQueue = new();
     private long lastMove;
     private readonly string root;
     private readonly bool loopbackOnly;
@@ -169,12 +172,15 @@ public sealed class MainForm : Forms.Form
     private bool shutdownStarted;
     private bool suppressTerminationEvent;
     private bool trayVisible;
+    private bool trayNoticeShown;
+    private Forms.FormWindowState trayWindowState;
+    private bool resumeViewingOnRestore;
     private int operationGeneration;
     private int sessionGeneration;
     private string? operationId;
     private DateTimeOffset? lastMeasurementUtc;
     private string footerMessage = "Prêt à recevoir une connexion";
-    private string footerDetail = "Fermer la fenêtre quitte l’agent";
+    private string footerDetail = "Fermer réduit dans la zone de notification";
 
     public string? CurrentPairingCode { get; private set; }
     public AgentServer? Agent => agent;
@@ -221,7 +227,7 @@ public sealed class MainForm : Forms.Form
     {
         shell.Padding = Forms.Padding.Empty;
         shell.BackColor = Canvas;
-        shell.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Absolute, 240));
+        shell.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Absolute, 216));
         shell.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
         shell.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 96));
         shell.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
@@ -240,25 +246,28 @@ public sealed class MainForm : Forms.Form
 
     private void BuildRail()
     {
-        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Forms.Padding(12, 16, 12, 8), BackColor = Rail };
+        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Forms.Padding(12, 16, 12, 8), BackColor = Rail };
         layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 76));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 112));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 72));
 
         var roles = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false, Padding = new Forms.Padding(0), BackColor = Rail };
         roles.Controls.Add(roleAgent); roles.Controls.Add(roleController);
-        layout.Controls.Add(roles, 0, 0);
+        var brand = new WorkspaceLabel { Name = "appBrand", Text = "Remote\nDebugger", ForeColor = Color.White, Font = new Font("Segoe UI", 17, FontStyle.Bold), Dock = Forms.DockStyle.Fill, Padding = new Forms.Padding(14, 0, 0, 0) };
+        layout.Controls.Add(brand, 0, 0);
+        layout.Controls.Add(roles, 0, 1);
 
         var work = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false, Padding = new Forms.Padding(0, 14, 0, 0), BackColor = Rail };
         work.Controls.Add(controllerNavCaption);
         work.Controls.Add(navConnection); work.Controls.Add(navScreen); work.Controls.Add(navProcesses); work.Controls.Add(navFiles); work.Controls.Add(navDiagnostics);
-        layout.Controls.Add(work, 0, 1);
+        layout.Controls.Add(work, 0, 2);
 
         var local = new Forms.Panel { Dock = Forms.DockStyle.Fill };
         var machine = new Forms.Label { Text = Environment.MachineName, AutoSize = false, Width = 180, Height = 20, ForeColor = RailSecondary, Font = new Font("Segoe UI", 9.5F), Location = new Point(12, 8), AutoEllipsis = true };
         var version = new Forms.Label { Text = "Remote Debugger · " + (typeof(MainForm).Assembly.GetName().Version?.ToString(3) ?? "0.2"), AutoSize = false, Width = 180, Height = 20, ForeColor = Color.FromArgb(116, 143, 154), Font = new Font("Segoe UI", 8.5F), Location = new Point(12, 32), AutoEllipsis = true };
-        local.Controls.Add(machine); local.Controls.Add(version); layout.Controls.Add(local, 0, 2);
+        local.Controls.Add(machine); local.Controls.Add(version); layout.Controls.Add(local, 0, 3);
         rail.Controls.Add(layout);
     }
 
@@ -272,7 +281,7 @@ public sealed class MainForm : Forms.Form
         headerTitle.Font = new Font("Segoe UI", 22, FontStyle.Bold); headerSubtitle.Font = new Font("Segoe UI", 10.5F);
         titles.Controls.Add(headerTitle, 0, 0); titles.Controls.Add(headerSubtitle, 0, 1);
         var actions = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.LeftToRight, WrapContents = false, AutoSize = true, Padding = new Forms.Padding(0, 20, 0, 0) };
-        statusPill.Width = 232; statusPill.Height = 30; statusPill.Margin = new Forms.Padding(0, 3, 12, 0);
+        statusPill.Width = 152; statusPill.Height = 30; statusPill.Margin = new Forms.Padding(0, 3, 12, 0);
         terminateSession.Margin = Forms.Padding.Empty;
         statusDot.Location = new Point(12, 7); statusLabel.Location = new Point(28, 6); statusPill.Controls.Add(statusDot); statusPill.Controls.Add(statusLabel); statusPill.Region = RoundedRegion(statusPill.Size, 15);
         actions.Controls.Add(statusPill); actions.Controls.Add(terminateSession);
@@ -324,7 +333,7 @@ public sealed class MainForm : Forms.Form
         layout.Controls.Add(agentSubtitle, 0, 2);
 
         var codeRow = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, Height = 96, WrapContents = false, FlowDirection = Forms.FlowDirection.LeftToRight, Padding = new Forms.Padding(0, 10, 0, 0), Margin = Forms.Padding.Empty };
-        agentPairCode.Margin = new Forms.Padding(0, 0, 14, 0); copyAgentCode.Margin = new Forms.Padding(0, 4, 0, 0); codeRow.Controls.Add(agentPairCode); codeRow.Controls.Add(copyAgentCode); layout.Controls.Add(codeRow, 0, 3);
+        agentPairCode.Margin = new Forms.Padding(0, 0, 14, 0); copyAgentCode.Margin = new Forms.Padding(0, 4, 0, 0); codeRow.Controls.Add(agentPairCode); codeRow.Controls.Add(copyAgentCode); restartAgent.Visible = false; codeRow.Controls.Add(restartAgent); layout.Controls.Add(codeRow, 0, 3);
         pairingCountdown.Width = 480; pairingCountdown.Height = 4; pairingCountdown.Margin = new Forms.Padding(0, 2, 0, 0); layout.Controls.Add(pairingCountdown, 0, 4);
         pairingCountdownText.AutoSize = false; pairingCountdownText.Dock = Forms.DockStyle.Fill; pairingCountdownText.Margin = Forms.Padding.Empty; layout.Controls.Add(pairingCountdownText, 0, 5);
 
@@ -426,17 +435,23 @@ public sealed class MainForm : Forms.Form
 
     private PagePanel BuildScreenPage()
     {
-        var page = new PagePanel("Écran distant") { BackColor = Canvas, Padding = new Forms.Padding(28, 12, 28, 16) };
+        var page = new PagePanel("Écran distant") { BackColor = Canvas, Padding = new Forms.Padding(20, 8, 20, 12) };
         var top = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Top, ColumnCount = 5, RowCount = 1, Height = 42 };
         top.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); top.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); top.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); top.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100)); top.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
         monitor.Items.Add(new MonitorChoice(0, "Principal")); monitor.SelectedIndex = 0;
         top.Controls.Add(new Forms.Label { Text = "Écran", AutoSize = true, ForeColor = SecondaryText, Anchor = Forms.AnchorStyles.Left, Margin = new Forms.Padding(0, 10, 12, 0) }, 0, 0); top.Controls.Add(monitor, 1, 0); top.Controls.Add(mouseEnabled, 2, 0); top.Controls.Add(new Forms.Label { Text = "", AutoSize = true }, 3, 0); top.Controls.Add(pauseViewing, 4, 0);
         screenSurface.Controls.Add(screen); screenSurface.Controls.Add(liveBadge); screenSurface.Controls.Add(streamOverlay); liveBadge.BringToFront(); streamOverlay.BringToFront(); liveBadge.Location = new Point(16, 14); streamOverlay.Anchor = Forms.AnchorStyles.None; screenSurface.Resize += (_, _) => streamOverlay.Location = new Point(Math.Max(0, (screenSurface.Width - streamOverlay.Width) / 2), Math.Max(0, (screenSurface.Height - streamOverlay.Height) / 2));
-        var view = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 2 }; view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100)); view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 82)); view.Controls.Add(screenSurface, 0, 0);
+        var view = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 2 }; view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100)); view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 78)); view.Controls.Add(screenSurface, 0, 0);
         var bottom = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 3, RowCount = 2, Padding = new Forms.Padding(0, 6, 0, 0), Margin = Forms.Padding.Empty };
         bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100)); bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
         bottom.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 44)); bottom.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 28));
-        remoteText.Dock = Forms.DockStyle.Top; remoteText.PlaceholderText = "Texte à envoyer au PC distant"; streamStatus.Margin = Forms.Padding.Empty; streamStatus.Dock = Forms.DockStyle.Fill; streamStatus.TextAlign = ContentAlignment.MiddleLeft; bottom.Controls.Add(remoteText, 0, 0); bottom.Controls.Add(typeText, 1, 0); bottom.Controls.Add(enterKey, 2, 0); bottom.Controls.Add(streamStatus, 0, 1); bottom.SetColumnSpan(streamStatus, 3); view.Controls.Add(bottom, 0, 1);
+        remoteText.Dock = Forms.DockStyle.Top; remoteText.PlaceholderText = "Texte à envoyer au PC distant";
+        streamStatus.Margin = Forms.Padding.Empty; streamStatus.Dock = Forms.DockStyle.Fill; streamStatus.AutoSize = false; streamStatus.AutoEllipsis = true; streamStatus.TextAlign = ContentAlignment.MiddleLeft;
+        bottom.Controls.Add(remoteText, 0, 0); bottom.Controls.Add(typeText, 1, 0); bottom.Controls.Add(enterKey, 2, 0);
+        var details = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Forms.Padding.Empty };
+        details.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 48)); details.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 52));
+        details.Controls.Add(streamStatus, 0, 0); details.Controls.Add(inputStatus, 1, 0);
+        bottom.Controls.Add(details, 0, 1); bottom.SetColumnSpan(details, 3); view.Controls.Add(bottom, 0, 1);
         page.Controls.Add(view); page.Controls.Add(top); return page;
     }
 
@@ -485,7 +500,7 @@ public sealed class MainForm : Forms.Form
 
     private void BuildTray()
     {
-        tray.Icon = Icon; tray.Text = "Remote Debugger"; tray.Visible = false;
+        tray.Icon = Icon; tray.Text = "Remote Debugger"; tray.Visible = true;
         var menu = new Forms.ContextMenuStrip(); menu.Items.Add("Ouvrir", null, (_, _) => RestoreFromTray()); menu.Items.Add("Terminer l’assistance", null, async (_, _) => await TerminateSupportAsync()); menu.Items.Add(new Forms.ToolStripSeparator()); menu.Items.Add("Quitter", null, (_, _) => RequestQuit()); tray.ContextMenuStrip = menu; tray.DoubleClick += (_, _) => RestoreFromTray();
     }
 
@@ -505,7 +520,9 @@ public sealed class MainForm : Forms.Form
         pairButton.Click += async (_, _) => await PairSelectedAsync();
         pauseViewing.Click += (_, _) => { if (liveStream == null) _ = StartStreamAsync(); else StopStream("Vision en pause"); };
         monitor.SelectedIndexChanged += (_, _) => { if (liveStream != null) { StopStream("Moniteur modifié"); _ = StartStreamAsync(); } };
-        mouseEnabled.CheckedChanged += (_, _) => { if (!mouseEnabled.Checked) QueueInput(new { kind = "release" }); };
+        mouseEnabled.CheckedChanged += (_, _) => { inputState.Enabled = mouseEnabled.Checked; if (!mouseEnabled.Checked) ReleaseHeldInputForCurrentSession(); RefreshInputStatus(); };
+        restartAgent.Click += (_, _) => { agent?.Dispose(); agent = null; agentIdle = false; StartAgent(); _ = PrepareAgentAsync(); };
+        Deactivate += (_, _) => ReleaseHeldInputForCurrentSession();
         screen.MouseDown += (_, e) => { screen.Focus(); QueueMouse("down", e); }; screen.MouseUp += (_, e) => QueueMouse("up", e); screen.MouseMove += (_, e) => { long now = Environment.TickCount64; if (now - lastMove < 33) return; lastMove = now; QueueMouse("move", e); }; screen.MouseWheel += (_, e) => QueueMouse("wheel", e); screen.PreviewKeyDown += (_, e) => e.IsInputKey = true; screen.KeyDown += (_, e) => { if (!CanSendInput()) return; e.SuppressKeyPress = true; QueueInput(new { kind = "keyDown", virtualKey = (int)e.KeyCode }); }; screen.KeyUp += (_, e) => { if (!CanSendInput()) return; e.SuppressKeyPress = true; QueueInput(new { kind = "keyUp", virtualKey = (int)e.KeyCode }); }; screen.LostFocus += (_, _) => ReleaseHeldInputForCurrentSession();
         typeText.Click += async (_, _) => await ExecuteAsync("ui.text", new { pid = (int)pid.Value, text = remoteText.Text }); enterKey.Click += async (_, _) => await ExecuteAsync("ui.key", new { pid = (int)pid.Value, key = "ENTER" });
         processList.ColumnClick += (_, e) => { processSort = processSort.Toggle(ProcessColumn(e.Column)); RenderProcesses(); }; processList.SelectedIndexChanged += (_, _) => { if (processList.SelectedItems.Count > 0 && processList.SelectedItems[0].Tag is ProcessSortRow row) { pid.Value = row.Pid; } };
@@ -579,14 +596,25 @@ public sealed class MainForm : Forms.Form
             // Pairing can appear immediately without triggering the broad Windows
             // firewall consent dialog. LAN listening starts only after the
             // provisioned broker has verified the Private/LocalSubnet rules.
-            agent = new AgentServer(root, loopbackOnly: loopbackOnly || !agentNetworkPrepared);
-            agent.Status += text => PostUi(() => { agentLog.Text = text; RefreshFooter(); });
-            agent.TerminationRequested += () => { if (!suppressTerminationEvent && !quitting) PostUi(TerminateAgentFromRemote); };
+            agentIdle = false;
+            var started = new AgentServer(root, loopbackOnly: loopbackOnly || !agentNetworkPrepared);
+            agent = started;
+            started.Status += text => PostUi(() => { if (ReferenceEquals(agent, started)) { agentLog.Text = text; RefreshFooter(); } });
+            started.TerminationRequested += reason =>
+            {
+                if (suppressTerminationEvent || quitting) return;
+                PostUi(() =>
+                {
+                    if (!ReferenceEquals(agent, started)) return;
+                    if (WindowLifetime.ExitAfterAgentStop(reason)) { agent = null; RequestQuit(); }
+                    else TerminateAgentFromRemote();
+                });
+            };
             agent.Start();
             powerHold ??= PowerHold.Acquire();
             technicalIdentity.Text = "Empreinte technique de cet agent : " + agent.Fingerprint;
             agentFingerprint.Text = agent.Fingerprint;
-            footerDetail = "Fermer la fenêtre quitte l’agent";
+            footerDetail = "Fermer réduit dans la zone de notification";
             RefreshUiState();
         }
         catch (Exception ex)
@@ -610,6 +638,7 @@ public sealed class MainForm : Forms.Form
         try { await local.TerminateAsync(CancellationToken.None); }
         catch (Exception ex) { footerMessage = "Arrêt de l’agent incomplet"; footerDetail = ex.Message; RefreshFooter(); return false; }
         finally { suppressTerminationEvent = false; }
+        local.Dispose();
         if (ReferenceEquals(agent, local)) agent = null;
         powerHold?.Dispose(); powerHold = null; CurrentPairingCode = null; RefreshUiState();
         return true;
@@ -669,11 +698,12 @@ public sealed class MainForm : Forms.Form
     private void RefreshUiState()
     {
         if (IsDisposed) return;
-        UpdateAgentState(); UpdateHeader(); RefreshFooter();
+        UpdateAgentState(); UpdateHeader(); RefreshFooter(); RefreshInputStatus();
         if (supportSession && liveStream != null && lastFrameUtc is { } presented && DateTimeOffset.UtcNow - presented > TimeSpan.FromSeconds(3))
         {
             // A frozen bitmap must never continue to look like a live view or
             // remain eligible for remote input after its freshness window.
+            if (liveFrameFresh) ReleaseHeldInputForCurrentSession();
             liveFrameFresh = false;
             liveBadge.Visible = false;
             streamOverlay.Text = "Image figée · en attente d’une capture fraîche…";
@@ -695,7 +725,8 @@ public sealed class MainForm : Forms.Form
         agentEyebrow.Text = paired ? "SESSION D’ASSISTANCE" : "CODE DE CONNEXION";
         agentHeading.Text = agent?.Session.State == "reconnecting" ? "La connexion a été interrompue" : paired ? "Votre PC est pris en charge" : "Partagez ce code";
         agentSubtitle.Text = paired ? "L’état de la connexion reste visible pendant toute la session." : "Saisissez-le sur le PC qui vous assiste.";
-        copyAgentCode.Visible = !paired;
+        copyAgentCode.Visible = !paired && !agentIdle;
+        restartAgent.Visible = agentIdle;
         float stateFontSize = paired ? 24 : 42;
         if (agentPairCode.Font.Size != stateFontSize)
         {
@@ -703,7 +734,18 @@ public sealed class MainForm : Forms.Form
             agentPairCode.Font = new Font(paired ? "Segoe UI" : "Consolas", stateFontSize, FontStyle.Bold);
             previousFont.Dispose();
         }
-        if (agent == null) { agentPairCode.Text = "— — —"; CurrentPairingCode = null; agentState.Text = "Agent en attente de préparation"; agentSessionNote.Text = "L’agent démarrera avec cette application lorsqu’elle est lancée en mode assistance."; setupNotice.Visible = false; return; }
+        if (agent == null || agentIdle)
+        {
+            agentPairCode.Text = agentIdle ? "" : "— — —"; CurrentPairingCode = null;
+            agentHeading.Text = agentIdle ? "Assistance terminée" : "Partagez ce code";
+            agentSubtitle.Text = agentIdle ? "Votre PC n’est plus accessible au contrôleur." : "Saisissez-le sur le PC qui vous assiste.";
+            agentEyebrow.Text = agentIdle ? "SESSION FERMÉE" : "CODE DE CONNEXION";
+            agentState.Text = agentIdle ? "Aucune connexion active" : "Agent en attente de préparation";
+            agentSessionNote.Text = agentIdle ? "Démarrez une nouvelle assistance pour obtenir un nouveau code." : "Préparation de l’assistance…";
+            pairingCountdown.Value = 0; pairingCountdownText.Text = agentIdle ? "L’ancien code et les accès ont été révoqués." : "";
+            agentNetworkState.Text = agentIdle ? "En attente" : "Préparation…"; agentMaintenanceState.Text = "Inactive";
+            setupNotice.Visible = false; return;
+        }
         var session = agent.Session;
         if (paired && !terminating && !quitting)
             footerMessage = session.State switch { "connected" => "Assistance active", "synchronizing" => "Synchronisation de l’agent…", "reconnecting" => "En attente du contrôleur", _ => footerMessage };
@@ -730,6 +772,7 @@ public sealed class MainForm : Forms.Form
     {
         bool onAgent = rolePages.SelectedIndex == 0;
         bool onController = !onAgent;
+        tray.Text = onAgent ? "Remote Debugger — PC assisté" : "Remote Debugger — Contrôleur";
         if (onAgent)
         {
             headerTitle.Text = "Donner le contrôle"; headerSubtitle.Text = Environment.MachineName + " · Assistance sur le réseau privé";
@@ -756,7 +799,7 @@ public sealed class MainForm : Forms.Form
         statusPill.BackColor = connected ? ConnectedBack : reconnecting ? Color.FromArgb(255, 244, 222) : Color.FromArgb(237, 241, 244);
         statusDot.ForeColor = connected ? Color.FromArgb(50, 137, 91) : reconnecting ? WarningText : SecondaryText;
         statusLabel.ForeColor = connected ? ConnectedText : reconnecting ? WarningText : Color.FromArgb(80, 103, 113);
-        statusLabel.Text = connected ? "Connecté" : reconnecting ? "Reconnexion…" : synchronizing ? "Synchronisation…" : pairing ? "Appairage…" : "En attente de connexion";
+        statusLabel.Text = connected ? "Connecté" : reconnecting ? "Reconnexion…" : synchronizing ? "Synchronisation…" : pairing ? "Appairage…" : agentIdle && onAgent ? "Session fermée" : "En attente";
         statusPill.AccessibleName = statusLabel.Text; statusPill.Region?.Dispose(); statusPill.Region = RoundedRegion(statusPill.Size, 16);
         terminateSession.Visible = onAgent ? agent?.Session.Connected == true || agent?.Session.State == "reconnecting" : supportSession || synchronizingAgent;
         roleAgent.BackColor = onAgent ? SelectedRail : Rail; roleController.BackColor = onController ? SelectedRail : Rail; navConnection.BackColor = onController && controllerPages.SelectedIndex == 0 ? SelectedRail : Rail; navScreen.BackColor = onController && controllerPages.SelectedIndex == 1 ? SelectedRail : Rail; navProcesses.BackColor = onController && controllerPages.SelectedIndex == 2 ? SelectedRail : Rail; navFiles.BackColor = onController && controllerPages.SelectedIndex == 3 ? SelectedRail : Rail; navDiagnostics.BackColor = onController && controllerPages.SelectedIndex == 4 ? SelectedRail : Rail;
@@ -800,7 +843,7 @@ public sealed class MainForm : Forms.Form
         }
         rolePages.SelectedIndex = index;
         controllerNavCaption.Visible = index == 1; navConnection.Visible = index == 1; navScreen.Visible = index == 1; navProcesses.Visible = index == 1; navFiles.Visible = index == 1; navDiagnostics.Visible = index == 1;
-        if (index == 0 && agent == null && !quitting) { StartAgent(); _ = PrepareAgentAsync(); }
+        if (index == 0 && agent == null && !quitting && !agentIdle) { StartAgent(); _ = PrepareAgentAsync(); }
         if (index == 1 && !supportSession)
         {
             footerMessage = "Choisissez un PC ou saisissez son adresse IP";
@@ -902,6 +945,7 @@ public sealed class MainForm : Forms.Form
 
     private async Task PairSelectedAsync()
     {
+        if (supportSession) { connectionState.Text = "Terminez l’assistance en cours avant de saisir un nouveau code."; return; }
         if (pairingBusy || string.IsNullOrWhiteSpace(host.Text)) { connectionState.Text = "Choisissez un PC ou saisissez son adresse IP."; return; }
         if (code.Text.Length != 6 || !code.Text.All(char.IsAsciiDigit)) { connectionState.Text = "Le code doit comporter exactement six chiffres."; code.Focus(); return; }
         pairingBusy = true; synchronizingAgent = false; pairButton.Enabled = false; discoverButton.Enabled = false; code.Enabled = false; host.Enabled = false; operationGeneration++; int generation = operationGeneration; sessionGeneration++; lastFrameUtc = null; liveFrameFresh = false; var pairingCts = new CancellationTokenSource(); pairingLifetime = pairingCts;
@@ -927,7 +971,7 @@ public sealed class MainForm : Forms.Form
                 try { await SupportPlatform.SynchronizeAgentAsync(pairedClient, synchronization.Token, progress); }
                 catch (OperationCanceledException) when (!pairingCts.IsCancellationRequested) { throw new TimeoutException("La synchronisation de l’agent n’a pas abouti dans le délai prévu."); }
             }
-            if (generation != operationGeneration) return; synchronizingAgent = false; supportSession = true; heartbeatHealthy = false; powerHold ??= PowerHold.Acquire(); StartHeartbeat(); SelectRole(1); SelectControllerPage(1); connectionState.Text = "Session établie."; footerMessage = "Session active · versions synchronisées"; footerDetail = "Chargement des mesures…"; RefreshFooter(); _ = LoadInitialRemoteStateAsync(generation);
+            if (generation != operationGeneration) return; synchronizingAgent = false; updateProgressArea.Visible = false; supportSession = true; heartbeatHealthy = false; powerHold ??= PowerHold.Acquire(); StartHeartbeat(); SelectRole(1); SelectControllerPage(1); code.Clear(); connectionState.Text = "Session établie. Terminez l’assistance pour changer de PC."; footerMessage = "Session active · versions synchronisées"; footerDetail = "Chargement des mesures…"; RefreshFooter(); _ = LoadInitialRemoteStateAsync(generation);
         }
         catch (OperationCanceledException) { if (pairedClient != null) _ = EndSessionBestEffortAsync(pairedClient); if (generation == operationGeneration) { connectionState.Text = "Connexion annulée."; footerMessage = "Connexion annulée"; footerDetail = "Réessayez avec le code affiché par l’agent"; } }
         catch (Exception ex) { if (pairedClient != null) _ = EndSessionBestEffortAsync(pairedClient); if (generation == operationGeneration) { connectionState.Text = "Échec : " + ex.Message; footerMessage = "Connexion impossible"; footerDetail = ex.Message; RefreshFooter(); } }
@@ -1000,20 +1044,27 @@ public sealed class MainForm : Forms.Form
                 var heartbeat = await target.HeartbeatAsync(ct);
                 bool sessionConnected = heartbeat.TryGetProperty("session", out var session) && session.TryGetProperty("connected", out var connected) && connected.GetBoolean();
                 bool binaryMatched = heartbeat.TryGetProperty("binaryMatched", out var matched) && matched.GetBoolean();
-                if (!ReferenceEquals(target, client)) continue;
+                if (ct.IsCancellationRequested || !ReferenceEquals(target, client)) break;
                 heartbeatHealthy = sessionConnected && binaryMatched;
                 if (!heartbeatHealthy)
                 {
                     liveFrameFresh = false;
-                    _ = ReleaseHeldInputAsync(target);
+                    ReleaseHeldInputForCurrentSession();
                 }
+                else if (inputState.Suspended) ReleaseHeldInputForCurrentSession();
                 PostUi(UpdateHeader);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
+            catch (RemoteOperationException ex) when (ex.Code is "access_denied" or "session_ended")
+            {
+                if (!ct.IsCancellationRequested && ReferenceEquals(target, client))
+                    await TerminateSupportAsync();
+                break;
+            }
             catch (Exception ex)
             {
-                if (!ReferenceEquals(target, client)) continue;
-                heartbeatHealthy = false; liveFrameFresh = false; _ = ReleaseHeldInputAsync(target); footerMessage = "Reconnexion…"; footerDetail = ex.Message; PostUi(() => { streamOverlay.Text = "Session interrompue · nouvelle tentative…"; streamOverlay.Visible = true; liveBadge.Visible = false; UpdateHeader(); RefreshFooter(); });
+                if (ct.IsCancellationRequested || !ReferenceEquals(target, client)) break;
+                heartbeatHealthy = false; liveFrameFresh = false; ReleaseHeldInputForCurrentSession(); footerMessage = "Reconnexion…"; footerDetail = ex.Message; PostUi(() => { streamOverlay.Text = "Session interrompue · nouvelle tentative…"; streamOverlay.Visible = true; liveBadge.Visible = false; UpdateHeader(); RefreshFooter(); });
             }
             try { await Task.Delay(TimeSpan.FromSeconds(5), ct); } catch (OperationCanceledException) { break; }
         }
@@ -1026,7 +1077,7 @@ public sealed class MainForm : Forms.Form
 
     private async Task StartStreamAsync()
     {
-        if (liveStream != null || client == null) return;
+        if (liveStream != null || client == null || trayVisible) return;
         try { RequireClient(); } catch (Exception ex) { streamStatus.Text = ex.Message; return; }
         RemoteClient target = client;
         int generation = sessionGeneration;
@@ -1041,18 +1092,18 @@ public sealed class MainForm : Forms.Form
                 {
                     await target.StreamAsync(frame =>
                     {
-                        if (generation == sessionGeneration && ReferenceEquals(target, client) && supportSession) Present(frame);
+                        if (!lifetime.IsCancellationRequested && ReferenceEquals(liveStream, lifetime) && generation == sessionGeneration && ReferenceEquals(target, client) && supportSession) Present(frame);
                         return Task.CompletedTask;
                     }, StreamPolicy.MaximumFps, MonitorValue(), 300, lifetime.Token);
                 }
-                catch (Exception ex) when (!lifetime.IsCancellationRequested && ex is IOException or System.Net.Sockets.SocketException)
+                catch (Exception ex) when (!lifetime.IsCancellationRequested && ex is IOException or System.Net.Sockets.SocketException or OperationCanceledException)
                 {
                     // The five-minute transport boundary and transient link loss
                     // renew the stream inside the same authenticated session.
                     liveFrameFresh = false; liveBadge.Visible = false;
                     streamOverlay.Text = "Reconnexion au flux…"; streamOverlay.Visible = true;
                     streamStatus.Text = "En attente d’une image fraîche";
-                    await ReleaseHeldInputAsync(target);
+                    ReleaseHeldInputForCurrentSession();
                     await Task.Delay(500, lifetime.Token);
                 }
             }
@@ -1078,7 +1129,7 @@ public sealed class MainForm : Forms.Form
                 streamOverlay.Text = "Flux arrêté · appuyez sur Reprendre";
             }
             lifetime.Dispose();
-            _ = ReleaseHeldInputAsync(target);
+            if (generation == sessionGeneration && ReferenceEquals(target, client)) ReleaseHeldInputForCurrentSession();
         }
     }
 
@@ -1090,7 +1141,7 @@ public sealed class MainForm : Forms.Form
         running?.Cancel();
         pauseViewing.Text = "Reprendre"; monitor.Enabled = true;
         liveFrameFresh = false; liveBadge.Visible = false; streamOverlay.Visible = true; streamOverlay.Text = "Vision en pause · appuyez sur Reprendre"; streamStatus.Text = message;
-        if (target != null) _ = ReleaseHeldInputAsync(target);
+        if (target != null) ReleaseHeldInputForCurrentSession();
     }
 
     private void Present(ScreenFrame frame)
@@ -1113,17 +1164,24 @@ public sealed class MainForm : Forms.Form
         if (!CanSendInput() || geometry == null) return; var point = geometry.MapLetterbox(screen.Width, screen.Height, e.X, e.Y); if (point == null) { if (kind == "up") QueueInput(new { kind = "release" }); return; } QueueInput(new { kind, x = point.Value.X, y = point.Value.Y, layoutId = geometry.LayoutId, button = e.Button == Forms.MouseButtons.Right ? "right" : e.Button == Forms.MouseButtons.Middle ? "middle" : "left", delta = e.Delta });
     }
 
-    private bool CanSendInput() => supportSession && heartbeatHealthy && liveFrameFresh && mouseEnabled.Checked && screen.ContainsFocus;
+    private bool CanSendInput() => inputState.CanSend(supportSession && heartbeatHealthy && !trayVisible, liveFrameFresh, screen.ContainsFocus && ContainsFocus);
+
+    private void RefreshInputStatus()
+    {
+        inputStatus.Text = !supportSession ? "Connectez-vous pour contrôler ce PC" : !inputState.Enabled ? "Consultation seule" : !heartbeatHealthy ? "Contrôle en attente de connexion" : inputState.Suspended ? "Rétablissement du contrôle…" : !liveFrameFresh ? "En attente d’une image fraîche" : screen.ContainsFocus && ContainsFocus ? "Souris et clavier actifs" : "Cliquez dans l’écran pour contrôler";
+    }
 
     private void QueueInput(object value)
     {
         RemoteClient? target = client;
         if (target == null || !supportSession) return;
-        if (!inputQueue.Writer.TryWrite(new QueuedInput(target, sessionGeneration, value)))
+        string kind = Json.Element(value).Str("kind");
+        if (kind == "release") { ReleaseHeldInputForCurrentSession(); return; }
+        if (!inputQueue.TryWrite(kind, new QueuedInput(target, sessionGeneration, value)))
         {
-            mouseEnabled.Checked = false;
-            streamStatus.Text = "Contrôle suspendu : file d’entrée saturée.";
-            _ = ReleaseHeldInputAsync(target);
+            inputState.Suspend();
+            inputStatus.Text = "Contrôle en attente · trop d’entrées";
+            ReleaseHeldInputForCurrentSession();
         }
     }
 
@@ -1155,7 +1213,8 @@ public sealed class MainForm : Forms.Form
 
     private void ReleaseHeldInputForCurrentSession()
     {
-        if (supportSession && client is { } target) _ = ReleaseHeldInputAsync(target);
+        if (supportSession && client is { } target)
+            inputQueue.Reset(new QueuedInput(target, sessionGeneration, new { kind = "release" }));
     }
 
     private async Task EndSessionBestEffortAsync(RemoteClient target)
@@ -1170,12 +1229,25 @@ public sealed class MainForm : Forms.Form
 
     private async Task PumpInputAsync()
     {
-        await foreach (QueuedInput item in inputQueue.Reader.ReadAllAsync())
+        await foreach (QueuedInput item in inputQueue.ReadAllAsync())
         {
             RemoteClient target = item.Client;
             if (!supportSession || item.Generation != sessionGeneration || !ReferenceEquals(target, client)) continue;
-            try { RemoteClient.Require(await target.CallAsync("ui.input", item.Payload, seconds: 5)); }
-            catch (Exception ex) { PostUi(() => { mouseEnabled.Checked = false; streamStatus.Text = "Entrée interrompue : " + ex.Message; }); }
+            bool release = Json.Element(item.Payload).Str("kind") == "release";
+            try
+            {
+                using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                RemoteClient.Require(await target.CallAsync("ui.input", item.Payload, deadline.Token, seconds: 3));
+                if (release && item.Generation == sessionGeneration && ReferenceEquals(target, client)) inputState.Released();
+            }
+            catch (Exception ex)
+            {
+                if (item.Generation != sessionGeneration || !ReferenceEquals(target, client)) continue;
+                inputState.Suspend();
+                inputStatus.Text = "Contrôle temporairement indisponible";
+                output.Text = "Entrée interrompue : " + ex.Message;
+                if (!release) ReleaseHeldInputForCurrentSession();
+            }
         }
     }
 
@@ -1264,7 +1336,8 @@ public sealed class MainForm : Forms.Form
 
     private async Task TerminateSupportAsync(bool selectControllerAfter = true)
     {
-        if (terminating) return; terminating = true; terminateSession.Enabled = false; footerMessage = "Fin de l’assistance…"; RefreshFooter(); pairingLifetime?.Cancel(); heartbeatLifetime?.Cancel(); StopStream("Assistance terminée"); QueueInput(new { kind = "release" });
+        if (terminating) return; terminating = true; operationGeneration++; terminateSession.Enabled = false; footerMessage = "Fin de l’assistance…"; RefreshFooter(); pairingLifetime?.Cancel(); heartbeatLifetime?.Cancel(); action?.Cancel(); resumeViewingOnRestore = false; StopStream("Assistance terminée"); QueueInput(new { kind = "release" });
+        bool wasAgent = agent != null || rolePages.SelectedIndex == 0;
         RemoteClient? oldClient = client;
         sessionGeneration++;
         supportSession = false;
@@ -1274,7 +1347,10 @@ public sealed class MainForm : Forms.Form
         {
             if (agent != null)
             {
-                localAgentStopped = await StopAgentAsync();
+                suppressTerminationEvent = true;
+                try { await agent.TerminateAsync(CancellationToken.None); }
+                catch { localAgentStopped = false; throw; }
+                finally { suppressTerminationEvent = false; }
             }
             else if (oldClient != null)
             {
@@ -1289,13 +1365,11 @@ public sealed class MainForm : Forms.Form
             terminating = false;
             return;
         }
-        client = null; selectedPeer = null; selectedFingerprint = ""; selectedFilePath = null; processRows.Clear(); fileRows.Clear(); powerHold?.Dispose(); powerHold = null; terminateSession.Enabled = true; terminating = false;
-        if (agent == null && rolePages.SelectedIndex == 0)
+        ClearControllerSession();
+        terminateSession.Enabled = true; terminating = false;
+        if (wasAgent)
         {
-            quitting = true;
-            shutdownStarted = true;
-            if (await ShutdownAsync()) Close();
-            else { quitting = false; shutdownStarted = false; }
+            agentIdle = true; footerMessage = "Assistance terminée"; footerDetail = "Nouvelle assistance pour obtenir un code"; RefreshUiState();
             return;
         }
         if (selectControllerAfter)
@@ -1307,7 +1381,22 @@ public sealed class MainForm : Forms.Form
 
     private void TerminateAgentFromRemote()
     {
-        if (quitting) return; footerMessage = "L’assistance a été terminée"; agent?.Dispose(); agent = null; powerHold?.Dispose(); powerHold = null; quitting = true; Close();
+        if (quitting) return;
+        agentIdle = true; CurrentPairingCode = null;
+        powerHold?.Dispose(); powerHold = null;
+        footerMessage = "Assistance terminée"; footerDetail = "Nouvelle assistance pour obtenir un code";
+        RefreshUiState();
+    }
+
+    private void ClearControllerSession()
+    {
+        client = null; selectedPeer = null; selectedFingerprint = ""; selectedFilePath = null;
+        geometry = null; lastFrameUtc = null; inputState.Released(); code.Clear();
+        processRows.Clear(); fileRows.Clear(); processList.Items.Clear(); fileList.Items.Clear();
+        screen.Image?.Dispose(); screen.Image = null; currentDirectory = ""; fileDirectory.Clear(); remotePath.Clear();
+        cpuSummary.Text = ramSummary.Text = processSummary.Text = resourceMeasuredAt.Text = "—";
+        lastMeasurementUtc = null; powerHold?.Dispose(); powerHold = null;
+        connectionState.Text = "Assistance terminée. Saisissez un nouveau code pour vous reconnecter.";
     }
 
     private void RequestQuit()
@@ -1319,7 +1408,13 @@ public sealed class MainForm : Forms.Form
     {
         SaveWindowPlacement();
         if (shutdownStarted) return;
-        if (quitting || agent != null)
+        if (WindowLifetime.HideToTray(e.CloseReason, quitting))
+        {
+            e.Cancel = true;
+            if (!trayVisible) HideToTray();
+            return;
+        }
+        if (!shutdownStarted)
         {
             e.Cancel = true;
             quitting = true;
@@ -1328,11 +1423,28 @@ public sealed class MainForm : Forms.Form
             else { quitting = false; shutdownStarted = false; }
             return;
         }
-        if (!trayVisible) { e.Cancel = true; HideToTray(); }
     }
 
-    private void HideToTray() { trayVisible = true; Hide(); tray.Visible = true; footerMessage = "Assistance active dans la zone de notification"; footerDetail = "Ouvrir pour reprendre"; RefreshFooter(); }
-    private void RestoreFromTray() { tray.Visible = false; trayVisible = false; Show(); WindowState = Forms.FormWindowState.Normal; Activate(); }
+    private void HideToTray()
+    {
+        trayWindowState = WindowState;
+        resumeViewingOnRestore = liveStream != null;
+        if (resumeViewingOnRestore) StopStream("Affichage réduit · connexion maintenue");
+        ReleaseHeldInputForCurrentSession();
+        trayVisible = true; tray.Visible = true; Hide();
+        if (!trayNoticeShown)
+        {
+            trayNoticeShown = true;
+            tray.ShowBalloonTip(3000, "Remote Debugger", "La connexion reste active. Double-cliquez sur l’icône pour rouvrir la fenêtre.", Forms.ToolTipIcon.Info);
+        }
+    }
+
+    private void RestoreFromTray()
+    {
+        trayVisible = false; Show(); WindowState = trayWindowState == Forms.FormWindowState.Maximized ? trayWindowState : Forms.FormWindowState.Normal; Activate();
+        if (resumeViewingOnRestore && supportSession && controllerPages.SelectedIndex == 1) _ = StartStreamAsync();
+        resumeViewingOnRestore = false;
+    }
 
     private void RestoreWindowPlacement()
     {
@@ -1380,9 +1492,10 @@ public sealed class MainForm : Forms.Form
                 return false;
             }
             finally { suppressTerminationEvent = false; }
+            localAgent.Dispose();
             if (ReferenceEquals(agent, localAgent)) agent = null;
         }
-        inputQueue.Writer.TryComplete(); if (agent != null) agent.Dispose(); agent = null; powerHold?.Dispose(); powerHold = null; tray.Visible = false; screen.Image?.Dispose();
+        inputQueue.Complete(); if (agent != null) agent.Dispose(); agent = null; powerHold?.Dispose(); powerHold = null; tray.Visible = false; screen.Image?.Dispose();
         return true;
     }
 
@@ -1431,9 +1544,17 @@ public sealed class MainForm : Forms.Form
     private static Forms.Label SummaryValue(string name) => new() { Name = name, Text = "—", AutoSize = true, ForeColor = PrimaryText, Font = new Font("Segoe UI", 13, FontStyle.Bold) };
     private static Forms.Label Eyebrow(string text) => new WorkspaceLabel() { Name = "agentEyebrow", Text = text, AutoSize = true, ForeColor = Teal, Font = new Font("Segoe UI", 9.5F, FontStyle.Bold) };
     private static Forms.Label RailCaption(string text) => new() { Text = text, AutoSize = true, ForeColor = RailSecondary, Font = new Font("Segoe UI", 8.5F, FontStyle.Bold), Margin = new Forms.Padding(12, 0, 0, 8) };
-    private static Forms.Button RailButton(string text, string name) => new() { Name = name, Text = text, AccessibleName = text, AutoSize = false, Width = 216, Height = 48, FlatStyle = Forms.FlatStyle.Flat, FlatAppearance = { BorderSize = 0 }, ForeColor = Color.White, BackColor = Rail, TextAlign = ContentAlignment.MiddleLeft, Padding = new Forms.Padding(16, 0, 0, 0), Margin = new Forms.Padding(0, 0, 0, 4), UseMnemonic = false };
-    private static Forms.Button RailSubButton(string text, string name) => new() { Name = name, Text = text, AccessibleName = text, AutoSize = false, Width = 200, Height = 42, FlatStyle = Forms.FlatStyle.Flat, FlatAppearance = { BorderSize = 0 }, ForeColor = RailSecondary, BackColor = Rail, TextAlign = ContentAlignment.MiddleLeft, Padding = new Forms.Padding(16, 0, 0, 0), Margin = new Forms.Padding(8, 0, 0, 5), UseMnemonic = false };
-    private static Forms.Button Button(string text, string name, int width = 0, bool primary = false, bool destructive = false) { var button = new Forms.Button { Name = name, Text = text, AccessibleName = text, AutoSize = true, AutoSizeMode = Forms.AutoSizeMode.GrowAndShrink, MinimumSize = new Size(width > 0 ? width : 120, 38), Font = new Font("Segoe UI", 10), FlatStyle = Forms.FlatStyle.Flat, UseMnemonic = false, Padding = new Forms.Padding(10, 0, 10, 0), BackColor = destructive ? DestructiveBack : primary ? Teal : Surface, ForeColor = destructive ? DestructiveText : primary ? Color.White : PrimaryText, FlatAppearance = { BorderSize = 1, BorderColor = destructive ? Color.FromArgb(250, 210, 214) : primary ? Teal : Color.FromArgb(203, 215, 221) } }; button.Region = RoundedRegion(button.Size, 6); button.Resize += (_, _) => { button.Region?.Dispose(); button.Region = RoundedRegion(button.Size, 6); }; button.GotFocus += (_, _) => button.FlatAppearance.BorderColor = Teal; button.LostFocus += (_, _) => button.FlatAppearance.BorderColor = destructive ? Color.FromArgb(250, 210, 214) : primary ? Teal : Color.FromArgb(203, 215, 221); button.MouseEnter += (_, _) => { if (primary) button.BackColor = TealHover; }; button.MouseLeave += (_, _) => { if (primary) button.BackColor = Teal; }; return button; }
+    private static Forms.Button RailButton(string text, string name) => new WorkspaceButton() { Name = name, Text = text, AccessibleName = text, AutoSize = false, Width = 188, Height = 44, FlatStyle = Forms.FlatStyle.Flat, FlatAppearance = { BorderSize = 0 }, ForeColor = Color.White, BackColor = Rail, TextAlign = ContentAlignment.MiddleLeft, Padding = new Forms.Padding(16, 0, 0, 0), Margin = new Forms.Padding(0, 0, 0, 4), UseMnemonic = false };
+    private static Forms.Button RailSubButton(string text, string name) => new WorkspaceButton() { Name = name, Text = text, AccessibleName = text, AutoSize = false, Width = 188, Height = 40, FlatStyle = Forms.FlatStyle.Flat, FlatAppearance = { BorderSize = 0 }, ForeColor = RailSecondary, BackColor = Rail, TextAlign = ContentAlignment.MiddleLeft, Padding = new Forms.Padding(16, 0, 0, 0), Margin = new Forms.Padding(0, 0, 0, 4), UseMnemonic = false };
+    private static Forms.Button Button(string text, string name, int width = 0, bool primary = false, bool destructive = false) => new WorkspaceButton
+    {
+        Name = name, Text = text, AccessibleName = text, AutoSize = true, AutoSizeMode = Forms.AutoSizeMode.GrowAndShrink,
+        MinimumSize = new Size(width > 0 ? width : 120, 38), Font = new Font("Segoe UI", 10), FlatStyle = Forms.FlatStyle.Flat,
+        UseMnemonic = false, Padding = new Forms.Padding(12, 0, 12, 0),
+        BackColor = destructive ? DestructiveBack : primary ? Teal : Surface,
+        ForeColor = destructive ? DestructiveText : primary ? Color.White : PrimaryText,
+        FlatAppearance = { BorderSize = primary ? 0 : 1, BorderColor = destructive ? Color.FromArgb(242, 219, 222) : Divider }
+    };
     private static Forms.TextBox TextBox(string name) { var box = new Forms.TextBox { Name = name, AccessibleName = name, BorderStyle = Forms.BorderStyle.FixedSingle, BackColor = Surface, ForeColor = PrimaryText, Font = new Font("Segoe UI", 11) }; box.Enter += (_, _) => box.BackColor = Color.FromArgb(248, 253, 253); box.Leave += (_, _) => box.BackColor = Surface; return box; }
     private static Forms.Label Badge(string text, string name) => new() { Name = name, Text = "●  " + text, AutoSize = true, ForeColor = ConnectedText, BackColor = ConnectedBack, Font = new Font("Segoe UI", 8.5F, FontStyle.Bold), Padding = new Forms.Padding(8, 5, 8, 5), Visible = false };
     private static Region RoundedRegion(Size size, int radius) { var path = new GraphicsPath(); path.AddArc(0, 0, radius * 2, radius * 2, 180, 90); path.AddArc(size.Width - radius * 2, 0, radius * 2, radius * 2, 270, 90); path.AddArc(size.Width - radius * 2, size.Height - radius * 2, radius * 2, radius * 2, 0, 90); path.AddArc(0, size.Height - radius * 2, radius * 2, radius * 2, 90, 90); path.CloseFigure(); return new Region(path); }

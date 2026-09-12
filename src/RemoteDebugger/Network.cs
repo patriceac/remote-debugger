@@ -95,7 +95,7 @@ public sealed class AgentServer : IDisposable
     public bool Paired { get { lock (authLock) return tokenHash.Length != 0; } }
     public AgentUpdateProgress UpdateProgress => updates.Progress;
     public event Action<string>? Status;
-    public event Action? TerminationRequested;
+    public event Action<AgentStopReason>? TerminationRequested;
     public SupportSessionSnapshot Session => session.Snapshot;
     public AgentServer(string root, int port = 45832, bool loopbackOnly = false)
     {
@@ -136,7 +136,7 @@ public sealed class AgentServer : IDisposable
             // Planned replacement preserves the bounded reconnect grant. Explicit
             // termination takes the cancellation path below instead.
             if (Interlocked.CompareExchange(ref terminating, 2, 0) != 0) return;
-            Dispose(); TerminationRequested?.Invoke();
+            Dispose(); TerminationRequested?.Invoke(AgentStopReason.UpdateReplacement);
         };
         privateNetworkEnabled = !loopbackOnly;
         listener = new TcpListener(loopbackOnly ? IPAddress.Loopback : IPAddress.Any, port);
@@ -274,7 +274,9 @@ public sealed class AgentServer : IDisposable
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
             deadline.CancelAfter(TimeSpan.FromSeconds(35));
             await updates.CancelActiveAsync(deadline.Token);
-            Revoke(); Dispose(); TerminationRequested?.Invoke();
+            // Retain the listener in an unauthorized idle state so the
+            // controller can distinguish termination from a temporary outage.
+            Revoke(); Volatile.Write(ref terminating, 2); TerminationRequested?.Invoke(AgentStopReason.SupportEnded);
         }
         finally { updateGate.Release(); }
     }
@@ -408,7 +410,7 @@ public sealed class AgentServer : IDisposable
                             using var endDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(35));
                             await updates.CancelActiveAsync(endDeadline.Token);
                             await Wire.WriteAsync(tls, Reply.Success(r.Id, new { ended = true }), timeout.Token);
-                            Revoke(); Dispose(); TerminationRequested?.Invoke();
+                            Revoke(); Volatile.Write(ref terminating, 2); TerminationRequested?.Invoke(AgentStopReason.SupportEnded);
                         }
                         finally { updateGate.Release(); }
                         return;
@@ -583,7 +585,7 @@ public sealed class RemoteClient(Connection connection)
             await present(frame); await Wire.WriteAsync(tls, new { sequence = frame.Sequence }, ct);
         }
     }
-    public static JsonElement Require(Reply reply) => reply.Ok ? reply.Data : throw new InvalidOperationException($"{reply.Error}: {reply.Message}");
+    public static JsonElement Require(Reply reply) => reply.Ok ? reply.Data : throw new RemoteOperationException(reply.Error ?? "operation_failed", reply.Message ?? "Remote operation failed.");
     private sealed record UploadState(string Transfer, string Sha256, long Size, string Path);
     public async Task<JsonElement> UploadAsync(string file, string relativePath, CancellationToken ct = default)
     {

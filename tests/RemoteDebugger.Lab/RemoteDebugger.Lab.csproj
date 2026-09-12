@@ -10,6 +10,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/RemoteDebugger/RemoteDebugger.csproj" />
-    <Content Include="../acceptance-contract.json" Link="acceptance-contract.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+    <Content Include="../acceptance-contract.json" Link="acceptance-contract.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" ExcludeFromSingleFile="true" />
   </ItemGroup>
 </Project>

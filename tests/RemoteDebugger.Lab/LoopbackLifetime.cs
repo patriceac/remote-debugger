@@ -278,7 +278,7 @@ internal sealed partial class LabForm
         while (DateTimeOffset.UtcNow <= deadline)
         {
             loopbackAgent.Refresh();
-            if (loopbackAgent.HasExited)
+            if (!loopbackAgent.HasExited && TryValue("agentHeading") == "Assistance terminée")
             {
                 exitedUtc = DateTimeOffset.UtcNow;
                 break;
@@ -291,10 +291,10 @@ internal sealed partial class LabForm
             double elapsedSeconds = (exitedUtc.Value - disconnectedUtc).TotalSeconds;
             bool timing = exitedUtc.Value >= earliest && exitedUtc.Value <= deadline;
             var evidence = new { disconnectedUtc, reconnectObservedUtc, reconnectState, reconnectCountdown, remainingSeconds, expectedExit, exitedUtc, elapsedSeconds, graceSeconds = grace.TotalSeconds, earliestAllowedUtc = earliest, latestAllowedUtc = deadline, timing };
-            if (timing) Pass("lifetime.disconnect_grace_exit", "The agent exits after the real ten-minute disconnect grace period", evidence);
-            else Fail("lifetime.disconnect_grace_exit", "The agent exits after the real ten-minute disconnect grace period", evidence);
+            if (timing) Pass("lifetime.disconnect_grace_exit", "The agent revokes access and returns to idle after the real ten-minute disconnect grace period", evidence);
+            else Fail("lifetime.disconnect_grace_exit", "The agent revokes access and returns to idle after the real ten-minute disconnect grace period", evidence);
         }
         else
-            Fail("lifetime.disconnect_grace_exit", "The agent exits after the real ten-minute disconnect grace period", new { disconnectedUtc, reconnectObservedUtc, reconnectState, reconnectCountdown, remainingSeconds, expectedExit, graceSeconds = grace.TotalSeconds, deadline, agentExited = false });
+            Fail("lifetime.disconnect_grace_exit", "The agent revokes access and returns to idle after the real ten-minute disconnect grace period", new { disconnectedUtc, reconnectObservedUtc, reconnectState, reconnectCountdown, remainingSeconds, expectedExit, graceSeconds = grace.TotalSeconds, deadline, agentExited = false });
     }
 }

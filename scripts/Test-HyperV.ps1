@@ -56,6 +56,14 @@ function New-RoleRequest([string]$roleName) {
         ExecutionTimeoutSeconds = $ExecutionTimeoutSeconds
         ThrowOnFailure = $true
     }
+    if ($roleName -in @('Loopback', 'LoopbackTray', 'LoopbackLifetime')) {
+        # Runtime checks consume the two canonical build outputs only. Old
+        # installers, tampered signing fixtures and update variants are unrelated.
+        $request.ArtifactPath = Join-Path $artifact 'lab'
+        $request.ExecutableRelativePath = 'RemoteDebugger.Lab.exe'
+        $request.ReadOnlyHostInput = @(@{ Name = 'release'; Path = (Join-Path $artifact 'release'); Mode = 'Vhdx' })
+        $request.Arguments += ' "{HOSTINPUT:release}\RemoteDebugger.exe"'
+    }
     if ($Scope -in @('Provisioned', 'Full') -and -not [string]::IsNullOrWhiteSpace($BrokerRoot)) {
         $setupRelativePath = switch ($UpdateVariant.ToLowerInvariant()) {
             'upgrade' { if ($roleName -eq 'Agent') { 'update-fixtures\older\RemoteDebugger.exe' } else { 'update-fixtures\newer\RemoteDebugger.exe' } }

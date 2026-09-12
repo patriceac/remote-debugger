@@ -131,7 +131,12 @@ internal sealed partial class LabForm
             product = loopbackAgent;
             try { await ProbeAgentTypographyAsync(paired: true); }
             finally { product = loopbackController; Native.FocusWindow(loopbackController.Id); }
+            await ProbeAutoDataAsync();
+            await CaptureLoopbackMinimumSizeAsync();
+            await ProbeInputPreferenceAsync();
+            await ProbeAgentTrayAsync();
             await ProbeLoopbackTrayAndTerminateAsync();
+            await ProbeSecondSessionAsync();
             await FinishAsync();
             return;
         }
@@ -153,7 +158,11 @@ internal sealed partial class LabForm
                 process.Refresh();
                 if (!process.HasExited)
                 {
-                    process.CloseMainWindow();
+                    product = process;
+                    var context = await OpenTrayContextAsync();
+                    var quit = context.OpenItem == null ? null : FindLoopbackTrayMenuItem("Quitter");
+                    if (quit == null) throw new InvalidOperationException("The tray Quit action is unavailable for cleanup.");
+                    InvokeElement(quit);
                     await WaitForProcessExitAsync(process, TimeSpan.FromSeconds(8));
                 }
             }
@@ -477,7 +486,12 @@ internal sealed partial class LabForm
         while (deadline.Elapsed < TimeSpan.FromSeconds(12))
         {
             poll++;
-            AutomationElement[] icons = FindSystemTrayIcons();
+            string expectedRole = product == loopbackAgent ? "PC assisté" : "Contrôleur";
+            AutomationElement[] icons = FindSystemTrayIcons().Where(icon =>
+            {
+                try { return icon.Current.Name.Contains(expectedRole, StringComparison.Ordinal); }
+                catch (ElementNotAvailableException) { return false; }
+            }).ToArray();
             attempts.Add(new
             {
                 stage = "icon_search",
@@ -658,7 +672,7 @@ internal sealed partial class LabForm
         if (product == null || loopbackAgent == null) throw new InvalidOperationException("Loopback product processes are missing.");
         Native.FocusWindow(product.Id);
         product.CloseMainWindow();
-        await Task.Delay(1400, stop.Token);
+        await Task.Delay(21000, stop.Token);
         product.Refresh();
         TrayContext tray = await OpenTrayContextAsync();
         bool trayAlive = !product.HasExited && !IsControllerWindowVisible() && tray.OpenItem != null;
@@ -684,7 +698,12 @@ internal sealed partial class LabForm
                 restoreError = ex.Message;
             }
             if (restored)
+            {
                 Pass("loopback.tray_restore", "The loopback controller tray Open action restores its window", new { menuVisible = true, restored, trayIcon = tray.IconName, overflowOpened = tray.OverflowOpened });
+                var live = await WaitForLiveEvidenceAsync(30);
+                if (live.BadgeVisible && live.TelemetryVisible) Pass("loopback.tray_restores_live", "Restoring the controller automatically resumes fresh viewing after more than one heartbeat timeout", live);
+                else Fail("loopback.tray_restores_live", "Restoring the controller automatically resumes fresh viewing after more than one heartbeat timeout", live);
+            }
             else
                 Fail("loopback.tray_restore", "The loopback controller tray Open action restores its window", new { menuVisible = true, restored, trayIcon = tray.IconName, overflowOpened = tray.OverflowOpened, error = restoreError });
         }
@@ -708,21 +727,17 @@ internal sealed partial class LabForm
             return;
         }
         bool disconnected = await WaitForTextAsync("connectionStatus", text => !IsConnected(text), 30);
-        bool agentExited = false;
-        for (int n = 0; n < 30; n++)
-        {
-            loopbackAgent.Refresh();
-            if (loopbackAgent.HasExited) { agentExited = true; break; }
-            await Task.Delay(1000, stop.Token);
-        }
-        if (disconnected && agentExited)
+        bool agentIdle = false;
+        product = loopbackAgent;
+        try { agentIdle = await WaitForTextAsync("agentHeading", text => text == "Assistance terminée", 30); }
+        finally { product = loopbackController; }
+        bool bothAlive = !loopbackAgent.HasExited && loopbackController is { HasExited: false };
+        if (disconnected && agentIdle && bothAlive)
         {
             sawTermination = true;
-            Pass("loopback.terminate", "The controller terminate action ends the loopback session and exits the agent", new { disconnected, agentPid = loopbackAgent.Id, agentExited });
+            Pass("loopback.terminate", "Ending support revokes access and keeps both applications open", new { disconnected, agentIdle, bothAlive });
         }
-        else Fail("loopback.terminate", "The controller terminate action ends the loopback session and exits the agent", new { disconnected, agentExited, agentPid = loopbackAgent.Id });
-        if (!agentExited)
-            await AttemptLoopbackSessionEndCleanupAsync("terminate_action_did_not_exit_agent", includeAccessDenied: false);
+        else Fail("loopback.terminate", "Ending support revokes access and keeps both applications open", new { disconnected, agentIdle, bothAlive });
         JsonElement denied = Json.Element(new { ok = false, error = "transport_after_termination" });
         try { denied = await CallAsync("status", requireSuccess: false, seconds: 15); } catch (Exception ex) { denied = Json.Element(new { ok = false, error = ex.Message }); }
         bool accessClosed = !denied.TryGetProperty("ok", out var accessOk) || accessOk.ValueKind != JsonValueKind.True;

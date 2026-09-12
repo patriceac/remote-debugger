@@ -83,7 +83,7 @@ Ctrl+C attempts cancellation of an in-flight `call`. Another controller process 
 | `cancel` | `{"id":"ORIGINAL-UUID"}` | Request cancellation of a running operation |
 | `session.heartbeat` | `{}` | Current session, actual binary hashes, maintenance and agent PID |
 | `session.disconnect` | `{}` | Release input and begin the ten-minute reconnect deadline |
-| `session.end` | `{}` | Cancel update replacement, end maintenance and access, then exit the agent |
+| `session.end` | `{}` | Cancel update replacement, end maintenance and access, then leave the agent open and idle |
 
 CPU values are percentages of total logical-processor capacity, not a single core. `null` means unavailable/newly created/inaccessible, never zero. Check `sampleStartUtc`, `sampleEndUtc` and `intervalMs`. A process without a main window has no GUI response state (`responding: null`). System and process requests are independent samples.
 

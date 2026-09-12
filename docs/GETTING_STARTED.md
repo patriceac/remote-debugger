@@ -16,7 +16,9 @@ The header shows connection state. **EN DIRECT** appears only while fresh frames
 
 **Processus** loads CPU, memory and process measurements after connection. Click a column header to sort; click again to reverse direction. Unavailable values remain unavailable instead of appearing as zero. CPU values represent total logical-processor capacity. **Fichiers** loads the remote workspace and storage information automatically, supports typed sorting, and keeps the current directory separate from the selected file.
 
-The controller's close button hides it to the system tray and keeps the session running. Its tray menu offers Open, End support, and Exit. **Terminer l’assistance** is the explicit session-ending action on both PCs. Closing the receiving agent ends it. A lost controller starts a ten-minute reconnect countdown; reconnecting cancels the countdown. Expiry ends the agent, cancels support work, closes administrator maintenance, and releases the temporary sleep request. Saved Windows power settings are never modified.
+The close button on either PC hides the application in the system tray and keeps the session running. Double-click its icon or use **Ouvrir** to restore it. The controller resumes live viewing automatically if it was viewing before being hidden. The tray also offers **Terminer l’assistance** and **Quitter**. Ending support on either PC revokes the old access, cancels work, closes administrator maintenance, and releases the temporary sleep request. Both applications stay open. On the receiving PC, choose **Nouvelle assistance** to get a new code and connect again. A lost controller starts a ten-minute reconnect countdown; reconnecting cancels it. Expiry returns the receiving PC to the same idle state. Saved Windows power settings are never modified.
+
+The mouse and keyboard checkbox is your preference. Temporary input errors do not uncheck it: the separate input status explains whether control is waiting for focus, a fresh frame, or reconnection. Pending mouse movements are combined so a slow connection does not build up a long pointer backlog.
 
 ## Files and diagnostics
 

@@ -9,8 +9,8 @@ A calm technical workspace: porcelain surfaces, a deep navy navigation rail, a s
 ## Tokens and geometry
 
 - Default window 1280 x 860; minimum 1060 x 720. Respect Windows DPI scaling at 100, 125, 150 and 200 percent. Use layout containers, not fixed device-pixel positions.
-- Rail 208 logical px; main header 84 px; main padding 28 px; footer/status strip 40 px. Spacing scale 4, 8, 12, 16, 24, 32. Keep geometry stable across states.
-- Canvas #F6F8FA; working surfaces #FFFFFF; rail #142630; rail secondary #A8BAC2; primary text #183039; secondary text #637780; divider #DFE6EA; selected navigation #24444E.
+- Rail 216 logical px; main header 96 px; main padding 28 px (20 px around the viewer); footer/status strip 40 px. Spacing scale 4, 8, 12, 16, 24, 32. Keep geometry stable across states.
+- Canvas #F7F9FA; working surfaces #FFFFFF; rail #18212B; rail secondary #A8BAC2; primary text #183039; secondary text #637780; divider #DFE6EA; selected navigation #273C46.
 - Primary action #087F83 with white text; hover #076C70. Connected background #E3F3E9 and text #206B45. Warning background #FFF2DB and text #8B5E12. Destructive text #B83D49, pale background #FFF0F1, solid destructive button only in its active hover/pressed state.
 - Segoe UI throughout: title 22 semibold, section 15 semibold, body/control 10.5-11, metadata 9.5. Pairing code Consolas 42 bold. Table headers 10 semibold; rows 10.5. Do not substitute typography with rendered images.
 - Buttons 38 px high, 14 px horizontal padding, subtle 5-6 px corners; icon buttons minimum 34 x 34. Inputs 40 px high, 1 px border, visible teal focus. Tables 36 px header and 34 px rows; alternate backgrounds only if needed for scanning.
@@ -34,7 +34,7 @@ Large six digit code (3+3 visual grouping permitted; copy returns exactly six AS
 
 Under a horizontal divider, three compact rows with icon/dot, label, value: Reseau prive / Pret or Preparation..., Mise en veille / Suspendue, Maintenance admin / Apres connexion. Show a once-needed setup notice inline when service is absent with Activer sur ce PC, and honest explanation Windows approval is once required. Automatic preparation may invoke initial setup only after this main window renders. No start-agent, open-pairing, revoke or manual session-admin buttons.
 
-Agent after pairing: same footprint, replace code with connected controller name and session duration. Show screen/control/admin state with separate explicit values. During disconnection show Reconnexion en attente and remaining ten-minute lifetime. Keep Terminer l'assistance prominent. Agent close exits; it does not silently hide the supported user's visibility.
+Agent after pairing: same footprint, replace code with connected controller name and session duration. Show screen/control/admin state with separate explicit values. During disconnection show Reconnexion en attente and remaining ten-minute lifetime. Keep Terminer l'assistance prominent. Closing either role hides its window in the tray, with a first-use notice and a tray termination action. Ending support leaves the agent idle with Nouvelle assistance; no new code or power hold is created until that action.
 
 ## Controller: connection view
 
@@ -50,9 +50,9 @@ During an update, show a thin transfer bar and an explicit percentage plus recei
 
 Header remote PC name and IP, Connected pill, terminate button. Toolbar under header: Ecran label with monitor selector, checked Controle souris et clavier toggle, small Pause/Reprendre viewing action. Main viewport fills remaining space with #142630 letterbox; no giant padding or redundant surrounding cards. Small EN DIRECT badge sits within the viewer top-left only while frames are current. An interruption overlay must clearly distinguish the last frozen frame.
 
-Input defaults enabled but events only forward with viewer focus and valid frame geometry. Focus loss, pause, tab switch, update, disconnect, or termination releases keys/buttons. Footer frame rate, bandwidth, and latency uses actual values.
+Input defaults enabled but events only forward with viewer focus and valid frame geometry. The checkbox represents user preference and never changes on a transport error. A separate input status explains waiting or recovery. Coalesce adjacent mouse moves, preserve click/key order, and serialize release after input already in flight. Focus loss, pause, tab switch, update, disconnect, or termination releases keys/buttons. Footer frame rate, bandwidth, and latency uses actual values.
 
-Controller X hides to tray; keep heartbeat alive. One first-use tray notice is acceptable. Tray menu Ouvrir / Terminer l'assistance / Quitter. Restoring retains the selected tab and ongoing session. Exit ends controller activity; if agent reachable it gets explicit disconnect and otherwise its heartbeat timeout handles the grace period.
+Both roles hide to tray on X, including repeated close messages. Explicit Quit and Windows shutdown exit. Keep the heartbeat alive while hidden, pause unnecessary frame presentation, and resume viewing on restore if it was previously running. Tray menu Ouvrir / Terminer l'assistance / Quitter. Restoring retains the selected tab and maximized state. Exit ends controller activity and revokes the remote session if reachable; otherwise its heartbeat timeout handles the grace period.
 
 ## Processes and files
 

@@ -1,4 +1,35 @@
-# Validation record — 0.2.0 candidate
+# Validation record
+
+## 0.2.1 — input, window lifetime, and session recovery
+
+September 12, 2026: **122/122 unit tests passed** (91 Core and 31 platform), with a Release build producing zero warnings and zero errors. New regression tests cover pointer coalescing, click/key ordering, pending-input release, preference preservation after transport failure, repeated native window closure, explicit Quit, Windows shutdown, and the distinction between ending support and exiting for an update.
+
+The signed self-contained Release executable has SHA-256 `E30E59653952C2517B37355C3D3826E1319CE9B0ACB1DFF47E42744FD32BE58D`. Its publisher is the locally enrolled publisher documented below; it is not a public CA certificate.
+
+Request `executable-test-20260912T090520555Z-e20c053d` exercised this exact executable with two GUI processes in a disconnected Hyper-V guest. The Lab was submitted from its canonical `artifacts/lab` directory, with canonical `artifacts/release` supplied as a read-only VHDX input. **All required checks passed: 28 checks passed in total**, with three optional checks explicitly blocked and no fatal error. The run verified:
+
+- Six-digit Enter pairing, exact running-binary identity, fresh automatic viewing, and enabled input by default.
+- Preserving both checked and unchecked input preferences through pause/resume and workspace navigation.
+- Closing the assisted-PC window twice, keeping it hidden for 21 seconds, restoring it through its actual notification icon, and retaining the session.
+- Closing the controller, retaining authenticated heartbeat for 21 seconds, restoring it through its notification icon, and automatically resuming fresh live frames.
+- Ending support from the controller while both processes stay alive, denying the old token, starting a new assistance session in those same processes, and then ending support from the assisted PC while both applications remain open.
+- Automatic process/files loading, typed sorting, minimum-size navigation, and pairing/connected text bounds at 1060×720 and 1280×860.
+
+The actual Release screenshots were visually inspected, including the live view, minimum-size Processes and Files workspaces, and the assisted PC's **Assistance terminée** screen with **Nouvelle assistance**. Controls remain readable at the tested default DPI; wide process columns retain horizontal scrolling. The narrower navigation rail, consistent buttons, larger viewing surface, and separate input-availability status are visible in these captures.
+
+Earlier diagnostic runs exposed native close messages being classified as `TaskManagerClosing` and an outdated external Lab UI contract. The close policy and its tests were corrected; the contract is now copied alongside the published Lab. The final passing request above used the corrected contract and exact final Release. The initial attempt to stage the entire artifacts directory exhausted a disposable payload volume before application launch; scoped canonical Lab and Release inputs resolved staging without changing the release contents.
+
+The 0.2.1 installer has SHA-256 `0D0F396EAA2871D3E4FD23F50537BF27600237C4D5AD4ACA0A192CBA6F209E15`. Request `executable-test-20260912T090417459Z-c313513b` evaluated it in another disconnected Hyper-V guest and passed. Setup returned zero, ran with `Administrative install mode: No`, installed under the test user's LocalAppData, created the per-user Start menu shortcut and HKCU uninstaller, and logged successful completion without a Windows restart.
+
+For both final requests, broker and guest harnesses report success, application assertions report `TestPassed=true`, process cleanup verified no survivors, and the worker ended Off before asynchronous recycling. No evidence warnings were reported. The disposable payload children were reported deleted and independently confirmed absent on disk; the read-only Release input also reports successful cleanup and an absent child. All network adapters were disconnected. Independent Hyper-V disk-attachment enumeration was denied to the development user's token, so attachment cleanup relies on the broker's successful cleanup report rather than a separate host inventory.
+
+Current scope limits: the three optional blocked checks are LAN/provisioning scope and OS-level power-request acquisition/release, which requires a privileged observer. This loopback run does not qualify physical-PC input delivery, multiple DPI or monitor configurations, the full update matrix, or the real ten-minute expiry under 0.2.1. Earlier release evidence below is historical and does not turn those current limits into new passes. Compilers and unit tests ran on the host; the application and installer ran only in isolated guests.
+
+Reproduce the current focused checks with `./scripts/Test-Unit.ps1`, `./scripts/Build.ps1 -IncludeLab -Sign`, and `./scripts/Test-HyperV.ps1 -Role LoopbackTray -Scope Runtime -UpdateVariant None`.
+
+## Historical evidence — 0.2.0 candidate
+
+The remainder of this document records the previous release and its original lifecycle, including the old agent-exits-on-termination behavior. These results are retained as historical evidence, not current 0.2.1 assertions.
 
 The support workflow overhaul is implemented. Release validation combines pure tests, isolated runtime/UI checks, actual five- and ten-minute timers, and a dedicated administrator-provisioned two-PC update test. Completed evidence and remaining limits are distinguished below.
 

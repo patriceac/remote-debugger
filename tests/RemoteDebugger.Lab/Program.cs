@@ -22,7 +22,7 @@ internal static class Program
         if (args.Length < 2) throw new ArgumentException("The Lab needs a role and an output directory.");
         Forms.Application.SetHighDpiMode(Forms.HighDpiMode.PerMonitorV2);
         Forms.Application.EnableVisualStyles();
-        Forms.Application.Run(new LabForm(args[0], args[1], args.Length > 2 ? args[2] : "runtime", args.Length > 3 ? args[3] : "none"));
+        Forms.Application.Run(new LabForm(args[0], args[1], args.Length > 2 ? args[2] : "runtime", args.Length > 3 ? args[3] : "none", args.Length > 4 ? args[4] : null));
     }
 }
 
@@ -68,13 +68,14 @@ internal sealed partial class LabForm : Forms.Form
 
     private sealed record CheckRecord(string Id, string Requirement, string Status, bool Required, DateTimeOffset Utc, object? Evidence);
 
-    public LabForm(string role, string output, string scope, string updateVariant)
+    public LabForm(string role, string output, string scope, string updateVariant, string? applicationPath = null)
     {
         this.role = role.Trim().ToLowerInvariant();
         this.output = Path.GetFullPath(output);
         this.scope = scope.Trim().ToLowerInvariant();
         this.updateVariant = updateVariant.Trim().ToLowerInvariant();
-        application = ResolveApplicationPath(this.role, this.updateVariant);
+        application = applicationPath == null ? ResolveApplicationPath(this.role, this.updateVariant) : Path.GetFullPath(applicationPath);
+        if (!File.Exists(application)) throw new FileNotFoundException("Release artifact missing.", application);
         productData = Path.Combine(this.output, "product-data");
         contract = LoadContract();
         Directory.CreateDirectory(this.output);
@@ -603,17 +604,17 @@ internal sealed partial class LabForm : Forms.Form
                     sawPairing = true;
                     await ProbeMaintenanceAfterPairingAsync();
                 }
-                response = new { alive = product != null && !product.HasExited, paired, machine = Environment.MachineName, state, coordinationAlive = true, rollbackCandidateKilled };
+                response = new { alive = product != null && !product.HasExited, ended = TryValue("agentHeading") == "Assistance terminée", paired, machine = Environment.MachineName, state, coordinationAlive = true, rollbackCandidateKilled };
             }
             else if (request == "RD_LAB_DONE")
             {
                 response = new { completed = true, alive = product != null && !product.HasExited };
                 await SendUdpAsync(udp, response, received.RemoteEndPoint);
                 retainCoordinationAfterProductExit = false;
-                await WaitForProductExitAsync(TimeSpan.FromSeconds(20));
+                bool idle = product is { HasExited: false } && await WaitForTextAsync("agentHeading", text => text == "Assistance terminée", 20);
                 if (product?.HasExited == true) productExitObservedUtc ??= DateTimeOffset.UtcNow;
                 if (rollbackCandidateHash != null && !rollbackCandidateKilled) Fail("agent.rollback_candidate_killed", "The rollback run kills the verified replacement before its startup health acknowledgement", new { candidateHash = rollbackCandidateHash, killed = false });
-                if (sawPairing && !sawTermination && product != null && !product.HasExited) Fail("agent.termination", "Terminating support exits the agent and releases its local session", new { productStillRunning = true });
+                if (sawPairing && !sawTermination) { if (idle) { productExitObservedUtc = DateTimeOffset.UtcNow; Pass("agent.termination", "Ending support leaves the agent open with access revoked", new { idle }); } else Fail("agent.termination", "Ending support leaves the agent open with access revoked", new { idle }); }
                 await ProbeSleepReleasedAsync();
                 await FinishAsync();
                 return;
@@ -1067,7 +1068,7 @@ internal sealed partial class LabForm : Forms.Form
     {
         if (!sleepRequestObserved)
         {
-            Block("agent.sleep_release", "The Windows power request is released after the agent exits", "The pre-exit power request was not observable, so release cannot be claimed.", required: false);
+            Block("agent.sleep_release", "The Windows power request is released after support ends", "The pre-exit power request was not observable, so release cannot be claimed.", required: false);
             return;
         }
         if (brokerProvisioning != null)
@@ -1075,19 +1076,19 @@ internal sealed partial class LabForm : Forms.Form
             var observed = await WaitForBrokerObservationAsync(productExitObservedUtc);
             if (observed.Observation == null)
             {
-                Block("agent.sleep_release", "The Windows power request is released after the agent exits", "The broker did not provide a fresh observer snapshot captured after the product exit.", new { observerError = observed.Error, exitedUtc = productExitObservedUtc }, required: false);
+                Block("agent.sleep_release", "The Windows power request is released after support ends", "The broker did not provide a fresh observer snapshot captured after the product exit.", new { observerError = observed.Error, exitedUtc = productExitObservedUtc }, required: false);
                 return;
             }
             var brokerRequest = observed.Observation.PowerRequests;
             bool brokerReleased = brokerRequest.ExitCode == 0 && !brokerRequest.Stdout.Contains("RemoteDebugger", StringComparison.OrdinalIgnoreCase) && !brokerRequest.Stdout.Contains("Remote Debugger", StringComparison.OrdinalIgnoreCase);
-            if (brokerReleased) Pass("agent.sleep_release", "The Windows power request is released after the agent exits", new { osEvidence = brokerRequest.Stdout, observer = observed.Observation.EvidencePath, capturedUtc = observed.Observation.CapturedUtc, exitedUtc = productExitObservedUtc });
-            else Fail("agent.sleep_release", "The Windows power request is released after the agent exits", new { commandExitCode = brokerRequest.ExitCode, osEvidence = brokerRequest.Stdout, stderr = brokerRequest.Stderr, observer = observed.Observation.EvidencePath, capturedUtc = observed.Observation.CapturedUtc, exitedUtc = productExitObservedUtc });
+            if (brokerReleased) Pass("agent.sleep_release", "The Windows power request is released after support ends", new { osEvidence = brokerRequest.Stdout, observer = observed.Observation.EvidencePath, capturedUtc = observed.Observation.CapturedUtc, exitedUtc = productExitObservedUtc });
+            else Fail("agent.sleep_release", "The Windows power request is released after support ends", new { commandExitCode = brokerRequest.ExitCode, osEvidence = brokerRequest.Stdout, stderr = brokerRequest.Stderr, observer = observed.Observation.EvidencePath, capturedUtc = observed.Observation.CapturedUtc, exitedUtc = productExitObservedUtc });
             return;
         }
         var request = await RunGuestPowerShellAsync("powercfg /requests");
         bool released = request.ExitCode == 0 && !request.Stdout.Contains("RemoteDebugger", StringComparison.OrdinalIgnoreCase) && !request.Stdout.Contains("Remote Debugger", StringComparison.OrdinalIgnoreCase);
-        if (released) Pass("agent.sleep_release", "The Windows power request is released after the agent exits", new { osEvidence = request.Stdout });
-        else Fail("agent.sleep_release", "The Windows power request is released after the agent exits", new { commandExitCode = request.ExitCode, osEvidence = request.Stdout, stderr = request.Stderr });
+        if (released) Pass("agent.sleep_release", "The Windows power request is released after support ends", new { osEvidence = request.Stdout });
+        else Fail("agent.sleep_release", "The Windows power request is released after support ends", new { commandExitCode = request.ExitCode, osEvidence = request.Stdout, stderr = request.Stderr });
     }
 
     private async Task ControllerAsync()
@@ -1759,12 +1760,13 @@ internal sealed partial class LabForm : Forms.Form
         JsonElement? stopped = null;
         for (int n = 0; n < 18; n++)
         {
-            try { stopped = await LabMessageAsync(peerHost!, "RD_LAB_STATUS"); if (!stopped.Value.GetProperty("alive").GetBoolean()) break; } catch (Exception) { break; }
+            try { stopped = await LabMessageAsync(peerHost!, "RD_LAB_STATUS"); if (stopped.Value.TryGetProperty("ended", out var ended) && ended.GetBoolean()) break; } catch (Exception) { break; }
             await Task.Delay(1000, stop.Token);
         }
         bool agentExited = stopped.HasValue && !stopped.Value.GetProperty("alive").GetBoolean();
-        if (disconnected && agentExited) { sawTermination = true; Pass("controller.terminate", "Terminate support ends the connection and exits the agent", new { disconnected, stopped }); }
-        else Fail("controller.terminate", "Terminate support ends the connection and exits the agent", new { disconnected, agentExited, stopped });
+        bool agentIdle = stopped.HasValue && stopped.Value.TryGetProperty("ended", out var endedState) && endedState.GetBoolean();
+        if (disconnected && agentIdle && !agentExited) { sawTermination = true; Pass("controller.terminate", "Ending support keeps both applications open", new { disconnected, stopped }); }
+        else Fail("controller.terminate", "Ending support keeps both applications open", new { disconnected, agentIdle, agentExited, stopped });
         var deniedAfterTermination = await CallAsync("status", requireSuccess: false);
         bool accessClosed = !deniedAfterTermination.TryGetProperty("ok", out var accessOk) || accessOk.ValueKind != JsonValueKind.True;
         if (accessClosed) Pass("controller.terminated_access_denied", "The terminated support session no longer authorizes controller requests", deniedAfterTermination);
