@@ -92,6 +92,9 @@ internal sealed partial class LabForm : Forms.Form
                     await PrepareBrokerProvisioningAsync();
                 if (role is "loopback" or "loopback-smoke") await LoopbackSmokeAsync();
                 else if (role is "loopbacktray" or "loopback-tray" or "loopbackui") await LoopbackTrayAsync();
+                else if (role == "loopbackexit") await LoopbackExitAsync();
+                else if (role == "loopbackscale") await LoopbackScaleAsync();
+                else if (role == "loopbackcolumns") await LoopbackColumnsAsync();
                 else if (role is "loopback-lifetime" or "loopbacklifetime") await LoopbackLifetimeAsync();
                 else if (IsAgent) await AgentAsync();
                 else await ControllerAsync();
@@ -1879,12 +1882,12 @@ internal sealed partial class LabForm : Forms.Form
         return "";
     }
 
-    private void CaptureDesktop(string name)
+    private void CaptureDesktop(string name, bool focusProduct = true)
     {
         try
         {
             if (product == null || product.HasExited) return;
-            Native.FocusWindow(product.Id);
+            if (focusProduct) Native.FocusWindow(product.Id);
             var capture = DesktopCapture.Capture(0, 1920, 85);
             var data = Json.Element(capture).GetProperty("data").GetString()!;
             File.WriteAllBytes(Path.Combine(output, name), Convert.FromBase64String(data));

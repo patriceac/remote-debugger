@@ -81,8 +81,16 @@ internal sealed partial class LabForm
         product = loopbackAgent;
         Native.FocusWindow(product.Id);
         CaptureDesktop("agent-session-ended.png");
+        string endCountdown = TryValue("pairingCountdown");
         Click("restartAgent");
         string newCode = await WaitPairingCodeAsync();
+        if (IsWorkspaceAudit)
+        {
+            string restartedCountdown = TryValue("pairingCountdown");
+            bool cancelled = endCountdown.Contains("Fermeture automatique dans") && !restartedCountdown.Contains("Fermeture automatique");
+            if (cancelled) Pass("ui.exit_countdown_cancelled", "New assistance cancels the previous exit countdown and issues a new pairing code", new { endCountdown, restartedCountdown });
+            else Fail("ui.exit_countdown_cancelled", "New assistance cancels the previous exit countdown and issues a new pairing code", new { endCountdown, restartedCountdown });
+        }
         product = loopbackController;
         Native.FocusWindow(product.Id);
         Set("host", "127.0.0.1"); Set("pairCode", newCode); FocusAndEnter("pairCode");

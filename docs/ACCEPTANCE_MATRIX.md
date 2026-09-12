@@ -34,12 +34,22 @@ For the complete workspace review, use `-Role LoopbackUi -Scope Runtime
 before pairing, while connected, and after termination; invalid pairing input;
 diagnostic templates, JSON validation, remote errors and cancellation; and recovery from an
 invalid file path. It records tab screenshots and checks control availability,
-visible bounds, connection identity, and scoped footers. It also changes the
-disposable guest's Windows display setting to 150 percent and verifies the
-Release window actually reports 144 DPI before recording scaled screenshots.
+visible bounds, connection identity, and scoped footers. It also checks vertical
+alignment, ancestor containment and metric glyph height. Native header gestures
+resize and reorder each table, then compare its widths and order after DPI
+changes and a full process restart. It attempts the disposable guest's Windows
+display presets at 125, 200, 175 and 150 percent and verifies the Release's
+actual DPI before recording scaled screenshots.
 It checks that the assisted-PC explanation remains reachable by scrolling.
 An unavailable scaling selector is reported as blocked, never a DPI pass.
 Rendered screenshots require human/model visual review in addition to assertions.
+
+`-Role LoopbackExit` separately pairs the real Release applications, ends support,
+observes the visible assisted-PC exit countdown, hides that window to the tray,
+and waits the full ten minutes for a normal exit while the controller stays open.
+The UI run also checks that new assistance cancels the pending exit countdown.
+`-Role LoopbackScale` is a focused Windows preset/DPI probe without the full tab
+review; it records the available presets and explicitly blocks absent choices.
 
 The elapsed-time run is separate so its five-minute rotation and ten-minute
 disconnect interval do not get confused with the shorter interaction checks:
@@ -132,7 +142,7 @@ diagnostic view, but it is not a pairing step.
 | `agent.sleep_release` | Sleep is released after support ends | A read-only `powercfg /requests` query no longer contains a RemoteDebugger request | Runtime |
 | `agent.maintenance_after_pairing` | Admin maintenance starts after pairing and lasts until support ends | Agent state, service/broker status, and paired maintenance command show one active session with no repeated UAC prompt | Provisioned |
 | `agent.disconnect_grace` | A temporary disconnect gives ten minutes to reconnect, then revokes access and releases sleep | Controller disconnect is recorded, agent shows a real countdown, reconnect cancels it; a long run observes expiry and return to idle | Runtime-long |
-| `agent.termination` | Termination cancels work and releases input/admin/sleep while keeping the application open | The agent displays Assistance terminée, rejects the old token, and offers Nouvelle assistance | Runtime |
+| `agent.termination` | Termination cancels work and releases input/admin/sleep, then starts the assisted-PC exit countdown | The agent displays Assistance terminée, rejects the old token, and offers Nouvelle assistance; a visible ten-minute countdown precedes automatic exit | Runtime / LoopbackExit |
 
 The Lab records `Native.IsElevated()` before deciding whether setup is
 possible. In an elevated guest it may invoke the product's supported
@@ -162,13 +172,13 @@ prompt or a guessed service as proof.
 | `controller.input_default` | Mouse and keyboard are enabled by default and release on focus loss | `remoteInputEnabled` is on; fixture receives a real mapped click/key; release evidence is recorded | Runtime |
 | `controller.connection_pill` | Connection status is truthful and persistent | `connectionStatus` says Connected with the remote name only while heartbeat/frame evidence is current | Runtime |
 | `controller.close_to_tray` | Close keeps the controller alive in the tray | Main window closes, controller process remains alive, heartbeat still succeeds, and tray Open restores it | Runtime |
-| `controller.terminate` | Terminate support is clear and works from the controller | `terminateSession` invokes; agent returns to idle, old token is rejected, both applications stay open, and controller returns to discovery | Runtime |
+| `controller.terminate` | Terminate support is clear and works from the controller | `terminateSession` invokes; agent starts its exit countdown, old token is rejected, and controller returns to discovery and stays open | Runtime |
 | `loopback.input_preference` | Input preference survives pauses and page changes | Both the enabled and disabled checkbox states remain unchanged across pause/resume and navigation | Runtime |
 | `loopback.agent_tray` | The receiving PC can hide and restore without ending support | Repeated window closes keep the process alive and tray Open restores a connected session after 21 seconds | Runtime |
 | `loopback.tray_restores_live` | Restoring the controller resumes viewing | A fresh live frame appears automatically after a 21-second tray interval | Runtime |
 | `loopback.latest_frame` | A slow presenter skips old frames | The Release CLI receives a 5 fps stream with a 1200 ms presenter delay; presented sequence numbers skip intermediate frames | Runtime |
 | `loopback.second_session` | Support can restart without relaunching either application | Nouvelle assistance creates a code and the same two process IDs pair and display a fresh frame | Runtime |
-| `loopback.agent_ends_session` | The receiving PC can end support | Both processes stay open; the agent returns to idle and the controller returns to connection | Runtime |
+| `loopback.agent_ends_session` | The receiving PC can end support | Both processes initially stay open; the agent starts its exit countdown and the controller returns to connection | Runtime |
 | `controller.resources_on_connect` | CPU, RAM, process, and file data load on connection | `processList` and `remoteFiles` contain rows; resource/file summaries have timestamps and non-placeholder values | Runtime |
 | `controller.process_sort` | Process columns sort correctly | Header activation changes order; PID/CPU/RAM use numeric ordering and unavailable values remain last | Runtime |
 | `controller.file_sort` | File columns sort correctly | Header activation changes order; name/size/date use typed ordering and folder grouping remains valid | Runtime |

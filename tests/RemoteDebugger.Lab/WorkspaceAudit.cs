@@ -91,6 +91,7 @@ internal sealed partial class LabForm
                 Pass(id, "The tab has visible controls, truthful availability, scoped status and current identity", evidence);
             else Fail(id, "The tab has visible controls, truthful availability, scoped status and current identity", evidence);
             CaptureDesktop($"ui-{phase}-{tab.Name}-{dpi}.png");
+            AuditControlAlignment(tab.Name, phase, dpi);
         }
     }
 
@@ -165,8 +166,11 @@ internal sealed partial class LabForm
         await Task.Delay(250, stop.Token);
     }
 
-    private async Task<bool> TrySetGuestScaleAsync()
+    private async Task<bool> TrySetGuestScaleAsync(int percent = 150)
     {
+        // Leave live loopback input before operating Windows Settings; otherwise
+        // cursor changes can be forwarded back into the same guest desktop.
+        Click("navConnection");
         Process.Start(new ProcessStartInfo("ms-settings:display") { UseShellExecute = true });
         await Task.Delay(3000, stop.Token);
         AutomationElement? settings = null;
@@ -176,26 +180,38 @@ internal sealed partial class LabForm
                 .FirstOrDefault(window => window.Current.Name is "Paramètres" or "Settings");
             if (settings == null) await Task.Delay(500, stop.Token);
         }
-        if (settings == null) { Block("ui.display_scale", "Windows display scaling is exercised at 150 percent", "Windows Settings did not appear.", required: false); return false; }
+        if (settings == null) { Fail($"ui.display_scale_{percent}", "Windows display scaling is exercised", "Windows Settings did not appear."); return false; }
         try
         {
+            settings.SetFocus();
+            await Task.Delay(500, stop.Token);
             var items = settings.FindAll(TreeScope.Descendants, Condition.TrueCondition).Cast<AutomationElement>().ToArray();
             File.WriteAllText(Path.Combine(output, "display-settings-inventory.json"), Json.Text(items.Select(item => new { name = Safe(() => item.Current.Name), id = Safe(() => item.Current.AutomationId), type = Safe(() => item.Current.ControlType.ProgrammaticName) })));
-            CaptureDesktop("ui-display-settings.png");
+            CaptureDesktop($"ui-display-settings-{percent}.png", focusProduct: false);
             var scale = items.FirstOrDefault(item => item.Current.ControlType == ControlType.ComboBox &&
                 (item.Current.Name.Contains("Échelle", StringComparison.OrdinalIgnoreCase) || item.Current.Name.Contains("Scale", StringComparison.OrdinalIgnoreCase)));
-            if (scale == null) { Block("ui.display_scale", "Windows display scaling is exercised at 150 percent", "The display scaling selector was not exposed; inspect the saved Settings inventory.", required: false); return false; }
+            if (scale == null) { Fail($"ui.display_scale_{percent}", "Windows display scaling is exercised", "The display scaling selector was not exposed; inspect the saved Settings inventory."); return false; }
             ((ExpandCollapsePattern)scale.GetCurrentPattern(ExpandCollapsePattern.Pattern)).Expand();
-            await Task.Delay(400, stop.Token);
-            var choice = settings.FindAll(TreeScope.Descendants, Condition.TrueCondition).Cast<AutomationElement>()
-                .FirstOrDefault(item => item.Current.Name.StartsWith("150", StringComparison.Ordinal) && item.TryGetCurrentPattern(SelectionItemPattern.Pattern, out _));
-            if (choice == null) throw new InvalidOperationException("Windows Settings did not expose the 150 percent option.");
+            await Task.Delay(1000, stop.Token);
+            // The XAML popup can belong to SystemSettings while its window is
+            // hosted by ApplicationFrameHost. Do not filter by the frame PID.
+            var choices = AutomationElement.RootElement.FindAll(TreeScope.Descendants,
+                new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem)).Cast<AutomationElement>().ToArray();
+            File.WriteAllText(Path.Combine(output, $"scale-choices-{percent}.json"), Json.Text(choices.Select(item => new { name = item.Current.Name, pid = item.Current.ProcessId })));
+            var choice = choices.FirstOrDefault(item => item.Current.Name.StartsWith(percent.ToString(), StringComparison.Ordinal) && item.TryGetCurrentPattern(SelectionItemPattern.Pattern, out _));
+            CaptureDesktop($"scale-popup-{percent}.png", focusProduct: false);
+            if (choice == null)
+            {
+                Block($"ui.display_scale_{percent}", $"Windows display scaling at {percent} percent", "The guest display exposes only the presets recorded in scale-choices; custom scaling requires a new Windows sign-in.",
+                    new { available = choices.Select(item => item.Current.Name).Where(name => name.Contains('%')).ToArray() }, required: false);
+                return false;
+            }
             ((SelectionItemPattern)choice.GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
             await Task.Delay(2500, stop.Token);
             product = loopbackController;
             uint dpi = GetDpiForWindow(Root().Current.NativeWindowHandle);
-            if (dpi == 144) { Pass("ui.display_scale", "The actual Release window uses 150 percent Windows display scaling", new { dpi }); return true; }
-            Fail("ui.display_scale", "The actual Release window uses 150 percent Windows display scaling", new { dpi });
+            if (dpi == 96 * percent / 100) { Pass($"ui.display_scale_{percent}", "The actual Release window uses the selected Windows display scaling", new { dpi, percent }); return true; }
+            Fail($"ui.display_scale_{percent}", "The actual Release window uses the selected Windows display scaling", new { dpi, percent });
             return false;
         }
         finally

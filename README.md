@@ -21,7 +21,9 @@ Features include continuous encrypted JPEG desktop streaming (5 fps cap, actual 
 
 The interactive agent uses the logged-in user's session. One initial administrator setup installs a protected local broker for automatic Private-network rules, session-scoped administrator maintenance, and silent signed updates. Subsequent sessions need no repeated elevation prompts. The broker has no network listener; the visible agent remains unelevated. See [installation and publisher enrollment](docs/INSTALLATION.md).
 
-Closing either window keeps the application and connection in the system tray. Restoring the controller resumes its live view automatically. **Terminer l’assistance** revokes access and leaves both applications open; the receiving PC offers **Nouvelle assistance** for a new code. After ten minutes without the controller, access expires and the receiving PC returns to idle, releasing its temporary sleep request and maintenance access. Use **Quitter** in the tray menu to exit.
+Closing either window keeps the application and connection in the system tray. Restoring the controller resumes its live view automatically. **Terminer l’assistance** immediately revokes access and starts a visible ten-minute exit countdown on the receiving PC. **Nouvelle assistance** cancels this countdown and issues a new code. The controlling PC stays open. A lost controller first gets a separate ten-minute reconnect grace period before access expires. Use **Quitter** in the tray menu to exit immediately.
+
+The available-PC, process and file tables remember their column widths and order separately. Drag a header to reorder it, drag its edge to resize it, or double-click an edge to fit its contents. Preferences survive restarting and use logical widths so changing display scaling preserves the layout.
 
 ## Development
 

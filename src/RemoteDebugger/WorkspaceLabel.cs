@@ -5,6 +5,7 @@ namespace RemoteDebugger;
 /// <summary>Text whose layout edge is independent of its font size.</summary>
 internal sealed class WorkspaceLabel : Forms.Label
 {
+    public bool WrapText { get; set; } = true;
     public WorkspaceLabel()
     {
         Margin = Forms.Padding.Empty;
@@ -12,11 +13,11 @@ internal sealed class WorkspaceLabel : Forms.Label
     }
 
     private Forms.TextFormatFlags TextFlags => Forms.TextFormatFlags.NoPadding | Forms.TextFormatFlags.NoPrefix |
-        Forms.TextFormatFlags.WordBreak | (AutoEllipsis ? Forms.TextFormatFlags.EndEllipsis : 0);
+        (WrapText ? Forms.TextFormatFlags.WordBreak : Forms.TextFormatFlags.SingleLine) | (AutoEllipsis ? Forms.TextFormatFlags.EndEllipsis : 0);
 
     public override Size GetPreferredSize(Size proposedSize)
     {
-        int width = proposedSize.Width > Padding.Horizontal ? proposedSize.Width - Padding.Horizontal : int.MaxValue;
+        int width = WrapText && proposedSize.Width > Padding.Horizontal ? proposedSize.Width - Padding.Horizontal : int.MaxValue;
         if (MaximumSize.Width > 0) width = Math.Min(width, Math.Max(1, MaximumSize.Width - Padding.Horizontal));
         var text = Forms.TextRenderer.MeasureText(Text, Font, new Size(width, int.MaxValue), TextFlags);
         return new Size(text.Width + Padding.Horizontal, text.Height + Padding.Vertical);

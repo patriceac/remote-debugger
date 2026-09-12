@@ -34,7 +34,7 @@ Large six digit code (3+3 visual grouping permitted; copy returns exactly six AS
 
 Under a horizontal divider, three compact rows with icon/dot, label, value: Reseau prive / Pret or Preparation..., Mise en veille / Suspendue, Maintenance admin / Apres connexion. Show a once-needed setup notice inline when service is absent with Activer sur ce PC, and honest explanation Windows approval is once required. Automatic preparation may invoke initial setup only after this main window renders. No start-agent, open-pairing, revoke or manual session-admin buttons.
 
-Agent after pairing: same footprint, replace code with connected controller name and session duration. Show screen/control/admin state with separate explicit values. During disconnection show Reconnexion en attente and remaining ten-minute lifetime. Keep Terminer l'assistance prominent. Closing either role hides its window in the tray, with a first-use notice and a tray termination action. Ending support leaves the agent idle with Nouvelle assistance; no new code or power hold is created until that action.
+Agent after pairing: same footprint, replace code with connected controller name and session duration. Show screen/control/admin state with separate explicit values. During disconnection show Reconnexion en attente and remaining ten-minute lifetime. Keep Terminer l'assistance prominent. Closing either role hides its window in the tray, with a first-use notice and a tray termination action. Ending support revokes access and starts a visible ten-minute automatic-exit countdown on the assisted PC, including while hidden in the tray. Nouvelle assistance cancels the exit countdown; no new code or power hold is created until that action. The controller stays open.
 
 ## Controller: connection view
 
@@ -63,6 +63,8 @@ Files: compact path breadcrumb/input + Parent/Actualiser; below full table Nom /
 Diagnostics: retain all existing operations, JSON arguments/results, deployment verification, cancellation and advanced troubleshooting. Label the arguments and result editors, load the selected operation's template, and enable PID only for operations that accept it. Identity comes from the current authenticated connection. Show validation errors, execution, cancellation and remote failures inline. Do not make raw JSON the default landing page.
 
 Every workspace owns its footer: connection and selected PC, frame status, resource measurements, file count and directory, or diagnostic state and selected action. Saved credentials never enable remote actions. Disable pairing while a session exists, disable unavailable remote actions before connecting, and clear stale results and selections after termination. The minimum window scales with Windows DPI but is capped to the display's working area; smaller agent workspaces scroll.
+
+Mixed-control rows center labels, fields and buttons vertically using content-sized layout. Resource values receive their full measured font height, with the volumes line below them. Each PC, process and file table independently remembers column widths and order across restarts and DPI changes. Keep table headers usable during a session while preventing a change of connected PC through row selection.
 
 ## Accessibility and interaction
 

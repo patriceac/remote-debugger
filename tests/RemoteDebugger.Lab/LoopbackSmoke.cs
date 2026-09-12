@@ -138,15 +138,19 @@ internal sealed partial class LabForm
             await ProbeInputPreferenceAsync();
             await ProbeLatestFramesAsync();
             await ProbeAgentTrayAsync();
-            if (IsWorkspaceAudit && await TrySetGuestScaleAsync())
+            if (IsWorkspaceAudit) await ChangeTableLayoutsAsync();
+            foreach (int scale in IsWorkspaceAudit ? new[] { 125, 200, 175, 150 } : Array.Empty<int>())
             {
-                await AuditTabsAsync("connected-scaled", true);
+                if (!await TrySetGuestScaleAsync(scale)) continue;
+                await VerifyTableLayoutsAsync("dpi_changed_" + scale);
+                await AuditTabsAsync("connected-scaled-" + scale, true);
                 await AuditScaledAgentAsync();
                 Click("navScreen"); await WaitForLiveEvidenceAsync(30);
             }
             await ProbeLoopbackTrayAndTerminateAsync();
             if (IsWorkspaceAudit) { await AuditTabsAsync("ended", false); Click("navConnection"); }
             await ProbeSecondSessionAsync();
+            if (IsWorkspaceAudit) { await RestartControllerForColumnsAsync(); await VerifySessionExitAsync(waitForExit: false); }
             await FinishAsync();
             return;
         }
@@ -424,6 +428,7 @@ internal sealed partial class LabForm
             var point = icon.GetClickablePoint();
             if (double.IsNaN(point.X) || double.IsNaN(point.Y) || double.IsInfinity(point.X) || double.IsInfinity(point.Y))
                 throw new InvalidOperationException("UIA returned a non-finite clickable point.");
+            if (!TrayIconOwnsPoint(icon, point)) return new(false, "GetClickablePoint", name, "tray_icon_is_occluded: " + lastTrayHit, bounds);
             EmitRightClick(point.X, point.Y);
             return new(true, "GetClickablePoint", name, "", bounds);
         }
@@ -451,6 +456,8 @@ internal sealed partial class LabForm
             double centerY = rectangle.Top + rectangle.Height / 2d;
             int x = (int)Math.Round(Math.Clamp(centerX, virtualScreen.Left, virtualScreen.Right - 1));
             int y = (int)Math.Round(Math.Clamp(centerY, virtualScreen.Top, virtualScreen.Bottom - 1));
+            if (!TrayIconOwnsPoint(icon, new System.Windows.Point(x, y)))
+                return new(false, "BoundingRectangleCenter", name, "tray_icon_is_occluded: " + lastTrayHit, bounds);
             EmitRightClick(x, y);
             return new(true, "BoundingRectangleCenter", name, clickablePointError, bounds);
         }
@@ -466,6 +473,28 @@ internal sealed partial class LabForm
         Forms.Cursor.Position = new System.Drawing.Point((int)Math.Round(x), (int)Math.Round(y));
         mouse_event(MouseEventRightDown, 0, 0, 0, UIntPtr.Zero);
         mouse_event(MouseEventRightUp, 0, 0, 0, UIntPtr.Zero);
+    }
+
+    [DllImport("user32.dll")] private static extern IntPtr WindowFromPhysicalPoint(System.Drawing.Point point);
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+    [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr window, uint flags);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(IntPtr window, System.Text.StringBuilder name, int length);
+    private static string lastTrayHit = "";
+
+    private static bool TrayIconOwnsPoint(AutomationElement icon, System.Windows.Point point)
+    {
+        // XAML's FromPoint provider can return a different fragment from the
+        // enumerated icon. Hit-test the actual physical window instead.
+        var hit = WindowFromPhysicalPoint(new System.Drawing.Point((int)Math.Round(point.X), (int)Math.Round(point.Y)));
+        GetWindowThreadProcessId(hit, out uint processId);
+        var root = GetAncestor(hit, 2);
+        var name = new System.Text.StringBuilder(256); GetClassName(root, name, name.Capacity);
+        lastTrayHit = $"pid={processId}; expected={icon.Current.ProcessId}; class={name}";
+        if (processId == icon.Current.ProcessId && (name.ToString().Contains("Overflow", StringComparison.OrdinalIgnoreCase) || name.ToString().Contains("Tray", StringComparison.OrdinalIgnoreCase))) return true;
+        // Do not hover a covering toast, which extends its normal expiry.
+        // Never right-click through the notification onto an underlying icon.
+        Forms.Cursor.Position = new System.Drawing.Point(Forms.SystemInformation.VirtualScreen.Left + 10, Forms.SystemInformation.VirtualScreen.Top + 10);
+        return false;
     }
 
     private void WriteTrayAttemptDiagnostics(string outcome, IReadOnlyCollection<object> attempts)
@@ -493,7 +522,7 @@ internal sealed partial class LabForm
         int poll = 0;
         var attempts = new List<object>();
         var deadline = Stopwatch.StartNew();
-        while (deadline.Elapsed < TimeSpan.FromSeconds(12))
+        while (deadline.Elapsed < TimeSpan.FromSeconds(45))
         {
             poll++;
             string expectedRole = product == loopbackAgent ? "PC assisté" : "Contrôleur";
@@ -556,7 +585,7 @@ internal sealed partial class LabForm
                     failure = "tray_icon_right_click_failed";
                     continue;
                 }
-                while (deadline.Elapsed < TimeSpan.FromSeconds(12))
+                while (deadline.Elapsed < TimeSpan.FromSeconds(45))
                 {
                     var open = FindLoopbackTrayMenuItem("Ouvrir") ?? FindLoopbackTrayMenuItem("Open");
                     attempts.Add(new { stage = "tray_menu_search", poll, iconName = click.Name, menuVisible = open != null });
@@ -645,6 +674,7 @@ internal sealed partial class LabForm
                             || className.Contains("context", StringComparison.OrdinalIgnoreCase)
                             || string.Equals(className, "#32768", StringComparison.Ordinal));
                     if (!nativeMenu && !productMenu) continue;
+                    if (productPid > 0 && current.ProcessId != productPid) continue;
                     if (!current.IsOffscreen && string.Equals(current.Name, name, StringComparison.OrdinalIgnoreCase)) return window;
                     var item = window.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.NameProperty, name));
                     if (item != null && !item.Current.IsOffscreen) return item;

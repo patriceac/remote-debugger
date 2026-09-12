@@ -6,6 +6,25 @@ namespace RemoteDebugger;
 
 public sealed partial class MainForm
 {
+    // Auto-sized rows follow the native preferred heights at every DPI. Left
+    // anchoring vertically centers labels, edits, selectors and buttons alike.
+    private static Forms.TableLayoutPanel ControlRow(params Forms.Control[] controls)
+    {
+        var row = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Top, AutoSize = true, AutoSizeMode = Forms.AutoSizeMode.GrowAndShrink,
+            ColumnCount = controls.Length, RowCount = 1, Margin = Forms.Padding.Empty };
+        row.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
+        for (int i = 0; i < controls.Length; i++)
+        {
+            row.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
+            controls[i].Anchor = Forms.AnchorStyles.Left;
+            controls[i].Margin = new Forms.Padding(0, 4, i == controls.Length - 1 ? 0 : 12, 4);
+            row.Controls.Add(controls[i], i, 0);
+        }
+        return row;
+    }
+
+    private static Forms.Label RowLabel(string text, string name) => new WorkspaceLabel { Text = text, Name = name, WrapText = false, AutoSize = true, ForeColor = SecondaryText };
+
     private const string ConnectToContinue = "Connectez-vous depuis l’onglet Connexion.";
     private Forms.Button parentFolderButton = null!;
     private Forms.Button browseFilesButton = null!;
@@ -50,7 +69,8 @@ public sealed partial class MainForm
     {
         if (executeButton == null) return;
         var state = WorkspaceAvailability.For(supportSession, heartbeatHealthy, pairingBusy, terminating, action != null, selectedFilePath != null);
-        pairButton.Enabled = host.Enabled = code.Enabled = peers.Enabled = state.CanPair;
+        pairButton.Enabled = host.Enabled = code.Enabled = state.CanPair;
+        peers.Enabled = !pairingBusy && !terminating;
         pairButton.Text = pairingBusy ? "Connexion…" : supportSession ? "Connecté" : "Connecter";
         refreshResourcesButton.Enabled = state.CanOperate && !resourcesLoading;
         browseFilesButton.Enabled = fileDirectory.Enabled = state.CanOperate && !filesLoading;
