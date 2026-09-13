@@ -1,0 +1,783 @@
+<?xml version='1.0' encoding='utf-8'?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <data name="Action" xml:space="preserve">
+    <value>Action</value>
+  </data>
+  <data name="ActionAlreadyRunning" xml:space="preserve">
+    <value>Une action est déjà en cours.</value>
+  </data>
+  <data name="ActionCancelled" xml:space="preserve">
+    <value>Action annulée.</value>
+  </data>
+  <data name="ActionFailedSeeResult" xml:space="preserve">
+    <value>Échec de l’action · consultez le résultat.</value>
+  </data>
+  <data name="ActionPrefix" xml:space="preserve">
+    <value>Action : </value>
+  </data>
+  <data name="ActionResult" xml:space="preserve">
+    <value>Résultat de l’action</value>
+  </data>
+  <data name="ActivationFailedPrefix" xml:space="preserve">
+    <value>Activation impossible : </value>
+  </data>
+  <data name="ActivationRequired" xml:space="preserve">
+    <value>Activation requise</value>
+  </data>
+  <data name="Active" xml:space="preserve">
+    <value>Active</value>
+  </data>
+  <data name="ActiveVersionsSynchronized" xml:space="preserve">
+    <value>Session active · versions synchronisées</value>
+  </data>
+  <data name="Address" xml:space="preserve">
+    <value>Adresse</value>
+  </data>
+  <data name="AdjustArguments" xml:space="preserve">
+    <value>Adaptez les paramètres avant d’exécuter l’action.</value>
+  </data>
+  <data name="AdminMaintenance" xml:space="preserve">
+    <value>Maintenance admin</value>
+  </data>
+  <data name="AfterConnection" xml:space="preserve">
+    <value>Après connexion</value>
+  </data>
+  <data name="AgentAwaitingPreparation" xml:space="preserve">
+    <value>Agent en attente de préparation</value>
+  </data>
+  <data name="AgentStopDelayed" xml:space="preserve">
+    <value>Arrêt de l’agent différé</value>
+  </data>
+  <data name="AgentStopIncomplete" xml:space="preserve">
+    <value>Arrêt de l’agent incomplet</value>
+  </data>
+  <data name="AgentSynchronizing" xml:space="preserve">
+    <value>Synchronisation de l’agent…</value>
+  </data>
+  <data name="AgentUnavailable" xml:space="preserve">
+    <value>Agent indisponible</value>
+  </data>
+  <data name="ArgumentsMustBeObject" xml:space="preserve">
+    <value>Les arguments doivent être un objet JSON.</value>
+  </data>
+  <data name="AuthenticatedControllerNote" xml:space="preserve">
+    <value>Le contrôleur authentifié peut maintenant assister ce PC. Terminer l’assistance coupe immédiatement l’accès et libère la mise en veille.</value>
+  </data>
+  <data name="AuthenticatedSession" xml:space="preserve">
+    <value>Session authentifiée</value>
+  </data>
+  <data name="AutoCloseCountdown" xml:space="preserve">
+    <value>Fermeture automatique dans {0:mm\:ss}</value>
+  </data>
+  <data name="AutoCloseTenMinutes" xml:space="preserve">
+    <value>Fermeture automatique dans dix minutes</value>
+  </data>
+  <data name="AutomaticPreparationFailedPrefix" xml:space="preserve">
+    <value>Préparation automatique impossible : </value>
+  </data>
+  <data name="Available" xml:space="preserve">
+    <value>Disponible</value>
+  </data>
+  <data name="AvailablePcCount" xml:space="preserve">
+    <value>PC disponibles : {0}</value>
+  </data>
+  <data name="AvailablePcs" xml:space="preserve">
+    <value>PC disponibles</value>
+  </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>Annuler</value>
+  </data>
+  <data name="CannotReadCheckPath" xml:space="preserve">
+    <value>Lecture impossible · vérifiez le chemin</value>
+  </data>
+  <data name="CannotReadFolder" xml:space="preserve">
+    <value>Lecture du dossier impossible</value>
+  </data>
+  <data name="CaptureMetrics" xml:space="preserve">
+    <value>{0:T} · capture {1:F0} ms</value>
+  </data>
+  <data name="ChoosePc" xml:space="preserve">
+    <value>Choisissez un PC ou saisissez son adresse IP</value>
+  </data>
+  <data name="ChoosePcAndCode" xml:space="preserve">
+    <value>Choisissez un PC ou saisissez son adresse IP et son code.</value>
+  </data>
+  <data name="ChoosePcPeriod" xml:space="preserve">
+    <value>Choisissez un PC ou saisissez son adresse IP.</value>
+  </data>
+  <data name="ClickScreenToControl" xml:space="preserve">
+    <value>Cliquez dans l’écran pour contrôler</value>
+  </data>
+  <data name="CloseToTray" xml:space="preserve">
+    <value>Fermer réduit dans la zone de notification</value>
+  </data>
+  <data name="CloseToTrayShort" xml:space="preserve">
+    <value>Fermeture : zone de notification</value>
+  </data>
+  <data name="CodeConsumed" xml:space="preserve">
+    <value>Le code est consommé.</value>
+  </data>
+  <data name="CodeCopied" xml:space="preserve">
+    <value>Code copié</value>
+  </data>
+  <data name="CodeMustBeSixDigits" xml:space="preserve">
+    <value>Le code doit comporter exactement six chiffres.</value>
+  </data>
+  <data name="CodeRotatesNote" xml:space="preserve">
+    <value>Le code change automatiquement toutes les cinq minutes.</value>
+  </data>
+  <data name="CommandsDisabledUntilVersions" xml:space="preserve">
+    <value>Les commandes restent désactivées jusqu’à la validation des versions.</value>
+  </data>
+  <data name="CompletedPrefix" xml:space="preserve">
+    <value>Terminé · </value>
+  </data>
+  <data name="Connect" xml:space="preserve">
+    <value>Connecter</value>
+  </data>
+  <data name="ConnectBeforeAction" xml:space="preserve">
+    <value>Connectez-vous à un PC distant avant cette action.</value>
+  </data>
+  <data name="ConnectToContinue" xml:space="preserve">
+    <value>Connectez-vous depuis l’onglet Connexion.</value>
+  </data>
+  <data name="ConnectToControl" xml:space="preserve">
+    <value>Connectez-vous pour contrôler ce PC</value>
+  </data>
+  <data name="Connected" xml:space="preserve">
+    <value>Connecté</value>
+  </data>
+  <data name="ConnectedDuration" xml:space="preserve">
+    <value>Connecté · assistance depuis {0}</value>
+  </data>
+  <data name="Connecting" xml:space="preserve">
+    <value>Connexion…</value>
+  </data>
+  <data name="ConnectingStream" xml:space="preserve">
+    <value>Connexion au flux…</value>
+  </data>
+  <data name="Connection" xml:space="preserve">
+    <value>Connexion</value>
+  </data>
+  <data name="ConnectionCancelled" xml:space="preserve">
+    <value>Connexion annulée</value>
+  </data>
+  <data name="ConnectionCancelledPeriod" xml:space="preserve">
+    <value>Connexion annulée.</value>
+  </data>
+  <data name="ConnectionFailed" xml:space="preserve">
+    <value>Connexion impossible</value>
+  </data>
+  <data name="ConnectionInterruptedHeading" xml:space="preserve">
+    <value>La connexion a été interrompue</value>
+  </data>
+  <data name="ConnectionStaysVisible" xml:space="preserve">
+    <value>L’état de la connexion reste visible pendant toute la session.</value>
+  </data>
+  <data name="ConnectionSubtitle" xml:space="preserve">
+    <value>Choisissez un PC puis saisissez son code.</value>
+  </data>
+  <data name="ControlAwaitingConnection" xml:space="preserve">
+    <value>Contrôle en attente de connexion</value>
+  </data>
+  <data name="ControlTemporarilyUnavailable" xml:space="preserve">
+    <value>Contrôle temporairement indisponible</value>
+  </data>
+  <data name="ControllerConnected" xml:space="preserve">
+    <value>Contrôleur connecté</value>
+  </data>
+  <data name="Copy" xml:space="preserve">
+    <value>Copier</value>
+  </data>
+  <data name="Diagnostics" xml:space="preserve">
+    <value>Diagnostics</value>
+  </data>
+  <data name="DiagnosticsSubtitle" xml:space="preserve">
+    <value>Exécutez des actions avancées et consultez leurs résultats.</value>
+  </data>
+  <data name="Download" xml:space="preserve">
+    <value>Télécharger</value>
+  </data>
+  <data name="DownloadFailedPrefix" xml:space="preserve">
+    <value>Téléchargement impossible : </value>
+  </data>
+  <data name="DownloadVerified" xml:space="preserve">
+    <value>Téléchargement vérifié</value>
+  </data>
+  <data name="EmptyFolder" xml:space="preserve">
+    <value>Dossier vide</value>
+  </data>
+  <data name="EnableOnThisPc" xml:space="preserve">
+    <value>Activer sur ce PC</value>
+  </data>
+  <data name="EnablePrivateNetwork" xml:space="preserve">
+    <value>Activez ce PC pour autoriser le réseau privé</value>
+  </data>
+  <data name="EnableSupportNotice" xml:space="preserve">
+    <value>Activez l’assistance sur ce PC. Une autorisation Windows est nécessaire une seule fois.</value>
+  </data>
+  <data name="EndSupport" xml:space="preserve">
+    <value>Terminer l’assistance</value>
+  </data>
+  <data name="EndSupportBeforeNewCode" xml:space="preserve">
+    <value>Terminez l’assistance en cours avant de saisir un nouveau code.</value>
+  </data>
+  <data name="EndingSupport" xml:space="preserve">
+    <value>Fin de l’assistance…</value>
+  </data>
+  <data name="EnterCodeOnController" xml:space="preserve">
+    <value>Saisissez-le sur le PC qui vous assiste.</value>
+  </data>
+  <data name="EnterDisplayedCode" xml:space="preserve">
+    <value>Saisissez le code affiché sur ce PC.</value>
+  </data>
+  <data name="EnterKey" xml:space="preserve">
+    <value>Entrée</value>
+  </data>
+  <data name="EnterPc" xml:space="preserve">
+    <value>PC à saisir</value>
+  </data>
+  <data name="EnterRemoteAddress" xml:space="preserve">
+    <value>Saisissez l’adresse du PC distant</value>
+  </data>
+  <data name="EnterRemoteCode" xml:space="preserve">
+    <value>Saisissez le code affiché sur le PC distant.</value>
+  </data>
+  <data name="Execute" xml:space="preserve">
+    <value>Exécuter</value>
+  </data>
+  <data name="ExecutionInterrupted" xml:space="preserve">
+    <value>L’exécution a été interrompue.</value>
+  </data>
+  <data name="FailurePrefix" xml:space="preserve">
+    <value>Échec : </value>
+  </data>
+  <data name="File" xml:space="preserve">
+    <value>Fichier</value>
+  </data>
+  <data name="FileSavedPrefix" xml:space="preserve">
+    <value>Fichier enregistré : </value>
+  </data>
+  <data name="FileType" xml:space="preserve">
+    <value>Type</value>
+  </data>
+  <data name="Files" xml:space="preserve">
+    <value>Fichiers</value>
+  </data>
+  <data name="FilesItemCount" xml:space="preserve">
+    <value>Fichiers · éléments : {0}</value>
+  </data>
+  <data name="FilesSubtitle" xml:space="preserve">
+    <value>Parcourez l’espace de travail distant et vérifiez les transferts.</value>
+  </data>
+  <data name="Folder" xml:space="preserve">
+    <value>Dossier</value>
+  </data>
+  <data name="FolderUploadVerified" xml:space="preserve">
+    <value>Dossier téléversé et vérifié</value>
+  </data>
+  <data name="FreshFrameTime" xml:space="preserve">
+    <value>Image fraîche · {0:F0} ms</value>
+  </data>
+  <data name="FrozenFrame" xml:space="preserve">
+    <value>Image figée · en attente d’une capture fraîche…</value>
+  </data>
+  <data name="GiveControl" xml:space="preserve">
+    <value>Donner le contrôle</value>
+  </data>
+  <data name="IdentityBoundToCode" xml:space="preserve">
+    <value>La vérification d’identité est liée au code de connexion.</value>
+  </data>
+  <data name="Inactive" xml:space="preserve">
+    <value>Inactive</value>
+  </data>
+  <data name="InputInterruptedPrefix" xml:space="preserve">
+    <value>Entrée interrompue : </value>
+  </data>
+  <data name="InputQueueFull" xml:space="preserve">
+    <value>Contrôle en attente · trop d’entrées</value>
+  </data>
+  <data name="InstalledStartupFailedPrefix" xml:space="preserve">
+    <value>Le démarrage de l’assistance installée a échoué : </value>
+  </data>
+  <data name="InvalidJsonArguments" xml:space="preserve">
+    <value>Arguments JSON invalides · corrigez les paramètres.</value>
+  </data>
+  <data name="IpOrManual" xml:space="preserve">
+    <value>Adresse IP (ou saisie manuelle)</value>
+  </data>
+  <data name="ItemCount" xml:space="preserve">
+    <value>Éléments : {0}</value>
+  </data>
+  <data name="JsonArguments" xml:space="preserve">
+    <value>Arguments JSON</value>
+  </data>
+  <data name="JustNow" xml:space="preserve">
+    <value>à l’instant</value>
+  </data>
+  <data name="Kibibytes" xml:space="preserve">
+    <value>{0:F0} Kio</value>
+  </data>
+  <data name="LastVerifiedIdentity" xml:space="preserve">
+    <value>Dernière identité vérifiée</value>
+  </data>
+  <data name="Live" xml:space="preserve">
+    <value>EN DIRECT</value>
+  </data>
+  <data name="Loading" xml:space="preserve">
+    <value>Chargement…</value>
+  </data>
+  <data name="LoadingMeasurements" xml:space="preserve">
+    <value>Chargement des mesures…</value>
+  </data>
+  <data name="LocalOnly" xml:space="preserve">
+    <value>Local uniquement</value>
+  </data>
+  <data name="ManualConnection" xml:space="preserve">
+    <value>Connexion manuelle</value>
+  </data>
+  <data name="MeasuredAt" xml:space="preserve">
+    <value>Mesuré à</value>
+  </data>
+  <data name="MeasuredAtTime" xml:space="preserve">
+    <value>Mesuré à {0}</value>
+  </data>
+  <data name="MeasurementComplete" xml:space="preserve">
+    <value>Mesure terminée</value>
+  </data>
+  <data name="MeasurementUnavailable" xml:space="preserve">
+    <value>Mesure indisponible</value>
+  </data>
+  <data name="MeasurementsFilesLoaded" xml:space="preserve">
+    <value>Mesures et fichiers chargés</value>
+  </data>
+  <data name="Measuring" xml:space="preserve">
+    <value>Mesure en cours…</value>
+  </data>
+  <data name="Mebibytes" xml:space="preserve">
+    <value>{0:F1} Mio</value>
+  </data>
+  <data name="MinimizedConnected" xml:space="preserve">
+    <value>Affichage réduit · connexion maintenue</value>
+  </data>
+  <data name="Modified" xml:space="preserve">
+    <value>Modifié</value>
+  </data>
+  <data name="Monitor" xml:space="preserve">
+    <value>Écran</value>
+  </data>
+  <data name="MonitorChanged" xml:space="preserve">
+    <value>Moniteur modifié</value>
+  </data>
+  <data name="MonitorNumber" xml:space="preserve">
+    <value>Écran {0}</value>
+  </data>
+  <data name="MouseKeyboardActive" xml:space="preserve">
+    <value>Souris et clavier actifs</value>
+  </data>
+  <data name="MouseKeyboardControl" xml:space="preserve">
+    <value>Contrôle souris et clavier</value>
+  </data>
+  <data name="Name" xml:space="preserve">
+    <value>Nom</value>
+  </data>
+  <data name="NewCodeCountdown" xml:space="preserve">
+    <value>Nouveau code dans {0:mm\:ss}</value>
+  </data>
+  <data name="NewConnection" xml:space="preserve">
+    <value>Nouvelle connexion</value>
+  </data>
+  <data name="NewSupport" xml:space="preserve">
+    <value>Nouvelle assistance</value>
+  </data>
+  <data name="NewSupportForCode" xml:space="preserve">
+    <value>Nouvelle assistance pour obtenir un code</value>
+  </data>
+  <data name="NoActiveConnection" xml:space="preserve">
+    <value>Aucune connexion active</value>
+  </data>
+  <data name="NoAuthenticatedConnection" xml:space="preserve">
+    <value>Aucune connexion authentifiée.</value>
+  </data>
+  <data name="NoMeasurement" xml:space="preserve">
+    <value>Aucune mesure</value>
+  </data>
+  <data name="NoMeasurementsAvailable" xml:space="preserve">
+    <value>Aucune mesure disponible</value>
+  </data>
+  <data name="NoPcsFound" xml:space="preserve">
+    <value>Aucun PC trouvé · saisissez une adresse IP.</value>
+  </data>
+  <data name="NotResponding" xml:space="preserve">
+    <value>Bloqué</value>
+  </data>
+  <data name="Open" xml:space="preserve">
+    <value>Ouvrir</value>
+  </data>
+  <data name="Pairing" xml:space="preserve">
+    <value>Appairage…</value>
+  </data>
+  <data name="PairingCodeCaption" xml:space="preserve">
+    <value>CODE DE CONNEXION</value>
+  </data>
+  <data name="PairingTimedOut" xml:space="preserve">
+    <value>L’appairage n’a pas abouti dans le délai prévu.</value>
+  </data>
+  <data name="ParentFolder" xml:space="preserve">
+    <value>Parent</value>
+  </data>
+  <data name="Pause" xml:space="preserve">
+    <value>Pause</value>
+  </data>
+  <data name="PcBeingAssisted" xml:space="preserve">
+    <value>Votre PC est pris en charge</value>
+  </data>
+  <data name="PcNoLongerAccessible" xml:space="preserve">
+    <value>Votre PC n’est plus accessible au contrôleur.</value>
+  </data>
+  <data name="PcPrefix" xml:space="preserve">
+    <value>PC : </value>
+  </data>
+  <data name="PreparationFailedPrefix" xml:space="preserve">
+    <value>Préparation impossible : </value>
+  </data>
+  <data name="Preparing" xml:space="preserve">
+    <value>Préparation…</value>
+  </data>
+  <data name="PreparingNextCode" xml:space="preserve">
+    <value>Préparation du prochain code…</value>
+  </data>
+  <data name="PreparingSupport" xml:space="preserve">
+    <value>Préparation de l’assistance…</value>
+  </data>
+  <data name="PreparingTransfer" xml:space="preserve">
+    <value>Préparation du transfert…</value>
+  </data>
+  <data name="PrimaryMonitor" xml:space="preserve">
+    <value>Principal</value>
+  </data>
+  <data name="PrivateNetwork" xml:space="preserve">
+    <value>Réseau privé</value>
+  </data>
+  <data name="PrivateSupportSuffix" xml:space="preserve">
+    <value> · Assistance sur le réseau privé</value>
+  </data>
+  <data name="ProcessMeasurement" xml:space="preserve">
+    <value>{0} processus · mesuré à {1:T}</value>
+  </data>
+  <data name="Processes" xml:space="preserve">
+    <value>Processus</value>
+  </data>
+  <data name="ProcessesSubtitle" xml:space="preserve">
+    <value>Mesurez le processeur, la mémoire et l’activité des applications.</value>
+  </data>
+  <data name="Quit" xml:space="preserve">
+    <value>Quitter</value>
+  </data>
+  <data name="RamMib" xml:space="preserve">
+    <value>RAM Mio</value>
+  </data>
+  <data name="Ready" xml:space="preserve">
+    <value>Prêt</value>
+  </data>
+  <data name="ReadyForConnection" xml:space="preserve">
+    <value>Prêt à recevoir une connexion</value>
+  </data>
+  <data name="ReadyToRun" xml:space="preserve">
+    <value>Prêt à exécuter.</value>
+  </data>
+  <data name="Reconnecting" xml:space="preserve">
+    <value>Reconnexion…</value>
+  </data>
+  <data name="ReconnectingStream" xml:space="preserve">
+    <value>Reconnexion au flux…</value>
+  </data>
+  <data name="ReconnectionCountdown" xml:space="preserve">
+    <value>Reconnexion en attente · {0:mm\:ss}</value>
+  </data>
+  <data name="ReconnectionGraceNote" xml:space="preserve">
+    <value>La session reste disponible pendant dix minutes. La mise en veille reste suspendue.</value>
+  </data>
+  <data name="ReconnectionInProgress" xml:space="preserve">
+    <value>Reconnexion en cours…</value>
+  </data>
+  <data name="Refresh" xml:space="preserve">
+    <value>Actualiser</value>
+  </data>
+  <data name="RemoteScreen" xml:space="preserve">
+    <value>Écran distant</value>
+  </data>
+  <data name="RemoteTextPlaceholder" xml:space="preserve">
+    <value>Texte à envoyer au PC distant</value>
+  </data>
+  <data name="ReparsePointsNotUploaded" xml:space="preserve">
+    <value>Les points de reparse ne sont pas téléversés.</value>
+  </data>
+  <data name="ResourcesUnavailable" xml:space="preserve">
+    <value>Ressources indisponibles</value>
+  </data>
+  <data name="Responding" xml:space="preserve">
+    <value>Réponse</value>
+  </data>
+  <data name="RestoringControl" xml:space="preserve">
+    <value>Rétablissement du contrôle…</value>
+  </data>
+  <data name="Result" xml:space="preserve">
+    <value>Résultat</value>
+  </data>
+  <data name="ResultPlaceholder" xml:space="preserve">
+    <value>Le résultat de l’action apparaîtra ici.</value>
+  </data>
+  <data name="Resume" xml:space="preserve">
+    <value>Reprendre</value>
+  </data>
+  <data name="RetryDisplayedCode" xml:space="preserve">
+    <value>Réessayez avec le code affiché par l’agent</value>
+  </data>
+  <data name="RevokedAccessNote" xml:space="preserve">
+    <value>L’ancien code et les accès sont révoqués. Nouvelle assistance annule la fermeture et crée un nouveau code.</value>
+  </data>
+  <data name="Running" xml:space="preserve">
+    <value>En cours…</value>
+  </data>
+  <data name="SavedConnection" xml:space="preserve">
+    <value>Connexion enregistrée</value>
+  </data>
+  <data name="ScreenSubtitle" xml:space="preserve">
+    <value>Visualisez et contrôlez l’écran du PC distant.</value>
+  </data>
+  <data name="SearchUnavailablePrefix" xml:space="preserve">
+    <value>Recherche indisponible : </value>
+  </data>
+  <data name="SearchingAtStartup" xml:space="preserve">
+    <value>Recherche au démarrage…</value>
+  </data>
+  <data name="SearchingPcs" xml:space="preserve">
+    <value>Recherche des PC disponibles…</value>
+  </data>
+  <data name="SelectFile" xml:space="preserve">
+    <value>Sélectionnez un fichier.</value>
+  </data>
+  <data name="SelectFileInList" xml:space="preserve">
+    <value>Sélectionnez un fichier dans la liste</value>
+  </data>
+  <data name="SelectPcToRestart" xml:space="preserve">
+    <value>Sélectionnez un PC pour recommencer</value>
+  </data>
+  <data name="SelectedFile" xml:space="preserve">
+    <value>Fichier sélectionné</value>
+  </data>
+  <data name="SessionClosed" xml:space="preserve">
+    <value>Session fermée</value>
+  </data>
+  <data name="SessionClosedCaption" xml:space="preserve">
+    <value>SESSION FERMÉE</value>
+  </data>
+  <data name="SessionEstablished" xml:space="preserve">
+    <value>Session établie. Terminez l’assistance pour changer de PC.</value>
+  </data>
+  <data name="SessionInterrupted" xml:space="preserve">
+    <value>Session interrompue</value>
+  </data>
+  <data name="SessionPartiallyLoaded" xml:space="preserve">
+    <value>Session active · chargement partiel</value>
+  </data>
+  <data name="SessionPreparingAgent" xml:space="preserve">
+    <value>Session authentifiée · préparation de l’agent</value>
+  </data>
+  <data name="SessionRetrying" xml:space="preserve">
+    <value>Session interrompue · nouvelle tentative…</value>
+  </data>
+  <data name="ShareCode" xml:space="preserve">
+    <value>Partagez ce code</value>
+  </data>
+  <data name="SixDigitCode" xml:space="preserve">
+    <value>Code à 6 chiffres</value>
+  </data>
+  <data name="Size" xml:space="preserve">
+    <value>Taille</value>
+  </data>
+  <data name="Sleep" xml:space="preserve">
+    <value>Mise en veille</value>
+  </data>
+  <data name="State" xml:space="preserve">
+    <value>État</value>
+  </data>
+  <data name="StreamInterruptedPrefix" xml:space="preserve">
+    <value>Flux interrompu : </value>
+  </data>
+  <data name="StreamInterruptedResume" xml:space="preserve">
+    <value>Flux interrompu · appuyez sur Reprendre</value>
+  </data>
+  <data name="StreamMetrics" xml:space="preserve">
+    <value>{0:F1} i/s · {1:F1} Mbit/s · capture {2:F0} ms</value>
+  </data>
+  <data name="StreamStoppedResume" xml:space="preserve">
+    <value>Flux arrêté · appuyez sur Reprendre</value>
+  </data>
+  <data name="SupportActive" xml:space="preserve">
+    <value>Assistance active</value>
+  </data>
+  <data name="SupportEnded" xml:space="preserve">
+    <value>Assistance terminée</value>
+  </data>
+  <data name="SupportEndedNewCode" xml:space="preserve">
+    <value>Assistance terminée. Saisissez un nouveau code pour vous reconnecter.</value>
+  </data>
+  <data name="SupportSessionCaption" xml:space="preserve">
+    <value>SESSION D’ASSISTANCE</value>
+  </data>
+  <data name="SupportSessionSuffix" xml:space="preserve">
+    <value> · Session d’assistance</value>
+  </data>
+  <data name="Suspended" xml:space="preserve">
+    <value>Suspendue</value>
+  </data>
+  <data name="SynchronizationInterrupted" xml:space="preserve">
+    <value>Synchronisation interrompue</value>
+  </data>
+  <data name="SynchronizationTimedOut" xml:space="preserve">
+    <value>La synchronisation de l’agent n’a pas abouti dans le délai prévu.</value>
+  </data>
+  <data name="Synchronizing" xml:space="preserve">
+    <value>Synchronisation en cours</value>
+  </data>
+  <data name="SynchronizingEllipsis" xml:space="preserve">
+    <value>Synchronisation…</value>
+  </data>
+  <data name="TakeControl" xml:space="preserve">
+    <value>Prendre le contrôle</value>
+  </data>
+  <data name="TargetAddress" xml:space="preserve">
+    <value>Adresse du PC à assister</value>
+  </data>
+  <data name="TargetChanged" xml:space="preserve">
+    <value>La cible a changé.</value>
+  </data>
+  <data name="TargetOfflineExpiration" xml:space="preserve">
+    <value>Cible hors ligne · expiration automatique active</value>
+  </data>
+  <data name="TransferProgress" xml:space="preserve">
+    <value>Transfert · {0} % · {1:N1} / {2:N1} Mio</value>
+  </data>
+  <data name="TransferRestarting" xml:space="preserve">
+    <value>Transfert terminé · redémarrage et reconnexion…</value>
+  </data>
+  <data name="TransferValidateVersion" xml:space="preserve">
+    <value>Transfert et validation de la version</value>
+  </data>
+  <data name="TransferVerifying" xml:space="preserve">
+    <value>Transfert terminé · vérification de la version…</value>
+  </data>
+  <data name="TrayAssistedPc" xml:space="preserve">
+    <value>Remote Debugger — PC assisté</value>
+  </data>
+  <data name="TrayController" xml:space="preserve">
+    <value>Remote Debugger — Contrôleur</value>
+  </data>
+  <data name="TrayNotice" xml:space="preserve">
+    <value>La connexion reste active. Double-cliquez sur l’icône pour rouvrir la fenêtre.</value>
+  </data>
+  <data name="TypeText" xml:space="preserve">
+    <value>Saisir</value>
+  </data>
+  <data name="Unavailable" xml:space="preserve">
+    <value>Indisponible</value>
+  </data>
+  <data name="UploadDestination" xml:space="preserve">
+    <value>Destination des téléversements</value>
+  </data>
+  <data name="UploadFailedPrefix" xml:space="preserve">
+    <value>Téléversement impossible : </value>
+  </data>
+  <data name="UploadFile" xml:space="preserve">
+    <value>Téléverser un fichier</value>
+  </data>
+  <data name="UploadFolder" xml:space="preserve">
+    <value>Téléverser un dossier</value>
+  </data>
+  <data name="UploadVerified" xml:space="preserve">
+    <value>Téléversement vérifié</value>
+  </data>
+  <data name="Uploading" xml:space="preserve">
+    <value>Téléversement…</value>
+  </data>
+  <data name="VerifiedIdentity" xml:space="preserve">
+    <value>Identité vérifiée</value>
+  </data>
+  <data name="VersionSynchronized" xml:space="preserve">
+    <value>Version synchronisée</value>
+  </data>
+  <data name="ViewOnly" xml:space="preserve">
+    <value>Consultation seule</value>
+  </data>
+  <data name="ViewingPaused" xml:space="preserve">
+    <value>Vision en pause</value>
+  </data>
+  <data name="ViewingPausedResume" xml:space="preserve">
+    <value>Vision en pause · appuyez sur Reprendre</value>
+  </data>
+  <data name="ViewingSuspended" xml:space="preserve">
+    <value>Vision suspendue</value>
+  </data>
+  <data name="VolumeReady" xml:space="preserve">
+    <value>{0} prêt</value>
+  </data>
+  <data name="VolumeSpace" xml:space="preserve">
+    <value>{0} {1} libres / {2}</value>
+  </data>
+  <data name="VolumeUnavailable" xml:space="preserve">
+    <value>{0} indisponible</value>
+  </data>
+  <data name="VolumesMeasuring" xml:space="preserve">
+    <value>Volumes · mesure en cours…</value>
+  </data>
+  <data name="VolumesPrefix" xml:space="preserve">
+    <value>Volumes · </value>
+  </data>
+  <data name="VolumesUnavailable" xml:space="preserve">
+    <value>Volumes · indisponibles</value>
+  </data>
+  <data name="Waiting" xml:space="preserve">
+    <value>En attente</value>
+  </data>
+  <data name="WaitingForConnection" xml:space="preserve">
+    <value>En attente de connexion</value>
+  </data>
+  <data name="WaitingForController" xml:space="preserve">
+    <value>En attente du contrôleur</value>
+  </data>
+  <data name="WaitingForReconnection" xml:space="preserve">
+    <value>Reconnexion en attente</value>
+  </data>
+  <data name="WaitingFreshFrame" xml:space="preserve">
+    <value>En attente d’une image fraîche</value>
+  </data>
+  <data name="WaitingFreshFrameEllipsis" xml:space="preserve">
+    <value>En attente d’une image fraîche…</value>
+  </data>
+  <data name="Window" xml:space="preserve">
+    <value>Fenêtre</value>
+  </data>
+  <data name="WindowsPermissionOnce" xml:space="preserve">
+    <value>Une autorisation Windows est nécessaire une seule fois sur ce PC.</value>
+  </data>
+  <data name="Workspace" xml:space="preserve">
+    <value>Espace de travail</value>
+  </data>
+  <data name="WorkspaceCaption" xml:space="preserve">
+    <value>ESPACE DE TRAVAIL</value>
+  </data>
+  <data name="Yes" xml:space="preserve">
+    <value>Oui</value>
+  </data>
+  <data name="Application" xml:space="preserve">
+    <value>Application</value>
+  </data>
+</root>

@@ -143,7 +143,7 @@ internal sealed partial class LabForm
         bool fileError = await WaitForTextAsync("fileState", text => text.StartsWith("Lecture impossible"), 20);
         CaptureDesktop("ui-files-error.png");
         Set("remoteDirectory", ""); FocusAndEnter("remoteDirectory");
-        bool recovered = await WaitForTextAsync("fileState", text => text.Contains("élément") || text == "Dossier vide", 20);
+        bool recovered = await WaitForTextAsync("fileState", text => text.Contains("élément", StringComparison.OrdinalIgnoreCase) || text == "Dossier vide", 20);
         if (fileError && recovered) Pass("ui.files_error_recovery", "An invalid directory has a visible error and a corrected path reloads", new { fileError, recovered });
         else Fail("ui.files_error_recovery", "An invalid directory has a visible error and a corrected path reloads", new { fileError, recovered });
         Click("navScreen"); await WaitForLiveEvidenceAsync(30); Click("pauseViewing");

@@ -30,6 +30,14 @@ VersionInfoVersion={#AppVersion}
 VersionInfoProductName={#AppName}
 VersionInfoDescription={#AppName} installer
 VersionInfoCompany={#AppPublisher}
+LanguageDetectionMethod=uilanguage
+ShowLanguageDialog=no
+UsePreviousLanguage=no
+
+[Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "french"; MessagesFile: "compiler:Languages\French.isl"
+Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 
 [Files]
 Source: "..\artifacts\release\RemoteDebugger.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -41,4 +49,4 @@ Source: "..\docs\*.md"; DestDir: "{app}\docs"; Excludes: "VALIDATION*.md"; Flags
 Name: "{group}\Remote Debugger"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"
 
 [Run]
-Filename: "{app}\{#AppExeName}"; Description: "Launch Remote Debugger"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,Remote Debugger}"; Flags: nowait postinstall skipifsilent

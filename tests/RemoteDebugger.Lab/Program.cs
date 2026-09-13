@@ -90,7 +90,9 @@ internal sealed partial class LabForm : Forms.Form
                 guestElevated = Native.IsElevated();
                 if (!IsLoopback)
                     await PrepareBrokerProvisioningAsync();
-                if (role is "loopback" or "loopback-smoke") await LoopbackSmokeAsync();
+                if (role == "localization") await LocalizationReviewAsync();
+                else if (role == "singleinstance") await SingleInstanceReviewAsync();
+                else if (role is "loopback" or "loopback-smoke") await LoopbackSmokeAsync();
                 else if (role is "loopbacktray" or "loopback-tray" or "loopbackui") await LoopbackTrayAsync();
                 else if (role == "loopbackexit") await LoopbackExitAsync();
                 else if (role == "loopbackscale") await LoopbackScaleAsync();
@@ -194,6 +196,8 @@ internal sealed partial class LabForm : Forms.Form
         if (!agent) psi.ArgumentList.Add("--controller");
         psi.ArgumentList.Add("--data-root");
         psi.ArgumentList.Add(productData);
+        // The existing acceptance contract checks French copy explicitly.
+        psi.ArgumentList.Add("--ui-language"); psi.ArgumentList.Add("fr");
         return Process.Start(psi) ?? throw new IOException("Release process did not start.");
     }
 

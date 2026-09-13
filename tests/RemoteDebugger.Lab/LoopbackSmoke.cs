@@ -525,7 +525,9 @@ internal sealed partial class LabForm
         while (deadline.Elapsed < TimeSpan.FromSeconds(45))
         {
             poll++;
-            string expectedRole = product == loopbackAgent ? "PC assisté" : "Contrôleur";
+            string expectedRole = role is "localization" or "singleinstance"
+                ? product == loopbackAgent ? UiText.TrayAssistedPc : UiText.TrayController
+                : product == loopbackAgent ? "PC assisté" : "Contrôleur";
             AutomationElement[] icons = FindSystemTrayIcons().Where(icon =>
             {
                 try { return icon.Current.Name.Contains(expectedRole, StringComparison.Ordinal); }
@@ -587,7 +589,7 @@ internal sealed partial class LabForm
                 }
                 while (deadline.Elapsed < TimeSpan.FromSeconds(45))
                 {
-                    var open = FindLoopbackTrayMenuItem("Ouvrir") ?? FindLoopbackTrayMenuItem("Open");
+                    var open = FindLoopbackTrayMenuItem(UiText.Open) ?? FindLoopbackTrayMenuItem("Ouvrir") ?? FindLoopbackTrayMenuItem("Open");
                     attempts.Add(new { stage = "tray_menu_search", poll, iconName = click.Name, menuVisible = open != null });
                     if (open != null)
                     {
@@ -692,7 +694,7 @@ internal sealed partial class LabForm
         catch (Exception) { return false; }
     }
 
-    private Process LaunchLoopbackProduct(bool agent, string dataRoot)
+    private Process LaunchLoopbackProduct(bool agent, string dataRoot, string? language = "fr")
     {
         var psi = new ProcessStartInfo(application)
         {
@@ -704,6 +706,7 @@ internal sealed partial class LabForm
         psi.ArgumentList.Add("--loopback-only");
         psi.ArgumentList.Add("--data-root");
         psi.ArgumentList.Add(dataRoot);
+        if (language != null) { psi.ArgumentList.Add("--ui-language"); psi.ArgumentList.Add(language); }
         return Process.Start(psi) ?? throw new IOException("Loopback Release process did not start.");
     }
 

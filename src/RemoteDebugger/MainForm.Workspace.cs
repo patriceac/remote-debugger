@@ -25,19 +25,28 @@ public sealed partial class MainForm
 
     private static Forms.Label RowLabel(string text, string name) => new WorkspaceLabel { Text = text, Name = name, WrapText = false, AutoSize = true, ForeColor = SecondaryText };
 
-    private const string ConnectToContinue = "Connectez-vous depuis l’onglet Connexion.";
+    private static string ConnectToContinue => UiText.ConnectToContinue;
     private Forms.Button parentFolderButton = null!;
     private Forms.Button browseFilesButton = null!;
     private bool resourcesLoading, filesLoading;
 
     private void InitializeWorkspaceState()
     {
-        arguments.AccessibleName = "Arguments JSON";
-        output.AccessibleName = "Résultat de l’action";
-        output.PlaceholderText = "Le résultat de l’action apparaîtra ici.";
+        host.AccessibleName = UiText.Address;
+        code.AccessibleName = UiText.SixDigitCode;
+        remoteText.AccessibleName = UiText.RemoteTextPlaceholder;
+        fileDirectory.AccessibleName = UiText.Workspace;
+        remotePath.AccessibleName = UiText.SelectedFile;
+        destination.AccessibleName = UiText.UploadDestination;
+        monitor.AccessibleName = UiText.Monitor;
+        operations.AccessibleName = UiText.Action;
+        pid.AccessibleName = "PID";
+        arguments.AccessibleName = UiText.JsonArguments;
+        output.AccessibleName = UiText.ActionResult;
+        output.PlaceholderText = UiText.ResultPlaceholder;
         resourceState.Text = fileState.Text = diagnosticState.Text = ConnectToContinue;
-        connectionState.Text = "Choisissez un PC ou saisissez son adresse IP et son code.";
-        streamStatus.Text = "Aucune connexion active";
+        connectionState.Text = UiText.ChoosePcAndCode;
+        streamStatus.Text = UiText.NoActiveConnection;
         operations.SelectedIndexChanged += (_, _) => LoadDiagnosticTemplate();
         pid.ValueChanged += (_, _) =>
         {
@@ -60,7 +69,7 @@ public sealed partial class MainForm
     {
         if (operations.SelectedItem is not string operation) return;
         arguments.Text = WorkspacePresentation.ArgumentsFor(Templates[operation], (int)pid.Value);
-        diagnosticState.Text = supportSession ? "Prêt à exécuter." : ConnectToContinue;
+        diagnosticState.Text = supportSession ? UiText.ReadyToRun : ConnectToContinue;
         output.Clear();
         RefreshControllerControls();
     }
@@ -71,14 +80,14 @@ public sealed partial class MainForm
         var state = WorkspaceAvailability.For(supportSession, heartbeatHealthy, pairingBusy, terminating, action != null, selectedFilePath != null);
         pairButton.Enabled = host.Enabled = code.Enabled = state.CanPair;
         peers.Enabled = !pairingBusy && !terminating;
-        pairButton.Text = pairingBusy ? "Connexion…" : supportSession ? "Connecté" : "Connecter";
+        pairButton.Text = pairingBusy ? UiText.Connecting : supportSession ? UiText.Connected : UiText.Connect;
         refreshResourcesButton.Enabled = state.CanOperate && !resourcesLoading;
         browseFilesButton.Enabled = fileDirectory.Enabled = state.CanOperate && !filesLoading;
         parentFolderButton.Enabled = state.CanOperate && !filesLoading && !string.IsNullOrEmpty(currentDirectory);
         uploadButton.Enabled = uploadFolderButton.Enabled = destination.Enabled = state.CanOperate;
         downloadButton.Enabled = state.CanDownload;
         executeButton.Enabled = state.CanOperate && action == null;
-        if (state.CanOperate && diagnosticState.Text == ConnectToContinue) diagnosticState.Text = "Prêt à exécuter.";
+        if (state.CanOperate && diagnosticState.Text == ConnectToContinue) diagnosticState.Text = UiText.ReadyToRun;
         cancelButton.Enabled = state.CanCancel;
         operations.Enabled = arguments.Enabled = state.CanOperate && action == null;
         pid.Enabled = state.CanOperate && action == null && operations.SelectedItem is string operation && WorkspacePresentation.UsesPid(Templates[operation]);
@@ -90,7 +99,7 @@ public sealed partial class MainForm
         if (supportSession && client != null)
         {
             selectedPeerName.Text = selectedPeer?.Name ?? client.Connection.Host;
-            selectedPeerAddress.Text = heartbeatHealthy ? "Session authentifiée" : "Reconnexion en cours…";
+            selectedPeerAddress.Text = heartbeatHealthy ? UiText.AuthenticatedSession : UiText.ReconnectionInProgress;
         }
         if (!supportSession && !pairingBusy)
         {

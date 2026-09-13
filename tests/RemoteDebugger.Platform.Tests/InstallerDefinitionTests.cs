@@ -35,4 +35,17 @@ public sealed class InstallerDefinitionTests
         Assert.NotNull(directory);
         return Path.Combine([directory!.FullName, .. segments]);
     }
+
+    [Fact]
+    public void InstallerUsesWindowsUiLanguageWithEnglishFirstAsFallback()
+    {
+        string definition = File.ReadAllText(ProjectFile("installer", "RemoteDebugger.iss"));
+        Assert.Contains("LanguageDetectionMethod=uilanguage", definition);
+        Assert.Contains("ShowLanguageDialog=no", definition);
+        Assert.Contains("UsePreviousLanguage=no", definition);
+        Assert.Contains("compiler:Languages\\French.isl", definition);
+        Assert.Contains("compiler:Languages\\Spanish.isl", definition);
+        Assert.True(definition.IndexOf("Name: \"english\"", StringComparison.Ordinal) < definition.IndexOf("Name: \"french\"", StringComparison.Ordinal));
+        Assert.Contains("{cm:LaunchProgram,Remote Debugger}", definition);
+    }
 }

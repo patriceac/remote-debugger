@@ -1,6 +1,6 @@
 # Remote Debugger
 
-A portable Windows tool for controlling and diagnosing another PC on a trusted local network. One executable provides **Donner le contrôle** (visible interactive agent) and **Prendre le contrôle** (GUI and JSON command line controller).
+A portable Windows tool for controlling and diagnosing another PC on a trusted local network. One executable provides **Give control** (visible interactive agent) and **Take control** (GUI and JSON command line controller).
 
 The command path is **Codex → local controller CLI → encrypted connection → remote agent → Windows application**. GUI buttons and the CLI use the same controller implementation and remote operations. No cloud relay or Internet-facing service is involved.
 
@@ -13,7 +13,7 @@ Build with .NET SDK 8 on Windows:
 ./scripts/Build.ps1 -Sign
 ```
 
-For a normal desktop installation, run `artifacts/installer/RemoteDebugger-<version>-Setup.exe`. It installs for the current user without elevation, creates a Start menu shortcut, and includes its own uninstaller. The portable `artifacts/release/RemoteDebugger.exe` remains available when no installation is wanted. Both forms include the .NET runtime. See [the quick start](docs/GETTING_STARTED.md) for pairing and daily use, and [the CLI reference](docs/CLI.md) for Codex automation. The application interface currently uses French labels; the documentation explains them in English.
+For a normal desktop installation, run `artifacts/installer/RemoteDebugger-<version>-Setup.exe`. It installs for the current user without elevation, creates a Start menu shortcut, and includes its own uninstaller. The portable `artifacts/release/RemoteDebugger.exe` remains available when no installation is wanted. Both forms include the .NET runtime. See [the quick start](docs/GETTING_STARTED.md) for pairing and daily use, and [the CLI reference](docs/CLI.md) for Codex automation. The app and installer select French, English or Spanish from the Windows display language, with English as the fallback. Regional variants such as French Canadian and Mexican Spanish are supported. Numbers and dates keep the user’s Windows regional formats.
 
 The agent opens directly to a six-digit pairing code that rotates every five minutes. The controller discovers PCs on launch, accepts the code with Enter, synchronizes the agent to its own signed executable, and opens the live desktop with mouse and keyboard enabled. Connection and live-frame indicators remain visible throughout support. See [the validation record](docs/VALIDATION.md) for completed test evidence; planned cases are listed separately in [the acceptance matrix](docs/ACCEPTANCE_MATRIX.md).
 
@@ -21,7 +21,9 @@ Features include continuous encrypted JPEG desktop streaming (5 fps cap, actual 
 
 The interactive agent uses the logged-in user's session. One initial administrator setup installs a protected local broker for automatic Private-network rules, session-scoped administrator maintenance, and silent signed updates. Subsequent sessions need no repeated elevation prompts. The broker has no network listener; the visible agent remains unelevated. See [installation and publisher enrollment](docs/INSTALLATION.md).
 
-Closing either window keeps the application and connection in the system tray. Restoring the controller resumes its live view automatically. **Terminer l’assistance** immediately revokes access and starts a visible ten-minute exit countdown on the receiving PC. **Nouvelle assistance** cancels this countdown and issues a new code. The controlling PC stays open. A lost controller first gets a separate ten-minute reconnect grace period before access expires. Use **Quitter** in the tray menu to exit immediately.
+Only one desktop instance runs per Windows user session. Launching the app again restores the existing window, including from the system tray, and preserves its workspace and language. The guard applies across portable and installed copies. CLI commands and service helpers can still run alongside the desktop app.
+
+Closing either window keeps the application and connection in the system tray. Restoring the controller resumes its live view automatically. **End support** immediately revokes access and starts a visible ten-minute exit countdown on the receiving PC. **New support session** cancels this countdown and issues a new code. The controlling PC stays open. A lost controller first gets a separate ten-minute reconnect grace period before access expires. Use **Quit** in the tray menu to exit immediately.
 
 The available-PC, process and file tables remember their column widths and order separately. Drag a header to reorder it, drag its edge to resize it, or double-click an edge to fit its contents. Preferences survive restarting and use logical widths so changing display scaling preserves the layout.
 
@@ -34,6 +36,6 @@ The available-PC, process and file tables remember their column widths and order
 ./scripts/Build-Installer.ps1 -Sign
 ```
 
-See [architecture and security](docs/ARCHITECTURE.md), [CLI contract](docs/CLI.md), and [test evidence](docs/VALIDATION.md). Application binaries and integration test scripts must run through the configured Hyper-V SYSTEM broker, not on the physical development host. Unit tests only exercise pure logic.
+See [architecture and security](docs/ARCHITECTURE.md), [interface languages](docs/LOCALIZATION.md), [CLI contract](docs/CLI.md), and [test evidence](docs/VALIDATION.md). Application binaries and integration test scripts must run through the configured Hyper-V SYSTEM broker, not on the physical development host. Unit tests only exercise pure logic.
 
 Local session logs, diagnostic captures, signing keys, and build outputs are excluded from the repository.

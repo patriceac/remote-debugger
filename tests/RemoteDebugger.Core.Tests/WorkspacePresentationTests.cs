@@ -4,8 +4,12 @@ using Xunit;
 
 namespace RemoteDebugger.Core.Tests;
 
-public sealed class WorkspacePresentationTests
+public sealed class WorkspacePresentationTests : IDisposable
 {
+    private readonly System.Globalization.CultureInfo previous = System.Globalization.CultureInfo.CurrentUICulture;
+    public WorkspacePresentationTests() => System.Globalization.CultureInfo.CurrentUICulture = System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
+    public void Dispose() => System.Globalization.CultureInfo.CurrentUICulture = previous;
+
     [Theory]
     [InlineData(false, false, false, false, false, true, false)]
     [InlineData(false, false, true, false, false, false, false)]

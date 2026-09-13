@@ -8,6 +8,7 @@ internal sealed class WorkspaceButton : Button
 {
     private bool hovered, pressed;
     public WorkspaceButton() => SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+    protected override void OnTextChanged(EventArgs e) { AccessibleName = Text; base.OnTextChanged(e); }
     protected override void OnMouseEnter(EventArgs e) { hovered = true; Invalidate(); base.OnMouseEnter(e); }
     protected override void OnMouseLeave(EventArgs e) { hovered = pressed = false; Invalidate(); base.OnMouseLeave(e); }
     protected override void OnMouseDown(MouseEventArgs e) { pressed = true; Invalidate(); base.OnMouseDown(e); }

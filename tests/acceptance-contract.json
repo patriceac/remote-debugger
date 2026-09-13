@@ -13,6 +13,9 @@
     "minimumDistinctFrames": 3
   },
   "uiAutomationIds": {
+    "headerTitle": "headerTitle",
+    "copyAgentCode": "copyAgentCode",
+    "streamOverlay": "streamOverlay",
     "agentPairCode": "agentPairCode",
     "pairingCountdown": "pairingCountdownText",
     "agentState": "agentState",

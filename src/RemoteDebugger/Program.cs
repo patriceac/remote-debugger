@@ -14,6 +14,8 @@ public static class Program
         if (args.Length == 2 && args[0] == "--elevated-job") return ElevatedJob.ExecuteAsync(args[1]).GetAwaiter().GetResult();
         if (args.Length == 2 && args[0] == "--ui-job") { Forms.Application.SetHighDpiMode(Forms.HighDpiMode.PerMonitorV2); return UiAutomationJob.Execute(args[1]); }
         if (args.Length > 0 && args[0] == "cli") return CliAsync(args.Skip(1).ToArray()).GetAwaiter().GetResult();
+        int languageIndex = Array.IndexOf(args, "--ui-language");
+        UiCulture.Initialize(languageIndex >= 0 && languageIndex + 1 < args.Length ? args[languageIndex + 1] : null);
         WaitForProvisioningParent(args);
         string? startupPreparationError = null;
         if (!args.Contains("--loopback-only"))
@@ -26,11 +28,20 @@ public static class Program
             }
             catch (Exception ex) { startupPreparationError = ex.Message; }
         }
-        Native.FreeConsole(); ApplicationConfiguration.Initialize();
         int rootIndex = Array.IndexOf(args, "--data-root");
         string? dataRoot = rootIndex >= 0 && rootIndex + 1 < args.Length ? args[rootIndex + 1] : null;
+        bool loopbackOnly = args.Contains("--loopback-only");
+        using var instance = SingleInstance.ForCurrentSession(loopbackOnly, dataRoot);
+        if (!instance.TryAcquire())
+        {
+            if (instance.ActivateExistingAsync().GetAwaiter().GetResult()) return 0;
+            // Recover if the owner exited or crashed while activation was attempted.
+            if (!instance.TryAcquire()) return 1;
+        }
+        Native.FreeConsole(); ApplicationConfiguration.Initialize();
         bool controllerOnly = args.Contains("--controller");
-        var form = new MainForm(!controllerOnly, dataRoot, args.Contains("--loopback-only"), startupPreparationError);
+        var form = new MainForm(!controllerOnly, dataRoot, loopbackOnly, startupPreparationError);
+        form.Shown += (_, _) => instance.StartListening(form.ActivateExistingWindow);
         SupportPlatform.ManagedRelaunchRequested += () =>
         {
             if (!form.IsDisposed && form.IsHandleCreated) form.BeginInvoke(Forms.Application.Exit);

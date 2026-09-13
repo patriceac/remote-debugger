@@ -1,0 +1,783 @@
+<?xml version='1.0' encoding='utf-8'?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <data name="Action" xml:space="preserve">
+    <value>Action</value>
+  </data>
+  <data name="ActionAlreadyRunning" xml:space="preserve">
+    <value>An action is already running.</value>
+  </data>
+  <data name="ActionCancelled" xml:space="preserve">
+    <value>Action cancelled.</value>
+  </data>
+  <data name="ActionFailedSeeResult" xml:space="preserve">
+    <value>Action failed · see the result.</value>
+  </data>
+  <data name="ActionPrefix" xml:space="preserve">
+    <value>Action: </value>
+  </data>
+  <data name="ActionResult" xml:space="preserve">
+    <value>Action result</value>
+  </data>
+  <data name="ActivationFailedPrefix" xml:space="preserve">
+    <value>Activation failed: </value>
+  </data>
+  <data name="ActivationRequired" xml:space="preserve">
+    <value>Activation required</value>
+  </data>
+  <data name="Active" xml:space="preserve">
+    <value>Active</value>
+  </data>
+  <data name="ActiveVersionsSynchronized" xml:space="preserve">
+    <value>Session active · versions synchronized</value>
+  </data>
+  <data name="Address" xml:space="preserve">
+    <value>Address</value>
+  </data>
+  <data name="AdjustArguments" xml:space="preserve">
+    <value>Adjust the parameters before running the action.</value>
+  </data>
+  <data name="AdminMaintenance" xml:space="preserve">
+    <value>Admin maintenance</value>
+  </data>
+  <data name="AfterConnection" xml:space="preserve">
+    <value>After connecting</value>
+  </data>
+  <data name="AgentAwaitingPreparation" xml:space="preserve">
+    <value>Agent awaiting preparation</value>
+  </data>
+  <data name="AgentStopDelayed" xml:space="preserve">
+    <value>Agent shutdown delayed</value>
+  </data>
+  <data name="AgentStopIncomplete" xml:space="preserve">
+    <value>Agent shutdown incomplete</value>
+  </data>
+  <data name="AgentSynchronizing" xml:space="preserve">
+    <value>Synchronizing agent…</value>
+  </data>
+  <data name="AgentUnavailable" xml:space="preserve">
+    <value>Agent unavailable</value>
+  </data>
+  <data name="ArgumentsMustBeObject" xml:space="preserve">
+    <value>Arguments must be a JSON object.</value>
+  </data>
+  <data name="AuthenticatedControllerNote" xml:space="preserve">
+    <value>The authenticated controller can now assist this PC. End support immediately revokes access and allows sleep.</value>
+  </data>
+  <data name="AuthenticatedSession" xml:space="preserve">
+    <value>Authenticated session</value>
+  </data>
+  <data name="AutoCloseCountdown" xml:space="preserve">
+    <value>Closing automatically in {0:mm\:ss}</value>
+  </data>
+  <data name="AutoCloseTenMinutes" xml:space="preserve">
+    <value>Closing automatically in ten minutes</value>
+  </data>
+  <data name="AutomaticPreparationFailedPrefix" xml:space="preserve">
+    <value>Automatic preparation failed: </value>
+  </data>
+  <data name="Available" xml:space="preserve">
+    <value>Available</value>
+  </data>
+  <data name="AvailablePcCount" xml:space="preserve">
+    <value>Available PCs: {0}</value>
+  </data>
+  <data name="AvailablePcs" xml:space="preserve">
+    <value>Available PCs</value>
+  </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="CannotReadCheckPath" xml:space="preserve">
+    <value>Cannot read · check the path</value>
+  </data>
+  <data name="CannotReadFolder" xml:space="preserve">
+    <value>Cannot read folder</value>
+  </data>
+  <data name="CaptureMetrics" xml:space="preserve">
+    <value>{0:T} · capture {1:F0} ms</value>
+  </data>
+  <data name="ChoosePc" xml:space="preserve">
+    <value>Choose a PC or enter its IP address</value>
+  </data>
+  <data name="ChoosePcAndCode" xml:space="preserve">
+    <value>Choose a PC or enter its IP address and code.</value>
+  </data>
+  <data name="ChoosePcPeriod" xml:space="preserve">
+    <value>Choose a PC or enter its IP address.</value>
+  </data>
+  <data name="ClickScreenToControl" xml:space="preserve">
+    <value>Click the screen to control</value>
+  </data>
+  <data name="CloseToTray" xml:space="preserve">
+    <value>Closing minimizes to the system tray</value>
+  </data>
+  <data name="CloseToTrayShort" xml:space="preserve">
+    <value>Close: minimize to tray</value>
+  </data>
+  <data name="CodeConsumed" xml:space="preserve">
+    <value>The code has been used.</value>
+  </data>
+  <data name="CodeCopied" xml:space="preserve">
+    <value>Code copied</value>
+  </data>
+  <data name="CodeMustBeSixDigits" xml:space="preserve">
+    <value>The code must contain exactly six digits.</value>
+  </data>
+  <data name="CodeRotatesNote" xml:space="preserve">
+    <value>The code changes automatically every five minutes.</value>
+  </data>
+  <data name="CommandsDisabledUntilVersions" xml:space="preserve">
+    <value>Commands stay disabled until the versions are verified.</value>
+  </data>
+  <data name="CompletedPrefix" xml:space="preserve">
+    <value>Completed · </value>
+  </data>
+  <data name="Connect" xml:space="preserve">
+    <value>Connect</value>
+  </data>
+  <data name="ConnectBeforeAction" xml:space="preserve">
+    <value>Connect to a remote PC before this action.</value>
+  </data>
+  <data name="ConnectToContinue" xml:space="preserve">
+    <value>Connect from the Connection tab.</value>
+  </data>
+  <data name="ConnectToControl" xml:space="preserve">
+    <value>Connect to control this PC</value>
+  </data>
+  <data name="Connected" xml:space="preserve">
+    <value>Connected</value>
+  </data>
+  <data name="ConnectedDuration" xml:space="preserve">
+    <value>Connected · support: {0}</value>
+  </data>
+  <data name="Connecting" xml:space="preserve">
+    <value>Connecting…</value>
+  </data>
+  <data name="ConnectingStream" xml:space="preserve">
+    <value>Connecting to stream…</value>
+  </data>
+  <data name="Connection" xml:space="preserve">
+    <value>Connection</value>
+  </data>
+  <data name="ConnectionCancelled" xml:space="preserve">
+    <value>Connection cancelled</value>
+  </data>
+  <data name="ConnectionCancelledPeriod" xml:space="preserve">
+    <value>Connection cancelled.</value>
+  </data>
+  <data name="ConnectionFailed" xml:space="preserve">
+    <value>Connection failed</value>
+  </data>
+  <data name="ConnectionInterruptedHeading" xml:space="preserve">
+    <value>The connection was interrupted</value>
+  </data>
+  <data name="ConnectionStaysVisible" xml:space="preserve">
+    <value>Connection status stays visible throughout the session.</value>
+  </data>
+  <data name="ConnectionSubtitle" xml:space="preserve">
+    <value>Choose a PC, then enter its code.</value>
+  </data>
+  <data name="ControlAwaitingConnection" xml:space="preserve">
+    <value>Control awaiting connection</value>
+  </data>
+  <data name="ControlTemporarilyUnavailable" xml:space="preserve">
+    <value>Control temporarily unavailable</value>
+  </data>
+  <data name="ControllerConnected" xml:space="preserve">
+    <value>Controller connected</value>
+  </data>
+  <data name="Copy" xml:space="preserve">
+    <value>Copy</value>
+  </data>
+  <data name="Diagnostics" xml:space="preserve">
+    <value>Diagnostics</value>
+  </data>
+  <data name="DiagnosticsSubtitle" xml:space="preserve">
+    <value>Run advanced actions and inspect their results.</value>
+  </data>
+  <data name="Download" xml:space="preserve">
+    <value>Download</value>
+  </data>
+  <data name="DownloadFailedPrefix" xml:space="preserve">
+    <value>Download failed: </value>
+  </data>
+  <data name="DownloadVerified" xml:space="preserve">
+    <value>Download verified</value>
+  </data>
+  <data name="EmptyFolder" xml:space="preserve">
+    <value>Empty folder</value>
+  </data>
+  <data name="EnableOnThisPc" xml:space="preserve">
+    <value>Enable on this PC</value>
+  </data>
+  <data name="EnablePrivateNetwork" xml:space="preserve">
+    <value>Enable this PC to allow private network access</value>
+  </data>
+  <data name="EnableSupportNotice" xml:space="preserve">
+    <value>Enable support on this PC. Windows permission is needed once.</value>
+  </data>
+  <data name="EndSupport" xml:space="preserve">
+    <value>End support</value>
+  </data>
+  <data name="EndSupportBeforeNewCode" xml:space="preserve">
+    <value>End the current support session before entering a new code.</value>
+  </data>
+  <data name="EndingSupport" xml:space="preserve">
+    <value>Ending support…</value>
+  </data>
+  <data name="EnterCodeOnController" xml:space="preserve">
+    <value>Enter it on the PC providing support.</value>
+  </data>
+  <data name="EnterDisplayedCode" xml:space="preserve">
+    <value>Enter the code displayed on this PC.</value>
+  </data>
+  <data name="EnterKey" xml:space="preserve">
+    <value>Enter</value>
+  </data>
+  <data name="EnterPc" xml:space="preserve">
+    <value>Enter a PC</value>
+  </data>
+  <data name="EnterRemoteAddress" xml:space="preserve">
+    <value>Enter the remote PC's address</value>
+  </data>
+  <data name="EnterRemoteCode" xml:space="preserve">
+    <value>Enter the code displayed on the remote PC.</value>
+  </data>
+  <data name="Execute" xml:space="preserve">
+    <value>Run</value>
+  </data>
+  <data name="ExecutionInterrupted" xml:space="preserve">
+    <value>Execution was interrupted.</value>
+  </data>
+  <data name="FailurePrefix" xml:space="preserve">
+    <value>Failed: </value>
+  </data>
+  <data name="File" xml:space="preserve">
+    <value>File</value>
+  </data>
+  <data name="FileSavedPrefix" xml:space="preserve">
+    <value>File saved: </value>
+  </data>
+  <data name="FileType" xml:space="preserve">
+    <value>Type</value>
+  </data>
+  <data name="Files" xml:space="preserve">
+    <value>Files</value>
+  </data>
+  <data name="FilesItemCount" xml:space="preserve">
+    <value>Files · items: {0}</value>
+  </data>
+  <data name="FilesSubtitle" xml:space="preserve">
+    <value>Browse the remote workspace and verify transfers.</value>
+  </data>
+  <data name="Folder" xml:space="preserve">
+    <value>Folder</value>
+  </data>
+  <data name="FolderUploadVerified" xml:space="preserve">
+    <value>Folder uploaded and verified</value>
+  </data>
+  <data name="FreshFrameTime" xml:space="preserve">
+    <value>Fresh frame · {0:F0} ms</value>
+  </data>
+  <data name="FrozenFrame" xml:space="preserve">
+    <value>Frozen frame · waiting for a fresh capture…</value>
+  </data>
+  <data name="GiveControl" xml:space="preserve">
+    <value>Give control</value>
+  </data>
+  <data name="IdentityBoundToCode" xml:space="preserve">
+    <value>Identity verification is linked to the connection code.</value>
+  </data>
+  <data name="Inactive" xml:space="preserve">
+    <value>Inactive</value>
+  </data>
+  <data name="InputInterruptedPrefix" xml:space="preserve">
+    <value>Input interrupted: </value>
+  </data>
+  <data name="InputQueueFull" xml:space="preserve">
+    <value>Control waiting · too many inputs</value>
+  </data>
+  <data name="InstalledStartupFailedPrefix" xml:space="preserve">
+    <value>Installed support failed to start: </value>
+  </data>
+  <data name="InvalidJsonArguments" xml:space="preserve">
+    <value>Invalid JSON arguments · correct the parameters.</value>
+  </data>
+  <data name="IpOrManual" xml:space="preserve">
+    <value>IP address (or enter manually)</value>
+  </data>
+  <data name="ItemCount" xml:space="preserve">
+    <value>Items: {0}</value>
+  </data>
+  <data name="JsonArguments" xml:space="preserve">
+    <value>JSON arguments</value>
+  </data>
+  <data name="JustNow" xml:space="preserve">
+    <value>just now</value>
+  </data>
+  <data name="Kibibytes" xml:space="preserve">
+    <value>{0:F0} KiB</value>
+  </data>
+  <data name="LastVerifiedIdentity" xml:space="preserve">
+    <value>Last verified identity</value>
+  </data>
+  <data name="Live" xml:space="preserve">
+    <value>LIVE</value>
+  </data>
+  <data name="Loading" xml:space="preserve">
+    <value>Loading…</value>
+  </data>
+  <data name="LoadingMeasurements" xml:space="preserve">
+    <value>Loading measurements…</value>
+  </data>
+  <data name="LocalOnly" xml:space="preserve">
+    <value>Local only</value>
+  </data>
+  <data name="ManualConnection" xml:space="preserve">
+    <value>Manual connection</value>
+  </data>
+  <data name="MeasuredAt" xml:space="preserve">
+    <value>Measured at</value>
+  </data>
+  <data name="MeasuredAtTime" xml:space="preserve">
+    <value>Measured at {0}</value>
+  </data>
+  <data name="MeasurementComplete" xml:space="preserve">
+    <value>Measurement complete</value>
+  </data>
+  <data name="MeasurementUnavailable" xml:space="preserve">
+    <value>Measurement unavailable</value>
+  </data>
+  <data name="MeasurementsFilesLoaded" xml:space="preserve">
+    <value>Measurements and files loaded</value>
+  </data>
+  <data name="Measuring" xml:space="preserve">
+    <value>Measuring…</value>
+  </data>
+  <data name="Mebibytes" xml:space="preserve">
+    <value>{0:F1} MiB</value>
+  </data>
+  <data name="MinimizedConnected" xml:space="preserve">
+    <value>Minimized · connection maintained</value>
+  </data>
+  <data name="Modified" xml:space="preserve">
+    <value>Modified</value>
+  </data>
+  <data name="Monitor" xml:space="preserve">
+    <value>Display</value>
+  </data>
+  <data name="MonitorChanged" xml:space="preserve">
+    <value>Display changed</value>
+  </data>
+  <data name="MonitorNumber" xml:space="preserve">
+    <value>Display {0}</value>
+  </data>
+  <data name="MouseKeyboardActive" xml:space="preserve">
+    <value>Mouse and keyboard active</value>
+  </data>
+  <data name="MouseKeyboardControl" xml:space="preserve">
+    <value>Mouse and keyboard control</value>
+  </data>
+  <data name="Name" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="NewCodeCountdown" xml:space="preserve">
+    <value>New code in {0:mm\:ss}</value>
+  </data>
+  <data name="NewConnection" xml:space="preserve">
+    <value>New connection</value>
+  </data>
+  <data name="NewSupport" xml:space="preserve">
+    <value>New support session</value>
+  </data>
+  <data name="NewSupportForCode" xml:space="preserve">
+    <value>Start a new support session to get a code</value>
+  </data>
+  <data name="NoActiveConnection" xml:space="preserve">
+    <value>No active connection</value>
+  </data>
+  <data name="NoAuthenticatedConnection" xml:space="preserve">
+    <value>No authenticated connection.</value>
+  </data>
+  <data name="NoMeasurement" xml:space="preserve">
+    <value>No measurements</value>
+  </data>
+  <data name="NoMeasurementsAvailable" xml:space="preserve">
+    <value>No measurements available</value>
+  </data>
+  <data name="NoPcsFound" xml:space="preserve">
+    <value>No PCs found · enter an IP address.</value>
+  </data>
+  <data name="NotResponding" xml:space="preserve">
+    <value>Not responding</value>
+  </data>
+  <data name="Open" xml:space="preserve">
+    <value>Open</value>
+  </data>
+  <data name="Pairing" xml:space="preserve">
+    <value>Pairing…</value>
+  </data>
+  <data name="PairingCodeCaption" xml:space="preserve">
+    <value>CONNECTION CODE</value>
+  </data>
+  <data name="PairingTimedOut" xml:space="preserve">
+    <value>Pairing did not complete within the time limit.</value>
+  </data>
+  <data name="ParentFolder" xml:space="preserve">
+    <value>Parent</value>
+  </data>
+  <data name="Pause" xml:space="preserve">
+    <value>Pause</value>
+  </data>
+  <data name="PcBeingAssisted" xml:space="preserve">
+    <value>Your PC is being assisted</value>
+  </data>
+  <data name="PcNoLongerAccessible" xml:space="preserve">
+    <value>The controller can no longer access your PC.</value>
+  </data>
+  <data name="PcPrefix" xml:space="preserve">
+    <value>PC: </value>
+  </data>
+  <data name="PreparationFailedPrefix" xml:space="preserve">
+    <value>Preparation failed: </value>
+  </data>
+  <data name="Preparing" xml:space="preserve">
+    <value>Preparing…</value>
+  </data>
+  <data name="PreparingNextCode" xml:space="preserve">
+    <value>Preparing the next code…</value>
+  </data>
+  <data name="PreparingSupport" xml:space="preserve">
+    <value>Preparing support…</value>
+  </data>
+  <data name="PreparingTransfer" xml:space="preserve">
+    <value>Preparing transfer…</value>
+  </data>
+  <data name="PrimaryMonitor" xml:space="preserve">
+    <value>Primary</value>
+  </data>
+  <data name="PrivateNetwork" xml:space="preserve">
+    <value>Private network</value>
+  </data>
+  <data name="PrivateSupportSuffix" xml:space="preserve">
+    <value> · Support on the private network</value>
+  </data>
+  <data name="ProcessMeasurement" xml:space="preserve">
+    <value>{0} processes · measured at {1:T}</value>
+  </data>
+  <data name="Processes" xml:space="preserve">
+    <value>Processes</value>
+  </data>
+  <data name="ProcessesSubtitle" xml:space="preserve">
+    <value>Measure CPU, memory and application activity.</value>
+  </data>
+  <data name="Quit" xml:space="preserve">
+    <value>Quit</value>
+  </data>
+  <data name="RamMib" xml:space="preserve">
+    <value>RAM MiB</value>
+  </data>
+  <data name="Ready" xml:space="preserve">
+    <value>Ready</value>
+  </data>
+  <data name="ReadyForConnection" xml:space="preserve">
+    <value>Ready for a connection</value>
+  </data>
+  <data name="ReadyToRun" xml:space="preserve">
+    <value>Ready to run.</value>
+  </data>
+  <data name="Reconnecting" xml:space="preserve">
+    <value>Reconnecting…</value>
+  </data>
+  <data name="ReconnectingStream" xml:space="preserve">
+    <value>Reconnecting to stream…</value>
+  </data>
+  <data name="ReconnectionCountdown" xml:space="preserve">
+    <value>Waiting to reconnect · {0:mm\:ss}</value>
+  </data>
+  <data name="ReconnectionGraceNote" xml:space="preserve">
+    <value>The session stays available for ten minutes. Sleep remains suspended.</value>
+  </data>
+  <data name="ReconnectionInProgress" xml:space="preserve">
+    <value>Reconnecting…</value>
+  </data>
+  <data name="Refresh" xml:space="preserve">
+    <value>Refresh</value>
+  </data>
+  <data name="RemoteScreen" xml:space="preserve">
+    <value>Remote screen</value>
+  </data>
+  <data name="RemoteTextPlaceholder" xml:space="preserve">
+    <value>Text to send to the remote PC</value>
+  </data>
+  <data name="ReparsePointsNotUploaded" xml:space="preserve">
+    <value>Reparse points are not uploaded.</value>
+  </data>
+  <data name="ResourcesUnavailable" xml:space="preserve">
+    <value>Resources unavailable</value>
+  </data>
+  <data name="Responding" xml:space="preserve">
+    <value>Responding</value>
+  </data>
+  <data name="RestoringControl" xml:space="preserve">
+    <value>Restoring control…</value>
+  </data>
+  <data name="Result" xml:space="preserve">
+    <value>Result</value>
+  </data>
+  <data name="ResultPlaceholder" xml:space="preserve">
+    <value>The action result will appear here.</value>
+  </data>
+  <data name="Resume" xml:space="preserve">
+    <value>Resume</value>
+  </data>
+  <data name="RetryDisplayedCode" xml:space="preserve">
+    <value>Try again with the code displayed by the agent</value>
+  </data>
+  <data name="RevokedAccessNote" xml:space="preserve">
+    <value>The old code and access are revoked. New support session cancels shutdown and creates a new code.</value>
+  </data>
+  <data name="Running" xml:space="preserve">
+    <value>Running…</value>
+  </data>
+  <data name="SavedConnection" xml:space="preserve">
+    <value>Saved connection</value>
+  </data>
+  <data name="ScreenSubtitle" xml:space="preserve">
+    <value>View and control the remote PC's screen.</value>
+  </data>
+  <data name="SearchUnavailablePrefix" xml:space="preserve">
+    <value>Search unavailable: </value>
+  </data>
+  <data name="SearchingAtStartup" xml:space="preserve">
+    <value>Searching at startup…</value>
+  </data>
+  <data name="SearchingPcs" xml:space="preserve">
+    <value>Searching for available PCs…</value>
+  </data>
+  <data name="SelectFile" xml:space="preserve">
+    <value>Select a file.</value>
+  </data>
+  <data name="SelectFileInList" xml:space="preserve">
+    <value>Select a file in the list</value>
+  </data>
+  <data name="SelectPcToRestart" xml:space="preserve">
+    <value>Select a PC to start again</value>
+  </data>
+  <data name="SelectedFile" xml:space="preserve">
+    <value>Selected file</value>
+  </data>
+  <data name="SessionClosed" xml:space="preserve">
+    <value>Session closed</value>
+  </data>
+  <data name="SessionClosedCaption" xml:space="preserve">
+    <value>SESSION CLOSED</value>
+  </data>
+  <data name="SessionEstablished" xml:space="preserve">
+    <value>Session established. End support to switch PCs.</value>
+  </data>
+  <data name="SessionInterrupted" xml:space="preserve">
+    <value>Session interrupted</value>
+  </data>
+  <data name="SessionPartiallyLoaded" xml:space="preserve">
+    <value>Session active · partially loaded</value>
+  </data>
+  <data name="SessionPreparingAgent" xml:space="preserve">
+    <value>Authenticated session · preparing agent</value>
+  </data>
+  <data name="SessionRetrying" xml:space="preserve">
+    <value>Session interrupted · retrying…</value>
+  </data>
+  <data name="ShareCode" xml:space="preserve">
+    <value>Share this code</value>
+  </data>
+  <data name="SixDigitCode" xml:space="preserve">
+    <value>6-digit code</value>
+  </data>
+  <data name="Size" xml:space="preserve">
+    <value>Size</value>
+  </data>
+  <data name="Sleep" xml:space="preserve">
+    <value>Sleep</value>
+  </data>
+  <data name="State" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="StreamInterruptedPrefix" xml:space="preserve">
+    <value>Stream interrupted: </value>
+  </data>
+  <data name="StreamInterruptedResume" xml:space="preserve">
+    <value>Stream interrupted · press Resume</value>
+  </data>
+  <data name="StreamMetrics" xml:space="preserve">
+    <value>{0:F1} fps · {1:F1} Mbit/s · capture {2:F0} ms</value>
+  </data>
+  <data name="StreamStoppedResume" xml:space="preserve">
+    <value>Stream stopped · press Resume</value>
+  </data>
+  <data name="SupportActive" xml:space="preserve">
+    <value>Support active</value>
+  </data>
+  <data name="SupportEnded" xml:space="preserve">
+    <value>Support ended</value>
+  </data>
+  <data name="SupportEndedNewCode" xml:space="preserve">
+    <value>Support ended. Enter a new code to reconnect.</value>
+  </data>
+  <data name="SupportSessionCaption" xml:space="preserve">
+    <value>SUPPORT SESSION</value>
+  </data>
+  <data name="SupportSessionSuffix" xml:space="preserve">
+    <value> · Support session</value>
+  </data>
+  <data name="Suspended" xml:space="preserve">
+    <value>Suspended</value>
+  </data>
+  <data name="SynchronizationInterrupted" xml:space="preserve">
+    <value>Synchronization interrupted</value>
+  </data>
+  <data name="SynchronizationTimedOut" xml:space="preserve">
+    <value>Agent synchronization did not complete within the time limit.</value>
+  </data>
+  <data name="Synchronizing" xml:space="preserve">
+    <value>Synchronizing</value>
+  </data>
+  <data name="SynchronizingEllipsis" xml:space="preserve">
+    <value>Synchronizing…</value>
+  </data>
+  <data name="TakeControl" xml:space="preserve">
+    <value>Take control</value>
+  </data>
+  <data name="TargetAddress" xml:space="preserve">
+    <value>Address of the PC to assist</value>
+  </data>
+  <data name="TargetChanged" xml:space="preserve">
+    <value>The target has changed.</value>
+  </data>
+  <data name="TargetOfflineExpiration" xml:space="preserve">
+    <value>Target offline · automatic expiry active</value>
+  </data>
+  <data name="TransferProgress" xml:space="preserve">
+    <value>Transfer · {0}% · {1:N1} / {2:N1} MiB</value>
+  </data>
+  <data name="TransferRestarting" xml:space="preserve">
+    <value>Transfer complete · restarting and reconnecting…</value>
+  </data>
+  <data name="TransferValidateVersion" xml:space="preserve">
+    <value>Transferring and verifying the version</value>
+  </data>
+  <data name="TransferVerifying" xml:space="preserve">
+    <value>Transfer complete · verifying version…</value>
+  </data>
+  <data name="TrayAssistedPc" xml:space="preserve">
+    <value>Remote Debugger — Assisted PC</value>
+  </data>
+  <data name="TrayController" xml:space="preserve">
+    <value>Remote Debugger — Controller</value>
+  </data>
+  <data name="TrayNotice" xml:space="preserve">
+    <value>The connection stays active. Double-click the icon to reopen the window.</value>
+  </data>
+  <data name="TypeText" xml:space="preserve">
+    <value>Type</value>
+  </data>
+  <data name="Unavailable" xml:space="preserve">
+    <value>Unavailable</value>
+  </data>
+  <data name="UploadDestination" xml:space="preserve">
+    <value>Upload destination</value>
+  </data>
+  <data name="UploadFailedPrefix" xml:space="preserve">
+    <value>Upload failed: </value>
+  </data>
+  <data name="UploadFile" xml:space="preserve">
+    <value>Upload file</value>
+  </data>
+  <data name="UploadFolder" xml:space="preserve">
+    <value>Upload folder</value>
+  </data>
+  <data name="UploadVerified" xml:space="preserve">
+    <value>Upload verified</value>
+  </data>
+  <data name="Uploading" xml:space="preserve">
+    <value>Uploading…</value>
+  </data>
+  <data name="VerifiedIdentity" xml:space="preserve">
+    <value>Verified identity</value>
+  </data>
+  <data name="VersionSynchronized" xml:space="preserve">
+    <value>Version synchronized</value>
+  </data>
+  <data name="ViewOnly" xml:space="preserve">
+    <value>View only</value>
+  </data>
+  <data name="ViewingPaused" xml:space="preserve">
+    <value>Viewing paused</value>
+  </data>
+  <data name="ViewingPausedResume" xml:space="preserve">
+    <value>Viewing paused · press Resume</value>
+  </data>
+  <data name="ViewingSuspended" xml:space="preserve">
+    <value>Viewing suspended</value>
+  </data>
+  <data name="VolumeReady" xml:space="preserve">
+    <value>{0} ready</value>
+  </data>
+  <data name="VolumeSpace" xml:space="preserve">
+    <value>{0} {1} free / {2}</value>
+  </data>
+  <data name="VolumeUnavailable" xml:space="preserve">
+    <value>{0} unavailable</value>
+  </data>
+  <data name="VolumesMeasuring" xml:space="preserve">
+    <value>Volumes · measuring…</value>
+  </data>
+  <data name="VolumesPrefix" xml:space="preserve">
+    <value>Volumes · </value>
+  </data>
+  <data name="VolumesUnavailable" xml:space="preserve">
+    <value>Volumes · unavailable</value>
+  </data>
+  <data name="Waiting" xml:space="preserve">
+    <value>Waiting</value>
+  </data>
+  <data name="WaitingForConnection" xml:space="preserve">
+    <value>Waiting for a connection</value>
+  </data>
+  <data name="WaitingForController" xml:space="preserve">
+    <value>Waiting for the controller</value>
+  </data>
+  <data name="WaitingForReconnection" xml:space="preserve">
+    <value>Waiting to reconnect</value>
+  </data>
+  <data name="WaitingFreshFrame" xml:space="preserve">
+    <value>Waiting for a fresh frame</value>
+  </data>
+  <data name="WaitingFreshFrameEllipsis" xml:space="preserve">
+    <value>Waiting for a fresh frame…</value>
+  </data>
+  <data name="Window" xml:space="preserve">
+    <value>Window</value>
+  </data>
+  <data name="WindowsPermissionOnce" xml:space="preserve">
+    <value>Windows permission is needed once on this PC.</value>
+  </data>
+  <data name="Workspace" xml:space="preserve">
+    <value>Workspace</value>
+  </data>
+  <data name="WorkspaceCaption" xml:space="preserve">
+    <value>WORKSPACE</value>
+  </data>
+  <data name="Yes" xml:space="preserve">
+    <value>Yes</value>
+  </data>
+  <data name="Application" xml:space="preserve">
+    <value>Application</value>
+  </data>
+</root>
