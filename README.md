@@ -13,7 +13,7 @@ Build with .NET SDK 8 on Windows:
 ./scripts/Build.ps1 -Sign
 ```
 
-For a normal desktop installation, run `artifacts/installer/RemoteDebugger-<version>-Setup.exe`. It installs for the current user without elevation, creates a Start menu shortcut, and includes its own uninstaller. The portable `artifacts/release/RemoteDebugger.exe` remains available when no installation is wanted. Both forms include the .NET runtime. See [the quick start](docs/GETTING_STARTED.md) for pairing and daily use, and [the CLI reference](docs/CLI.md) for Codex automation. The app and installer select French, English or Spanish from the Windows display language, with English as the fallback. Regional variants such as French Canadian and Mexican Spanish are supported. Numbers and dates keep the user’s Windows regional formats.
+For a normal desktop installation, run `artifacts/installer/RemoteDebugger-<version>-Setup.exe`. It installs for the current user without elevation, creates a Start menu shortcut, and includes its own uninstaller. The portable `artifacts/release/RemoteDebugger.exe` remains available when no installation is wanted. Both forms include the .NET runtime. See [the quick start](docs/GETTING_STARTED.md) for pairing and daily use, and [the CLI reference](docs/CLI.md) for Codex automation. The app and installer select French, English or Spanish from the Windows display language, with English as the fallback. Use **Language** at the bottom of the sidebar to choose **System default**, **English**, **Français** or **Español**. Changes apply immediately without interrupting support and are saved for future launches. Regional variants such as French Canadian and Mexican Spanish are supported. Numbers and dates keep the user’s Windows regional formats.
 
 The agent opens directly to a six-digit pairing code that rotates every five minutes. The controller discovers PCs on launch, accepts the code with Enter, synchronizes the agent to its own signed executable, and opens the live desktop with mouse and keyboard enabled. Connection and live-frame indicators remain visible throughout support. See [the validation record](docs/VALIDATION.md) for completed test evidence; planned cases are listed separately in [the acceptance matrix](docs/ACCEPTANCE_MATRIX.md).
 
@@ -36,6 +36,6 @@ The available-PC, process and file tables remember their column widths and order
 ./scripts/Build-Installer.ps1 -Sign
 ```
 
-See [architecture and security](docs/ARCHITECTURE.md), [interface languages](docs/LOCALIZATION.md), [CLI contract](docs/CLI.md), and [test evidence](docs/VALIDATION.md). Application binaries and integration test scripts must run through the configured Hyper-V SYSTEM broker, not on the physical development host. Unit tests only exercise pure logic.
+See [architecture and security](docs/ARCHITECTURE.md), [interface languages](docs/LOCALIZATION.md), [CLI contract](docs/CLI.md), and [test evidence](docs/VALIDATION.md). Application binaries and integration test scripts must run through the configured Hyper-V SYSTEM broker, not on the physical development host. Unit tests exercise logic and isolated control bindings without launching the application.
 
 Local session logs, diagnostic captures, signing keys, and build outputs are excluded from the repository.

@@ -32,6 +32,23 @@ public sealed partial class MainForm
 
     private void InitializeWorkspaceState()
     {
+        RefreshLocalizedDescriptions();
+        resourceState.SetText(() => ConnectToContinue); fileState.SetText(() => ConnectToContinue); diagnosticState.SetText(() => ConnectToContinue);
+        connectionState.SetText(() => UiText.ChoosePcAndCode);
+        streamStatus.SetText(() => UiText.NoActiveConnection);
+        operations.SelectedIndexChanged += (_, _) => LoadDiagnosticTemplate();
+        pid.ValueChanged += (_, _) =>
+        {
+            try { arguments.SetText(WorkspacePresentation.ArgumentsFor(arguments.Text, (int)pid.Value)); }
+            catch (JsonException) { /* Keep invalid JSON intact so the user can correct it. */ }
+        };
+        LoadDiagnosticTemplate();
+        DpiChanged += (_, _) => ClampMinimumSizeToDisplay();
+        Shown += (_, _) => ClampMinimumSizeToDisplay();
+    }
+
+    private void RefreshLocalizedDescriptions()
+    {
         host.AccessibleName = UiText.Address;
         code.AccessibleName = UiText.SixDigitCode;
         remoteText.AccessibleName = UiText.RemoteTextPlaceholder;
@@ -44,18 +61,9 @@ public sealed partial class MainForm
         arguments.AccessibleName = UiText.JsonArguments;
         output.AccessibleName = UiText.ActionResult;
         output.PlaceholderText = UiText.ResultPlaceholder;
-        resourceState.Text = fileState.Text = diagnosticState.Text = ConnectToContinue;
-        connectionState.Text = UiText.ChoosePcAndCode;
-        streamStatus.Text = UiText.NoActiveConnection;
-        operations.SelectedIndexChanged += (_, _) => LoadDiagnosticTemplate();
-        pid.ValueChanged += (_, _) =>
-        {
-            try { arguments.Text = WorkspacePresentation.ArgumentsFor(arguments.Text, (int)pid.Value); }
-            catch (JsonException) { /* Keep invalid JSON intact so the user can correct it. */ }
-        };
-        LoadDiagnosticTemplate();
-        DpiChanged += (_, _) => ClampMinimumSizeToDisplay();
-        Shown += (_, _) => ClampMinimumSizeToDisplay();
+        remoteText.PlaceholderText = UiText.RemoteTextPlaceholder;
+        fileDirectory.PlaceholderText = UiText.Workspace;
+        remotePath.PlaceholderText = UiText.SelectFileInList;
     }
 
     private void ClampMinimumSizeToDisplay()
@@ -68,9 +76,9 @@ public sealed partial class MainForm
     private void LoadDiagnosticTemplate()
     {
         if (operations.SelectedItem is not string operation) return;
-        arguments.Text = WorkspacePresentation.ArgumentsFor(Templates[operation], (int)pid.Value);
-        diagnosticState.Text = supportSession ? UiText.ReadyToRun : ConnectToContinue;
-        output.Clear();
+        arguments.SetText(WorkspacePresentation.ArgumentsFor(Templates[operation], (int)pid.Value));
+        diagnosticState.SetText(() => supportSession ? UiText.ReadyToRun : ConnectToContinue);
+        output.SetText("");
         RefreshControllerControls();
     }
 
@@ -80,43 +88,43 @@ public sealed partial class MainForm
         var state = WorkspaceAvailability.For(supportSession, heartbeatHealthy, pairingBusy, terminating, action != null, selectedFilePath != null);
         pairButton.Enabled = host.Enabled = code.Enabled = state.CanPair;
         peers.Enabled = !pairingBusy && !terminating;
-        pairButton.Text = pairingBusy ? UiText.Connecting : supportSession ? UiText.Connected : UiText.Connect;
+        pairButton.SetText(() => pairingBusy ? UiText.Connecting : supportSession ? UiText.Connected : UiText.Connect);
         refreshResourcesButton.Enabled = state.CanOperate && !resourcesLoading;
         browseFilesButton.Enabled = fileDirectory.Enabled = state.CanOperate && !filesLoading;
         parentFolderButton.Enabled = state.CanOperate && !filesLoading && !string.IsNullOrEmpty(currentDirectory);
         uploadButton.Enabled = uploadFolderButton.Enabled = destination.Enabled = state.CanOperate;
         downloadButton.Enabled = state.CanDownload;
         executeButton.Enabled = state.CanOperate && action == null;
-        if (state.CanOperate && diagnosticState.Text == ConnectToContinue) diagnosticState.Text = UiText.ReadyToRun;
+        if (state.CanOperate && diagnosticState.Text == ConnectToContinue) diagnosticState.SetText(() => UiText.ReadyToRun);
         cancelButton.Enabled = state.CanCancel;
         operations.Enabled = arguments.Enabled = state.CanOperate && action == null;
         pid.Enabled = state.CanOperate && action == null && operations.SelectedItem is string operation && WorkspacePresentation.UsesPid(Templates[operation]);
         pauseViewing.Enabled = supportSession && !terminating;
         monitor.Enabled = state.CanOperate;
         typeText.Enabled = enterKey.Enabled = remoteText.Enabled = state.CanOperate && liveFrameFresh;
-        technicalIdentity.Text = WorkspacePresentation.Identity(supportSession && client != null, heartbeatHealthy,
-            client?.Connection.Host ?? "", client?.Connection.Fingerprint ?? "");
+        technicalIdentity.SetText(WorkspacePresentation.Identity(supportSession && client != null, heartbeatHealthy,
+            client?.Connection.Host ?? "", client?.Connection.Fingerprint ?? ""));
         if (supportSession && client != null)
         {
-            selectedPeerName.Text = selectedPeer?.Name ?? client.Connection.Host;
-            selectedPeerAddress.Text = heartbeatHealthy ? UiText.AuthenticatedSession : UiText.ReconnectionInProgress;
+            selectedPeerName.SetText(selectedPeer?.Name ?? client.Connection.Host);
+            selectedPeerAddress.SetText(() => heartbeatHealthy ? UiText.AuthenticatedSession : UiText.ReconnectionInProgress);
         }
         if (!supportSession && !pairingBusy)
         {
-            streamOverlay.Text = ConnectToContinue;
+            streamOverlay.SetText(() => ConnectToContinue);
             streamOverlay.Visible = true;
         }
     }
 
-    private static Forms.Control DiagnosticSection(string title, string name, Forms.Control editor, string? help = null)
+    private static Forms.Control DiagnosticSection(Func<string> title, string name, Forms.Control editor, Func<string>? help = null)
     {
         var section = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = help == null ? 2 : 3, Margin = Forms.Padding.Empty };
         section.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
         section.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 26));
         if (help != null) section.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 24));
         section.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
-        section.Controls.Add(new WorkspaceLabel { Name = name, Text = title, Dock = Forms.DockStyle.Fill, Font = new Font("Segoe UI", 10.5f, FontStyle.Bold), ForeColor = PrimaryText }, 0, 0);
-        if (help != null) section.Controls.Add(new WorkspaceLabel { Text = help, Dock = Forms.DockStyle.Fill, AutoEllipsis = true, ForeColor = SecondaryText }, 0, 1);
+        section.Controls.Add(new WorkspaceLabel { Name = name, Dock = Forms.DockStyle.Fill, Font = new Font("Segoe UI", 10.5f, FontStyle.Bold), ForeColor = PrimaryText }.WithText(title), 0, 0);
+        if (help != null) section.Controls.Add(new WorkspaceLabel { Dock = Forms.DockStyle.Fill, AutoEllipsis = true, ForeColor = SecondaryText }.WithText(help), 0, 1);
         editor.Margin = Forms.Padding.Empty;
         section.Controls.Add(editor, 0, help == null ? 1 : 2);
         return section;

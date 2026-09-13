@@ -15,7 +15,10 @@ public static class Program
         if (args.Length == 2 && args[0] == "--ui-job") { Forms.Application.SetHighDpiMode(Forms.HighDpiMode.PerMonitorV2); return UiAutomationJob.Execute(args[1]); }
         if (args.Length > 0 && args[0] == "cli") return CliAsync(args.Skip(1).ToArray()).GetAwaiter().GetResult();
         int languageIndex = Array.IndexOf(args, "--ui-language");
-        UiCulture.Initialize(languageIndex >= 0 && languageIndex + 1 < args.Length ? args[languageIndex + 1] : null);
+        string? languageOverride = languageIndex >= 0 && languageIndex + 1 < args.Length ? args[languageIndex + 1] : null;
+        int rootIndex = Array.IndexOf(args, "--data-root");
+        string? dataRoot = rootIndex >= 0 && rootIndex + 1 < args.Length ? args[rootIndex + 1] : null;
+        UiCulture.Initialize(languageOverride ?? LanguagePreference.Load(dataRoot ?? Vault.DefaultRoot));
         WaitForProvisioningParent(args);
         string? startupPreparationError = null;
         if (!args.Contains("--loopback-only"))
@@ -28,8 +31,6 @@ public static class Program
             }
             catch (Exception ex) { startupPreparationError = ex.Message; }
         }
-        int rootIndex = Array.IndexOf(args, "--data-root");
-        string? dataRoot = rootIndex >= 0 && rootIndex + 1 < args.Length ? args[rootIndex + 1] : null;
         bool loopbackOnly = args.Contains("--loopback-only");
         using var instance = SingleInstance.ForCurrentSession(loopbackOnly, dataRoot);
         if (!instance.TryAcquire())
@@ -40,7 +41,7 @@ public static class Program
         }
         Native.FreeConsole(); ApplicationConfiguration.Initialize();
         bool controllerOnly = args.Contains("--controller");
-        var form = new MainForm(!controllerOnly, dataRoot, loopbackOnly, startupPreparationError);
+        var form = new MainForm(!controllerOnly, dataRoot, loopbackOnly, startupPreparationError, languageOverride);
         form.Shown += (_, _) => instance.StartListening(form.ActivateExistingWindow);
         SupportPlatform.ManagedRelaunchRequested += () =>
         {

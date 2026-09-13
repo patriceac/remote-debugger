@@ -12,7 +12,7 @@ public static partial class UiText
         "RemoteDebugger.Core.Localization.Strings", typeof(UiText).Assembly);
 
     public static string Get(string key, CultureInfo? culture = null) =>
-        Resources.GetString(key, UiCulture.Resolve(culture ?? CultureInfo.CurrentUICulture))
+        Resources.GetString(key, UiCulture.Resolve(culture ?? UiCulture.ApplicationLanguage ?? CultureInfo.CurrentUICulture))
         ?? throw new MissingManifestResourceException($"Missing UI resource: {key}");
 
     // Keep the user's regional number/date formats, independently of UI language.

@@ -13,6 +13,8 @@
     "minimumDistinctFrames": 3
   },
   "uiAutomationIds": {
+    "languageSelector": "languageSelector",
+    "languageLabel": "languageLabel",
     "headerTitle": "headerTitle",
     "copyAgentCode": "copyAgentCode",
     "streamOverlay": "streamOverlay",

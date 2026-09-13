@@ -525,7 +525,7 @@ internal sealed partial class LabForm
         while (deadline.Elapsed < TimeSpan.FromSeconds(45))
         {
             poll++;
-            string expectedRole = role is "localization" or "singleinstance"
+            string expectedRole = role is "localization" or "singleinstance" or "languageselection"
                 ? product == loopbackAgent ? UiText.TrayAssistedPc : UiText.TrayController
                 : product == loopbackAgent ? "PC assisté" : "Contrôleur";
             AutomationElement[] icons = FindSystemTrayIcons().Where(icon =>
@@ -539,6 +539,7 @@ internal sealed partial class LabForm
                 poll,
                 elapsedMs = deadline.ElapsedMilliseconds,
                 overflowOpened,
+                expectedRole,
                 candidateCount = icons.Length,
                 candidates = icons.Take(24).Select(DescribeTrayElement).ToArray()
             });
@@ -650,7 +651,7 @@ internal sealed partial class LabForm
         // The tray icon can remain visible only in the shell overflow window
         // after the controller hides. Retain the desktop image beside the
         // bounded UIA inventory so a selector miss is reviewable.
-        CaptureDesktop("loopback-tray-lookup.png");
+        CaptureDesktop("loopback-tray-lookup.png", focusProduct: false);
     }
 
     private AutomationElement? FindLoopbackTrayMenuItem(string name)

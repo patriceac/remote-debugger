@@ -4,6 +4,10 @@ namespace RemoteDebugger.Core;
 
 public static class UiCulture
 {
+    public static CultureInfo SystemLanguage { get; private set; } = CultureInfo.CurrentUICulture;
+    // Async operations may have captured the previous thread UI culture. Resource
+    // lookups use this shared choice so their later results follow live changes.
+    public static CultureInfo? ApplicationLanguage { get; set; }
     public static CultureInfo Resolve(CultureInfo? systemLanguage) =>
         CultureInfo.GetCultureInfo(systemLanguage?.TwoLetterISOLanguageName switch
         {
@@ -23,7 +27,15 @@ public static class UiCulture
     {
         // At GUI startup, .NET exposes the Windows user's preferred UI language.
         // Initialize before constructing controls, including their field initializers.
-        var language = Select(CultureInfo.CurrentUICulture, languageOverride);
+        SystemLanguage = CultureInfo.CurrentUICulture;
+        var language = Select(SystemLanguage, languageOverride);
+        Apply(language);
+    }
+
+    public static void Apply(CultureInfo language)
+    {
+        language = Resolve(language);
+        ApplicationLanguage = language;
         CultureInfo.DefaultThreadCurrentUICulture = language;
         CultureInfo.CurrentUICulture = language;
     }

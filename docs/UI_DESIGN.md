@@ -68,6 +68,8 @@ Mixed-control rows center labels, fields and buttons vertically using content-si
 
 ## Accessibility and interaction
 
+The shared sidebar includes a compact Language selector above the local PC/version metadata. Options are System default, English, Français and Español; language names remain in their native spelling. Apply and save changes immediately without restarting, disconnecting, changing the selected tab or resetting editors/table state. The selector remains available during support. Localize its caption and System default option, and preserve stable Automation IDs `languageSelector` and `languageLabel`.
+
 Preserve or deliberately document UI Automation names/ids for acceptance. New stable ids: pairCode, pair, peers, host, connectionStatus, agentPairCode, pairingCountdown, agentState, terminateSession, processList, remoteFiles, remoteScreen, streamStatus, refreshResources, browseFiles. Expose text values via native controls; do not paint all content into one inaccessible bitmap.
 
 Use a short opacity/state transition only where native controls support it without complexity; no ornamental animation. Countdown bar updates smoothly enough to read, busy operations show a modest progress indicator. Honor Windows high-contrast/reduced-motion preferences. Keyboard tab order follows visual order. Validate no clipped headings/buttons/rows at minimum size and 200 percent DPI.

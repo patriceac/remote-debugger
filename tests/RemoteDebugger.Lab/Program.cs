@@ -91,6 +91,7 @@ internal sealed partial class LabForm : Forms.Form
                 if (!IsLoopback)
                     await PrepareBrokerProvisioningAsync();
                 if (role == "localization") await LocalizationReviewAsync();
+                else if (role == "languageselection") await LanguageSelectionReviewAsync();
                 else if (role == "singleinstance") await SingleInstanceReviewAsync();
                 else if (role is "loopback" or "loopback-smoke") await LoopbackSmokeAsync();
                 else if (role is "loopbacktray" or "loopback-tray" or "loopbackui") await LoopbackTrayAsync();
@@ -373,8 +374,8 @@ internal sealed partial class LabForm : Forms.Form
     private static bool IsLiveTelemetry(string text)
     {
         string value = text.ToLowerInvariant();
-        return Regex.IsMatch(value, @"(?<!\d)\d+(?:[.,]\d+)?\s*i/s", RegexOptions.CultureInvariant)
-            && value.Contains("capture", StringComparison.Ordinal);
+        return Regex.IsMatch(value, @"(?<!\d)\d+(?:[.,]\d+)?\s*(?:i/s|fps)", RegexOptions.CultureInvariant)
+            && (value.Contains("capture", StringComparison.Ordinal) || value.Contains("captura", StringComparison.Ordinal));
     }
 
     private static bool IsPairingAttempt(string text)

@@ -3,6 +3,9 @@ namespace RemoteDebugger.Core;
 
 public static partial class UiText
 {
+    public static string Language => Get(nameof(Language));
+    public static string SystemDefault => Get(nameof(SystemDefault));
+    public static string LanguageSaveFailed => Get(nameof(LanguageSaveFailed));
     public static string Application => Get(nameof(Application));
     public static string Action => Get(nameof(Action));
     public static string ActionAlreadyRunning => Get(nameof(ActionAlreadyRunning));

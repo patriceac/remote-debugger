@@ -40,26 +40,26 @@ public sealed partial class MainForm : Forms.Form
     private readonly Forms.Panel statusPill = new() { Name = "connectionStatus", Height = 32, Width = 184 };
     private readonly Forms.Label statusDot = new() { AutoSize = true, Text = "●", Font = new Font("Segoe UI", 9), Margin = new Forms.Padding(10, 7, 4, 0) };
     private readonly Forms.Label statusLabel = new() { AutoSize = true, Font = new Font("Segoe UI", 9.5F), Margin = new Forms.Padding(0, 7, 8, 0) };
-    private readonly Forms.Button terminateSession = Button(UiText.EndSupport, "terminateSession", destructive: true);
+    private readonly Forms.Button terminateSession = Button(() => UiText.EndSupport, "terminateSession", destructive: true);
     private readonly Forms.Label footerLeft = new() { Name = "footerStatus", Dock = Forms.DockStyle.Fill, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F) };
     private readonly Forms.Label footerRight = new() { Name = "footerDetail", Dock = Forms.DockStyle.Fill, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleRight, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F) };
 
-    private readonly Forms.Button roleAgent = RailButton(UiText.GiveControl, "roleAgent");
-    private readonly Forms.Button roleController = RailButton(UiText.TakeControl, "roleController");
-    private readonly Forms.Label controllerNavCaption = RailCaption(UiText.WorkspaceCaption);
-    private readonly Forms.Button navConnection = RailSubButton(UiText.Connection, "navConnection");
-    private readonly Forms.Button navScreen = RailSubButton(UiText.RemoteScreen, "navScreen");
-    private readonly Forms.Button navProcesses = RailSubButton(UiText.Processes, "navProcesses");
-    private readonly Forms.Button navFiles = RailSubButton(UiText.Files, "navFiles");
-    private readonly Forms.Button navDiagnostics = RailSubButton(UiText.Diagnostics, "navDiagnostics");
+    private readonly Forms.Button roleAgent = RailButton(() => UiText.GiveControl, "roleAgent");
+    private readonly Forms.Button roleController = RailButton(() => UiText.TakeControl, "roleController");
+    private readonly Forms.Label controllerNavCaption = RailCaption(() => UiText.WorkspaceCaption);
+    private readonly Forms.Button navConnection = RailSubButton(() => UiText.Connection, "navConnection");
+    private readonly Forms.Button navScreen = RailSubButton(() => UiText.RemoteScreen, "navScreen");
+    private readonly Forms.Button navProcesses = RailSubButton(() => UiText.Processes, "navProcesses");
+    private readonly Forms.Button navFiles = RailSubButton(() => UiText.Files, "navFiles");
+    private readonly Forms.Button navDiagnostics = RailSubButton(() => UiText.Diagnostics, "navDiagnostics");
 
     // Agent screen.
-    private readonly Forms.Label agentEyebrow = Eyebrow(UiText.PairingCodeCaption);
-    private readonly Forms.Label agentHeading = new WorkspaceLabel() { Name = "agentHeading", Text = UiText.ShareCode, AutoSize = true, Dock = Forms.DockStyle.Fill, Font = new Font("Segoe UI", 32, FontStyle.Bold), ForeColor = PrimaryText };
-    private readonly Forms.Label agentSubtitle = new WorkspaceLabel() { Name = "agentSubtitle", Text = UiText.EnterCodeOnController, AutoSize = true, Dock = Forms.DockStyle.Fill, Font = new Font("Segoe UI", 13), ForeColor = SecondaryText };
+    private readonly Forms.Label agentEyebrow = Eyebrow(() => UiText.PairingCodeCaption);
+    private readonly Forms.Label agentHeading = new WorkspaceLabel() { Name = "agentHeading", AutoSize = true, Dock = Forms.DockStyle.Fill, Font = new Font("Segoe UI", 32, FontStyle.Bold), ForeColor = PrimaryText }.WithText(() => UiText.ShareCode);
+    private readonly Forms.Label agentSubtitle = new WorkspaceLabel() { Name = "agentSubtitle", AutoSize = true, Dock = Forms.DockStyle.Fill, Font = new Font("Segoe UI", 13), ForeColor = SecondaryText }.WithText(() => UiText.EnterCodeOnController);
     private readonly Forms.Label agentPairCode = new WorkspaceLabel() { Name = "agentPairCode", AutoSize = true, Text = "— — —", Font = new Font("Consolas", 42, FontStyle.Bold), ForeColor = PrimaryText };
-    private readonly Forms.Button copyAgentCode = Button(UiText.Copy, "copyAgentCode", 86);
-    private readonly Forms.Button restartAgent = Button(UiText.NewSupport, "restartAgent", primary: true);
+    private readonly Forms.Button copyAgentCode = Button(() => UiText.Copy, "copyAgentCode", 86);
+    private readonly Forms.Button restartAgent = Button(() => UiText.NewSupport, "restartAgent", primary: true);
     private bool agentIdle;
     private readonly SessionExitCountdown sessionExit = new();
     private readonly Forms.ProgressBar pairingCountdown = new() { Name = "pairingCountdown", Minimum = 0, Maximum = 300, Value = 0, Height = 4, Style = Forms.ProgressBarStyle.Continuous };
@@ -71,7 +71,7 @@ public sealed partial class MainForm : Forms.Form
     private readonly Forms.Label agentSessionNote = new WorkspaceLabel() { Name = "agentSessionNote", AutoSize = true, ForeColor = SecondaryText, MaximumSize = new Size(620, 0) };
     private readonly Forms.Panel setupNotice = new() { Name = "agentSetupNotice", AutoSize = true, Visible = false, Padding = new Forms.Padding(12), BackColor = WarningBack };
     private readonly Forms.Label setupNoticeText = new() { AutoSize = true, ForeColor = WarningText, MaximumSize = new Size(440, 0) };
-    private readonly Forms.Button preparePlatform = Button(UiText.EnableOnThisPc, "preparePlatform", 148);
+    private readonly Forms.Button preparePlatform = Button(() => UiText.EnableOnThisPc, "preparePlatform", 148);
     private readonly Forms.Label agentFingerprint = new() { Name = "agentFingerprint", AutoSize = true, ForeColor = SecondaryText, MaximumSize = new Size(720, 0) };
     private readonly Forms.Label agentLog = new() { Name = "agentLog", AutoSize = true, ForeColor = SecondaryText, MaximumSize = new Size(720, 0) };
 
@@ -79,16 +79,16 @@ public sealed partial class MainForm : Forms.Form
     private readonly RememberedListView peers = new() { Name = "peers", Dock = Forms.DockStyle.Fill, View = Forms.View.Details, FullRowSelect = true, HideSelection = false, MultiSelect = false, BorderStyle = Forms.BorderStyle.None, BackColor = Surface };
     private readonly Forms.TextBox host = TextBox("host");
     private readonly Forms.TextBox code = TextBox("pairCode");
-    private readonly Forms.Button pairButton = Button(UiText.Connect, "pair", 110, primary: true);
-    private readonly Forms.Button discoverButton = Button(UiText.Refresh, "discover", 92);
+    private readonly Forms.Button pairButton = Button(() => UiText.Connect, "pair", 110, primary: true);
+    private readonly Forms.Button discoverButton = Button(() => UiText.Refresh, "discover", 92);
     private readonly Forms.Label connectionState = new() { Name = "connectionFormState", AutoSize = true, ForeColor = SecondaryText, MaximumSize = new Size(460, 0) };
     private readonly Forms.TableLayoutPanel updateProgressArea = new() { Dock = Forms.DockStyle.Top, Height = 50, ColumnCount = 1, RowCount = 2, Margin = Forms.Padding.Empty, Visible = false };
     private readonly Forms.Panel updateProgressTrack = new() { Name = "updateProgress", Dock = Forms.DockStyle.Fill, BackColor = Divider, Margin = new Forms.Padding(0, 0, 0, 4) };
     private readonly Forms.Panel updateProgressFill = new() { Dock = Forms.DockStyle.Left, BackColor = Teal, Width = 0 };
     private readonly Forms.Label updateProgressText = new() { Name = "updateProgressText", Dock = Forms.DockStyle.Fill, AutoSize = false, ForeColor = SecondaryText, Margin = Forms.Padding.Empty };
     private int updateTransferPercent;
-    private readonly Forms.Label selectedPeerName = new WorkspaceLabel { Text = UiText.ManualConnection, AutoSize = true, Font = new Font("Segoe UI", 15, FontStyle.Bold), ForeColor = PrimaryText };
-    private readonly Forms.Label selectedPeerAddress = new WorkspaceLabel { Text = UiText.TargetAddress, AutoSize = true, ForeColor = SecondaryText };
+    private readonly Forms.Label selectedPeerName = new WorkspaceLabel { AutoSize = true, Font = new Font("Segoe UI", 15, FontStyle.Bold), ForeColor = PrimaryText }.WithText(() => UiText.ManualConnection);
+    private readonly Forms.Label selectedPeerAddress = new WorkspaceLabel { AutoSize = true, ForeColor = SecondaryText }.WithText(() => UiText.TargetAddress);
     private readonly Forms.Label discoveryState = new() { AutoSize = true, ForeColor = SecondaryText };
     private readonly List<Peer> discoveredPeers = [];
     private Peer? selectedPeer;
@@ -98,17 +98,17 @@ public sealed partial class MainForm : Forms.Form
     // Live screen.
     private readonly RemoteScreenView screen = new() { Name = "remoteScreen", Dock = Forms.DockStyle.Fill, SizeMode = Forms.PictureBoxSizeMode.Zoom, BackColor = Rail };
     private readonly Forms.Panel screenSurface = new() { Dock = Forms.DockStyle.Fill, BackColor = Rail, Padding = new Forms.Padding(0) };
-    private readonly Forms.Label liveBadge = Badge(UiText.Live, "liveBadge");
-    private readonly Forms.Label streamOverlay = new() { Name = "streamOverlay", AutoSize = true, ForeColor = Color.White, BackColor = Color.FromArgb(190, 20, 38, 48), Padding = new Forms.Padding(10, 7, 10, 7), Text = UiText.WaitingFreshFrameEllipsis, Visible = true };
-    private readonly Forms.Button pauseViewing = Button(UiText.Pause, "pauseViewing", 82);
-    private readonly Forms.ComboBox monitor = new() { Name = "monitor", DropDownStyle = Forms.ComboBoxStyle.DropDownList, Width = 130 };
-    private readonly Forms.CheckBox mouseEnabled = new() { Name = "mouseKeyboard", Text = UiText.MouseKeyboardControl, Checked = true, AutoSize = true, ForeColor = PrimaryText, Margin = new Forms.Padding(12, 10, 0, 0) };
+    private readonly Forms.Label liveBadge = Badge(() => UiText.Live, "liveBadge");
+    private readonly Forms.Label streamOverlay = new Forms.Label { Name = "streamOverlay", AutoSize = true, ForeColor = Color.White, BackColor = Color.FromArgb(190, 20, 38, 48), Padding = new Forms.Padding(10, 7, 10, 7), Visible = true }.WithText(() => UiText.WaitingFreshFrameEllipsis);
+    private readonly Forms.Button pauseViewing = Button(() => UiText.Pause, "pauseViewing", 82);
+    private readonly LocalizedComboBox monitor = new() { Name = "monitor", DropDownStyle = Forms.ComboBoxStyle.DropDownList, Width = 130 };
+    private readonly Forms.CheckBox mouseEnabled = new Forms.CheckBox { Name = "mouseKeyboard", Checked = true, AutoSize = true, ForeColor = PrimaryText, Margin = new Forms.Padding(12, 10, 0, 0) }.WithText(() => UiText.MouseKeyboardControl);
     private readonly Forms.Label streamStatus = new() { Name = "streamStatus", AutoSize = true, ForeColor = SecondaryText };
     private readonly Forms.Label inputStatus = new() { Name = "inputStatus", AutoSize = false, Dock = Forms.DockStyle.Fill, ForeColor = SecondaryText, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleRight };
     private readonly RemoteInputState inputState = new();
     private readonly Forms.TextBox remoteText = TextBox("remoteText");
-    private readonly Forms.Button typeText = Button(UiText.TypeText, "typeText", 76);
-    private readonly Forms.Button enterKey = Button(UiText.EnterKey, "enterKey", 76);
+    private readonly Forms.Button typeText = Button(() => UiText.TypeText, "typeText", 76);
+    private readonly Forms.Button enterKey = Button(() => UiText.EnterKey, "enterKey", 76);
     private DesktopGeometry? geometry;
     private bool liveFrameFresh;
     private DateTimeOffset? lastFrameUtc;
@@ -178,8 +178,6 @@ public sealed partial class MainForm : Forms.Form
     private int sessionGeneration;
     private string? operationId;
     private DateTimeOffset? lastMeasurementUtc;
-    private string footerMessage = UiText.ReadyForConnection;
-    private string footerDetail = UiText.CloseToTray;
 
     public string? CurrentPairingCode { get; private set; }
     public AgentServer? Agent => agent;
@@ -188,7 +186,7 @@ public sealed partial class MainForm : Forms.Form
 
     private readonly string? startupPreparationError;
 
-    public MainForm(bool startAgent = true, string? dataRoot = null, bool loopbackOnly = false, string? startupPreparationError = null)
+    public MainForm(bool startAgent = true, string? dataRoot = null, bool loopbackOnly = false, string? startupPreparationError = null, string? languageOverride = null)
     {
         // Build the entire 96-DPI layout before WinForms applies startup DPI.
         // Otherwise early layout can consume the scale factor while later
@@ -211,7 +209,7 @@ public sealed partial class MainForm : Forms.Form
         AutoScaleMode = Forms.AutoScaleMode.Dpi;
         AutoScaleDimensions = new SizeF(96, 96);
 
-        BuildShell();
+        BuildShell(languageOverride);
         BuildAgentPage();
         BuildControllerPages();
         BuildTray();
@@ -229,7 +227,7 @@ public sealed partial class MainForm : Forms.Form
         ResumeLayout(true);
     }
 
-    private void BuildShell()
+    private void BuildShell(string? languageOverride)
     {
         shell.Padding = Forms.Padding.Empty;
         shell.BackColor = Canvas;
@@ -245,18 +243,19 @@ public sealed partial class MainForm : Forms.Form
         shell.Controls.Add(footer, 1, 2);
         Controls.Add(shell);
 
-        BuildRail();
+        BuildRail(languageOverride);
         BuildHeader();
         BuildFooter();
     }
 
-    private void BuildRail()
+    private void BuildRail(string? languageOverride)
     {
-        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Forms.Padding(12, 16, 12, 8), BackColor = Rail };
+        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Forms.Padding(12, 16, 12, 8), BackColor = Rail };
         layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 76));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 112));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 72));
 
         var roles = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false, Margin = Forms.Padding.Empty, Padding = new Forms.Padding(0), BackColor = Rail };
@@ -273,7 +272,8 @@ public sealed partial class MainForm : Forms.Form
         var local = new Forms.Panel { Dock = Forms.DockStyle.Fill };
         var machine = new Forms.Label { Text = Environment.MachineName, AutoSize = false, Width = 180, Height = 20, ForeColor = RailSecondary, Font = new Font("Segoe UI", 9.5F), Location = new Point(12, 8), AutoEllipsis = true };
         var version = new Forms.Label { Text = "Remote Debugger · " + (typeof(MainForm).Assembly.GetName().Version?.ToString(3) ?? "0.2"), AutoSize = false, Width = 180, Height = 20, ForeColor = Color.FromArgb(116, 143, 154), Font = new Font("Segoe UI", 8.5F), Location = new Point(12, 32), AutoEllipsis = true };
-        local.Controls.Add(machine); local.Controls.Add(version); layout.Controls.Add(local, 0, 3);
+        layout.Controls.Add(BuildLanguageSelector(languageOverride), 0, 3);
+        local.Controls.Add(machine); local.Controls.Add(version); layout.Controls.Add(local, 0, 4);
         rail.Controls.Add(layout);
     }
 
@@ -307,7 +307,7 @@ public sealed partial class MainForm : Forms.Form
 
     private void BuildAgentPage()
     {
-        var page = new PagePanel(UiText.GiveControl) { BackColor = Canvas, Padding = new Forms.Padding(0) };
+        var page = new PagePanel(() => UiText.GiveControl) { BackColor = Canvas, Padding = new Forms.Padding(0) };
         var content = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 1, Padding = new Forms.Padding(28, 36, 28, 20), Margin = Forms.Padding.Empty };
         content.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
         content.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
@@ -350,7 +350,7 @@ public sealed partial class MainForm : Forms.Form
         var states = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, Height = 90, ColumnCount = 3, RowCount = 3, Margin = Forms.Padding.Empty };
         states.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Absolute, 22)); states.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 65)); states.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 35));
         for (int row = 0; row < 3; row++) states.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 33.333F));
-        AddAgentStateRow(states, 0, UiText.PrivateNetwork, agentNetworkState); AddAgentStateRow(states, 1, UiText.Sleep, agentSleepState); AddAgentStateRow(states, 2, UiText.AdminMaintenance, agentMaintenanceState); layout.Controls.Add(states, 0, 7);
+        AddAgentStateRow(states, 0, () => UiText.PrivateNetwork, agentNetworkState); AddAgentStateRow(states, 1, () => UiText.Sleep, agentSleepState); AddAgentStateRow(states, 2, () => UiText.AdminMaintenance, agentMaintenanceState); layout.Controls.Add(states, 0, 7);
 
         setupNotice.AutoSize = false; setupNotice.Dock = Forms.DockStyle.Fill; setupNotice.Width = 760; setupNotice.Height = 66; setupNotice.Padding = new Forms.Padding(8); setupNotice.Controls.Clear();
         var noticeLayout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Forms.Padding.Empty, Padding = Forms.Padding.Empty };
@@ -365,17 +365,17 @@ public sealed partial class MainForm : Forms.Form
         return panel;
     }
 
-    private static void AddAgentStateRow(Forms.TableLayoutPanel table, int row, string label, Forms.Label value)
+    private static void AddAgentStateRow(Forms.TableLayoutPanel table, int row, Func<string> label, Forms.Label value)
     {
         var dot = new Forms.Label { AutoSize = true, Text = "●", ForeColor = SecondaryText, Margin = new Forms.Padding(0, 3, 0, 0) };
-        var name = new Forms.Label { AutoSize = true, Text = label, ForeColor = SecondaryText, Margin = new Forms.Padding(0, 3, 0, 0) };
+        var name = new Forms.Label { AutoSize = true, ForeColor = SecondaryText, Margin = new Forms.Padding(0, 3, 0, 0) }.WithText(label);
         value.Margin = new Forms.Padding(0, 3, 0, 0); value.Anchor = Forms.AnchorStyles.Left;
         table.Controls.Add(dot, 0, row); table.Controls.Add(name, 1, row); table.Controls.Add(value, 2, row);
     }
 
     private void BuildControllerPages()
     {
-        var page = new PagePanel(UiText.TakeControl) { BackColor = Canvas };
+        var page = new PagePanel(() => UiText.TakeControl) { BackColor = Canvas };
         page.Controls.Add(controllerPages);
         controllerPages.TabPages.Add(BuildConnectionPage());
         controllerPages.TabPages.Add(BuildScreenPage());
@@ -387,7 +387,7 @@ public sealed partial class MainForm : Forms.Form
 
     private PagePanel BuildConnectionPage()
     {
-        var page = new PagePanel(UiText.Connection) { BackColor = Canvas, Padding = new Forms.Padding(28) };
+        var page = new PagePanel(() => UiText.Connection) { BackColor = Canvas, Padding = new Forms.Padding(28) };
         var columns = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
         columns.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 45)); columns.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Absolute, 1)); columns.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 55));
         columns.Controls.Add(BuildPeerList(), 0, 0); columns.Controls.Add(new Forms.Panel { Dock = Forms.DockStyle.Fill, BackColor = Divider }, 1, 0); columns.Controls.Add(BuildConnectionForm(), 2, 0);
@@ -398,9 +398,9 @@ public sealed partial class MainForm : Forms.Form
     {
         var panel = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Forms.Padding(0, 0, 24, 0) };
         panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 32)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 42)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 28)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
-        panel.Controls.Add(new WorkspaceLabel { Text = UiText.AvailablePcs, AutoSize = true, Font = new Font("Segoe UI", 15, FontStyle.Bold), ForeColor = PrimaryText, Anchor = Forms.AnchorStyles.Left }, 0, 0);
+        panel.Controls.Add(new WorkspaceLabel { AutoSize = true, Font = new Font("Segoe UI", 15, FontStyle.Bold), ForeColor = PrimaryText, Anchor = Forms.AnchorStyles.Left }.WithText(() => UiText.AvailablePcs), 0, 0);
         discoverButton.Anchor = Forms.AnchorStyles.Left; panel.Controls.Add(discoverButton, 0, 1); panel.Controls.Add(discoveryState, 0, 2);
-        peers.Columns.Add(UiText.Name, 110); peers.Columns.Add(UiText.Address, 125); peers.Columns.Add(UiText.State, 70);
+        peers.Columns.Add("", 110).WithText(() => UiText.Name); peers.Columns.Add("", 125).WithText(() => UiText.Address); peers.Columns.Add("", 70).WithText(() => UiText.State);
         peers.RememberLayout(root, "name", "address", "state"); panel.Controls.Add(peers, 0, 3);
         return panel;
     }
@@ -416,9 +416,9 @@ public sealed partial class MainForm : Forms.Form
         panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 34)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 30));
         for (int i = 2; i < 6; i++) panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 60)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
-        panel.Controls.Add(selectedPeerName, 0, 0); panel.Controls.Add(selectedPeerAddress, 0, 1); panel.Controls.Add(new WorkspaceLabel { Text = UiText.IpOrManual, AutoSize = true, ForeColor = SecondaryText, Margin = Forms.Padding.Empty, Dock = Forms.DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 2);
+        panel.Controls.Add(selectedPeerName, 0, 0); panel.Controls.Add(selectedPeerAddress, 0, 1); panel.Controls.Add(new WorkspaceLabel { AutoSize = true, ForeColor = SecondaryText, Margin = Forms.Padding.Empty, Dock = Forms.DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }.WithText(() => UiText.IpOrManual), 0, 2);
         host.Dock = Forms.DockStyle.Top; host.Margin = new Forms.Padding(0, 4, 0, 18); panel.Controls.Add(host, 0, 3);
-        panel.Controls.Add(new WorkspaceLabel { Text = UiText.SixDigitCode, AutoSize = true, ForeColor = SecondaryText, Margin = Forms.Padding.Empty, Dock = Forms.DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 4);
+        panel.Controls.Add(new WorkspaceLabel { AutoSize = true, ForeColor = SecondaryText, Margin = Forms.Padding.Empty, Dock = Forms.DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }.WithText(() => UiText.SixDigitCode), 0, 4);
         code.Width = 150; code.Font = new Font("Consolas", 20); code.MaxLength = 6; code.TextAlign = Forms.HorizontalAlignment.Center;
         var codeRow = ControlRow(code, pairButton); codeRow.Margin = new Forms.Padding(0, 4, 0, 0); panel.Controls.Add(codeRow, 0, 5);
         connectionState.Margin = new Forms.Padding(0, 7, 0, 0); panel.Controls.Add(connectionState, 0, 6);
@@ -446,15 +446,15 @@ public sealed partial class MainForm : Forms.Form
         updateProgressFill.Width = updateProgressTrack.ClientSize.Width * updateTransferPercent / 100;
         updateProgressFill.BackColor = Teal;
         updateProgressText.ForeColor = SecondaryText;
-        updateProgressText.Text = UpdateProgressDescription(progress);
+        updateProgressText.SetText(() => UpdateProgressDescription(progress));
         updateProgressTrack.AccessibleName = updateProgressText.Text;
     }
 
     private PagePanel BuildScreenPage()
     {
-        var page = new PagePanel(UiText.RemoteScreen) { BackColor = Canvas, Padding = new Forms.Padding(20, 8, 20, 12) };
-        monitor.Items.Add(new MonitorChoice(0, UiText.PrimaryMonitor)); monitor.SelectedIndex = 0;
-        var top = ControlRow(RowLabel(UiText.Monitor, "monitorLabel"), monitor, mouseEnabled, new Forms.Panel { Size = new Size(1, 1) }, pauseViewing);
+        var page = new PagePanel(() => UiText.RemoteScreen) { BackColor = Canvas, Padding = new Forms.Padding(20, 8, 20, 12) };
+        monitor.Items.Add(new MonitorChoice(0, () => UiText.PrimaryMonitor)); monitor.SelectedIndex = 0;
+        var top = ControlRow(RowLabel(() => UiText.Monitor, "monitorLabel"), monitor, mouseEnabled, new Forms.Panel { Size = new Size(1, 1) }, pauseViewing);
         top.Dock = Forms.DockStyle.Top; top.Padding = new Forms.Padding(0, 0, 0, 8);
         top.ColumnStyles[3] = new Forms.ColumnStyle(Forms.SizeType.Percent, 100);
         screenSurface.Controls.Add(screen); screenSurface.Controls.Add(liveBadge); screenSurface.Controls.Add(streamOverlay); liveBadge.BringToFront(); streamOverlay.BringToFront(); liveBadge.Location = new Point(16, 14); streamOverlay.Anchor = Forms.AnchorStyles.None; screenSurface.Resize += (_, _) => streamOverlay.Location = new Point(Math.Max(0, (screenSurface.Width - streamOverlay.Width) / 2), Math.Max(0, (screenSurface.Height - streamOverlay.Height) / 2));
@@ -479,14 +479,14 @@ public sealed partial class MainForm : Forms.Form
 
     private PagePanel BuildProcessPage()
     {
-        var page = new PagePanel(UiText.Processes) { BackColor = Canvas, Padding = new Forms.Padding(28) };
-        refreshResourcesButton = Button(UiText.Refresh, "refreshResources", 100, primary: true);
+        var page = new PagePanel(() => UiText.Processes) { BackColor = Canvas, Padding = new Forms.Padding(28) };
+        refreshResourcesButton = Button(() => UiText.Refresh, "refreshResources", 100, primary: true);
         var action = ControlRow(refreshResourcesButton, resourceState);
         var summary = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Top, AutoSize = true, ColumnCount = 4, RowCount = 1, Margin = Forms.Padding.Empty, Padding = new Forms.Padding(0, 16, 0, 10) };
         summary.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         for (int i = 0; i < 4; i++) summary.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 25));
-        AddSummary(summary, 0, "CPU", cpuSummary); AddSummary(summary, 1, "RAM", ramSummary); AddSummary(summary, 2, UiText.Processes, processSummary); AddSummary(summary, 3, UiText.MeasuredAt, resourceMeasuredAt);
-        processList.Columns.Add("PID", 80, Forms.HorizontalAlignment.Right); processList.Columns.Add(UiText.Application, 240); processList.Columns.Add("CPU %", 100, Forms.HorizontalAlignment.Right); processList.Columns.Add(UiText.RamMib, 110, Forms.HorizontalAlignment.Right); processList.Columns.Add(UiText.Responding, 100); processList.Columns.Add(UiText.Window, 300);
+        AddSummary(summary, 0, () => "CPU", cpuSummary); AddSummary(summary, 1, () => "RAM", ramSummary); AddSummary(summary, 2, () => UiText.Processes, processSummary); AddSummary(summary, 3, () => UiText.MeasuredAt, resourceMeasuredAt);
+        processList.Columns.Add("PID", 80, Forms.HorizontalAlignment.Right); processList.Columns.Add("", 240).WithText(() => UiText.Application); processList.Columns.Add("CPU %", 100, Forms.HorizontalAlignment.Right); processList.Columns.Add("", 110, Forms.HorizontalAlignment.Right).WithText(() => UiText.RamMib); processList.Columns.Add("", 100).WithText(() => UiText.Responding); processList.Columns.Add("", 300).WithText(() => UiText.Window);
         processList.RememberLayout(root, "pid", "name", "cpu", "ram", "responding", "window");
         var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 4, Margin = Forms.Padding.Empty };
         layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
@@ -497,20 +497,20 @@ public sealed partial class MainForm : Forms.Form
 
     private PagePanel BuildFilePage()
     {
-        var page = new PagePanel(UiText.Files) { BackColor = Canvas, Padding = new Forms.Padding(28) };
+        var page = new PagePanel(() => UiText.Files) { BackColor = Canvas, Padding = new Forms.Padding(28) };
         fileDirectory.ReadOnly = false; fileDirectory.PlaceholderText = UiText.Workspace;
-        uploadButton = Button(UiText.UploadFile, "upload", 150); var parent = parentFolderButton = Button(UiText.ParentFolder, "parentFolder", 78); var refresh = browseFilesButton = Button(UiText.Refresh, "browseFiles", 92);
+        uploadButton = Button(() => UiText.UploadFile, "upload", 150); var parent = parentFolderButton = Button(() => UiText.ParentFolder, "parentFolder", 78); var refresh = browseFilesButton = Button(() => UiText.Refresh, "browseFiles", 92);
         var pathRow = ControlRow(fileDirectory, parent, refresh);
         pathRow.ColumnStyles[0] = new Forms.ColumnStyle(Forms.SizeType.Percent, 100); fileDirectory.Anchor |= Forms.AnchorStyles.Right;
         remotePath.ReadOnly = true; remotePath.PlaceholderText = UiText.SelectFileInList;
-        var selectionRow = ControlRow(RowLabel(UiText.SelectedFile, "selectionLabel"), remotePath);
+        var selectionRow = ControlRow(RowLabel(() => UiText.SelectedFile, "selectionLabel"), remotePath);
         selectionRow.ColumnStyles[1] = new Forms.ColumnStyle(Forms.SizeType.Percent, 100); remotePath.Anchor |= Forms.AnchorStyles.Right;
-        destination.Text = "deployments/";
-        uploadFolderButton = Button(UiText.UploadFolder, "uploadFolder", 160); downloadButton = Button(UiText.Download, "download", 102);
+        destination.SetText("deployments/");
+        uploadFolderButton = Button(() => UiText.UploadFolder, "uploadFolder", 160); downloadButton = Button(() => UiText.Download, "download", 102);
         var fileButtons = ControlRow(uploadButton, uploadFolderButton, downloadButton);
-        var destinationRow = ControlRow(RowLabel(UiText.UploadDestination, "destinationLabel"), destination);
+        var destinationRow = ControlRow(RowLabel(() => UiText.UploadDestination, "destinationLabel"), destination);
         destinationRow.ColumnStyles[1] = new Forms.ColumnStyle(Forms.SizeType.Percent, 100); destination.Anchor |= Forms.AnchorStyles.Right;
-        fileList.Columns.Add(UiText.Name, 330); fileList.Columns.Add(UiText.FileType, 100); fileList.Columns.Add(UiText.Size, 105, Forms.HorizontalAlignment.Right); fileList.Columns.Add(UiText.Modified, 220);
+        fileList.Columns.Add("", 330).WithText(() => UiText.Name); fileList.Columns.Add("", 100).WithText(() => UiText.FileType); fileList.Columns.Add("", 105, Forms.HorizontalAlignment.Right).WithText(() => UiText.Size); fileList.Columns.Add("", 220).WithText(() => UiText.Modified);
         fileList.RememberLayout(root, "name", "type", "size", "modified");
         var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 6, Margin = Forms.Padding.Empty };
         layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
@@ -519,15 +519,15 @@ public sealed partial class MainForm : Forms.Form
         fileState.Margin = new Forms.Padding(0, 4, 0, 12); fileState.Dock = Forms.DockStyle.Top;
         layout.Controls.Add(pathRow, 0, 0); layout.Controls.Add(selectionRow, 0, 1); layout.Controls.Add(fileButtons, 0, 2);
         layout.Controls.Add(destinationRow, 0, 3); layout.Controls.Add(fileState, 0, 4); layout.Controls.Add(fileList, 0, 5); page.Controls.Add(layout);
-        parent.Click += async (_, _) => { currentDirectory = ParentPath(currentDirectory); selectedFilePath = null; remotePath.Clear(); fileDirectory.Text = currentDirectory; await BrowseFilesAsync(); }; refresh.Click += async (_, _) => await BrowseFilesAsync(); fileDirectory.KeyDown += async (_, e) => { if (e.KeyCode == Forms.Keys.Enter) { e.SuppressKeyPress = true; currentDirectory = fileDirectory.Text.Trim(); selectedFilePath = null; remotePath.Clear(); await BrowseFilesAsync(); } };
+        parent.Click += async (_, _) => { currentDirectory = ParentPath(currentDirectory); selectedFilePath = null; remotePath.SetText(""); fileDirectory.SetText(currentDirectory); await BrowseFilesAsync(); }; refresh.Click += async (_, _) => await BrowseFilesAsync(); fileDirectory.KeyDown += async (_, e) => { if (e.KeyCode == Forms.Keys.Enter) { e.SuppressKeyPress = true; currentDirectory = fileDirectory.Text.Trim(); selectedFilePath = null; remotePath.SetText(""); await BrowseFilesAsync(); } };
         return page;
     }
 
     private PagePanel BuildDiagnosticsPage()
     {
-        var page = new PagePanel(UiText.Diagnostics) { BackColor = Canvas, Padding = new Forms.Padding(28) };
-        executeButton = Button(UiText.Execute, "execute", 92, primary: true); cancelButton = Button(UiText.Cancel, "cancel", 82);
-        var top = ControlRow(RowLabel(UiText.Action, "operationLabel"), operations, RowLabel("PID", "pidLabel"), pid, executeButton, cancelButton);
+        var page = new PagePanel(() => UiText.Diagnostics) { BackColor = Canvas, Padding = new Forms.Padding(28) };
+        executeButton = Button(() => UiText.Execute, "execute", 92, primary: true); cancelButton = Button(() => UiText.Cancel, "cancel", 82);
+        var top = ControlRow(RowLabel(() => UiText.Action, "operationLabel"), operations, RowLabel("PID", "pidLabel"), pid, executeButton, cancelButton);
         technicalIdentity.AutoSize = false; technicalIdentity.Dock = Forms.DockStyle.Fill; technicalIdentity.AutoEllipsis = true; technicalIdentity.TextAlign = ContentAlignment.MiddleLeft;
         diagnosticState.AutoSize = false; diagnosticState.Dock = Forms.DockStyle.Fill; diagnosticState.AutoEllipsis = true; diagnosticState.TextAlign = ContentAlignment.MiddleLeft; diagnosticState.Margin = Forms.Padding.Empty;
         operations.Items.AddRange(Templates.Keys.Cast<object>().ToArray()); operations.SelectedIndex = 0;
@@ -537,15 +537,15 @@ public sealed partial class MainForm : Forms.Form
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 148)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 32));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 12)); layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
         layout.Controls.Add(technicalIdentity, 0, 0); layout.Controls.Add(top, 0, 1);
-        layout.Controls.Add(DiagnosticSection(UiText.JsonArguments, "argumentsLabel", arguments, UiText.AdjustArguments), 0, 2);
+        layout.Controls.Add(DiagnosticSection(() => UiText.JsonArguments, "argumentsLabel", arguments, () => UiText.AdjustArguments), 0, 2);
         layout.Controls.Add(diagnosticState, 0, 3); layout.Controls.Add(new Forms.Panel(), 0, 4);
-        layout.Controls.Add(DiagnosticSection(UiText.Result, "resultLabel", output), 0, 5); page.Controls.Add(layout); return page;
+        layout.Controls.Add(DiagnosticSection(() => UiText.Result, "resultLabel", output), 0, 5); page.Controls.Add(layout); return page;
     }
 
     private void BuildTray()
     {
         tray.Icon = Icon; tray.Text = "Remote Debugger"; tray.Visible = true;
-        var menu = new Forms.ContextMenuStrip(); menu.Items.Add(UiText.Open, null, (_, _) => RestoreFromTray()); menu.Items.Add(UiText.EndSupport, null, async (_, _) => await TerminateSupportAsync()); menu.Items.Add(new Forms.ToolStripSeparator()); menu.Items.Add(UiText.Quit, null, (_, _) => RequestQuit()); tray.ContextMenuStrip = menu; tray.DoubleClick += (_, _) => RestoreFromTray();
+        var menu = new Forms.ContextMenuStrip(); menu.Items.Add("", null, (_, _) => RestoreFromTray()).WithText(() => UiText.Open); menu.Items.Add("", null, async (_, _) => await TerminateSupportAsync()).WithText(() => UiText.EndSupport); menu.Items.Add(new Forms.ToolStripSeparator()); menu.Items.Add("", null, (_, _) => RequestQuit()).WithText(() => UiText.Quit); tray.ContextMenuStrip = menu; tray.DoubleClick += (_, _) => RestoreFromTray();
     }
 
     private void WireEvents()
@@ -554,23 +554,23 @@ public sealed partial class MainForm : Forms.Form
         roleController.Click += (_, _) => { SelectRole(1); _ = DiscoverAsync(false); };
         navConnection.Click += (_, _) => SelectControllerPage(0); navScreen.Click += (_, _) => SelectControllerPage(1); navProcesses.Click += (_, _) => SelectControllerPage(2); navFiles.Click += (_, _) => SelectControllerPage(3); navDiagnostics.Click += (_, _) => SelectControllerPage(4);
         terminateSession.Click += async (_, _) => await TerminateSupportAsync();
-        copyAgentCode.Click += (_, _) => { if (!string.IsNullOrWhiteSpace(CurrentPairingCode)) Forms.Clipboard.SetText(CurrentPairingCode); footerMessage = UiText.CodeCopied; RefreshFooter(); };
+        copyAgentCode.Click += (_, _) => { if (!string.IsNullOrWhiteSpace(CurrentPairingCode)) Forms.Clipboard.SetText(CurrentPairingCode); SetFooterMessage(() => UiText.CodeCopied); RefreshFooter(); };
         preparePlatform.Click += async (_, _) => await ProvisionPlatformAsync();
         discoverButton.Click += async (_, _) => await DiscoverAsync(true);
         peers.SelectedIndexChanged += (_, _) => SelectPeerFromList();
-        host.TextChanged += (_, _) => { if (selectedPeer?.Host != host.Text.Trim()) { selectedPeer = null; selectedFingerprint = ""; selectedPeerName.Text = UiText.EnterPc; selectedPeerAddress.Text = UiText.IdentityBoundToCode; } };
+        host.TextChanged += (_, _) => { if (selectedPeer?.Host != host.Text.Trim()) { selectedPeer = null; selectedFingerprint = ""; selectedPeerName.SetText(() => UiText.EnterPc); selectedPeerAddress.SetText(() => UiText.IdentityBoundToCode); } };
         code.KeyPress += (_, e) => { if (!char.IsControl(e.KeyChar) && !char.IsAsciiDigit(e.KeyChar)) e.Handled = true; };
         code.KeyDown += async (_, e) => { if (e.KeyCode == Forms.Keys.Enter) { e.SuppressKeyPress = true; await PairSelectedAsync(); } };
         pairButton.Click += async (_, _) => await PairSelectedAsync();
-        pauseViewing.Click += (_, _) => { if (liveStream == null) _ = StartStreamAsync(); else StopStream(UiText.ViewingPaused); };
-        monitor.SelectedIndexChanged += (_, _) => { if (liveStream != null) { StopStream(UiText.MonitorChanged); _ = StartStreamAsync(); } };
+        pauseViewing.Click += (_, _) => { if (liveStream == null) _ = StartStreamAsync(); else StopStream(() => UiText.ViewingPaused); };
+        monitor.SelectedIndexChanged += (_, _) => { if (!refreshingMonitorLabels && liveStream != null) { StopStream(() => UiText.MonitorChanged); _ = StartStreamAsync(); } };
         mouseEnabled.CheckedChanged += (_, _) => { inputState.Enabled = mouseEnabled.Checked; if (!mouseEnabled.Checked) ReleaseHeldInputForCurrentSession(); RefreshInputStatus(); };
         restartAgent.Click += (_, _) => { agent?.Dispose(); agent = null; agentIdle = false; StartAgent(); _ = PrepareAgentAsync(); };
         Deactivate += (_, _) => ReleaseHeldInputForCurrentSession();
         screen.MouseDown += (_, e) => { screen.Focus(); QueueMouse("down", e); }; screen.MouseUp += (_, e) => QueueMouse("up", e); screen.MouseMove += (_, e) => { long now = Environment.TickCount64; if (now - lastMove < 33) return; lastMove = now; QueueMouse("move", e); }; screen.MouseWheel += (_, e) => QueueMouse("wheel", e); screen.PreviewKeyDown += (_, e) => e.IsInputKey = true; screen.KeyDown += (_, e) => { if (!CanSendInput()) return; e.SuppressKeyPress = true; QueueInput(new { kind = "keyDown", virtualKey = (int)e.KeyCode }); }; screen.KeyUp += (_, e) => { if (!CanSendInput()) return; e.SuppressKeyPress = true; QueueInput(new { kind = "keyUp", virtualKey = (int)e.KeyCode }); }; screen.LostFocus += (_, _) => ReleaseHeldInputForCurrentSession();
         typeText.Click += async (_, _) => await ExecuteAsync("ui.text", new { pid = (int)pid.Value, text = remoteText.Text }); enterKey.Click += async (_, _) => await ExecuteAsync("ui.key", new { pid = (int)pid.Value, key = "ENTER" });
         processList.ColumnClick += (_, e) => { processSort = processSort.Toggle(ProcessColumn(e.Column)); RenderProcesses(); }; processList.SelectedIndexChanged += (_, _) => { if (processList.SelectedItems.Count > 0 && processList.SelectedItems[0].Tag is ProcessSortRow row) { pid.Value = row.Pid; } };
-        fileList.ColumnClick += (_, e) => { fileSort = fileSort.Toggle(FileColumn(e.Column)); RenderFiles(); }; fileList.SelectedIndexChanged += (_, _) => { selectedFilePath = fileList.SelectedItems.Count > 0 && fileList.SelectedItems[0].Tag is FileSortRow row && !row.IsDirectory ? row.Path : null; remotePath.Text = selectedFilePath ?? ""; RefreshControllerControls(); }; fileList.DoubleClick += async (_, _) => { if (fileList.SelectedItems.Count == 0 || fileList.SelectedItems[0].Tag is not FileSortRow row) return; if (row.IsDirectory) { currentDirectory = row.Path; selectedFilePath = null; remotePath.Clear(); fileDirectory.Text = currentDirectory; await BrowseFilesAsync(); } };
+        fileList.ColumnClick += (_, e) => { fileSort = fileSort.Toggle(FileColumn(e.Column)); RenderFiles(); }; fileList.SelectedIndexChanged += (_, _) => { selectedFilePath = fileList.SelectedItems.Count > 0 && fileList.SelectedItems[0].Tag is FileSortRow row && !row.IsDirectory ? row.Path : null; remotePath.SetText(selectedFilePath ?? ""); RefreshControllerControls(); }; fileList.DoubleClick += async (_, _) => { if (fileList.SelectedItems.Count == 0 || fileList.SelectedItems[0].Tag is not FileSortRow row) return; if (row.IsDirectory) { currentDirectory = row.Path; selectedFilePath = null; remotePath.SetText(""); fileDirectory.SetText(currentDirectory); await BrowseFilesAsync(); } };
         refreshResourcesButton.Click += async (_, _) => await RefreshResourcesAsync(); executeButton.Click += async (_, _) => await ExecuteSelectedAsync(); cancelButton.Click += async (_, _) => await CancelActionAsync(); uploadButton.Click += async (_, _) => await UploadFileAsync(); uploadFolderButton.Click += async (_, _) => await UploadFolderAsync(); downloadButton.Click += async (_, _) => await DownloadFileAsync();
     }
 
@@ -587,13 +587,13 @@ public sealed partial class MainForm : Forms.Form
         try
         {
             client = RemoteClient.Load();
-            host.Text = client.Connection.Host;
+            host.SetText(client.Connection.Host);
             // Reuse the address as a convenience. A new displayed code starts
             // a new PAKE exchange that authenticates the current certificate;
             // an old saved pin must not block fresh pairing after reinstall.
             selectedFingerprint = "";
-            selectedPeerName.Text = UiText.SavedConnection;
-            selectedPeerAddress.Text = client.Connection.Host;
+            selectedPeerName.SetText(() => UiText.SavedConnection);
+            selectedPeerAddress.SetText(client.Connection.Host);
         }
         catch { client = null; }
     }
@@ -644,7 +644,7 @@ public sealed partial class MainForm : Forms.Form
             agentIdle = false;
             var started = new AgentServer(root, loopbackOnly: loopbackOnly || !agentNetworkPrepared);
             agent = started;
-            started.Status += text => PostUi(() => { if (ReferenceEquals(agent, started)) { agentLog.Text = text; RefreshFooter(); } });
+            started.Status += text => PostUi(() => { if (ReferenceEquals(agent, started)) { agentLog.SetText(text); RefreshFooter(); } });
             started.TerminationRequested += reason =>
             {
                 if (suppressTerminationEvent || quitting) return;
@@ -657,13 +657,13 @@ public sealed partial class MainForm : Forms.Form
             };
             agent.Start();
             powerHold ??= PowerHold.Acquire();
-            agentFingerprint.Text = agent.Fingerprint;
-            footerDetail = UiText.CloseToTray;
+            agentFingerprint.SetText(agent.Fingerprint);
+            SetFooterDetail(() => UiText.CloseToTray);
             RefreshUiState();
         }
         catch (Exception ex)
         {
-            agent?.Dispose(); agent = null; agentState.Text = UiText.PreparationFailedPrefix + ex.Message; footerMessage = UiText.AgentUnavailable; RefreshFooter();
+            agent?.Dispose(); agent = null; agentState.SetText(() => UiText.PreparationFailedPrefix + ex.Message); SetFooterMessage(() => UiText.AgentUnavailable); RefreshFooter();
         }
     }
 
@@ -680,7 +680,7 @@ public sealed partial class MainForm : Forms.Form
         if (local == null) return true;
         suppressTerminationEvent = true;
         try { await local.TerminateAsync(CancellationToken.None); }
-        catch (Exception ex) { footerMessage = UiText.AgentStopIncomplete; footerDetail = ex.Message; RefreshFooter(); return false; }
+        catch (Exception ex) { SetFooterMessage(() => UiText.AgentStopIncomplete); footerDetail = ex.Message; RefreshFooter(); return false; }
         finally { suppressTerminationEvent = false; }
         local.Dispose();
         if (ReferenceEquals(agent, local)) agent = null;
@@ -692,7 +692,7 @@ public sealed partial class MainForm : Forms.Form
     {
         AgentServer? preparing = agent;
         if (preparing == null) return;
-        if (loopbackOnly) { agentNetworkState.Text = UiText.LocalOnly; return; }
+        if (loopbackOnly) { agentNetworkState.SetText(() => UiText.LocalOnly); return; }
         try
         {
             SupportPlatformStatus status = await SupportPlatform.PrepareAsync(requireFirewall: true);
@@ -706,34 +706,34 @@ public sealed partial class MainForm : Forms.Form
             }
             ApplyPlatformStatus(status);
             if (startupPreparationError != null)
-                ShowSetupNotice(UiText.InstalledStartupFailedPrefix + startupPreparationError);
+                ShowSetupNotice(() => UiText.InstalledStartupFailedPrefix + startupPreparationError);
         }
-        catch (Exception ex) { ShowSetupNotice(UiText.AutomaticPreparationFailedPrefix + ex.Message); }
+        catch (Exception ex) { ShowSetupNotice(() => UiText.AutomaticPreparationFailedPrefix + ex.Message); }
     }
 
     private async Task ProvisionPlatformAsync()
     {
         preparePlatform.Enabled = false;
         try { ApplyPlatformStatus(await SupportPlatform.ProvisionAsync()); if (!quitting) await PrepareAgentAsync(); }
-        catch (Exception ex) { ShowSetupNotice(UiText.ActivationFailedPrefix + ex.Message); }
+        catch (Exception ex) { ShowSetupNotice(() => UiText.ActivationFailedPrefix + ex.Message); }
         finally { preparePlatform.Enabled = true; }
     }
 
     private void ApplyPlatformStatus(SupportPlatformStatus status)
     {
-        agentNetworkState.Text = status.FirewallReady ? UiText.Ready : status.RequiresAdministratorConsent ? UiText.ActivationRequired : UiText.Unavailable;
+        agentNetworkState.SetText(() => status.FirewallReady ? UiText.Ready : status.RequiresAdministratorConsent ? UiText.ActivationRequired : UiText.Unavailable);
         agentNetworkState.ForeColor = status.FirewallReady ? ConnectedText : WarningText;
-        agentSleepState.Text = powerHold != null ? UiText.Suspended : UiText.Active;
+        agentSleepState.SetText(() => powerHold != null ? UiText.Suspended : UiText.Active);
         agentSleepState.ForeColor = powerHold != null ? PrimaryText : SecondaryText;
-        if (status.RequiresAdministratorConsent) ShowSetupNotice(UiText.EnableSupportNotice);
+        if (status.RequiresAdministratorConsent) ShowSetupNotice(() => UiText.EnableSupportNotice);
         else if (status.Available || status.Provisioned) HideSetupNotice();
-        output.Text = Pretty(status);
-        footerMessage = status.FirewallReady ? UiText.ReadyForConnection : UiText.EnablePrivateNetwork; RefreshFooter();
+        output.SetText(Pretty(status));
+        SetFooterMessage(() => status.FirewallReady ? UiText.ReadyForConnection : UiText.EnablePrivateNetwork); RefreshFooter();
     }
 
-    private void ShowSetupNotice(string message)
+    private void ShowSetupNotice(Func<string> message)
     {
-        setupNoticeText.Text = string.IsNullOrWhiteSpace(message) ? UiText.WindowsPermissionOnce : message;
+        setupNoticeText.SetText(() => string.IsNullOrWhiteSpace(message()) ? UiText.WindowsPermissionOnce : message());
         setupNotice.Visible = true;
     }
 
@@ -751,25 +751,25 @@ public sealed partial class MainForm : Forms.Form
             if (liveFrameFresh) ReleaseHeldInputForCurrentSession();
             liveFrameFresh = false;
             liveBadge.Visible = false;
-            streamOverlay.Text = UiText.FrozenFrame;
+            streamOverlay.SetText(() => UiText.FrozenFrame);
             streamOverlay.Visible = true;
         }
         if (!agentIdle && agent?.Operations.Maintenance is { } maintenance)
         {
             var state = Json.Element(maintenance.Status); bool active = state.TryGetProperty("active", out var a) && a.GetBoolean(); bool brokerAvailable = !state.TryGetProperty("brokerAvailable", out var broker) || broker.GetBoolean(); bool requiresProvisioning = state.TryGetProperty("requiresProvisioning", out var provisioning) && provisioning.GetBoolean();
-            agentMaintenanceState.Text = active ? UiText.Active : !brokerAvailable || requiresProvisioning ? UiText.Unavailable : agent?.Session.HasPaired == true ? UiText.Preparing : UiText.AfterConnection;
+            agentMaintenanceState.SetText(() => active ? UiText.Active : !brokerAvailable || requiresProvisioning ? UiText.Unavailable : agent?.Session.HasPaired == true ? UiText.Preparing : UiText.AfterConnection);
             agentMaintenanceState.ForeColor = active ? ConnectedText : !brokerAvailable || requiresProvisioning ? WarningText : SecondaryText;
         }
     }
 
     private void UpdateAgentState()
     {
-        agentSleepState.Text = powerHold != null ? UiText.Suspended : UiText.Active;
+        agentSleepState.SetText(() => powerHold != null ? UiText.Suspended : UiText.Active);
         agentSleepState.ForeColor = powerHold != null ? PrimaryText : SecondaryText;
         bool paired = agent?.Session.HasPaired == true;
-        agentEyebrow.Text = paired ? UiText.SupportSessionCaption : UiText.PairingCodeCaption;
-        agentHeading.Text = agent?.Session.State == "reconnecting" ? UiText.ConnectionInterruptedHeading : paired ? UiText.PcBeingAssisted : UiText.ShareCode;
-        agentSubtitle.Text = paired ? UiText.ConnectionStaysVisible : UiText.EnterCodeOnController;
+        agentEyebrow.SetText(() => paired ? UiText.SupportSessionCaption : UiText.PairingCodeCaption);
+        agentHeading.SetText(() => agent?.Session.State == "reconnecting" ? UiText.ConnectionInterruptedHeading : paired ? UiText.PcBeingAssisted : UiText.ShareCode);
+        agentSubtitle.SetText(() => paired ? UiText.ConnectionStaysVisible : UiText.EnterCodeOnController);
         copyAgentCode.Visible = !paired && !agentIdle;
         restartAgent.Visible = agentIdle;
         float stateFontSize = paired ? 24 : 42;
@@ -781,36 +781,37 @@ public sealed partial class MainForm : Forms.Form
         }
         if (agent == null || agentIdle)
         {
-            agentPairCode.Text = agentIdle ? "" : "— — —"; CurrentPairingCode = null;
-            agentHeading.Text = agentIdle ? UiText.SupportEnded : UiText.ShareCode;
-            agentSubtitle.Text = agentIdle ? UiText.PcNoLongerAccessible : UiText.EnterCodeOnController;
-            agentEyebrow.Text = agentIdle ? UiText.SessionClosedCaption : UiText.PairingCodeCaption;
-            agentState.Text = agentIdle ? UiText.NoActiveConnection : UiText.AgentAwaitingPreparation;
-            agentSessionNote.Text = agentIdle ? UiText.RevokedAccessNote : UiText.PreparingSupport;
-            pairingCountdown.Value = 0; pairingCountdownText.Text = agentIdle && sessionExit.Active
-                ? UiText.Format(UiText.AutoCloseCountdown, TimeSpan.FromSeconds(Math.Ceiling(sessionExit.Remaining.TotalSeconds))) : "";
-            agentNetworkState.Text = agentIdle ? UiText.Waiting : UiText.Preparing; agentMaintenanceState.Text = UiText.Inactive;
+            agentPairCode.SetText(agentIdle ? "" : "— — —"); CurrentPairingCode = null;
+            agentHeading.SetText(() => agentIdle ? UiText.SupportEnded : UiText.ShareCode);
+            agentSubtitle.SetText(() => agentIdle ? UiText.PcNoLongerAccessible : UiText.EnterCodeOnController);
+            agentEyebrow.SetText(() => agentIdle ? UiText.SessionClosedCaption : UiText.PairingCodeCaption);
+            agentState.SetText(() => agentIdle ? UiText.NoActiveConnection : UiText.AgentAwaitingPreparation);
+            agentSessionNote.SetText(() => agentIdle ? UiText.RevokedAccessNote : UiText.PreparingSupport);
+            pairingCountdown.Value = 0; pairingCountdownText.SetText(() => agentIdle && sessionExit.Active
+                ? UiText.Format(UiText.AutoCloseCountdown, TimeSpan.FromSeconds(Math.Ceiling(sessionExit.Remaining.TotalSeconds))) : "");
+            agentNetworkState.SetText(() => agentIdle ? UiText.Waiting : UiText.Preparing); agentMaintenanceState.SetText(() => UiText.Inactive);
             setupNotice.Visible = false; return;
         }
         var session = agent.Session;
         if (paired && !terminating && !quitting)
-            footerMessage = session.State switch { "connected" => UiText.SupportActive, "synchronizing" => UiText.AgentSynchronizing, "reconnecting" => UiText.WaitingForController, _ => footerMessage };
+            if (session.State is "connected" or "synchronizing" or "reconnecting")
+                SetFooterMessage(() => session.State switch { "connected" => UiText.SupportActive, "synchronizing" => UiText.AgentSynchronizing, _ => UiText.WaitingForController });
         if (session.Connected && session.BinaryMatched)
         {
-            CurrentPairingCode = null; pairingCountdownText.Text = UiText.CodeConsumed; pairingCountdown.Value = 0; string duration = session.StartedUtc is { } started ? FormatDuration(DateTimeOffset.UtcNow - started) : UiText.JustNow; agentPairCode.Text = UiText.ControllerConnected; agentState.Text = UiText.Format(UiText.ConnectedDuration, duration); agentSessionNote.Text = UiText.AuthenticatedControllerNote; terminateSession.Visible = true;
+            CurrentPairingCode = null; pairingCountdownText.SetText(() => UiText.CodeConsumed); pairingCountdown.Value = 0; string duration = session.StartedUtc is { } started ? FormatDuration(DateTimeOffset.UtcNow - started) : UiText.JustNow; agentPairCode.SetText(() => UiText.ControllerConnected); agentState.SetText(() => UiText.Format(UiText.ConnectedDuration, duration)); agentSessionNote.SetText(() => UiText.AuthenticatedControllerNote); terminateSession.Visible = true;
         }
         else if (session.Connected)
         {
             var updateProgress = agent.UpdateProgress;
-            CurrentPairingCode = null; pairingCountdown.Value = updateProgress.TransferPercent * 3; pairingCountdownText.Text = UpdateProgressDescription(updateProgress); agentPairCode.Text = UiText.Synchronizing; agentState.Text = UiText.SessionPreparingAgent; agentSessionNote.Text = UiText.CommandsDisabledUntilVersions; terminateSession.Visible = true;
+            CurrentPairingCode = null; pairingCountdown.Value = updateProgress.TransferPercent * 3; pairingCountdownText.SetText(() => UpdateProgressDescription(updateProgress)); agentPairCode.SetText(() => UiText.Synchronizing); agentState.SetText(() => UiText.SessionPreparingAgent); agentSessionNote.SetText(() => UiText.CommandsDisabledUntilVersions); terminateSession.Visible = true;
         }
         else if (session.HasPaired && session.State == "reconnecting")
         {
-            agentPairCode.Text = UiText.SessionInterrupted; CurrentPairingCode = null; var remaining = session.DisconnectDeadlineUtc is { } d ? d - DateTimeOffset.UtcNow : TimeSpan.Zero; pairingCountdownText.Text = remaining > TimeSpan.Zero ? UiText.Format(UiText.ReconnectionCountdown, remaining) : UiText.WaitingForReconnection; pairingCountdown.Value = 0; agentState.Text = UiText.WaitingForReconnection; agentSessionNote.Text = UiText.ReconnectionGraceNote; terminateSession.Visible = true;
+            agentPairCode.SetText(() => UiText.SessionInterrupted); CurrentPairingCode = null; var remaining = session.DisconnectDeadlineUtc is { } d ? d - DateTimeOffset.UtcNow : TimeSpan.Zero; pairingCountdownText.SetText(() => remaining > TimeSpan.Zero ? UiText.Format(UiText.ReconnectionCountdown, remaining) : UiText.WaitingForReconnection); pairingCountdown.Value = 0; agentState.SetText(() => UiText.WaitingForReconnection); agentSessionNote.SetText(() => UiText.ReconnectionGraceNote); terminateSession.Visible = true;
         }
         else
         {
-            string current = agent.Pairing.CurrentCode ?? ""; CurrentPairingCode = current.Length == 6 ? current : null; agentPairCode.Text = FormatPairingCode(current); var expires = agent.Pairing.ExpiresUtc; var remaining = expires - DateTimeOffset.UtcNow; int seconds = Math.Clamp((int)Math.Ceiling(remaining.TotalSeconds), 0, 300); pairingCountdown.Value = seconds; pairingCountdownText.Text = seconds > 0 ? UiText.Format(UiText.NewCodeCountdown, TimeSpan.FromSeconds(seconds)) : UiText.PreparingNextCode; agentState.Text = UiText.WaitingForConnection; agentSessionNote.Text = UiText.CodeRotatesNote; terminateSession.Visible = false;
+            string current = agent.Pairing.CurrentCode ?? ""; CurrentPairingCode = current.Length == 6 ? current : null; agentPairCode.SetText(FormatPairingCode(current)); var expires = agent.Pairing.ExpiresUtc; var remaining = expires - DateTimeOffset.UtcNow; int seconds = Math.Clamp((int)Math.Ceiling(remaining.TotalSeconds), 0, 300); pairingCountdown.Value = seconds; pairingCountdownText.SetText(() => seconds > 0 ? UiText.Format(UiText.NewCodeCountdown, TimeSpan.FromSeconds(seconds)) : UiText.PreparingNextCode); agentState.SetText(() => UiText.WaitingForConnection); agentSessionNote.SetText(() => UiText.CodeRotatesNote); terminateSession.Visible = false;
         }
     }
 
@@ -821,20 +822,20 @@ public sealed partial class MainForm : Forms.Form
         tray.Text = onAgent ? UiText.TrayAssistedPc : UiText.TrayController;
         if (onAgent)
         {
-            headerTitle.Text = UiText.GiveControl; headerSubtitle.Text = Environment.MachineName + UiText.PrivateSupportSuffix;
+            headerTitle.SetText(() => UiText.GiveControl); headerSubtitle.SetText(() => Environment.MachineName + UiText.PrivateSupportSuffix);
         }
         else
         {
             var presentation = ControllerPagePresentation(controllerPages.SelectedIndex);
-            headerTitle.Text = presentation.Title;
+            headerTitle.SetText(presentation.Title);
             if (supportSession && client != null)
-                headerSubtitle.Text = selectedPeer == null || selectedPeer.Name == client.Connection.Host
+                headerSubtitle.SetText(() => selectedPeer == null || selectedPeer.Name == client.Connection.Host
                     ? client.Connection.Host + UiText.SupportSessionSuffix
-                    : selectedPeer.Name + " · " + client.Connection.Host;
+                    : selectedPeer.Name + " · " + client.Connection.Host);
             else if (selectedPeer != null)
-                headerSubtitle.Text = selectedPeer.Name + " · " + selectedPeer.Host;
+                headerSubtitle.SetText(selectedPeer.Name + " · " + selectedPeer.Host);
             else
-                headerSubtitle.Text = presentation.Subtitle;
+                headerSubtitle.SetText(presentation.Subtitle);
         }
 
         bool connected = onAgent ? agent?.Session is { Connected: true, BinaryMatched: true } : heartbeatHealthy && supportSession;
@@ -845,7 +846,7 @@ public sealed partial class MainForm : Forms.Form
         statusPill.BackColor = connected ? ConnectedBack : reconnecting ? Color.FromArgb(255, 244, 222) : Color.FromArgb(237, 241, 244);
         statusDot.ForeColor = connected ? Color.FromArgb(50, 137, 91) : reconnecting ? WarningText : SecondaryText;
         statusLabel.ForeColor = connected ? ConnectedText : reconnecting ? WarningText : Color.FromArgb(80, 103, 113);
-        statusLabel.Text = connected ? UiText.Connected : reconnecting ? UiText.Reconnecting : synchronizing ? UiText.SynchronizingEllipsis : pairing ? UiText.Pairing : agentIdle && onAgent ? UiText.SessionClosed : UiText.Waiting;
+        statusLabel.SetText(() => connected ? UiText.Connected : reconnecting ? UiText.Reconnecting : synchronizing ? UiText.SynchronizingEllipsis : pairing ? UiText.Pairing : agentIdle && onAgent ? UiText.SessionClosed : UiText.Waiting);
         statusPill.AccessibleName = statusLabel.Text; statusPill.Region?.Dispose(); statusPill.Region = RoundedRegion(statusPill.Size, 16);
         terminateSession.Visible = onAgent ? agent?.Session.Connected == true || agent?.Session.State == "reconnecting" : supportSession || synchronizingAgent;
         roleAgent.BackColor = onAgent ? SelectedRail : Rail; roleController.BackColor = onController ? SelectedRail : Rail; navConnection.BackColor = onController && controllerPages.SelectedIndex == 0 ? SelectedRail : Rail; navScreen.BackColor = onController && controllerPages.SelectedIndex == 1 ? SelectedRail : Rail; navProcesses.BackColor = onController && controllerPages.SelectedIndex == 2 ? SelectedRail : Rail; navFiles.BackColor = onController && controllerPages.SelectedIndex == 3 ? SelectedRail : Rail; navDiagnostics.BackColor = onController && controllerPages.SelectedIndex == 4 ? SelectedRail : Rail;
@@ -853,13 +854,13 @@ public sealed partial class MainForm : Forms.Form
 
     private void RefreshFooter()
     {
-        if (rolePages.SelectedIndex != 1 || terminating) { footerLeft.Text = footerMessage; footerRight.Text = footerDetail; return; }
+        if (rolePages.SelectedIndex != 1 || terminating) { footerLeft.SetText(footerMessage); footerRight.SetText(footerDetail); return; }
         var text = WorkspacePresentation.Footer(controllerPages.SelectedIndex, connectionState.Text, streamStatus.Text,
             resourceState.Text, fileState.Text, diagnosticState.Text, host.Text,
             lastMeasurementUtc is { } measured ? UiText.Format(UiText.ProcessMeasurement, processRows.Count, measured.ToLocalTime()) : UiText.NoMeasurement,
             currentDirectory, operations.SelectedItem?.ToString() ?? "");
-        footerLeft.Text = supportSession && !heartbeatHealthy ? UiText.ReconnectionInProgress : text.Status;
-        footerRight.Text = text.Detail;
+        footerLeft.SetText(() => supportSession && !heartbeatHealthy ? UiText.ReconnectionInProgress : text.Status);
+        footerRight.SetText(text.Detail);
     }
 
     private void SelectRole(int index)
@@ -890,8 +891,8 @@ public sealed partial class MainForm : Forms.Form
         if (index == 0 && agent == null && !quitting && !agentIdle) { StartAgent(); _ = PrepareAgentAsync(); }
         if (index == 1 && !supportSession)
         {
-            footerMessage = UiText.ChoosePc;
-            footerDetail = UiText.CloseToTrayShort;
+            SetFooterMessage(() => UiText.ChoosePc);
+            SetFooterDetail(() => UiText.CloseToTrayShort);
             RefreshFooter();
         }
         UpdateHeader();
@@ -914,7 +915,7 @@ public sealed partial class MainForm : Forms.Form
 
     private void SelectControllerPage(int index)
     {
-        if (liveStream != null && controllerPages.SelectedIndex == 1 && index != 1) StopStream(UiText.ViewingSuspended);
+        if (liveStream != null && controllerPages.SelectedIndex == 1 && index != 1) StopStream(() => UiText.ViewingSuspended);
         controllerPages.SelectedIndex = index; UpdateHeader(); RefreshControllerControls(); RefreshFooter();
         if (index == 1 && supportSession && client != null && liveStream == null) _ = StartStreamAsync();
         if (index == 2 && processRows.Count == 0 && supportSession && heartbeatHealthy) _ = RefreshResourcesAsync();
@@ -924,14 +925,14 @@ public sealed partial class MainForm : Forms.Form
     private async Task DiscoverAsync(bool explicitRefresh)
     {
         if (pairingBusy) return;
-        discoveryState.Text = explicitRefresh ? UiText.SearchingPcs : UiText.SearchingAtStartup; discoverButton.Enabled = false;
+        discoveryState.SetText(() => explicitRefresh ? UiText.SearchingPcs : UiText.SearchingAtStartup); discoverButton.Enabled = false;
         discoveryLifetime?.Cancel(); discoveryLifetime = new CancellationTokenSource();
         try
         {
-            var found = await Discovery.FindAsync(2500, discoveryLifetime.Token); discoveredPeers.Clear(); discoveredPeers.AddRange(found.Where(IsRemotePeer).OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase)); RenderPeers(); discoveryState.Text = discoveredPeers.Count == 0 ? UiText.NoPcsFound : UiText.Format(UiText.AvailablePcCount, discoveredPeers.Count); if (discoveredPeers.Count == 1 && selectedPeer == null && peers.Items.Count > 0) peers.Items[0].Selected = true;
+            var found = await Discovery.FindAsync(2500, discoveryLifetime.Token); discoveredPeers.Clear(); discoveredPeers.AddRange(found.Where(IsRemotePeer).OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase)); RenderPeers(); discoveryState.SetText(() => discoveredPeers.Count == 0 ? UiText.NoPcsFound : UiText.Format(UiText.AvailablePcCount, discoveredPeers.Count)); if (discoveredPeers.Count == 1 && selectedPeer == null && peers.Items.Count > 0) peers.Items[0].Selected = true;
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { discoveryState.Text = UiText.SearchUnavailablePrefix + ex.Message; }
+        catch (Exception ex) { discoveryState.SetText(() => UiText.SearchUnavailablePrefix + ex.Message); }
         finally { discoverButton.Enabled = true; }
     }
 
@@ -970,20 +971,20 @@ public sealed partial class MainForm : Forms.Form
         if (renderingPeers || supportSession || pairingBusy || terminating) return;
         if (peers.SelectedItems.Count == 0 || peers.SelectedItems[0].Tag is not Peer peer) return;
         InvalidateInputSession();
-        selectedPeer = peer; selectedFingerprint = peer.Fingerprint; host.Text = peer.Host; selectedPeerName.Text = peer.Name; selectedPeerAddress.Text = peer.Host; connectionState.Text = UiText.EnterDisplayedCode; code.Clear(); code.Focus();
+        selectedPeer = peer; selectedFingerprint = peer.Fingerprint; host.SetText(peer.Host); selectedPeerName.SetText(peer.Name); selectedPeerAddress.SetText(peer.Host); connectionState.SetText(() => UiText.EnterDisplayedCode); code.SetText(""); code.Focus();
     }
 
     private async Task PairSelectedAsync()
     {
-        if (supportSession) { connectionState.Text = UiText.EndSupportBeforeNewCode; return; }
-        if (pairingBusy || string.IsNullOrWhiteSpace(host.Text)) { connectionState.Text = UiText.ChoosePcPeriod; return; }
-        if (code.Text.Length != 6 || !code.Text.All(char.IsAsciiDigit)) { connectionState.Text = UiText.CodeMustBeSixDigits; code.Focus(); return; }
+        if (supportSession) { connectionState.SetText(() => UiText.EndSupportBeforeNewCode); return; }
+        if (pairingBusy || string.IsNullOrWhiteSpace(host.Text)) { connectionState.SetText(() => UiText.ChoosePcPeriod); return; }
+        if (code.Text.Length != 6 || !code.Text.All(char.IsAsciiDigit)) { connectionState.SetText(() => UiText.CodeMustBeSixDigits); code.Focus(); return; }
         pairingBusy = true; synchronizingAgent = false; pairButton.Enabled = false; discoverButton.Enabled = false; code.Enabled = false; host.Enabled = false; operationGeneration++; int generation = operationGeneration; sessionGeneration++; lastFrameUtc = null; liveFrameFresh = false; var pairingCts = new CancellationTokenSource(); pairingLifetime = pairingCts;
         RemoteClient? pairedClient = null;
         updateProgressArea.Visible = false;
         try
         {
-            pairedClient = new RemoteClient(new Connection(host.Text.Trim(), 45832, selectedFingerprint, "")); client = pairedClient; connectionState.Text = UiText.Pairing; footerMessage = UiText.Pairing; UpdateHeader(); RefreshFooter();
+            pairedClient = new RemoteClient(new Connection(host.Text.Trim(), 45832, selectedFingerprint, "")); client = pairedClient; connectionState.SetText(() => UiText.Pairing); SetFooterMessage(() => UiText.Pairing); UpdateHeader(); RefreshFooter();
             using (var handshake = CancellationTokenSource.CreateLinkedTokenSource(pairingCts.Token))
             {
                 handshake.CancelAfter(TimeSpan.FromSeconds(SupportOperationTimeouts.PairingHandshakeSeconds));
@@ -991,7 +992,7 @@ public sealed partial class MainForm : Forms.Form
                 catch (OperationCanceledException) when (!pairingCts.IsCancellationRequested) { throw new TimeoutException(UiText.PairingTimedOut); }
             }
             sessionExit.Cancel();
-            pairedClient.Save(); synchronizingAgent = true; connectionState.Text = UiText.AgentSynchronizing; footerMessage = UiText.AgentSynchronizing; footerDetail = UiText.TransferValidateVersion; ShowUpdateProgress(new AgentUpdateProgress("idle", 0, 0)); UpdateHeader(); RefreshFooter();
+            pairedClient.Save(); synchronizingAgent = true; connectionState.SetText(() => UiText.AgentSynchronizing); SetFooterMessage(() => UiText.AgentSynchronizing); SetFooterDetail(() => UiText.TransferValidateVersion); ShowUpdateProgress(new AgentUpdateProgress("idle", 0, 0)); UpdateHeader(); RefreshFooter();
             using (var synchronization = CancellationTokenSource.CreateLinkedTokenSource(pairingCts.Token))
             {
                 synchronization.CancelAfter(TimeSpan.FromSeconds(SupportOperationTimeouts.ControllerSynchronizationSeconds));
@@ -1002,10 +1003,10 @@ public sealed partial class MainForm : Forms.Form
                 try { await SupportPlatform.SynchronizeAgentAsync(pairedClient, synchronization.Token, progress); }
                 catch (OperationCanceledException) when (!pairingCts.IsCancellationRequested) { throw new TimeoutException(UiText.SynchronizationTimedOut); }
             }
-            if (generation != operationGeneration) return; synchronizingAgent = false; updateProgressArea.Visible = false; supportSession = true; heartbeatHealthy = false; powerHold ??= PowerHold.Acquire(); StartHeartbeat(); SelectRole(1); SelectControllerPage(1); code.Clear(); connectionState.Text = UiText.SessionEstablished; footerMessage = UiText.ActiveVersionsSynchronized; footerDetail = UiText.LoadingMeasurements; RefreshFooter(); _ = LoadInitialRemoteStateAsync(generation);
+            if (generation != operationGeneration) return; synchronizingAgent = false; updateProgressArea.Visible = false; supportSession = true; heartbeatHealthy = false; powerHold ??= PowerHold.Acquire(); StartHeartbeat(); SelectRole(1); SelectControllerPage(1); code.SetText(""); connectionState.SetText(() => UiText.SessionEstablished); SetFooterMessage(() => UiText.ActiveVersionsSynchronized); SetFooterDetail(() => UiText.LoadingMeasurements); RefreshFooter(); _ = LoadInitialRemoteStateAsync(generation);
         }
-        catch (OperationCanceledException) { if (pairedClient != null) _ = EndSessionBestEffortAsync(pairedClient); if (generation == operationGeneration) { connectionState.Text = UiText.ConnectionCancelledPeriod; footerMessage = UiText.ConnectionCancelled; footerDetail = UiText.RetryDisplayedCode; } }
-        catch (Exception ex) { if (pairedClient != null) _ = EndSessionBestEffortAsync(pairedClient); if (generation == operationGeneration) { connectionState.Text = UiText.FailurePrefix + ex.Message; footerMessage = UiText.ConnectionFailed; footerDetail = ex.Message; RefreshFooter(); } }
+        catch (OperationCanceledException) { if (pairedClient != null) _ = EndSessionBestEffortAsync(pairedClient); if (generation == operationGeneration) { connectionState.SetText(() => UiText.ConnectionCancelledPeriod); SetFooterMessage(() => UiText.ConnectionCancelled); SetFooterDetail(() => UiText.RetryDisplayedCode); } }
+        catch (Exception ex) { if (pairedClient != null) _ = EndSessionBestEffortAsync(pairedClient); if (generation == operationGeneration) { connectionState.SetText(() => UiText.FailurePrefix + ex.Message); SetFooterMessage(() => UiText.ConnectionFailed); footerDetail = ex.Message; RefreshFooter(); } }
         finally
         {
             bool ownsPairing = ReferenceEquals(pairingLifetime, pairingCts);
@@ -1013,7 +1014,7 @@ public sealed partial class MainForm : Forms.Form
             {
                 if (updateProgressArea.Visible && !supportSession)
                 {
-                    updateProgressText.Text = UiText.SynchronizationInterrupted;
+                    updateProgressText.SetText(() => UiText.SynchronizationInterrupted);
                     updateProgressText.ForeColor = DestructiveText; updateProgressFill.BackColor = DestructiveText;
                 }
                 pairingLifetime = null;
@@ -1030,9 +1031,9 @@ public sealed partial class MainForm : Forms.Form
         {
             if (client == null) return;
             if (liveStream == null) _ = StartStreamAsync();
-            var resourcesTask = RefreshResourcesAsync(); var monitorsTask = LoadMonitorsAsync(generation); currentDirectory = ""; fileDirectory.Text = ""; var filesTask = BrowseFilesAsync(); await Task.WhenAll(resourcesTask, monitorsTask, filesTask); if (generation != operationGeneration) return; footerDetail = UiText.MeasurementsFilesLoaded; RefreshFooter();
+            var resourcesTask = RefreshResourcesAsync(); var monitorsTask = LoadMonitorsAsync(generation); currentDirectory = ""; fileDirectory.SetText(""); var filesTask = BrowseFilesAsync(); await Task.WhenAll(resourcesTask, monitorsTask, filesTask); if (generation != operationGeneration) return; SetFooterDetail(() => UiText.MeasurementsFilesLoaded); RefreshFooter();
         }
-        catch (Exception ex) { footerMessage = UiText.SessionPartiallyLoaded; footerDetail = ex.Message; RefreshFooter(); }
+        catch (Exception ex) { SetFooterMessage(() => UiText.SessionPartiallyLoaded); footerDetail = ex.Message; RefreshFooter(); }
     }
 
     private async Task LoadMonitorsAsync(int generation)
@@ -1044,7 +1045,7 @@ public sealed partial class MainForm : Forms.Form
             if (generation != operationGeneration || IsDisposed) return;
             var choices = data.EnumerateArray().Select((item, index) => new MonitorChoice(
                 item.Int("index", index),
-                item.TryGetProperty("primary", out var primary) && primary.GetBoolean() ? UiText.PrimaryMonitor : UiText.Format(UiText.MonitorNumber, index + 1))).ToArray();
+                () => item.TryGetProperty("primary", out var primary) && primary.GetBoolean() ? UiText.PrimaryMonitor : UiText.Format(UiText.MonitorNumber, index + 1))).ToArray();
             if (choices.Length == 0) return;
             monitor.BeginUpdate();
             monitor.Items.Clear();
@@ -1095,7 +1096,7 @@ public sealed partial class MainForm : Forms.Form
             catch (Exception ex)
             {
                 if (ct.IsCancellationRequested || !ReferenceEquals(target, client)) break;
-                heartbeatHealthy = false; liveFrameFresh = false; ReleaseHeldInputForCurrentSession(); footerMessage = UiText.Reconnecting; footerDetail = ex.Message; PostUi(() => { streamOverlay.Text = UiText.SessionRetrying; streamOverlay.Visible = true; liveBadge.Visible = false; UpdateHeader(); RefreshFooter(); });
+                heartbeatHealthy = false; liveFrameFresh = false; ReleaseHeldInputForCurrentSession(); SetFooterMessage(() => UiText.Reconnecting); footerDetail = ex.Message; PostUi(() => { streamOverlay.SetText(() => UiText.SessionRetrying); streamOverlay.Visible = true; liveBadge.Visible = false; UpdateHeader(); RefreshFooter(); });
             }
             try { await Task.Delay(TimeSpan.FromSeconds(5), ct); } catch (OperationCanceledException) { break; }
         }
@@ -1103,17 +1104,17 @@ public sealed partial class MainForm : Forms.Form
 
     private async Task RefreshScreenAsync()
     {
-        RequireClient(); var watch = Stopwatch.StartNew(); var data = RemoteClient.Require(await client!.CallAsync("screenshot", new { monitor = MonitorValue() }, seconds: 30)); Present(data.Deserialize<ScreenFrame>(Json.Options)!); streamStatus.Text = UiText.Format(UiText.FreshFrameTime, watch.Elapsed.TotalMilliseconds); footerDetail = streamStatus.Text; RefreshFooter();
+        RequireClient(); var watch = Stopwatch.StartNew(); var data = RemoteClient.Require(await client!.CallAsync("screenshot", new { monitor = MonitorValue() }, seconds: 30)); Present(data.Deserialize<ScreenFrame>(Json.Options)!); streamStatus.SetText(() => UiText.Format(UiText.FreshFrameTime, watch.Elapsed.TotalMilliseconds)); SetFooterDetail(() => streamStatus.Text); RefreshFooter();
     }
 
     private async Task StartStreamAsync()
     {
         if (liveStream != null || client == null || trayVisible) return;
-        try { RequireClient(); } catch (Exception ex) { streamStatus.Text = ex.Message; return; }
+        try { RequireClient(); } catch (Exception ex) { streamStatus.SetText(ex.Message); return; }
         RemoteClient target = client;
         int generation = sessionGeneration;
         var lifetime = new CancellationTokenSource();
-        liveStream = lifetime; streamStartedUtc = DateTimeOffset.UtcNow; streamFrames = 0; streamBytes = 0; pauseViewing.Text = UiText.Pause; streamOverlay.Visible = true; streamOverlay.Text = UiText.ConnectingStream;
+        liveStream = lifetime; streamStartedUtc = DateTimeOffset.UtcNow; streamFrames = 0; streamBytes = 0; pauseViewing.SetText(() => UiText.Pause); streamOverlay.Visible = true; streamOverlay.SetText(() => UiText.ConnectingStream);
         try
         {
             while (!lifetime.IsCancellationRequested && generation == sessionGeneration && ReferenceEquals(target, client))
@@ -1132,8 +1133,8 @@ public sealed partial class MainForm : Forms.Form
                     // The five-minute transport boundary and transient link loss
                     // renew the stream inside the same authenticated session.
                     liveFrameFresh = false; liveBadge.Visible = false;
-                    streamOverlay.Text = UiText.ReconnectingStream; streamOverlay.Visible = true;
-                    streamStatus.Text = UiText.WaitingFreshFrame;
+                    streamOverlay.SetText(() => UiText.ReconnectingStream); streamOverlay.Visible = true;
+                    streamStatus.SetText(() => UiText.WaitingFreshFrame);
                     ReleaseHeldInputForCurrentSession();
                     await Task.Delay(500, lifetime.Token);
                 }
@@ -1144,7 +1145,7 @@ public sealed partial class MainForm : Forms.Form
         {
             if (ReferenceEquals(liveStream, lifetime))
             {
-                liveFrameFresh = false; liveBadge.Visible = false; streamOverlay.Text = UiText.StreamInterruptedResume; streamOverlay.Visible = true; streamStatus.Text = UiText.StreamInterruptedPrefix + ex.Message;
+                liveFrameFresh = false; liveBadge.Visible = false; streamOverlay.SetText(() => UiText.StreamInterruptedResume); streamOverlay.Visible = true; streamStatus.SetText(() => UiText.StreamInterruptedPrefix + ex.Message);
             }
         }
         finally
@@ -1153,25 +1154,25 @@ public sealed partial class MainForm : Forms.Form
             {
                 liveStream = null;
                 monitor.Enabled = true;
-                pauseViewing.Text = UiText.Resume;
+                pauseViewing.SetText(() => UiText.Resume);
                 liveFrameFresh = false;
                 liveBadge.Visible = false;
                 streamOverlay.Visible = true;
-                streamOverlay.Text = UiText.StreamStoppedResume;
+                streamOverlay.SetText(() => UiText.StreamStoppedResume);
             }
             lifetime.Dispose();
             if (generation == sessionGeneration && ReferenceEquals(target, client)) ReleaseHeldInputForCurrentSession();
         }
     }
 
-    private void StopStream(string message)
+    private void StopStream(Func<string> message)
     {
         var target = client;
         var running = liveStream;
         liveStream = null;
         running?.Cancel();
-        pauseViewing.Text = UiText.Resume; monitor.Enabled = true;
-        liveFrameFresh = false; liveBadge.Visible = false; streamOverlay.Visible = true; streamOverlay.Text = UiText.ViewingPausedResume; streamStatus.Text = message;
+        pauseViewing.SetText(() => UiText.Resume); monitor.Enabled = true;
+        liveFrameFresh = false; liveBadge.Visible = false; streamOverlay.Visible = true; streamOverlay.SetText(() => UiText.ViewingPausedResume); streamStatus.SetText(message);
         if (target != null) ReleaseHeldInputForCurrentSession();
     }
 
@@ -1185,9 +1186,9 @@ public sealed partial class MainForm : Forms.Form
         geometry = frame.Geometry; using var ms = new MemoryStream(Convert.FromBase64String(frame.Data)); using var image = Image.FromStream(ms); var previous = screen.Image; screen.Image = new Bitmap(image); previous?.Dispose(); screen.Refresh(); liveFrameFresh = true; lastFrameUtc = DateTimeOffset.UtcNow; liveBadge.Visible = true; streamOverlay.Visible = false;
         if (liveStream != null && streamStartedUtc is { } started)
         {
-            streamFrames++; streamBytes += frame.Data.Length; double seconds = Math.Max(0.001, (DateTimeOffset.UtcNow - started).TotalSeconds); double fps = streamFrames / seconds; double mbps = streamBytes * 8 / seconds / 1_000_000d; streamStatus.Text = UiText.Format(UiText.StreamMetrics, fps, mbps, frame.CaptureEncodeMs); footerDetail = streamStatus.Text; RefreshFooter();
+            streamFrames++; streamBytes += frame.Data.Length; double seconds = Math.Max(0.001, (DateTimeOffset.UtcNow - started).TotalSeconds); double fps = streamFrames / seconds; double mbps = streamBytes * 8 / seconds / 1_000_000d; streamStatus.SetText(() => UiText.Format(UiText.StreamMetrics, fps, mbps, frame.CaptureEncodeMs)); SetFooterDetail(() => streamStatus.Text); RefreshFooter();
         }
-        else streamStatus.Text = UiText.Format(UiText.CaptureMetrics, frame.CapturedUtc.ToLocalTime(), frame.CaptureEncodeMs);
+        else streamStatus.SetText(() => UiText.Format(UiText.CaptureMetrics, frame.CapturedUtc.ToLocalTime(), frame.CaptureEncodeMs));
     }
 
     private void QueueMouse(string kind, Forms.MouseEventArgs e)
@@ -1199,7 +1200,7 @@ public sealed partial class MainForm : Forms.Form
 
     private void RefreshInputStatus()
     {
-        inputStatus.Text = !supportSession ? UiText.ConnectToControl : !inputState.Enabled ? UiText.ViewOnly : !heartbeatHealthy ? UiText.ControlAwaitingConnection : inputState.Suspended ? UiText.RestoringControl : !liveFrameFresh ? UiText.WaitingFreshFrame : screen.ContainsFocus && ContainsFocus ? UiText.MouseKeyboardActive : UiText.ClickScreenToControl;
+        inputStatus.SetText(() => !supportSession ? UiText.ConnectToControl : !inputState.Enabled ? UiText.ViewOnly : !heartbeatHealthy ? UiText.ControlAwaitingConnection : inputState.Suspended ? UiText.RestoringControl : !liveFrameFresh ? UiText.WaitingFreshFrame : screen.ContainsFocus && ContainsFocus ? UiText.MouseKeyboardActive : UiText.ClickScreenToControl);
     }
 
     private void QueueInput(object value)
@@ -1211,7 +1212,7 @@ public sealed partial class MainForm : Forms.Form
         if (!inputQueue.TryWrite(kind, new QueuedInput(target, sessionGeneration, value)))
         {
             inputState.Suspend();
-            inputStatus.Text = UiText.InputQueueFull;
+            inputStatus.SetText(() => UiText.InputQueueFull);
             ReleaseHeldInputForCurrentSession();
         }
     }
@@ -1275,8 +1276,8 @@ public sealed partial class MainForm : Forms.Form
             {
                 if (item.Generation != sessionGeneration || !ReferenceEquals(target, client)) continue;
                 inputState.Suspend();
-                inputStatus.Text = UiText.ControlTemporarilyUnavailable;
-                output.Text = UiText.InputInterruptedPrefix + ex.Message;
+                inputStatus.SetText(() => UiText.ControlTemporarilyUnavailable);
+                output.SetText(() => UiText.InputInterruptedPrefix + ex.Message);
                 if (!release) ReleaseHeldInputForCurrentSession();
             }
         }
@@ -1289,9 +1290,9 @@ public sealed partial class MainForm : Forms.Form
         int generation = sessionGeneration; RemoteClient? target = client;
         try
         {
-            RequireClient(); resourceState.Text = UiText.Measuring; volumeSummary.Text = UiText.VolumesMeasuring; int? selected = processList.SelectedItems.Count > 0 && processList.SelectedItems[0].Tag is ProcessSortRow row ? row.Pid : null; var data = RemoteClient.Require(await target!.CallAsync("processes", seconds: 30)); var system = RemoteClient.Require(await target.CallAsync("system", seconds: 30)); if (generation != sessionGeneration || !ReferenceEquals(target, client)) return; processRows.Clear(); foreach (var p in data.GetProperty("processes").EnumerateArray()) processRows.Add(new ProcessSortRow(p.Int("pid"), p.Str("name", UiText.Unavailable), NullableDouble(p, "cpuPercentTotalMachine"), NullableLong(p, "workingSetBytes"), NullableBool(p, "responding"), p.Str("window"), NullableDate(p, "startUtc"))); lastMeasurementUtc = NullableDate(data, "sampleEndUtc") ?? DateTimeOffset.UtcNow; RenderProcesses(selected); var cpu = NullableDouble(system, "cpuPercentTotalMachine"); cpuSummary.Text = cpu is { } c ? $"{c:F1} %" : UiText.Unavailable; long? total = NullableLong(system, "physicalMemoryTotalBytes"); long? available = NullableLong(system, "physicalMemoryAvailableBytes"); ramSummary.Text = total is > 0 && available is >= 0 ? FormatBytes(total.Value - available.Value) : UiText.Unavailable; processSummary.Text = processRows.Count.ToString("N0"); resourceMeasuredAt.Text = lastMeasurementUtc.Value.ToLocalTime().ToString("T"); volumeSummary.Text = FormatVolumes(system); resourceState.Text = UiText.MeasurementComplete; footerDetail = UiText.Format(UiText.MeasuredAtTime, resourceMeasuredAt.Text); RefreshFooter();
+            RequireClient(); resourceState.SetText(() => UiText.Measuring); volumeSummary.SetText(() => UiText.VolumesMeasuring); int? selected = processList.SelectedItems.Count > 0 && processList.SelectedItems[0].Tag is ProcessSortRow row ? row.Pid : null; var data = RemoteClient.Require(await target!.CallAsync("processes", seconds: 30)); var system = RemoteClient.Require(await target.CallAsync("system", seconds: 30)); if (generation != sessionGeneration || !ReferenceEquals(target, client)) return; processRows.Clear(); foreach (var p in data.GetProperty("processes").EnumerateArray()) processRows.Add(new ProcessSortRow(p.Int("pid"), p.Str("name", UiText.Unavailable), NullableDouble(p, "cpuPercentTotalMachine"), NullableLong(p, "workingSetBytes"), NullableBool(p, "responding"), p.Str("window"), NullableDate(p, "startUtc"))); lastMeasurementUtc = NullableDate(data, "sampleEndUtc") ?? DateTimeOffset.UtcNow; RenderProcesses(selected); var cpu = NullableDouble(system, "cpuPercentTotalMachine"); cpuSummary.SetText(() => cpu is { } c ? $"{c:F1} %" : UiText.Unavailable); long? total = NullableLong(system, "physicalMemoryTotalBytes"); long? available = NullableLong(system, "physicalMemoryAvailableBytes"); ramSummary.SetText(() => total is > 0 && available is >= 0 ? FormatBytes(total.Value - available.Value) : UiText.Unavailable); processSummary.SetText(processRows.Count.ToString("N0")); resourceMeasuredAt.SetText(lastMeasurementUtc.Value.ToLocalTime().ToString("T")); volumeSummary.SetText(() => FormatVolumes(system)); resourceState.SetText(() => UiText.MeasurementComplete); SetFooterDetail(() => UiText.Format(UiText.MeasuredAtTime, resourceMeasuredAt.Text)); RefreshFooter();
         }
-        catch (Exception ex) { if (generation != sessionGeneration) return; resourceState.Text = UiText.MeasurementUnavailable; footerMessage = UiText.ResourcesUnavailable; footerDetail = ex.Message; RefreshFooter(); }
+        catch (Exception ex) { if (generation != sessionGeneration) return; resourceState.SetText(() => UiText.MeasurementUnavailable); SetFooterMessage(() => UiText.ResourcesUnavailable); footerDetail = ex.Message; RefreshFooter(); }
         finally { resourcesLoading = false; RefreshControllerControls(); }
     }
 
@@ -1308,16 +1309,16 @@ public sealed partial class MainForm : Forms.Form
         int generation = sessionGeneration; RemoteClient? target = client; string directory = currentDirectory;
         try
         {
-            RequireClient(); fileState.Text = UiText.Loading; string keep = selectedFilePath ?? ""; var data = RemoteClient.Require(await target!.CallAsync("files", new { path = directory }, seconds: 30)); if (generation != sessionGeneration || !ReferenceEquals(target, client) || directory != currentDirectory) return; fileRows.Clear(); foreach (var entry in data.EnumerateArray()) fileRows.Add(new FileSortRow(entry.Str("name"), entry.TryGetProperty("directory", out var d) && d.GetBoolean(), NullableLong(entry, "size"), NullableDate(entry, "modifiedUtc"), entry.Str("path"))); RenderFiles(keep); fileState.Text = fileRows.Count == 0 ? UiText.EmptyFolder : UiText.Format(UiText.ItemCount, fileRows.Count); fileDirectory.Text = currentDirectory; footerDetail = UiText.Format(UiText.FilesItemCount, fileRows.Count); RefreshFooter();
+            RequireClient(); fileState.SetText(() => UiText.Loading); string keep = selectedFilePath ?? ""; var data = RemoteClient.Require(await target!.CallAsync("files", new { path = directory }, seconds: 30)); if (generation != sessionGeneration || !ReferenceEquals(target, client) || directory != currentDirectory) return; fileRows.Clear(); foreach (var entry in data.EnumerateArray()) fileRows.Add(new FileSortRow(entry.Str("name"), entry.TryGetProperty("directory", out var d) && d.GetBoolean(), NullableLong(entry, "size"), NullableDate(entry, "modifiedUtc"), entry.Str("path"))); RenderFiles(keep); fileState.SetText(() => fileRows.Count == 0 ? UiText.EmptyFolder : UiText.Format(UiText.ItemCount, fileRows.Count)); fileDirectory.SetText(currentDirectory); SetFooterDetail(() => UiText.Format(UiText.FilesItemCount, fileRows.Count)); RefreshFooter();
         }
-        catch (Exception ex) { if (generation != sessionGeneration || directory != currentDirectory) return; fileRows.Clear(); fileList.Items.Clear(); selectedFilePath = null; remotePath.Clear(); fileState.Text = UiText.CannotReadCheckPath; footerMessage = UiText.CannotReadFolder; footerDetail = ex.Message; RefreshFooter(); }
+        catch (Exception ex) { if (generation != sessionGeneration || directory != currentDirectory) return; fileRows.Clear(); fileList.Items.Clear(); selectedFilePath = null; remotePath.SetText(""); fileState.SetText(() => UiText.CannotReadCheckPath); SetFooterMessage(() => UiText.CannotReadFolder); footerDetail = ex.Message; RefreshFooter(); }
         finally { filesLoading = false; RefreshControllerControls(); }
     }
 
     private void RenderFiles(string? selectedPath = null)
     {
         SetSortIndicator(fileList, (int)fileSort.Column, fileSort.Descending);
-        string keep = selectedPath ?? selectedFilePath ?? ""; var sorted = UiSorting.SortFiles(fileRows, fileSort); fileList.BeginUpdate(); fileList.Items.Clear(); foreach (var row in sorted) { var item = new Forms.ListViewItem(row.Name); item.SubItems.Add(row.IsDirectory ? UiText.Folder : UiText.File); item.SubItems.Add(row.SizeBytes is { } bytes ? FormatBytes(bytes) : "—"); item.SubItems.Add(row.ModifiedUtc is { } date ? date.ToLocalTime().ToString("g") : "—"); item.Tag = row; if (!row.IsDirectory && row.Path == keep) item.Selected = true; fileList.Items.Add(item); } fileList.EndUpdate(); remotePath.Text = selectedFilePath ?? "";
+        string keep = selectedPath ?? selectedFilePath ?? ""; var sorted = UiSorting.SortFiles(fileRows, fileSort); fileList.BeginUpdate(); fileList.Items.Clear(); foreach (var row in sorted) { var item = new Forms.ListViewItem(row.Name); item.SubItems.Add(row.IsDirectory ? UiText.Folder : UiText.File); item.SubItems.Add(row.SizeBytes is { } bytes ? FormatBytes(bytes) : "—"); item.SubItems.Add(row.ModifiedUtc is { } date ? date.ToLocalTime().ToString("g") : "—"); item.Tag = row; if (!row.IsDirectory && row.Path == keep) item.Selected = true; fileList.Items.Add(item); } fileList.EndUpdate(); remotePath.SetText(selectedFilePath ?? "");
     }
 
     private static void SetSortIndicator(Forms.ListView table, int selectedColumn, bool descending)
@@ -1325,8 +1326,7 @@ public sealed partial class MainForm : Forms.Form
         for (int index = 0; index < table.Columns.Count; index++)
         {
             var column = table.Columns[index];
-            column.Tag ??= column.Text;
-            column.Text = (string)column.Tag + (index == selectedColumn ? descending ? "  ▼" : "  ▲" : "");
+            column.Text = LiveText.Caption(column) + (index == selectedColumn ? descending ? "  ▼" : "  ▲" : "");
         }
     }
 
@@ -1339,25 +1339,25 @@ public sealed partial class MainForm : Forms.Form
             if (args.ValueKind != JsonValueKind.Object) throw new JsonException(UiText.ArgumentsMustBeObject);
             await ExecuteAsync(op, args);
         }
-        catch (JsonException ex) { diagnosticState.Text = UiText.InvalidJsonArguments; output.Text = ex.Message; RefreshFooter(); }
+        catch (JsonException ex) { diagnosticState.SetText(() => UiText.InvalidJsonArguments); output.SetText(ex.Message); RefreshFooter(); }
     }
 
     public async Task ExecuteAsync(string op, object args) => await ExecuteAsync(op, Json.Element(args));
 
     private async Task ExecuteAsync(string op, JsonElement args)
     {
-        if (action != null) { diagnosticState.Text = UiText.ActionAlreadyRunning; return; }
+        if (action != null) { diagnosticState.SetText(() => UiText.ActionAlreadyRunning); return; }
         int generation = sessionGeneration;
         RemoteClient? target = client;
         try
         {
-            RequireClient(); using var cts = new CancellationTokenSource(); action = cts; operationId = Guid.NewGuid().ToString(); diagnosticState.Text = UiText.Running; output.Clear(); RefreshControllerControls(); RefreshFooter();
+            RequireClient(); using var cts = new CancellationTokenSource(); action = cts; operationId = Guid.NewGuid().ToString(); diagnosticState.SetText(() => UiText.Running); output.SetText(""); RefreshControllerControls(); RefreshFooter();
             var reply = await target!.CallAsync(op, args, cts.Token, operationId, 120);
             if (generation != sessionGeneration || !ReferenceEquals(target, client)) return;
-            output.Text = Pretty(reply); RemoteClient.Require(reply); diagnosticState.Text = UiText.CompletedPrefix + DateTime.Now.ToString("T");
+            output.SetText(Pretty(reply)); RemoteClient.Require(reply); diagnosticState.SetText(() => UiText.CompletedPrefix + DateTime.Now.ToString("T"));
         }
-        catch (OperationCanceledException) { if (generation == sessionGeneration) { diagnosticState.Text = UiText.ActionCancelled; output.Text = UiText.ExecutionInterrupted; } }
-        catch (Exception ex) { if (generation == sessionGeneration) { diagnosticState.Text = UiText.ActionFailedSeeResult; output.Text = Pretty(new { ok = false, message = ex.Message }); } }
+        catch (OperationCanceledException) { if (generation == sessionGeneration) { diagnosticState.SetText(() => UiText.ActionCancelled); output.SetText(() => UiText.ExecutionInterrupted); } }
+        catch (Exception ex) { if (generation == sessionGeneration) { diagnosticState.SetText(() => UiText.ActionFailedSeeResult); output.SetText(Pretty(new { ok = false, message = ex.Message })); } }
         finally { action = null; operationId = null; RefreshControllerControls(); RefreshFooter(); }
     }
 
@@ -1371,22 +1371,22 @@ public sealed partial class MainForm : Forms.Form
 
     private async Task UploadFileAsync()
     {
-        using var dialog = new Forms.OpenFileDialog(); if (dialog.ShowDialog() != Forms.DialogResult.OK) return; try { RequireClient(); fileState.Text = UiText.Uploading; var result = await client!.UploadAsync(dialog.FileName, destination.Text.TrimEnd('/', '\\') + "/" + Path.GetFileName(dialog.FileName)); output.Text = Pretty(result); fileState.Text = UiText.UploadVerified; await BrowseFilesAsync(); } catch (Exception ex) { fileState.Text = UiText.UploadFailedPrefix + ex.Message; }
+        using var dialog = new Forms.OpenFileDialog(); if (dialog.ShowDialog() != Forms.DialogResult.OK) return; try { RequireClient(); fileState.SetText(() => UiText.Uploading); var result = await client!.UploadAsync(dialog.FileName, destination.Text.TrimEnd('/', '\\') + "/" + Path.GetFileName(dialog.FileName)); output.SetText(Pretty(result)); fileState.SetText(() => UiText.UploadVerified); await BrowseFilesAsync(); } catch (Exception ex) { fileState.SetText(() => UiText.UploadFailedPrefix + ex.Message); }
     }
 
     private async Task UploadFolderAsync()
     {
-        using var dialog = new Forms.FolderBrowserDialog(); if (dialog.ShowDialog() != Forms.DialogResult.OK) return; try { RequireClient(); var target = client!; int generation = sessionGeneration; string folderDestination = destination.Text.TrimEnd('/', '\\'); foreach (string file in Directory.EnumerateFiles(dialog.SelectedPath, "*", SearchOption.AllDirectories)) { if (File.GetAttributes(file).HasFlag(FileAttributes.ReparsePoint)) throw new IOException(UiText.ReparsePointsNotUploaded); if (generation != sessionGeneration) throw new OperationCanceledException(UiText.TargetChanged); await target.UploadAsync(file, folderDestination + "/" + Path.GetRelativePath(dialog.SelectedPath, file)); } fileState.Text = UiText.FolderUploadVerified; await BrowseFilesAsync(); } catch (Exception ex) { fileState.Text = UiText.UploadFailedPrefix + ex.Message; }
+        using var dialog = new Forms.FolderBrowserDialog(); if (dialog.ShowDialog() != Forms.DialogResult.OK) return; try { RequireClient(); var target = client!; int generation = sessionGeneration; string folderDestination = destination.Text.TrimEnd('/', '\\'); foreach (string file in Directory.EnumerateFiles(dialog.SelectedPath, "*", SearchOption.AllDirectories)) { if (File.GetAttributes(file).HasFlag(FileAttributes.ReparsePoint)) throw new IOException(UiText.ReparsePointsNotUploaded); if (generation != sessionGeneration) throw new OperationCanceledException(UiText.TargetChanged); await target.UploadAsync(file, folderDestination + "/" + Path.GetRelativePath(dialog.SelectedPath, file)); } fileState.SetText(() => UiText.FolderUploadVerified); await BrowseFilesAsync(); } catch (Exception ex) { fileState.SetText(() => UiText.UploadFailedPrefix + ex.Message); }
     }
 
     private async Task DownloadFileAsync()
     {
-        if (string.IsNullOrWhiteSpace(selectedFilePath)) { fileState.Text = UiText.SelectFile; return; } using var dialog = new Forms.SaveFileDialog { FileName = Path.GetFileName(selectedFilePath) }; if (dialog.ShowDialog() != Forms.DialogResult.OK) return; try { RequireClient(); await client!.DownloadAsync(selectedFilePath, dialog.FileName); fileState.Text = UiText.DownloadVerified; output.Text = UiText.FileSavedPrefix + dialog.FileName; } catch (Exception ex) { fileState.Text = UiText.DownloadFailedPrefix + ex.Message; }
+        if (string.IsNullOrWhiteSpace(selectedFilePath)) { fileState.SetText(() => UiText.SelectFile); return; } using var dialog = new Forms.SaveFileDialog { FileName = Path.GetFileName(selectedFilePath) }; if (dialog.ShowDialog() != Forms.DialogResult.OK) return; try { RequireClient(); await client!.DownloadAsync(selectedFilePath, dialog.FileName); fileState.SetText(() => UiText.DownloadVerified); output.SetText(() => UiText.FileSavedPrefix + dialog.FileName); } catch (Exception ex) { fileState.SetText(() => UiText.DownloadFailedPrefix + ex.Message); }
     }
 
     private async Task TerminateSupportAsync(bool selectControllerAfter = true)
     {
-        if (terminating) return; terminating = true; operationGeneration++; terminateSession.Enabled = false; footerMessage = UiText.EndingSupport; RefreshFooter(); pairingLifetime?.Cancel(); heartbeatLifetime?.Cancel(); action?.Cancel(); resumeViewingOnRestore = false; StopStream(UiText.SupportEnded); QueueInput(new { kind = "release" });
+        if (terminating) return; terminating = true; operationGeneration++; terminateSession.Enabled = false; SetFooterMessage(() => UiText.EndingSupport); RefreshFooter(); pairingLifetime?.Cancel(); heartbeatLifetime?.Cancel(); action?.Cancel(); resumeViewingOnRestore = false; StopStream(() => UiText.SupportEnded); QueueInput(new { kind = "release" });
         bool wasAgent = agent != null || rolePages.SelectedIndex == 0;
         RemoteClient? oldClient = client;
         sessionGeneration++;
@@ -1408,7 +1408,7 @@ public sealed partial class MainForm : Forms.Form
                 await oldClient.EndSessionAsync(CancellationToken.None);
             }
         }
-        catch (Exception ex) { footerDetail = UiText.TargetOfflineExpiration; output.Text = Pretty(new { ok = false, message = ex.Message }); }
+        catch (Exception ex) { SetFooterDetail(() => UiText.TargetOfflineExpiration); output.SetText(Pretty(new { ok = false, message = ex.Message })); }
         if (!localAgentStopped)
         {
             terminateSession.Enabled = true;
@@ -1419,14 +1419,14 @@ public sealed partial class MainForm : Forms.Form
         terminateSession.Enabled = true; terminating = false;
         if (wasAgent)
         {
-            agentIdle = true; sessionExit.Start(); footerMessage = UiText.SupportEnded; footerDetail = UiText.AutoCloseTenMinutes; RefreshUiState();
+            agentIdle = true; sessionExit.Start(); SetFooterMessage(() => UiText.SupportEnded); SetFooterDetail(() => UiText.AutoCloseTenMinutes); RefreshUiState();
             return;
         }
         if (selectControllerAfter)
         {
             SelectRole(1); SelectControllerPage(0); _ = DiscoverAsync(false);
         }
-        footerMessage = UiText.SupportEnded; footerDetail = UiText.SelectPcToRestart; RefreshFooter();
+        SetFooterMessage(() => UiText.SupportEnded); SetFooterDetail(() => UiText.SelectPcToRestart); RefreshFooter();
     }
 
     private void TerminateAgentFromRemote()
@@ -1434,23 +1434,23 @@ public sealed partial class MainForm : Forms.Form
         if (quitting) return;
         agentIdle = true; sessionExit.Start(); CurrentPairingCode = null;
         powerHold?.Dispose(); powerHold = null;
-        footerMessage = UiText.SupportEnded; footerDetail = UiText.NewSupportForCode;
+        SetFooterMessage(() => UiText.SupportEnded); SetFooterDetail(() => UiText.NewSupportForCode);
         RefreshUiState();
     }
 
     private void ClearControllerSession()
     {
         client = null; selectedPeer = null; selectedFingerprint = ""; selectedFilePath = null;
-        selectedPeerName.Text = UiText.NewConnection; selectedPeerAddress.Text = UiText.EnterRemoteCode;
-        geometry = null; lastFrameUtc = null; inputState.Released(); code.Clear();
+        selectedPeerName.SetText(() => UiText.NewConnection); selectedPeerAddress.SetText(() => UiText.EnterRemoteCode);
+        geometry = null; lastFrameUtc = null; inputState.Released(); code.SetText("");
         processRows.Clear(); fileRows.Clear(); processList.Items.Clear(); fileList.Items.Clear();
-        screen.Image?.Dispose(); screen.Image = null; currentDirectory = ""; fileDirectory.Clear(); remotePath.Clear();
-        cpuSummary.Text = ramSummary.Text = processSummary.Text = resourceMeasuredAt.Text = "—";
+        screen.Image?.Dispose(); screen.Image = null; currentDirectory = ""; fileDirectory.Clear(); remotePath.SetText("");
+        cpuSummary.SetText(ramSummary.SetText(processSummary.SetText(resourceMeasuredAt.SetText("—"))));
         lastMeasurementUtc = null; powerHold?.Dispose(); powerHold = null;
-        resourceState.Text = fileState.Text = diagnosticState.Text = ConnectToContinue;
-        volumeSummary.Text = UiText.NoMeasurementsAvailable; output.Clear(); remoteText.Clear(); pid.Value = 0;
-        streamStatus.Text = UiText.NoActiveConnection;
-        connectionState.Text = UiText.SupportEndedNewCode;
+        resourceState.SetText(() => ConnectToContinue); fileState.SetText(() => ConnectToContinue); diagnosticState.SetText(() => ConnectToContinue);
+        volumeSummary.SetText(() => UiText.NoMeasurementsAvailable); output.SetText(""); remoteText.SetText(""); pid.Value = 0;
+        streamStatus.SetText(() => UiText.NoActiveConnection);
+        connectionState.SetText(() => UiText.SupportEndedNewCode);
         RefreshControllerControls();
     }
 
@@ -1484,7 +1484,7 @@ public sealed partial class MainForm : Forms.Form
     {
         trayWindowState = WindowState;
         resumeViewingOnRestore = liveStream != null;
-        if (resumeViewingOnRestore) StopStream(UiText.MinimizedConnected);
+        if (resumeViewingOnRestore) StopStream(() => UiText.MinimizedConnected);
         ReleaseHeldInputForCurrentSession();
         trayVisible = true; tray.Visible = true; Hide();
         if (!trayNoticeShown)
@@ -1551,7 +1551,7 @@ public sealed partial class MainForm : Forms.Form
             catch (Exception ex)
             {
                 suppressTerminationEvent = false;
-                footerMessage = UiText.AgentStopDelayed;
+                SetFooterMessage(() => UiText.AgentStopDelayed);
                 footerDetail = ex.Message;
                 renderTimer.Start();
                 RefreshFooter();
@@ -1606,12 +1606,12 @@ public sealed partial class MainForm : Forms.Form
     private static ProcessSortColumn ProcessColumn(int index) => index switch { 0 => ProcessSortColumn.Pid, 1 => ProcessSortColumn.Name, 2 => ProcessSortColumn.CpuPercentTotalMachine, 3 => ProcessSortColumn.WorkingSetBytes, 4 => ProcessSortColumn.Responding, _ => ProcessSortColumn.Window };
     private static FileSortColumn FileColumn(int index) => index switch { 0 => FileSortColumn.Name, 1 => FileSortColumn.Type, 2 => FileSortColumn.SizeBytes, _ => FileSortColumn.ModifiedUtc };
     private static string Pretty(object value) => JsonSerializer.Serialize(value, new JsonSerializerOptions(Json.Options) { WriteIndented = true });
-    private static void AddSummary(Forms.TableLayoutPanel table, int col, string title, Forms.Label value)
+    private static void AddSummary(Forms.TableLayoutPanel table, int col, Func<string> title, Forms.Label value)
     {
         var stack = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Top, AutoSize = true, ColumnCount = 1, RowCount = 2, Margin = new Forms.Padding(0, 0, 12, 0) };
         stack.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
         stack.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize)); stack.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
-        stack.Controls.Add(new WorkspaceLabel { Text = title, AutoSize = true, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F), Margin = new Forms.Padding(0, 0, 0, 4) }, 0, 0);
+        stack.Controls.Add(new WorkspaceLabel { AutoSize = true, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F), Margin = new Forms.Padding(0, 0, 0, 4) }.WithText(title), 0, 0);
         value.Dock = Forms.DockStyle.Top; stack.Controls.Add(value, 0, 1); table.Controls.Add(stack, col, 0);
     }
     private static Forms.Label SummaryValue(string name) => new WorkspaceLabel { Name = name, Text = "—", AutoSize = true, ForeColor = PrimaryText, Font = new Font("Segoe UI", 13, FontStyle.Bold) };
@@ -1635,7 +1635,7 @@ public sealed partial class MainForm : Forms.Form
     private void PostUi(Action callback) { if (IsDisposed || !IsHandleCreated) return; try { BeginInvoke(callback); } catch (InvalidOperationException) { } }
 
     private sealed record QueuedInput(RemoteClient Client, int Generation, object Payload);
-    private sealed record MonitorChoice(int Index, string Name) { public override string ToString() => Name; }
+    private sealed record MonitorChoice(int Index, Func<string> Name) { public override string ToString() => Name(); }
     public static readonly Dictionary<string, string> Templates = new()
     {
         ["status"] = "{}", ["processes"] = "{}", ["process.info"] = "{\"pid\":1234}", ["start"] = "{\"path\":\"deployments/essai-1/MonApp.exe\",\"arguments\":[]}", ["stop"] = "{\"pid\":1234,\"mode\":\"graceful\"}", ["restart"] = "{\"pid\":1234,\"mode\":\"graceful\",\"arguments\":[]}",
