@@ -41,6 +41,24 @@ public sealed class RemoteInputQueueTests
     }
 
     [Fact]
+    public async Task ReleaseCanBeRequeuedAfterAReleaseTransportFailure()
+    {
+        var queue = new RemoteInputQueue<string>(2);
+        queue.Reset("first release");
+        await using var reader = queue.ReadAllAsync().GetAsyncEnumerator();
+
+        Assert.True(await reader.MoveNextAsync());
+        Assert.Equal("first release", reader.Current);
+
+        // The first release is already in flight when the retry is requested.
+        // The retry must still wake the single reader instead of being lost.
+        queue.Reset("retry release");
+        Assert.True(await reader.MoveNextAsync());
+        Assert.Equal("retry release", reader.Current);
+        queue.Complete();
+    }
+
+    [Fact]
     public void TransportFailureKeepsPreferenceAndRequiresReleaseBeforeRecovery()
     {
         var state = new RemoteInputState();

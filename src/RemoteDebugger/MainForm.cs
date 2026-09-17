@@ -153,6 +153,7 @@ public sealed partial class MainForm : Forms.Form
     private readonly bool startInTray;
     private readonly Forms.Timer renderTimer = new() { Interval = 250 };
     private readonly Forms.Timer discoveryTimer = new() { Interval = 30000 };
+    private readonly Forms.Timer inputRecoveryTimer = new() { Interval = 750 };
     private readonly Forms.NotifyIcon tray = new();
     private RemoteClient? client;
     private AgentServer? agent;
@@ -593,8 +594,10 @@ public sealed partial class MainForm : Forms.Form
         monitor.SelectedIndexChanged += (_, _) => { if (!refreshingMonitorLabels && liveStream != null) { StopStream(() => UiText.MonitorChanged); _ = StartStreamAsync(); } };
         mouseEnabled.CheckedChanged += (_, _) => { inputState.Enabled = mouseEnabled.Checked; if (!mouseEnabled.Checked) ReleaseHeldInputForCurrentSession(); RefreshInputStatus(); };
         restartAgent.Click += (_, _) => { agent?.Dispose(); agent = null; agentIdle = false; StartAgent(); _ = PrepareAgentAsync(); };
-        Deactivate += (_, _) => ReleaseHeldInputForCurrentSession();
-        screen.MouseDown += (_, e) => { screen.Focus(); QueueMouse("down", e); }; screen.MouseUp += (_, e) => QueueMouse("up", e); screen.MouseMove += (_, e) => { long now = Environment.TickCount64; if (now - lastMove < 33) return; lastMove = now; QueueMouse("move", e); }; screen.MouseWheel += (_, e) => QueueMouse("wheel", e); screen.PreviewKeyDown += (_, e) => e.IsInputKey = true; screen.KeyDown += (_, e) => { if (!CanSendInput()) return; e.SuppressKeyPress = true; QueueInput(new { kind = "keyDown", virtualKey = (int)e.KeyCode }); }; screen.KeyUp += (_, e) => { if (!CanSendInput()) return; e.SuppressKeyPress = true; QueueInput(new { kind = "keyUp", virtualKey = (int)e.KeyCode }); }; screen.LostFocus += (_, _) => ReleaseHeldInputForCurrentSession();
+        Deactivate += (_, _) => { ReleaseHeldInputForCurrentSession(); RefreshInputStatus(); };
+        Activated += (_, _) => RefreshInputStatus();
+        inputRecoveryTimer.Tick += (_, _) => RetryInputRecovery();
+        screen.MouseDown += (_, e) => { screen.Focus(); RefreshInputStatus(); QueueMouse("down", e); }; screen.MouseUp += (_, e) => QueueMouse("up", e); screen.MouseMove += (_, e) => { long now = Environment.TickCount64; if (now - lastMove < 33) return; lastMove = now; QueueMouse("move", e); }; screen.MouseWheel += (_, e) => QueueMouse("wheel", e); screen.PreviewKeyDown += (_, e) => e.IsInputKey = true; screen.KeyDown += (_, e) => { if (!CanSendInput()) return; e.SuppressKeyPress = true; QueueInput(new { kind = "keyDown", virtualKey = (int)e.KeyCode }); }; screen.KeyUp += (_, e) => { if (!CanSendInput()) return; e.SuppressKeyPress = true; QueueInput(new { kind = "keyUp", virtualKey = (int)e.KeyCode }); }; screen.GotFocus += (_, _) => RefreshInputStatus(); screen.LostFocus += (_, _) => { ReleaseHeldInputForCurrentSession(); RefreshInputStatus(); };
         typeText.Click += async (_, _) => await ExecuteAsync("ui.text", new { pid = (int)pid.Value, text = remoteText.Text }); enterKey.Click += async (_, _) => await ExecuteAsync("ui.key", new { pid = (int)pid.Value, key = "ENTER" });
         processList.ColumnClick += (_, e) => { processSort = processSort.Toggle(ProcessColumn(e.Column)); RenderProcesses(); }; processList.SelectedIndexChanged += (_, _) => { if (processList.SelectedItems.Count > 0 && processList.SelectedItems[0].Tag is ProcessSortRow row) { pid.Value = row.Pid; } };
         fileList.ColumnClick += (_, e) => { fileSort = fileSort.Toggle(FileColumn(e.Column)); RenderFiles(); }; fileList.SelectedIndexChanged += (_, _) => { selectedFilePath = fileList.SelectedItems.Count > 0 && fileList.SelectedItems[0].Tag is FileSortRow row && !row.IsDirectory ? row.Path : null; remotePath.SetText(selectedFilePath ?? ""); RefreshControllerControls(); }; fileList.DoubleClick += async (_, _) => { if (fileList.SelectedItems.Count == 0 || fileList.SelectedItems[0].Tag is not FileSortRow row) return; if (row.IsDirectory) { currentDirectory = row.Path; selectedFilePath = null; remotePath.SetText(""); fileDirectory.SetText(currentDirectory); await BrowseFilesAsync(); } };
@@ -1142,8 +1145,8 @@ public sealed partial class MainForm : Forms.Form
                     liveFrameFresh = false;
                     ReleaseHeldInputForCurrentSession();
                 }
-                else if (inputState.Suspended) ReleaseHeldInputForCurrentSession();
-                PostUi(UpdateHeader);
+                else if (inputState.Suspended) BeginInputRecovery();
+                PostUi(() => { UpdateHeader(); RefreshInputStatus(); });
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
             catch (RemoteOperationException ex) when (ex.Code is "access_denied" or "session_ended")
@@ -1155,7 +1158,7 @@ public sealed partial class MainForm : Forms.Form
             catch (Exception ex)
             {
                 if (ct.IsCancellationRequested || !ReferenceEquals(target, client)) break;
-                heartbeatHealthy = false; liveFrameFresh = false; ReleaseHeldInputForCurrentSession(); SetFooterMessage(() => UiText.Reconnecting); footerDetail = ex.Message; PostUi(() => { streamOverlay.SetText(() => UiText.SessionRetrying); streamOverlay.Visible = true; liveBadge.Visible = false; UpdateHeader(); RefreshFooter(); });
+                heartbeatHealthy = false; liveFrameFresh = false; ReleaseHeldInputForCurrentSession(); SetFooterMessage(() => UiText.Reconnecting); footerDetail = ex.Message; PostUi(() => { streamOverlay.SetText(() => UiText.SessionRetrying); streamOverlay.Visible = true; liveBadge.Visible = false; UpdateHeader(); RefreshInputStatus(); RefreshFooter(); });
             }
             try { await Task.Delay(TimeSpan.FromSeconds(5), ct); } catch (OperationCanceledException) { break; }
         }
@@ -1193,7 +1196,7 @@ public sealed partial class MainForm : Forms.Form
                     // renew the stream inside the same authenticated session.
                     liveFrameFresh = false; liveBadge.Visible = false;
                     streamOverlay.SetText(() => UiText.ReconnectingStream); streamOverlay.Visible = true;
-                    streamStatus.SetText(() => UiText.WaitingFreshFrame);
+                    streamStatus.SetText(() => UiText.WaitingFreshFrame); RefreshInputStatus();
                     ReleaseHeldInputForCurrentSession();
                     await Task.Delay(500, lifetime.Token);
                 }
@@ -1204,7 +1207,7 @@ public sealed partial class MainForm : Forms.Form
         {
             if (ReferenceEquals(liveStream, lifetime))
             {
-                liveFrameFresh = false; liveBadge.Visible = false; streamOverlay.SetText(() => UiText.StreamInterruptedResume); streamOverlay.Visible = true; streamStatus.SetText(() => UiText.StreamInterruptedPrefix + ex.Message);
+                liveFrameFresh = false; liveBadge.Visible = false; streamOverlay.SetText(() => UiText.StreamInterruptedResume); streamOverlay.Visible = true; streamStatus.SetText(() => UiText.StreamInterruptedPrefix + ex.Message); RefreshInputStatus();
             }
         }
         finally
@@ -1218,6 +1221,7 @@ public sealed partial class MainForm : Forms.Form
                 liveBadge.Visible = false;
                 streamOverlay.Visible = true;
                 streamOverlay.SetText(() => UiText.StreamStoppedResume);
+                RefreshInputStatus();
             }
             lifetime.Dispose();
             if (generation == sessionGeneration && ReferenceEquals(target, client)) ReleaseHeldInputForCurrentSession();
@@ -1231,7 +1235,7 @@ public sealed partial class MainForm : Forms.Form
         liveStream = null;
         running?.Cancel();
         pauseViewing.SetText(() => UiText.Resume); monitor.Enabled = true;
-        liveFrameFresh = false; liveBadge.Visible = false; streamOverlay.Visible = true; streamOverlay.SetText(() => UiText.ViewingPausedResume); streamStatus.SetText(message);
+        liveFrameFresh = false; liveBadge.Visible = false; streamOverlay.Visible = true; streamOverlay.SetText(() => UiText.ViewingPausedResume); streamStatus.SetText(message); RefreshInputStatus();
         if (target != null) ReleaseHeldInputForCurrentSession();
     }
 
@@ -1242,7 +1246,7 @@ public sealed partial class MainForm : Forms.Form
             PostUi(() => Present(frame));
             return;
         }
-        geometry = frame.Geometry; using var ms = new MemoryStream(Convert.FromBase64String(frame.Data)); using var image = Image.FromStream(ms); var previous = screen.Image; screen.Image = new Bitmap(image); previous?.Dispose(); screen.Refresh(); liveFrameFresh = true; lastFrameUtc = DateTimeOffset.UtcNow; liveBadge.Visible = true; streamOverlay.Visible = false;
+        geometry = frame.Geometry; using var ms = new MemoryStream(Convert.FromBase64String(frame.Data)); using var image = Image.FromStream(ms); var previous = screen.Image; screen.Image = new Bitmap(image); previous?.Dispose(); screen.Refresh(); liveFrameFresh = true; lastFrameUtc = DateTimeOffset.UtcNow; liveBadge.Visible = true; streamOverlay.Visible = false; RefreshInputStatus();
         if (liveStream != null && streamStartedUtc is { } started)
         {
             streamFrames++; streamBytes += frame.Data.Length; double seconds = Math.Max(0.001, (DateTimeOffset.UtcNow - started).TotalSeconds); double fps = streamFrames / seconds; double mbps = streamBytes * 8 / seconds / 1_000_000d; streamStatus.SetText(() => UiText.Format(UiText.StreamMetrics, fps, mbps, frame.CaptureEncodeMs)); SetFooterDetail(() => streamStatus.Text); RefreshFooter();
@@ -1272,7 +1276,7 @@ public sealed partial class MainForm : Forms.Form
         {
             inputState.Suspend();
             inputStatus.SetText(() => UiText.InputQueueFull);
-            ReleaseHeldInputForCurrentSession();
+            BeginInputRecovery();
         }
     }
 
@@ -1308,6 +1312,35 @@ public sealed partial class MainForm : Forms.Form
             inputQueue.Reset(new QueuedInput(target, sessionGeneration, new { kind = "release" }));
     }
 
+    private void BeginInputRecovery()
+    {
+        if (!inputState.Suspended)
+        {
+            inputRecoveryTimer.Stop();
+            return;
+        }
+
+        if (!supportSession || client == null || !heartbeatHealthy)
+        {
+            inputRecoveryTimer.Stop();
+            return;
+        }
+
+        ReleaseHeldInputForCurrentSession();
+        inputRecoveryTimer.Start();
+    }
+
+    private void RetryInputRecovery()
+    {
+        if (!supportSession || client == null || !inputState.Suspended || !heartbeatHealthy)
+        {
+            inputRecoveryTimer.Stop();
+            return;
+        }
+
+        ReleaseHeldInputForCurrentSession();
+    }
+
     private async Task EndSessionBestEffortAsync(RemoteClient target)
     {
         try { await target.EndSessionAsync(CancellationToken.None); } catch { }
@@ -1329,15 +1362,20 @@ public sealed partial class MainForm : Forms.Form
             {
                 using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
                 RemoteClient.Require(await target.CallAsync("ui.input", item.Payload, deadline.Token, seconds: 3));
-                if (release && item.Generation == sessionGeneration && ReferenceEquals(target, client)) inputState.Released();
+                if (release && item.Generation == sessionGeneration && ReferenceEquals(target, client))
+                {
+                    inputState.Released();
+                    inputRecoveryTimer.Stop();
+                    RefreshInputStatus();
+                }
             }
             catch (Exception ex)
             {
                 if (item.Generation != sessionGeneration || !ReferenceEquals(target, client)) continue;
                 inputState.Suspend();
-                inputStatus.SetText(() => UiText.ControlTemporarilyUnavailable);
+                inputStatus.SetText(() => UiText.RestoringControl);
                 output.SetText(() => UiText.InputInterruptedPrefix + ex.Message);
-                if (!release) ReleaseHeldInputForCurrentSession();
+                BeginInputRecovery();
             }
         }
     }
@@ -1501,7 +1539,7 @@ public sealed partial class MainForm : Forms.Form
     {
         client = null; selectedPeer = null; selectedFingerprint = ""; selectedFilePath = null;
         selectedPeerName.SetText(() => UiText.NewConnection); selectedPeerAddress.SetText(() => PrivateInternet ? UiText.PrivateConnectInstructions : UiText.EnterRemoteCode);
-        geometry = null; lastFrameUtc = null; inputState.Released(); code.SetText("");
+        geometry = null; lastFrameUtc = null; inputState.Released(); inputRecoveryTimer.Stop(); code.SetText("");
         processRows.Clear(); fileRows.Clear(); processList.Items.Clear(); fileList.Items.Clear();
         screen.Image?.Dispose(); screen.Image = null; currentDirectory = ""; fileDirectory.Clear(); remotePath.SetText("");
         cpuSummary.SetText(ramSummary.SetText(processSummary.SetText(resourceMeasuredAt.SetText("—"))));
@@ -1588,7 +1626,7 @@ public sealed partial class MainForm : Forms.Form
 
     private async Task<bool> ShutdownAsync()
     {
-        renderTimer.Stop(); discoveryTimer.Stop(); discoveryLifetime?.Cancel(); heartbeatLifetime?.Cancel(); pairingLifetime?.Cancel(); liveStream?.Cancel(); action?.Cancel();
+        renderTimer.Stop(); discoveryTimer.Stop(); inputRecoveryTimer.Stop(); discoveryLifetime?.Cancel(); heartbeatLifetime?.Cancel(); pairingLifetime?.Cancel(); liveStream?.Cancel(); action?.Cancel();
         // A saved connection only pre-fills the controller form. It is not an
         // active outbound session, and must never delay an agent replacement
         // while trying to contact an unrelated (possibly offline) old peer.
@@ -1627,7 +1665,7 @@ public sealed partial class MainForm : Forms.Form
     private void DisposeResources()
     {
         SupportPlatform.ManagedRelaunchRequested -= OnManagedRelaunchRequested;
-        renderTimer.Dispose(); discoveryTimer.Dispose(); discoveryLifetime?.Dispose(); heartbeatLifetime?.Dispose(); pairingLifetime?.Dispose(); liveStream?.Dispose(); action?.Dispose(); powerHold?.Dispose(); tray.Dispose();
+        renderTimer.Dispose(); discoveryTimer.Dispose(); inputRecoveryTimer.Dispose(); discoveryLifetime?.Dispose(); heartbeatLifetime?.Dispose(); pairingLifetime?.Dispose(); liveStream?.Dispose(); action?.Dispose(); powerHold?.Dispose(); tray.Dispose();
     }
 
     private void RequireClient() { if (client == null || !supportSession) throw new InvalidOperationException(UiText.ConnectBeforeAction); }
