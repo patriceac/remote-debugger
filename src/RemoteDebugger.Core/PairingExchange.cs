@@ -10,7 +10,7 @@ public sealed record PakeMessage(string ParticipantId, string[] Values);
 /// <summary>
 /// Bouncy Castle J-PAKE with mandatory mutual key confirmation, then HKDF/HMAC
 /// binding to the actual TLS certificate and controller binary identity.
-/// The six-digit password is never transmitted or used as a bearer credential.
+/// The displayed code or private installer secret is never transmitted.
 /// </summary>
 public sealed class PairingExchange : IDisposable
 {
@@ -23,7 +23,7 @@ public sealed class PairingExchange : IDisposable
     public PairingExchange(string role, string code, string fingerprint, string binaryHash)
     {
         if (role is not ("agent" or "controller")) throw new ArgumentException("Invalid pairing role.");
-        if (code.Length != 6 || !code.All(char.IsAsciiDigit)) throw new ArgumentException("Enter exactly six digits.");
+        if (!ValidSecret(code)) throw new ArgumentException("Invalid pairing secret.");
         if (!ValidHash(fingerprint) || !ValidHash(binaryHash)) throw new ArgumentException("Invalid pairing identity.");
         this.role = role; this.fingerprint = fingerprint.ToUpperInvariant(); this.binaryHash = binaryHash.ToUpperInvariant();
         char[] secret = code.ToCharArray();
@@ -31,6 +31,7 @@ public sealed class PairingExchange : IDisposable
         finally { Array.Clear(secret); }
     }
     public static bool ValidHash(string? hash) => hash?.Length == 64 && hash.All(Uri.IsHexDigit);
+    public static bool ValidSecret(string code) => code.Length == 6 && code.All(char.IsAsciiDigit) || ValidHash(code);
     private static string Hex(BigInteger value) => value.ToString(16);
     private static BigInteger[] Decode(PakeMessage message, int count)
     {

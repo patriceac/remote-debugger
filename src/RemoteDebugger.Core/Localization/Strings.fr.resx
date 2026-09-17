@@ -214,7 +214,7 @@
     <value>Dossier vide</value>
   </data>
   <data name="EnableOnThisPc" xml:space="preserve">
-    <value>Activer sur ce PC</value>
+    <value>Activer l’assistance</value>
   </data>
   <data name="EnablePrivateNetwork" xml:space="preserve">
     <value>Activez ce PC pour autoriser le réseau privé</value>
@@ -783,15 +783,21 @@
   <data name="Language" xml:space="preserve"><value>Langue</value></data>
   <data name="SystemDefault" xml:space="preserve"><value>Langue du système</value></data>
   <data name="LanguageSaveFailed" xml:space="preserve"><value>Langue appliquée, mais non enregistrée.</value></data>
-  <data name="InternetSetup" xml:space="preserve"><value>Configurer Internet…</value></data>
-  <data name="InternetSetupRequired" xml:space="preserve"><value>Importez votre fichier de configuration Internet privé une fois sur chaque PC.</value></data>
+  <data name="InternetSetupRequired" xml:space="preserve"><value>Exécutez votre programme d’installation privé pour activer l’assistance Internet.</value></data>
   <data name="InternetReady" xml:space="preserve"><value>Internet prêt</value></data>
   <data name="InternetConnecting" xml:space="preserve"><value>Connexion au relais Internet…</value></data>
   <data name="InternetRetrying" xml:space="preserve"><value>Internet indisponible · nouvelle tentative…</value></data>
   <data name="InternetUnavailable" xml:space="preserve"><value>Internet indisponible</value></data>
   <data name="PublicIp" xml:space="preserve"><value>IP publique</value></data>
   <data name="SupportId" xml:space="preserve"><value>Identifiant d’assistance</value></data>
-  <data name="InternetInstructions" xml:space="preserve"><value>Pour Internet, partagez cet identifiant et le code ci-dessous.</value></data>
-  <data name="InternetSupportSuffix" xml:space="preserve"><value> · Assistance par Internet et réseau local</value></data>
+  <data name="InternetInstructions" xml:space="preserve"><value>Sur le PC d’assistance, sélectionnez cet ordinateur par son nom et cliquez sur Connecter.</value></data>
+  <data name="PrivateSupportReady" xml:space="preserve"><value>Assistance activée</value></data>
+  <data name="PrivateEnableInstructions" xml:space="preserve"><value>Cliquez sur Activer l’assistance pour rendre cet ordinateur accessible à votre PC d’assistance.</value></data>
+  <data name="PrivateAccessNote" xml:space="preserve"><value>Votre installateur privé authentifie la connexion. Terminer l’assistance révoque l’accès.</value></data>
+  <data name="PrivateConnectInstructions" xml:space="preserve"><value>Sélectionnez un ordinateur en ligne et cliquez sur Connecter.</value></data>
+  <data name="NoInternetPcs" xml:space="preserve"><value>Aucun PC en ligne. Activez l’assistance sur l’autre PC.</value></data>
+  <data name="InternetSupportSuffix" xml:space="preserve"><value> · Assistance par Internet</value></data>
+  <data name="SelectComputer" xml:space="preserve"><value>Sélectionnez un ordinateur</value></data>
+  <data name="InternetLabel" xml:space="preserve"><value>Internet</value></data>
   <data name="InternetMaintenanceNotice" xml:space="preserve"><value>L’activation Windows sert uniquement au réseau local et à la maintenance administrateur.</value></data>
 </root>

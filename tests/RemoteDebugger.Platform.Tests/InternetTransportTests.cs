@@ -14,16 +14,28 @@ public sealed class InternetTransportTests
         try
         {
             string profile = Path.Combine(directory, "setup.rdrelay"), settingsRoot = Path.Combine(directory, "settings");
-            var expected = new InternetSettings("https://relay.example", new string('a', 64));
+            var expected = new InternetSettings("https://relay.example", new string('a', 64), new string('b', 64));
             File.WriteAllText(profile, JsonSerializer.Serialize(expected));
             InternetSettings.Import(profile, settingsRoot);
             Assert.Equal(expected, InternetSettings.Load(settingsRoot));
             Assert.DoesNotContain(expected.AccessKey, Encoding.UTF8.GetString(File.ReadAllBytes(Path.Combine(settingsRoot, "internet.dpapi"))));
+            Assert.DoesNotContain(expected.PairingKey, Encoding.UTF8.GetString(File.ReadAllBytes(Path.Combine(settingsRoot, "internet.dpapi"))));
             File.WriteAllText(profile, JsonSerializer.Serialize(expected with { RelayUrl = "http://relay.example" }));
             Assert.Throws<ArgumentException>(() => InternetSettings.Import(profile, settingsRoot));
             Assert.Equal(expected, InternetSettings.Load(settingsRoot));
         }
         finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Fact]
+    public void PrivateAuthenticationRequiresTheInstallerSecretAndBindsItToEachInvitation()
+    {
+        var settings = new InternetSettings("https://relay.example", new string('a', 64), new string('b', 64));
+        string first = settings.AuthenticationSecret("0123456789ABCDEF");
+        Assert.Equal(first, settings.AuthenticationSecret("RD-0123-4567-89AB-CDEF"));
+        Assert.NotEqual(first, settings.AuthenticationSecret("0123456789ABCDE0"));
+        Assert.NotEqual(first, (settings with { PairingKey = new string('c', 64) }).AuthenticationSecret("0123456789ABCDEF"));
+        Assert.Throws<ArgumentException>(() => (settings with { PairingKey = "" }).AuthenticationSecret("0123456789ABCDEF"));
     }
 
     [Theory]

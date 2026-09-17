@@ -34,7 +34,7 @@ public sealed partial class MainForm
     {
         RefreshLocalizedDescriptions();
         resourceState.SetText(() => ConnectToContinue); fileState.SetText(() => ConnectToContinue); diagnosticState.SetText(() => ConnectToContinue);
-        connectionState.SetText(() => UiText.ChoosePcAndCode);
+        connectionState.SetText(() => PrivateInternet ? UiText.PrivateConnectInstructions : UiText.ChoosePcAndCode);
         streamStatus.SetText(() => UiText.NoActiveConnection);
         operations.SelectedIndexChanged += (_, _) => LoadDiagnosticTemplate();
         pid.ValueChanged += (_, _) =>

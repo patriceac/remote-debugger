@@ -8,9 +8,10 @@ const receive = (ws: WebSocket) => new Promise<string | ArrayBuffer>((resolve, r
   ws.addEventListener("message", e => resolve(e.data as string | ArrayBuffer), { once: true });
   ws.addEventListener("close", () => reject(new Error("closed")), { once: true });
 });
-async function connect(room: string, action: string, ownerKey?: string) {
+async function connect(room: string, action: string, ownerKey?: string, name?: string) {
   const headers: Record<string, string> = { Authorization: `Bearer ${key}`, Upgrade: "websocket" };
   if (ownerKey) headers["X-Session-Key"] = ownerKey;
+  if (name) headers["X-Computer-Name"] = encodeURIComponent(name);
   const response = await SELF.fetch(`https://relay/v1/sessions/${room}/${action}`, { headers });
   expect(response.status).toBe(101);
   const ws = response.webSocket!; ws.binaryType = "arraybuffer"; ws.accept(); sockets.push(ws); return ws;
@@ -18,6 +19,27 @@ async function connect(room: string, action: string, ownerKey?: string) {
 afterEach(() => { for (const ws of sockets.splice(0)) ws.close(); });
 
 describe("private encrypted transport relay", () => {
+  it("privately discovers live computers by name and removes disconnected clients", async () => {
+    expect((await SELF.fetch("https://relay/v1/clients")).status).toBe(401);
+    expect((await SELF.fetch("https://relay/v1/clients", { headers: { Authorization: `Bearer ${owner}` } })).status).toBe(401);
+    const room = id(), agent = await connect(room, "agent", owner, "PC-Étude"); await receive(agent);
+    const list = async () => {
+      const response = await SELF.fetch("https://relay/v1/clients", { headers: { Authorization: `Bearer ${key}` } });
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+      return await response.json() as { id: string; name: string }[];
+    };
+    expect(await list()).toContainEqual({ id: room, name: "PC-Étude" });
+    const impostor = await SELF.fetch(`https://relay/v1/sessions/${room}/agent`, {
+      headers: { Upgrade: "websocket", Authorization: `Bearer ${key}`, "X-Session-Key": "c".repeat(64), "X-Computer-Name": "Fake" }
+    });
+    expect(impostor.status).toBe(404);
+    expect(await list()).toContainEqual({ id: room, name: "PC-Étude" });
+    const replacement = await connect(room, "agent", owner, "PC-Renamed"); await receive(replacement);
+    expect((await list()).filter(client => client.id === room)).toEqual([{ id: room, name: "PC-Renamed" }]);
+    replacement.close();
+    await expect.poll(async () => (await list()).some(client => client.id === room)).toBe(false);
+  });
+
   it("rejects missing hosting credentials and unknown sessions", async () => {
     expect((await SELF.fetch("https://relay/v1/sessions/1111111111111111/agent", { headers: { Upgrade: "websocket" } })).status).toBe(401);
     expect((await SELF.fetch(`https://relay/v1/sessions/${id()}/connect`, { headers: { Upgrade: "websocket", Authorization: `Bearer ${key}` } })).status).toBe(404);

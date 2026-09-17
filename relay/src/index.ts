@@ -8,6 +8,7 @@ type SocketState = {
   window: number;
   bytes: number;
   generation: string;
+  name?: string;
 };
 const unavailable = () => new Response("Session unavailable", { status: 404 });
 const validId = (s: string) => /^[A-F0-9]{16}$/.test(s);
@@ -24,6 +25,10 @@ export default {
     // endpoint J-PAKE, the displayed code, and pinned inner TLS still do that.
     if (!env.ACCESS_KEY || request.headers.get("Authorization") !== `Bearer ${env.ACCESS_KEY}`)
       return new Response("Unauthorized", { status: 401 });
+    if (request.method === "GET" && url.pathname === "/v1/clients")
+      return Response.json(await env.DIRECTORY.getByName("private-clients").list(), {
+        headers: { "Cache-Control": "no-store" }
+      });
     if (request.method !== "GET" || request.headers.get("Upgrade")?.toLowerCase() !== "websocket")
       return new Response("WebSocket required", { status: 426 });
     const parts = url.pathname.split("/");
@@ -36,6 +41,29 @@ export default {
   }
 } satisfies ExportedHandler<RelayEnv>;
 
+// The private install's small directory stores routing IDs only. A computer is
+// listed only while its session has a live, recently responsive agent socket.
+export class ClientDirectory extends DurableObject<RelayEnv> {
+  constructor(ctx: DurableObjectState, env: RelayEnv) {
+    super(ctx, env);
+    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS clients (id TEXT PRIMARY KEY, registered INTEGER NOT NULL)");
+  }
+
+  register(id: string): void {
+    this.ctx.storage.sql.exec("INSERT OR REPLACE INTO clients VALUES (?, ?)", id, Date.now());
+    this.ctx.storage.sql.exec("DELETE FROM clients WHERE id NOT IN (SELECT id FROM clients ORDER BY registered DESC LIMIT 32)");
+  }
+
+  async list(): Promise<{ id: string; name: string }[]> {
+    const rows = this.ctx.storage.sql.exec<{ id: string }>("SELECT id FROM clients").toArray();
+    const clients = await Promise.all(rows.map(async ({ id }) => {
+      const name = await this.env.SESSIONS.getByName(id).presence();
+      return name ? { id, name } : null;
+    }));
+    return clients.filter((client): client is { id: string; name: string } => client !== null);
+  }
+}
+
 // Each invitation is an independent coordination unit. WebSocket attachments
 // and the owner hash survive hibernation; screen/file data is never stored.
 export class SupportSession extends DurableObject<RelayEnv> {
@@ -47,6 +75,10 @@ export class SupportSession extends DurableObject<RelayEnv> {
   async fetch(request: Request): Promise<Response> {
     const action = new URL(request.url).pathname.split("/").slice(4).join("/");
     if (action === "agent") {
+      let name = "";
+      try { name = decodeURIComponent(request.headers.get("X-Computer-Name") ?? "").trim(); }
+      catch { return new Response("Invalid computer name", { status: 400 }); }
+      if (name.length > 128 || /[\x00-\x1f\x7f]/.test(name)) return new Response("Invalid computer name", { status: 400 });
       const key = request.headers.get("X-Session-Key") ?? "";
       if (!validKey(key)) return unavailable();
       const owner = await hash(key);
@@ -59,7 +91,8 @@ export class SupportSession extends DurableObject<RelayEnv> {
       if (!accepted) return unavailable();
       for (const socket of this.ctx.getWebSockets()) this.close(socket, "Agent reconnected");
       const [client, server] = Object.values(new WebSocketPair());
-      this.accept(server, "agent", "", crypto.randomUUID());
+      this.accept(server, "agent", "", crypto.randomUUID(), name);
+      if (name) await this.env.DIRECTORY.getByName("private-clients").register(new URL(request.url).pathname.split("/")[3]);
       server.send(JSON.stringify({ type: "registered", publicIp: request.headers.get("CF-Connecting-IP") ?? "" }));
       await this.scheduleCleanup();
       return new Response(null, { status: 101, webSocket: client });
@@ -90,9 +123,17 @@ export class SupportSession extends DurableObject<RelayEnv> {
     return unavailable();
   }
 
-  private accept(socket: WebSocket, role: SocketState["role"], channel: string, generation: string): void {
+  presence(): string | null {
+    const socket = this.ctx.getWebSockets("agent").find(s => s.readyState === WebSocket.OPEN);
+    if (!socket) return null;
+    const state = socket.deserializeAttachment() as SocketState;
+    const lastSeen = this.ctx.getWebSocketAutoResponseTimestamp(socket)?.getTime() ?? state.created;
+    return Date.now() - lastSeen < 60000 ? state.name || null : null;
+  }
+
+  private accept(socket: WebSocket, role: SocketState["role"], channel: string, generation: string, name?: string): void {
     this.ctx.acceptWebSocket(socket, [role, `channel:${channel}`]);
-    socket.serializeAttachment({ role, channel, created: Date.now(), window: Date.now(), bytes: 0, generation } satisfies SocketState);
+    socket.serializeAttachment({ role, channel, created: Date.now(), window: Date.now(), bytes: 0, generation, name } satisfies SocketState);
   }
 
   webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): void {

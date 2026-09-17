@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Windows.Automation;
 using RemoteDebugger.Core;
 using Forms = System.Windows.Forms;
 
@@ -9,9 +10,10 @@ namespace RemoteDebugger.Lab;
 
 internal sealed partial class LabForm
 {
-    private Process LaunchInternetProduct(bool isAgent, string dataRoot)
+    private Process LaunchInternetProduct(bool isAgent, string dataRoot, bool enableSupport = false)
     {
         var start = new ProcessStartInfo(application) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(application)! };
+        if (isAgent && enableSupport) start.ArgumentList.Add("--enable-support");
         if (!isAgent)
         {
             start.ArgumentList.Add("--controller");
@@ -33,33 +35,50 @@ internal sealed partial class LabForm
             await CliAsync(["internet-import", "--file", profile, "--data-root", productData]);
             await CliAsync(["internet-import", "--file", profile, "--data-root", controllerRoot]);
             Pass("internet.configuration", "Both Release instances import the private relay profile");
-            loopbackAgent = LaunchInternetProduct(true, productData); product = loopbackAgent;
+            loopbackAgent = LaunchInternetProduct(true, productData, enableSupport: true); product = loopbackAgent;
             await WaitUiAsync(); WindowState = Forms.FormWindowState.Minimized;
             ResizeProductWindow(1060, 720); Native.FocusWindow(product.Id);
             string supportId = "";
+            var settings = InternetSettings.Load(controllerRoot)!;
             var deadline = Stopwatch.StartNew();
             while (deadline.Elapsed < TimeSpan.FromSeconds(75))
             {
-                var field = Find("supportId", 100);
-                supportId = field == null ? "" : Value(field);
+                supportId = (await settings.FindAsync(stop.Token)).FirstOrDefault(peer => peer.Name == Environment.MachineName)?.Host ?? "";
                 if (InternetSettings.IsSupportId(supportId)) break;
                 await Task.Delay(500, stop.Token);
             }
             if (!InternetSettings.IsSupportId(supportId)) throw new IOException("Relay registration failed: " + Value(Find("internetState")!));
-            Pass("internet.discovery", "The actual Release registers an internet invitation", new { supportId, relay = "Cloudflare" });
-            string code = await WaitPairingCodeAsync();
+            if (Find("supportId", 100) != null || Find("copySupportId", 100) != null)
+                throw new IOException("An internal support ID is visible in the normal agent UI.");
+            Pass("internet.discovery", "The actual Release is privately discoverable by computer name", new { computer = Environment.MachineName, relay = "Cloudflare" });
+            if (Find("agentPairCode", 100) != null) throw new IOException("The private client still displays an authorization code.");
             CaptureDesktop("internet-agent.png");
-            string wrong = code == "000000" ? "111111" : "000000";
-            var rejected = await CliAsync(["pair", "--host", supportId, "--data-root", controllerRoot], wrong, requireSuccess: false);
-            if (rejected.GetProperty("ok").GetBoolean()) throw new IOException("An incorrect code was accepted.");
-            Pass("internet.wrong_code", "The internet relay cannot bypass endpoint pairing authentication");
+            var wrongSettings = settings with { PairingKey = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)) };
+            string controllerSettings = Path.Combine(controllerRoot, "internet.dpapi");
+            Vault.Save(controllerSettings, JsonSerializer.SerializeToUtf8Bytes(wrongSettings, Json.Options));
+            JsonElement rejected;
+            try { rejected = await CliAsync(["pair", "--host", supportId, "--data-root", controllerRoot], requireSuccess: false); }
+            finally { Vault.Save(controllerSettings, JsonSerializer.SerializeToUtf8Bytes(settings, Json.Options)); }
+            if (rejected.GetProperty("ok").GetBoolean()) throw new IOException("A different installer secret was accepted.");
+            Pass("internet.wrong_installer", "Relay access alone cannot authenticate: a different private installer secret is rejected");
 
             loopbackController = LaunchInternetProduct(false, controllerRoot); product = loopbackController;
             await WaitUiAsync(); ResizeProductWindow(1060, 720); Native.FocusWindow(product.Id);
-            Set("host", supportId); Set("pairCode", code); FocusAndEnter("pairCode");
+            var discoveryDeadline = Stopwatch.StartNew();
+            AutomationElement? computer = null;
+            while (discoveryDeadline.Elapsed < TimeSpan.FromSeconds(30) && computer == null)
+            {
+                computer = Find("peers", 100)?.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem))
+                    .Cast<AutomationElement>().FirstOrDefault(item => item.Current.Name == Environment.MachineName);
+                if (computer == null) await Task.Delay(500, stop.Token);
+            }
+            if (computer == null || Find("host", 100) != null) throw new IOException("The private controller did not replace the address field with computer discovery.");
+            ((SelectionItemPattern)computer.GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
+            if (Find("pairCode", 100) != null) throw new IOException("The private controller still asks for an authorization code.");
+            Click("pair");
             if (!await WaitForTextAsync("connectionStatus", IsConnected, 90))
                 throw new IOException("Internet GUI pairing failed: " + TryValue("connectionFormState"));
-            Pass("internet.gui_pairing", "The shipped GUI pairs using the support ID and six-digit code");
+            Pass("internet.gui_pairing", "The shipped GUI connects by computer name with no ID or authorization code");
             var saved = RemoteClient.Load().Connection;
             if (saved.RelayUrl.Length == 0 || saved.Host != supportId || saved.Fingerprint.Length != 64)
                 throw new IOException("The saved connection did not bind relay routing and endpoint identity.");

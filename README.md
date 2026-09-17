@@ -6,7 +6,7 @@ The command path is **Codex → local controller CLI → encrypted connection �
 
 ## Get started
 
-For your personal internet-enabled installation, use `RemoteDebugger-<version>-Private-Setup.exe`. It imports the bundled relay settings automatically. The private installer is sufficient on each PC; no separate `.rdrelay` file needs to be selected.
+For your personal internet-enabled installation, use `RemoteDebugger-<version>-Private-Setup.exe` on each PC. On the receiving PC, open the app and click **Enable support**. On your support PC, select its computer name and click **Connect**. The installer supplies private authentication automatically; there is no support ID, authorization code, or separate Internet setup step.
 
 Build with .NET SDK 8 on Windows:
 
@@ -17,7 +17,7 @@ Build with .NET SDK 8 on Windows:
 
 For a normal desktop installation, run `artifacts/installer/RemoteDebugger-<version>-Setup.exe`. It installs for the current user without elevation, creates a Start menu shortcut, and includes its own uninstaller. The portable `artifacts/release/RemoteDebugger.exe` remains available when no installation is wanted. Both forms include the .NET runtime. See [the quick start](docs/GETTING_STARTED.md) for pairing and daily use, and [the CLI reference](docs/CLI.md) for Codex automation. The app and installer select French, English or Spanish from the Windows display language, with English as the fallback. Use **Language** at the bottom of the sidebar to choose **System default**, **English**, **Français** or **Español**. Changes apply immediately without interrupting support and are saved for future launches. Regional variants such as French Canadian and Mexican Spanish are supported. Numbers and dates keep the user’s Windows regional formats.
 
-The agent opens directly to a six-digit pairing code that rotates every five minutes. The controller discovers PCs on launch, accepts the code with Enter, synchronizes the agent to its own signed executable, and opens the live desktop with mouse and keyboard enabled. Connection and live-frame indicators remain visible throughout support. See [the validation record](docs/VALIDATION.md) for completed test evidence; planned cases are listed separately in [the acceptance matrix](docs/ACCEPTANCE_MATRIX.md).
+Without a private internet profile, LAN mode uses a six-digit pairing code that rotates every five minutes. Both modes synchronize the agent to the controller's signed executable and open the live desktop with mouse and keyboard enabled. Connection and live-frame indicators remain visible throughout support. See [the validation record](docs/VALIDATION.md) for completed test evidence; planned cases are listed separately in [the acceptance matrix](docs/ACCEPTANCE_MATRIX.md).
 
 Features include continuous encrypted JPEG desktop streaming (5 fps cap, actual rate shown), fresh screenshots, keyboard/mouse events, UI Automation controls, file browsing, resumable uploads with SHA-256 verification, downloads, application launch/stop/restart and binary identity, timestamped CPU/RAM/process/volume samples, network/services/event diagnostics, bounded commands, real native debugger attachment with breakpoint evidence, minidumps, and intervention history.
 
@@ -25,7 +25,7 @@ The interactive agent uses the logged-in user's session. One initial administrat
 
 Only one desktop instance runs per Windows user session. Launching the app again restores the existing window, including from the system tray, and preserves its workspace and language. The guard applies across portable and installed copies. CLI commands and service helpers can still run alongside the desktop app.
 
-Closing either window keeps the application and connection in the system tray. Restoring the controller resumes its live view automatically. **End support** immediately revokes access and starts a visible ten-minute exit countdown on the receiving PC. **New support session** cancels this countdown and issues a new code. The controlling PC stays open. A lost controller first gets a separate ten-minute reconnect grace period before access expires. Use **Quit** in the tray menu to exit immediately.
+Closing either window keeps the application and connection in the system tray. Restoring the controller resumes its live view automatically. **End support** immediately revokes access and starts a visible ten-minute exit countdown on the receiving PC. Enabling support again cancels this countdown and creates a new session; LAN-only mode also issues a new code. The controlling PC stays open. A lost controller first gets a separate ten-minute reconnect grace period before access expires. Use **Quit** in the tray menu to exit immediately.
 
 The available-PC, process and file tables remember their column widths and order separately. Drag a header to reorder it, drag its edge to resize it, or double-click an edge to fit its contents. Preferences survive restarting and use logical widths so changing display scaling preserves the layout.
 

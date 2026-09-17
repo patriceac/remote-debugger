@@ -79,6 +79,9 @@
     "resourceMeasuredAt": "resourceMeasuredAt"
   },
   "forbiddenNormalPairingIds": [
+    "internetSetup",
+    "supportId",
+    "copySupportId",
     "fingerprint",
     "fingerprintVerified",
     "openPairing",

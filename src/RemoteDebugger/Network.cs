@@ -152,7 +152,11 @@ public sealed class AgentServer : IDisposable
         {
             ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
             if (Volatile.Read(ref started) != 0) throw new InvalidOperationException("The agent listener has already started.");
-            if (!Paired) Pairing.Open();
+            if (!Paired)
+            {
+                if (Internet != null) Pairing.OpenPrivate(Internet.AuthenticationSecret);
+                else Pairing.Open();
+            }
             listener.Start();
             Volatile.Write(ref started, 1);
             StartTransportLoopsLocked();

@@ -1,4 +1,6 @@
 using System.Net.Sockets;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
@@ -7,24 +9,53 @@ using RemoteDebugger.Core;
 
 namespace RemoteDebugger;
 
-public sealed record InternetSettings(string RelayUrl, string AccessKey)
+public sealed record InternetSettings(string RelayUrl, string AccessKey, string PairingKey = "")
 {
+    private sealed record OnlineClient(string Id, string Name);
+
+    public async Task<List<Peer>> FindAsync(CancellationToken ct = default)
+    {
+        Validate();
+        using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
+        { Timeout = TimeSpan.FromSeconds(10), MaxResponseContentBufferSize = 16384 };
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", AccessKey);
+        using var response = await http.GetAsync(new Uri(new Uri(RelayUrl), "/v1/clients"), ct).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        var clients = JsonSerializer.Deserialize<List<OnlineClient>>(await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false), Json.Options)
+            ?? throw new IOException("Invalid computer list.");
+        if (clients.Count > 32 || clients.Any(c => string.IsNullOrWhiteSpace(c.Name) || c.Name.Length > 128 || c.Name.Any(char.IsControl)))
+            throw new IOException("Invalid computer list.");
+        return clients.Select(c => new Peer(c.Name, DisplayId(SessionId(c.Id)), 443, "")).ToList();
+    }
+
     public static InternetSettings? Load(string root)
     {
         string path = Path.Combine(root, "internet.dpapi");
         if (!File.Exists(path)) return null;
         var settings = JsonSerializer.Deserialize<InternetSettings>(Vault.Read(path), Json.Options)
             ?? throw new IOException("Invalid internet settings.");
-        settings.Validate(); return settings;
+        settings.Validate(requirePairingKey: true); return settings;
     }
 
-    public void Validate()
+    public void Validate(bool requirePairingKey = false)
     {
         if (!Uri.TryCreate(RelayUrl, UriKind.Absolute, out var uri) || uri.Scheme != "https" ||
             uri.AbsolutePath != "/" || uri.UserInfo.Length != 0 || uri.Query.Length != 0 || uri.Fragment.Length != 0)
             throw new ArgumentException("The relay must be an HTTPS origin without a path or credentials.");
         if (AccessKey.Length != 64 || !AccessKey.All(Uri.IsHexDigit))
             throw new ArgumentException("Invalid private relay access key.");
+        if (requirePairingKey && !PairingExchange.ValidHash(PairingKey))
+            throw new ArgumentException(UiText.InternetSetupRequired);
+    }
+
+    // This separate installer secret is never sent to or stored by the relay.
+    // Binding it to the invitation prevents reusing an exchange across sessions.
+    public string AuthenticationSecret(string invitationId)
+    {
+        Validate(requirePairingKey: true);
+        byte[] key = Convert.FromHexString(PairingKey);
+        try { return Convert.ToHexString(HMACSHA256.HashData(key, Encoding.UTF8.GetBytes("RemoteDebugger.Private.v1|" + SessionId(invitationId)))); }
+        finally { CryptographicOperations.ZeroMemory(key); }
     }
 
     public static void Import(string file, string root)
@@ -32,7 +63,7 @@ public sealed record InternetSettings(string RelayUrl, string AccessKey)
         if (new FileInfo(file).Length > 4096) throw new IOException("Internet setup file is too large.");
         var settings = JsonSerializer.Deserialize<InternetSettings>(File.ReadAllBytes(file), Json.Options)
             ?? throw new IOException("Invalid internet setup file.");
-        settings.Validate();
+        settings.Validate(requirePairingKey: true);
         Vault.Save(Path.Combine(root, "internet.dpapi"), JsonSerializer.SerializeToUtf8Bytes(settings, Json.Options));
     }
 
@@ -180,6 +211,7 @@ public sealed class InternetAgent : IDisposable
     private readonly SemaphoreSlim channels = new(12);
     private ClientWebSocket? control;
     public string SupportId => InternetSettings.DisplayId(invitation.Id);
+    public string AuthenticationSecret => settings.AuthenticationSecret(invitation.Id);
     public bool Connected { get; private set; }
     public string PublicIp { get; private set; } = "";
     public string Error { get; private set; } = "";
@@ -201,6 +233,7 @@ public sealed class InternetAgent : IDisposable
             try
             {
                 using var socket = settings.Socket(invitation.Key); control = socket;
+                socket.Options.SetRequestHeader("X-Computer-Name", Uri.EscapeDataString(Environment.MachineName));
                 using var connect = CancellationTokenSource.CreateLinkedTokenSource(stop.Token); connect.CancelAfter(TimeSpan.FromSeconds(20));
                 await socket.ConnectAsync(settings.Address(invitation.Id, "agent"), connect.Token).ConfigureAwait(false);
                 using var heartbeat = CancellationTokenSource.CreateLinkedTokenSource(stop.Token);

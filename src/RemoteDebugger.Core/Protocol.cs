@@ -61,25 +61,32 @@ public sealed class PairingGate(TimeProvider? clock = null)
     private readonly TimeProvider time = clock ?? TimeProvider.System;
     private readonly object sync = new();
     private string? code;
+    private string? privateSecret;
     private DateTimeOffset expires;
     private int failures;
     private bool open;
     private readonly Queue<DateTimeOffset> attempts = new();
-    public string? CurrentCode { get { lock (sync) { RotateIfExpired(); return code; } } }
+    public string? CurrentCode { get { lock (sync) { RotateIfExpired(); return privateSecret == null ? code : null; } } }
     public DateTimeOffset ExpiresUtc { get { lock (sync) { RotateIfExpired(); return expires; } } }
     public int AttemptsRemaining { get { lock (sync) { RotateIfExpired(); return Math.Max(0, 5 - failures); } } }
     public string Open()
     {
-        lock (sync) { open = true; Rotate(); return code!; }
+        lock (sync) { privateSecret = null; open = true; Rotate(); return code!; }
+    }
+    public void OpenPrivate(string secret)
+    {
+        if (!PairingExchange.ValidHash(secret)) throw new ArgumentException("Invalid private authentication secret.");
+        lock (sync) { privateSecret = secret; open = true; Rotate(); }
     }
     private void Rotate()
     {
         string? previous = code;
-        do { code = RandomNumberGenerator.GetInt32(0, 1000000).ToString("D6"); } while (code == previous);
+        if (privateSecret != null) code = privateSecret;
+        else do { code = RandomNumberGenerator.GetInt32(0, 1000000).ToString("D6"); } while (code == previous);
         expires = time.GetUtcNow() + Lifetime; failures = 0;
     }
     private void RotateIfExpired() { if (open && time.GetUtcNow() >= expires) Rotate(); }
-    public void Close() { lock (sync) { open = false; code = null; } }
+    public void Close() { lock (sync) { open = false; code = privateSecret = null; } }
 
     // Reserve a bounded attempt before expensive PAKE work. The rolling allowance
     // survives code rotation/reopening so rotating the UI cannot defeat throttling.

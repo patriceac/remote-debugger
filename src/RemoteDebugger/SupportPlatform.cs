@@ -173,7 +173,7 @@ public static class SupportPlatform
         return await GetStatusAsync(ct);
     }
 
-    public static async Task<SupportPlatformStatus> ProvisionAsync(CancellationToken ct = default)
+    public static async Task<SupportPlatformStatus> ProvisionAsync(CancellationToken ct = default, bool enableSupport = false)
     {
         await SupportInstaller.ProvisionAsync(ct);
         if (!string.Equals(Path.GetFullPath(Environment.ProcessPath!), Path.GetFullPath(SupportPlatformPaths.ApplicationExecutable), StringComparison.OrdinalIgnoreCase))
@@ -185,6 +185,7 @@ public static class SupportPlatform
                     SupportPlatformPaths.ApplicationExecutable, signature.SignerThumbprint,
                     typeof(Program).Assembly.GetName().Version?.ToString());
             var start = CreateManagedStartInfo(Environment.GetCommandLineArgs().Skip(1).ToArray());
+            if (enableSupport && !start.ArgumentList.Contains("--enable-support")) start.ArgumentList.Add("--enable-support");
             _ = Process.Start(start) ?? throw new IOException("The managed Remote Debugger application did not relaunch.");
             ManagedRelaunchRequested?.Invoke();
             return new(SupportPlatformAvailability.Ready, true, true, true, false, false,

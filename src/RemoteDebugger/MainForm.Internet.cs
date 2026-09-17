@@ -6,57 +6,70 @@ namespace RemoteDebugger;
 public sealed partial class MainForm
 {
     private readonly Forms.Label internetState = new WorkspaceLabel { Name = "internetState", AutoSize = true, ForeColor = SecondaryText };
-    private readonly Forms.TextBox supportId = new() { Name = "supportId", ReadOnly = true, Width = 295, Font = new Font("Consolas", 14), BorderStyle = Forms.BorderStyle.FixedSingle };
-    private readonly Forms.Button internetSetup = Button(() => UiText.InternetSetup, "internetSetup", 170);
-    private readonly Forms.Button copySupportId = Button(() => UiText.Copy, "copySupportId", 86);
     private string? internetSetupError;
     private bool internetConfigured;
+    private bool PrivateInternet => internetConfigured;
+    private bool privateSupportEnabled;
+    private readonly Forms.Button enableSupport = Button(() => UiText.EnableOnThisPc, "enableSupport", 200, primary: true);
+
+    private async Task EnablePrivateSupportAsync()
+    {
+        enableSupport.Enabled = false;
+        try
+        {
+            var status = await SupportPlatform.GetStatusAsync();
+            if (!status.Available) status = await SupportPlatform.ProvisionAsync(enableSupport: true);
+            if (quitting) return;
+            if (!status.Available) throw new IOException(status.Message);
+            privateSupportEnabled = true; internetSetupError = null;
+            agent?.Dispose(); agent = null; agentIdle = false;
+            StartAgent(); await PrepareAgentAsync();
+        }
+        catch (Exception ex) { internetSetupError = ex.Message; }
+        finally { enableSupport.Enabled = true; RefreshUiState(); }
+    }
+
+    private void UpdatePrivateAgentState()
+    {
+        CurrentPairingCode = null;
+        enableSupport.Visible = agent == null || agentIdle;
+        restartAgent.Visible = false; copyAgentCode.Visible = false;
+        pairingCountdownText.Visible = agentIdle;
+        if (agent?.Session.HasPaired == true) return;
+        bool active = agent != null && !agentIdle;
+        agentHeading.SetText(() => agentIdle ? UiText.SupportEnded : active ? UiText.PrivateSupportReady : UiText.EnableOnThisPc);
+        agentEyebrow.SetText(() => UiText.GiveControl);
+        agentSubtitle.SetText(() => active ? UiText.InternetInstructions : UiText.PrivateEnableInstructions);
+        agentState.SetText(() => active ? UiText.WaitingForConnection : UiText.NoActiveConnection);
+        agentSessionNote.SetText(() => active ? UiText.PrivateAccessNote : UiText.PcNoLongerAccessible);
+        agentNetworkState.SetText(() => agent?.Internet?.Connected == true ? UiText.Ready : active ? UiText.Preparing : UiText.Inactive);
+        agentNetworkState.ForeColor = agent?.Internet?.Connected == true ? ConnectedText : SecondaryText;
+        SetFooterMessage(() => agentIdle ? UiText.SupportEnded : active ? UiText.WaitingForConnection : UiText.NoActiveConnection);
+        setupNotice.Visible = false;
+    }
 
     private Forms.Control BuildInternetSection()
     {
         try { internetConfigured = InternetSettings.Load(root) != null; }
         catch (Exception ex) { internetSetupError = ex.Message; }
-        var panel = new Forms.TableLayoutPanel { AutoSize = true, Dock = Forms.DockStyle.Top, ColumnCount = 1, RowCount = 3, Margin = Forms.Padding.Empty };
+        if (PrivateInternet) discoveryTimer.Interval = 10000;
+        var panel = new Forms.TableLayoutPanel { AutoSize = true, Dock = Forms.DockStyle.Top, ColumnCount = 1, RowCount = 2, Margin = Forms.Padding.Empty };
         panel.Controls.Add(agentSubtitle, 0, 0);
-        var row = new Forms.FlowLayoutPanel { AutoSize = true, Dock = Forms.DockStyle.Top, WrapContents = true, Margin = new Forms.Padding(0, 10, 0, 2) };
-        row.Controls.Add(supportId); row.Controls.Add(copySupportId); row.Controls.Add(internetSetup);
-        panel.Controls.Add(row, 0, 1); panel.Controls.Add(internetState, 0, 2);
-        copySupportId.Click += (_, _) => { if (agent?.Internet is { Connected: true } relay) Forms.Clipboard.SetText(relay.SupportId); };
-        internetSetup.Click += async (_, _) => await ImportInternetSettingsAsync();
+        internetState.Margin = new Forms.Padding(0, 10, 0, 2);
+        panel.Controls.Add(internetState, 0, 1);
         return panel;
-    }
-
-    private async Task ImportInternetSettingsAsync()
-    {
-        using var picker = new Forms.OpenFileDialog { Filter = "Remote Debugger (*.rdrelay)|*.rdrelay", Title = UiText.InternetSetup };
-        if (picker.ShowDialog(this) != Forms.DialogResult.OK) return;
-        try
-        {
-            InternetSettings.Import(picker.FileName, root); internetSetupError = null; internetConfigured = true;
-            if (agent != null)
-            {
-                if (!await StopAgentAsync()) return;
-                agentIdle = false; StartAgent(); _ = PrepareAgentAsync();
-            }
-            UpdateInternetState();
-        }
-        catch (Exception ex) { internetSetupError = ex.Message; UpdateInternetState(); }
     }
 
     private void UpdateInternetState()
     {
         var relay = agent?.Internet;
-        supportId.Visible = copySupportId.Visible = internetConfigured && !loopbackOnly;
-        supportId.Text = relay?.Connected == true && !agentIdle ? relay.SupportId : "";
-        copySupportId.Enabled = supportId.Text.Length != 0;
-        internetSetup.Enabled = !supportSession && !pairingBusy && agent?.Paired != true;
         internetState.SetText(() => internetSetupError != null ? UiText.InternetUnavailable + ": " + internetSetupError
             : loopbackOnly ? UiText.LocalOnly
             : !internetConfigured ? UiText.InternetSetupRequired
             : agentIdle ? UiText.SupportEnded
-            : relay?.Connected == true ? UiText.InternetReady + (relay.PublicIp.Length == 0 ? "" : " · " + UiText.PublicIp + " " + relay.PublicIp)
+            : agent == null ? UiText.Inactive
+            : relay?.Connected == true ? UiText.InternetReady
             : relay?.Error.Length > 0 ? UiText.InternetRetrying : UiText.InternetConnecting);
         internetState.ForeColor = relay?.Connected == true ? ConnectedText : SecondaryText;
-        supportId.AccessibleName = UiText.SupportId;
     }
 }

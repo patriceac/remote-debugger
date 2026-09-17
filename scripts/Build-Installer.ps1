@@ -45,7 +45,8 @@ if (-not $WithoutInternetProfile) {
     if (-not [Uri]::TryCreate([string]$profile.relayUrl, [UriKind]::Absolute, [ref]$relayUri) -or
         $relayUri.Scheme -ne 'https' -or $relayUri.AbsolutePath -ne '/' -or
         $relayUri.UserInfo.Length -ne 0 -or $relayUri.Query.Length -ne 0 -or $relayUri.Fragment.Length -ne 0 -or
-        [string]$profile.accessKey -cnotmatch '^[A-Fa-f0-9]{64}$') { throw 'Invalid private internet setup settings.' }
+        [string]$profile.accessKey -cnotmatch '^[A-Fa-f0-9]{64}$' -or
+        [string]$profile.pairingKey -cnotmatch '^[A-Fa-f0-9]{64}$') { throw 'Invalid private internet setup settings.' }
     # Pass the local filename to the compiler, never the credential itself.
     $compilerArguments += '/DRelayProfilePath=' + $profileFile.FullName
 }

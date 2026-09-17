@@ -15,7 +15,7 @@ temporary plaintext copy. This works in interactive and silent installations.
 The installer stays private because it contains the relay credential.
 
 The desktop installer is deliberately separate from protected support setup.
-Choosing **Enable on this PC** still requests one explicit Windows administrator
+Choosing **Enable support** still requests one explicit Windows administrator
 approval so the application can provision its Program Files copy, local broker,
 and Private/LocalSubnet firewall rules. Later launches through the Start menu
 automatically redirect an agent to that protected copy without another prompt.
@@ -36,7 +36,7 @@ verify automatic configuration and first-launch relay registration in Hyper-V.
 
 Inno Setup must be installed or its compiler path supplied with
 `-CompilerPath`. Uninstalling the per-user package removes its files and Start
-menu shortcut. Protected support provisioned by **Enable on this PC** is managed
+menu shortcut. Protected support provisioned by **Enable support** is managed
 separately because removing a Windows service and Program Files state requires
 administrator authorization.
 

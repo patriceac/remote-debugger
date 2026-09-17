@@ -181,12 +181,12 @@ public sealed partial class MainForm : Forms.Form
 
     public string? CurrentPairingCode { get; private set; }
     public AgentServer? Agent => agent;
-    public bool AgentNetworkReady => loopbackOnly || agentNetworkPrepared;
+    public bool AgentNetworkReady => loopbackOnly || (PrivateInternet ? agent?.Internet?.Connected == true : agentNetworkPrepared);
     public RemoteClient? Client => client;
 
     private readonly string? startupPreparationError;
 
-    public MainForm(bool startAgent = true, string? dataRoot = null, bool loopbackOnly = false, string? startupPreparationError = null, string? languageOverride = null)
+    public MainForm(bool startAgent = true, string? dataRoot = null, bool loopbackOnly = false, string? startupPreparationError = null, string? languageOverride = null, bool enableSupport = false)
     {
         // Build the entire 96-DPI layout before WinForms applies startup DPI.
         // Otherwise early layout can consume the scale factor while later
@@ -196,6 +196,7 @@ public sealed partial class MainForm : Forms.Form
         this.loopbackOnly = loopbackOnly;
         this.startupPreparationError = startupPreparationError;
         startAgentOnLaunch = startAgent;
+        privateSupportEnabled = enableSupport;
 
         Text = "Remote Debugger";
         Name = "RemoteDebuggerMain";
@@ -342,15 +343,19 @@ public sealed partial class MainForm : Forms.Form
         layout.Controls.Add(BuildInternetSection(), 0, 2);
 
         var codeRow = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, Height = 96, WrapContents = false, FlowDirection = Forms.FlowDirection.LeftToRight, Padding = new Forms.Padding(0, 10, 0, 0), Margin = Forms.Padding.Empty };
-        agentPairCode.Margin = new Forms.Padding(0, 0, 14, 0); copyAgentCode.Margin = new Forms.Padding(0, 4, 0, 0); codeRow.Controls.Add(agentPairCode); codeRow.Controls.Add(copyAgentCode); restartAgent.Visible = false; codeRow.Controls.Add(restartAgent); layout.Controls.Add(codeRow, 0, 3);
-        pairingCountdown.Width = 480; pairingCountdown.Height = 4; pairingCountdown.Margin = new Forms.Padding(0, 2, 0, 0); layout.Controls.Add(pairingCountdown, 0, 4);
+        agentPairCode.Margin = new Forms.Padding(0, 0, 14, 0); copyAgentCode.Margin = new Forms.Padding(0, 4, 0, 0);
+        if (PrivateInternet) codeRow.Controls.Add(enableSupport);
+        else { codeRow.Controls.Add(agentPairCode); codeRow.Controls.Add(copyAgentCode); }
+        restartAgent.Visible = false; codeRow.Controls.Add(restartAgent); layout.Controls.Add(codeRow, 0, 3);
+        pairingCountdown.Width = 480; pairingCountdown.Height = 4; pairingCountdown.Margin = new Forms.Padding(0, 2, 0, 0);
+        if (!PrivateInternet) layout.Controls.Add(pairingCountdown, 0, 4);
         pairingCountdownText.AutoSize = false; pairingCountdownText.Dock = Forms.DockStyle.Fill; pairingCountdownText.Margin = Forms.Padding.Empty; layout.Controls.Add(pairingCountdownText, 0, 5);
 
         var divider = new Forms.Panel { Dock = Forms.DockStyle.Top, Height = 1, BackColor = Divider, Margin = new Forms.Padding(0, 18, 0, 0) }; layout.Controls.Add(divider, 0, 6);
         var states = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, Height = 90, ColumnCount = 3, RowCount = 3, Margin = Forms.Padding.Empty };
         states.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Absolute, 22)); states.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 65)); states.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 35));
         for (int row = 0; row < 3; row++) states.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 33.333F));
-        AddAgentStateRow(states, 0, () => UiText.PrivateNetwork, agentNetworkState); AddAgentStateRow(states, 1, () => UiText.Sleep, agentSleepState); AddAgentStateRow(states, 2, () => UiText.AdminMaintenance, agentMaintenanceState); layout.Controls.Add(states, 0, 7);
+        AddAgentStateRow(states, 0, () => PrivateInternet ? UiText.InternetLabel : UiText.PrivateNetwork, agentNetworkState); AddAgentStateRow(states, 1, () => UiText.Sleep, agentSleepState); AddAgentStateRow(states, 2, () => UiText.AdminMaintenance, agentMaintenanceState); layout.Controls.Add(states, 0, 7);
 
         setupNotice.AutoSize = false; setupNotice.Dock = Forms.DockStyle.Fill; setupNotice.Width = 760; setupNotice.Height = 66; setupNotice.Padding = new Forms.Padding(8); setupNotice.Controls.Clear();
         var noticeLayout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Forms.Padding.Empty, Padding = Forms.Padding.Empty };
@@ -400,13 +405,16 @@ public sealed partial class MainForm : Forms.Form
         panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 32)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 42)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 28)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
         panel.Controls.Add(new WorkspaceLabel { AutoSize = true, Font = new Font("Segoe UI", 15, FontStyle.Bold), ForeColor = PrimaryText, Anchor = Forms.AnchorStyles.Left }.WithText(() => UiText.AvailablePcs), 0, 0);
         discoverButton.Anchor = Forms.AnchorStyles.Left; panel.Controls.Add(discoverButton, 0, 1); panel.Controls.Add(discoveryState, 0, 2);
-        peers.Columns.Add("", 110).WithText(() => UiText.Name); peers.Columns.Add("", 125).WithText(() => UiText.Address); peers.Columns.Add("", 70).WithText(() => UiText.State);
-        peers.RememberLayout(root, "name", "address", "state"); panel.Controls.Add(peers, 0, 3);
+        peers.Columns.Add("", PrivateInternet ? 210 : 110).WithText(() => UiText.Name);
+        if (!PrivateInternet) peers.Columns.Add("", 125).WithText(() => UiText.Address);
+        peers.Columns.Add("", 90).WithText(() => UiText.State);
+        peers.RememberLayout(root, PrivateInternet ? ["name", "state"] : ["name", "address", "state"]); panel.Controls.Add(peers, 0, 3);
         return panel;
     }
 
     private Forms.Control BuildConnectionForm()
     {
+        if (PrivateInternet) { selectedPeerName.SetText(() => UiText.SelectComputer); selectedPeerAddress.SetText(""); }
         var panel = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 8, Padding = new Forms.Padding(24, 0, 0, 0) };
         panel.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
         selectedPeerName.AutoSize = selectedPeerAddress.AutoSize = connectionState.AutoSize = false;
@@ -416,11 +424,15 @@ public sealed partial class MainForm : Forms.Form
         panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 34)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 30));
         for (int i = 2; i < 6; i++) panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 60)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
-        panel.Controls.Add(selectedPeerName, 0, 0); panel.Controls.Add(selectedPeerAddress, 0, 1); panel.Controls.Add(new WorkspaceLabel { AutoSize = true, ForeColor = SecondaryText, Margin = Forms.Padding.Empty, Dock = Forms.DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }.WithText(() => UiText.IpOrManual), 0, 2);
-        host.Dock = Forms.DockStyle.Top; host.Margin = new Forms.Padding(0, 4, 0, 18); panel.Controls.Add(host, 0, 3);
-        panel.Controls.Add(new WorkspaceLabel { AutoSize = true, ForeColor = SecondaryText, Margin = Forms.Padding.Empty, Dock = Forms.DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }.WithText(() => UiText.SixDigitCode), 0, 4);
+        panel.Controls.Add(selectedPeerName, 0, 0); panel.Controls.Add(selectedPeerAddress, 0, 1);
+        if (!PrivateInternet)
+        {
+            panel.Controls.Add(new WorkspaceLabel { AutoSize = true, ForeColor = SecondaryText, Margin = Forms.Padding.Empty, Dock = Forms.DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }.WithText(() => UiText.IpOrManual), 0, 2);
+            host.Dock = Forms.DockStyle.Top; host.Margin = new Forms.Padding(0, 4, 0, 18); panel.Controls.Add(host, 0, 3);
+        }
+        if (!PrivateInternet) panel.Controls.Add(new WorkspaceLabel { AutoSize = true, ForeColor = SecondaryText, Margin = Forms.Padding.Empty, Dock = Forms.DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }.WithText(() => UiText.SixDigitCode), 0, 4);
         code.Width = 150; code.Font = new Font("Consolas", 20); code.MaxLength = 6; code.TextAlign = Forms.HorizontalAlignment.Center;
-        var codeRow = ControlRow(code, pairButton); codeRow.Margin = new Forms.Padding(0, 4, 0, 0); panel.Controls.Add(codeRow, 0, 5);
+        var codeRow = PrivateInternet ? ControlRow(pairButton) : ControlRow(code, pairButton); codeRow.Margin = new Forms.Padding(0, 4, 0, 0); panel.Controls.Add(codeRow, 0, 5);
         connectionState.Margin = new Forms.Padding(0, 7, 0, 0); panel.Controls.Add(connectionState, 0, 6);
         updateProgressArea.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 10));
         updateProgressArea.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
@@ -556,6 +568,7 @@ public sealed partial class MainForm : Forms.Form
         terminateSession.Click += async (_, _) => await TerminateSupportAsync();
         copyAgentCode.Click += (_, _) => { if (!string.IsNullOrWhiteSpace(CurrentPairingCode)) Forms.Clipboard.SetText(CurrentPairingCode); SetFooterMessage(() => UiText.CodeCopied); RefreshFooter(); };
         preparePlatform.Click += async (_, _) => await ProvisionPlatformAsync();
+        enableSupport.Click += async (_, _) => await EnablePrivateSupportAsync();
         discoverButton.Click += async (_, _) => await DiscoverAsync(true);
         peers.SelectedIndexChanged += (_, _) => SelectPeerFromList();
         host.TextChanged += (_, _) => { if (selectedPeer?.Host != host.Text.Trim()) { selectedPeer = null; selectedFingerprint = ""; selectedPeerName.SetText(() => UiText.EnterPc); selectedPeerAddress.SetText(() => UiText.IdentityBoundToCode); } };
@@ -584,6 +597,9 @@ public sealed partial class MainForm : Forms.Form
 
     private void LoadSavedConnection()
     {
+        // Internet invitations are session-specific; choose an online computer
+        // instead of presenting a stale routing ID from a previous session.
+        if (PrivateInternet) return;
         try
         {
             client = RemoteClient.Load();
@@ -642,7 +658,7 @@ public sealed partial class MainForm : Forms.Form
             // firewall consent dialog. LAN listening starts only after the
             // provisioned broker has verified the Private/LocalSubnet rules.
             agentIdle = false;
-            var started = new AgentServer(root, loopbackOnly: loopbackOnly || !agentNetworkPrepared, enableInternet: !loopbackOnly);
+            var started = new AgentServer(root, loopbackOnly: loopbackOnly || PrivateInternet || !agentNetworkPrepared, enableInternet: !loopbackOnly);
             agent = started;
             started.Status += text => PostUi(() => { if (ReferenceEquals(agent, started)) { agentLog.SetText(text); RefreshFooter(); } });
             started.TerminationRequested += reason =>
@@ -684,6 +700,7 @@ public sealed partial class MainForm : Forms.Form
         finally { suppressTerminationEvent = false; }
         local.Dispose();
         if (ReferenceEquals(agent, local)) agent = null;
+        privateSupportEnabled = false;
         powerHold?.Dispose(); powerHold = null; CurrentPairingCode = null; RefreshUiState();
         return true;
     }
@@ -695,9 +712,9 @@ public sealed partial class MainForm : Forms.Form
         if (loopbackOnly) { agentNetworkState.SetText(() => UiText.LocalOnly); return; }
         try
         {
-            SupportPlatformStatus status = await SupportPlatform.PrepareAsync(requireFirewall: true);
+            SupportPlatformStatus status = await SupportPlatform.PrepareAsync(requireFirewall: !PrivateInternet);
             if (!ReferenceEquals(agent, preparing) || quitting) return;
-            if (status.Available && status.FirewallReady && !agentNetworkPrepared)
+            if (!PrivateInternet && status.Available && status.FirewallReady && !agentNetworkPrepared)
             {
                 // Keep the displayed code, rate limits and any accepted local
                 // connection while widening the prepared listener to the LAN.
@@ -725,7 +742,8 @@ public sealed partial class MainForm : Forms.Form
         agentNetworkState.ForeColor = status.FirewallReady ? ConnectedText : WarningText;
         agentSleepState.SetText(() => powerHold != null ? UiText.Suspended : UiText.Active);
         agentSleepState.ForeColor = powerHold != null ? PrimaryText : SecondaryText;
-        if (status.RequiresAdministratorConsent) ShowSetupNotice(() => internetConfigured ? UiText.InternetMaintenanceNotice : UiText.EnableSupportNotice);
+        if (PrivateInternet) HideSetupNotice();
+        else if (status.RequiresAdministratorConsent) ShowSetupNotice(() => UiText.EnableSupportNotice);
         else if (status.Available || status.Provisioned) HideSetupNotice();
         output.SetText(Pretty(status));
         SetFooterMessage(() => status.FirewallReady ? UiText.ReadyForConnection : UiText.EnablePrivateNetwork); RefreshFooter();
@@ -743,7 +761,7 @@ public sealed partial class MainForm : Forms.Form
     {
         if (sessionExit.Expired && !quitting) { RequestQuit(); return; }
         if (IsDisposed) return;
-        UpdateAgentState(); UpdateInternetState(); UpdateHeader(); RefreshControllerControls(); RefreshFooter(); RefreshInputStatus();
+        UpdateAgentState(); if (PrivateInternet) UpdatePrivateAgentState(); UpdateInternetState(); UpdateHeader(); RefreshControllerControls(); RefreshFooter(); RefreshInputStatus();
         if (supportSession && liveStream != null && lastFrameUtc is { } presented && DateTimeOffset.UtcNow - presented > TimeSpan.FromSeconds(3))
         {
             // A frozen bitmap must never continue to look like a live view or
@@ -828,14 +846,16 @@ public sealed partial class MainForm : Forms.Form
         {
             var presentation = ControllerPagePresentation(controllerPages.SelectedIndex);
             headerTitle.SetText(presentation.Title);
-            if (supportSession && client != null)
+            if (PrivateInternet && selectedPeer != null)
+                headerSubtitle.SetText(selectedPeer.Name);
+            else if (supportSession && client != null)
                 headerSubtitle.SetText(() => selectedPeer == null || selectedPeer.Name == client.Connection.Host
                     ? client.Connection.Host + UiText.SupportSessionSuffix
                     : selectedPeer.Name + " · " + client.Connection.Host);
             else if (selectedPeer != null)
                 headerSubtitle.SetText(selectedPeer.Name + " · " + selectedPeer.Host);
             else
-                headerSubtitle.SetText(presentation.Subtitle);
+                headerSubtitle.SetText(PrivateInternet && controllerPages.SelectedIndex == 0 ? UiText.PrivateConnectInstructions : presentation.Subtitle);
         }
 
         bool connected = onAgent ? agent?.Session is { Connected: true, BinaryMatched: true } : heartbeatHealthy && supportSession;
@@ -848,7 +868,7 @@ public sealed partial class MainForm : Forms.Form
         statusLabel.ForeColor = connected ? ConnectedText : reconnecting ? WarningText : Color.FromArgb(80, 103, 113);
         statusLabel.SetText(() => connected ? UiText.Connected : reconnecting ? UiText.Reconnecting : synchronizing ? UiText.SynchronizingEllipsis : pairing ? UiText.Pairing : agentIdle && onAgent ? UiText.SessionClosed : UiText.Waiting);
         statusPill.AccessibleName = statusLabel.Text; statusPill.Region?.Dispose(); statusPill.Region = RoundedRegion(statusPill.Size, 16);
-        terminateSession.Visible = onAgent ? agent?.Session.Connected == true || agent?.Session.State == "reconnecting" : supportSession || synchronizingAgent;
+        terminateSession.Visible = onAgent ? PrivateInternet && agent != null && !agentIdle || agent?.Session.Connected == true || agent?.Session.State == "reconnecting" : supportSession || synchronizingAgent;
         roleAgent.BackColor = onAgent ? SelectedRail : Rail; roleController.BackColor = onController ? SelectedRail : Rail; navConnection.BackColor = onController && controllerPages.SelectedIndex == 0 ? SelectedRail : Rail; navScreen.BackColor = onController && controllerPages.SelectedIndex == 1 ? SelectedRail : Rail; navProcesses.BackColor = onController && controllerPages.SelectedIndex == 2 ? SelectedRail : Rail; navFiles.BackColor = onController && controllerPages.SelectedIndex == 3 ? SelectedRail : Rail; navDiagnostics.BackColor = onController && controllerPages.SelectedIndex == 4 ? SelectedRail : Rail;
     }
 
@@ -856,11 +876,11 @@ public sealed partial class MainForm : Forms.Form
     {
         if (rolePages.SelectedIndex != 1 || terminating) { footerLeft.SetText(footerMessage); footerRight.SetText(footerDetail); return; }
         var text = WorkspacePresentation.Footer(controllerPages.SelectedIndex, connectionState.Text, streamStatus.Text,
-            resourceState.Text, fileState.Text, diagnosticState.Text, host.Text,
+            resourceState.Text, fileState.Text, diagnosticState.Text, PrivateInternet ? selectedPeer?.Name ?? "" : host.Text,
             lastMeasurementUtc is { } measured ? UiText.Format(UiText.ProcessMeasurement, processRows.Count, measured.ToLocalTime()) : UiText.NoMeasurement,
             currentDirectory, operations.SelectedItem?.ToString() ?? "");
         footerLeft.SetText(() => supportSession && !heartbeatHealthy ? UiText.ReconnectionInProgress : text.Status);
-        footerRight.SetText(text.Detail);
+        footerRight.SetText(PrivateInternet && controllerPages.SelectedIndex == 0 && selectedPeer == null ? "" : text.Detail);
     }
 
     private void SelectRole(int index)
@@ -888,7 +908,7 @@ public sealed partial class MainForm : Forms.Form
         }
         rolePages.SelectedIndex = index;
         controllerNavCaption.Visible = index == 1; navConnection.Visible = index == 1; navScreen.Visible = index == 1; navProcesses.Visible = index == 1; navFiles.Visible = index == 1; navDiagnostics.Visible = index == 1;
-        if (index == 0 && agent == null && !quitting && !agentIdle) { StartAgent(); _ = PrepareAgentAsync(); }
+        if (index == 0 && agent == null && !quitting && !agentIdle && (!PrivateInternet || privateSupportEnabled)) { StartAgent(); _ = PrepareAgentAsync(); }
         if (index == 1 && !supportSession)
         {
             SetFooterMessage(() => UiText.ChoosePc);
@@ -910,7 +930,7 @@ public sealed partial class MainForm : Forms.Form
         roleController.Enabled = false;
         bool stopped = await StopAgentAsync();
         roleController.Enabled = true;
-        if (stopped && !quitting) SelectRole(1);
+        if (stopped && !quitting) { SelectRole(1); await DiscoverAsync(false); }
     }
 
     private void SelectControllerPage(int index)
@@ -924,12 +944,26 @@ public sealed partial class MainForm : Forms.Form
 
     private async Task DiscoverAsync(bool explicitRefresh)
     {
-        if (pairingBusy) return;
+        if (pairingBusy || supportSession || rolePages.SelectedIndex != 1 || quitting) return;
         discoveryState.SetText(() => explicitRefresh ? UiText.SearchingPcs : UiText.SearchingAtStartup); discoverButton.Enabled = false;
         discoveryLifetime?.Cancel(); discoveryLifetime = new CancellationTokenSource();
         try
         {
-            var found = await Discovery.FindAsync(2500, discoveryLifetime.Token); discoveredPeers.Clear(); discoveredPeers.AddRange(found.Where(IsRemotePeer).OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase)); RenderPeers(); discoveryState.SetText(() => discoveredPeers.Count == 0 ? UiText.NoPcsFound : UiText.Format(UiText.AvailablePcCount, discoveredPeers.Count)); if (discoveredPeers.Count == 1 && selectedPeer == null && peers.Items.Count > 0) peers.Items[0].Selected = true;
+            var found = PrivateInternet
+                ? await InternetSettings.Load(root)!.FindAsync(discoveryLifetime.Token)
+                : await Discovery.FindAsync(2500, discoveryLifetime.Token);
+            if (pairingBusy || supportSession || rolePages.SelectedIndex != 1) return;
+            discoveredPeers.Clear();
+            discoveredPeers.AddRange(found.Where(p => PrivateInternet || IsRemotePeer(p)).OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase));
+            if (PrivateInternet && selectedPeer != null && !discoveredPeers.Any(p => p.Host == selectedPeer.Host))
+            {
+                selectedPeer = null; selectedFingerprint = ""; host.SetText(""); code.SetText("");
+                selectedPeerName.SetText(() => UiText.SelectComputer); selectedPeerAddress.SetText("");
+                connectionState.SetText(() => UiText.PrivateConnectInstructions);
+            }
+            RenderPeers();
+            discoveryState.SetText(() => discoveredPeers.Count == 0 ? PrivateInternet ? UiText.NoInternetPcs : UiText.NoPcsFound : UiText.Format(UiText.AvailablePcCount, discoveredPeers.Count));
+            if (discoveredPeers.Count == 1 && selectedPeer == null && peers.Items.Count > 0) peers.Items[0].Selected = true;
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { discoveryState.SetText(() => UiText.SearchUnavailablePrefix + ex.Message); }
@@ -954,7 +988,9 @@ public sealed partial class MainForm : Forms.Form
             peers.Items.Clear();
             foreach (var peer in discoveredPeers)
             {
-                var item = new Forms.ListViewItem(peer.Name); item.SubItems.Add(peer.Host); item.SubItems.Add(UiText.Available); item.Tag = peer; peers.Items.Add(item); if (peer.Host == keep) item.Selected = true;
+                var item = new Forms.ListViewItem(peer.Name);
+                if (!PrivateInternet) item.SubItems.Add(peer.Host);
+                item.SubItems.Add(UiText.Available); item.Tag = peer; peers.Items.Add(item); if (peer.Host == keep) item.Selected = true;
             }
         }
         finally
@@ -971,14 +1007,17 @@ public sealed partial class MainForm : Forms.Form
         if (renderingPeers || supportSession || pairingBusy || terminating) return;
         if (peers.SelectedItems.Count == 0 || peers.SelectedItems[0].Tag is not Peer peer) return;
         InvalidateInputSession();
-        selectedPeer = peer; selectedFingerprint = peer.Fingerprint; host.SetText(peer.Host); selectedPeerName.SetText(peer.Name); selectedPeerAddress.SetText(peer.Host); connectionState.SetText(() => UiText.EnterDisplayedCode); code.SetText(""); code.Focus();
+        selectedPeer = peer; selectedFingerprint = peer.Fingerprint; host.SetText(peer.Host); selectedPeerName.SetText(peer.Name);
+        selectedPeerAddress.SetText(() => PrivateInternet ? UiText.InternetReady : peer.Host);
+        connectionState.SetText(() => PrivateInternet ? UiText.PrivateConnectInstructions : UiText.EnterDisplayedCode); code.SetText("");
+        if (PrivateInternet) pairButton.Focus(); else code.Focus();
     }
 
     private async Task PairSelectedAsync()
     {
         if (supportSession) { connectionState.SetText(() => UiText.EndSupportBeforeNewCode); return; }
-        if (pairingBusy || string.IsNullOrWhiteSpace(host.Text)) { connectionState.SetText(() => UiText.ChoosePcPeriod); return; }
-        if (code.Text.Length != 6 || !code.Text.All(char.IsAsciiDigit)) { connectionState.SetText(() => UiText.CodeMustBeSixDigits); code.Focus(); return; }
+        if (pairingBusy || string.IsNullOrWhiteSpace(host.Text)) { connectionState.SetText(() => PrivateInternet ? UiText.SelectComputer : UiText.ChoosePcPeriod); return; }
+        if (!PrivateInternet && (code.Text.Length != 6 || !code.Text.All(char.IsAsciiDigit))) { connectionState.SetText(() => UiText.CodeMustBeSixDigits); code.Focus(); return; }
         pairingBusy = true; synchronizingAgent = false; pairButton.Enabled = false; discoverButton.Enabled = false; code.Enabled = false; host.Enabled = false; operationGeneration++; int generation = operationGeneration; sessionGeneration++; lastFrameUtc = null; liveFrameFresh = false; var pairingCts = new CancellationTokenSource(); pairingLifetime = pairingCts;
         RemoteClient? pairedClient = null;
         updateProgressArea.Visible = false;
@@ -988,7 +1027,7 @@ public sealed partial class MainForm : Forms.Form
             using (var handshake = CancellationTokenSource.CreateLinkedTokenSource(pairingCts.Token))
             {
                 handshake.CancelAfter(TimeSpan.FromSeconds(SupportOperationTimeouts.PairingHandshakeSeconds));
-                try { await pairedClient.PairAsync(code.Text, handshake.Token); }
+                try { await pairedClient.PairAsync(PrivateInternet ? InternetSettings.Load(root)!.AuthenticationSecret(host.Text) : code.Text, handshake.Token); }
                 catch (OperationCanceledException) when (!pairingCts.IsCancellationRequested) { throw new TimeoutException(UiText.PairingTimedOut); }
             }
             sessionExit.Cancel();
@@ -1434,14 +1473,14 @@ public sealed partial class MainForm : Forms.Form
         if (quitting) return;
         agentIdle = true; sessionExit.Start(); CurrentPairingCode = null;
         powerHold?.Dispose(); powerHold = null;
-        SetFooterMessage(() => UiText.SupportEnded); SetFooterDetail(() => UiText.NewSupportForCode);
+        SetFooterMessage(() => UiText.SupportEnded); SetFooterDetail(() => PrivateInternet ? UiText.PrivateEnableInstructions : UiText.NewSupportForCode);
         RefreshUiState();
     }
 
     private void ClearControllerSession()
     {
         client = null; selectedPeer = null; selectedFingerprint = ""; selectedFilePath = null;
-        selectedPeerName.SetText(() => UiText.NewConnection); selectedPeerAddress.SetText(() => UiText.EnterRemoteCode);
+        selectedPeerName.SetText(() => UiText.NewConnection); selectedPeerAddress.SetText(() => PrivateInternet ? UiText.PrivateConnectInstructions : UiText.EnterRemoteCode);
         geometry = null; lastFrameUtc = null; inputState.Released(); code.SetText("");
         processRows.Clear(); fileRows.Clear(); processList.Items.Clear(); fileList.Items.Clear();
         screen.Image?.Dispose(); screen.Image = null; currentDirectory = ""; fileDirectory.Clear(); remotePath.SetText("");
@@ -1450,7 +1489,7 @@ public sealed partial class MainForm : Forms.Form
         resourceState.SetText(() => ConnectToContinue); fileState.SetText(() => ConnectToContinue); diagnosticState.SetText(() => ConnectToContinue);
         volumeSummary.SetText(() => UiText.NoMeasurementsAvailable); output.SetText(""); remoteText.SetText(""); pid.Value = 0;
         streamStatus.SetText(() => UiText.NoActiveConnection);
-        connectionState.SetText(() => UiText.SupportEndedNewCode);
+        connectionState.SetText(() => PrivateInternet ? UiText.SupportEnded : UiText.SupportEndedNewCode);
         RefreshControllerControls();
     }
 

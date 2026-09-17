@@ -214,7 +214,7 @@
     <value>Empty folder</value>
   </data>
   <data name="EnableOnThisPc" xml:space="preserve">
-    <value>Enable on this PC</value>
+    <value>Enable support</value>
   </data>
   <data name="EnablePrivateNetwork" xml:space="preserve">
     <value>Enable this PC to allow private network access</value>
@@ -783,15 +783,21 @@
   <data name="Language" xml:space="preserve"><value>Language</value></data>
   <data name="SystemDefault" xml:space="preserve"><value>System default</value></data>
   <data name="LanguageSaveFailed" xml:space="preserve"><value>Language applied, but could not be saved.</value></data>
-  <data name="InternetSetup" xml:space="preserve"><value>Internet setup…</value></data>
-  <data name="InternetSetupRequired" xml:space="preserve"><value>Import your private internet setup file once on each PC.</value></data>
+  <data name="InternetSetupRequired" xml:space="preserve"><value>Run your private installer to enable internet support.</value></data>
   <data name="InternetReady" xml:space="preserve"><value>Internet ready</value></data>
   <data name="InternetConnecting" xml:space="preserve"><value>Connecting to the internet relay…</value></data>
   <data name="InternetRetrying" xml:space="preserve"><value>Internet unavailable · retrying…</value></data>
   <data name="InternetUnavailable" xml:space="preserve"><value>Internet unavailable</value></data>
   <data name="PublicIp" xml:space="preserve"><value>Public IP</value></data>
   <data name="SupportId" xml:space="preserve"><value>Support ID</value></data>
-  <data name="InternetInstructions" xml:space="preserve"><value>For internet access, share this support ID and the code below.</value></data>
-  <data name="InternetSupportSuffix" xml:space="preserve"><value> · Internet and local network support</value></data>
+  <data name="InternetInstructions" xml:space="preserve"><value>On your support PC, select this computer by name and click Connect.</value></data>
+  <data name="PrivateSupportReady" xml:space="preserve"><value>Support enabled</value></data>
+  <data name="PrivateEnableInstructions" xml:space="preserve"><value>Click Enable support to make this computer available to your support PC.</value></data>
+  <data name="PrivateAccessNote" xml:space="preserve"><value>Your private installer authenticates the connection. End support to revoke access.</value></data>
+  <data name="PrivateConnectInstructions" xml:space="preserve"><value>Select an online computer and click Connect.</value></data>
+  <data name="NoInternetPcs" xml:space="preserve"><value>No computers online. Enable support on the other PC.</value></data>
+  <data name="InternetSupportSuffix" xml:space="preserve"><value> · Internet support</value></data>
+  <data name="SelectComputer" xml:space="preserve"><value>Select a computer</value></data>
+  <data name="InternetLabel" xml:space="preserve"><value>Internet</value></data>
   <data name="InternetMaintenanceNotice" xml:space="preserve"><value>Windows activation is needed only for local network access and administrator maintenance.</value></data>
 </root>

@@ -50,21 +50,65 @@ internal sealed partial class LabForm
             loopbackAgent = LaunchInternetProduct(true, Vault.DefaultRoot); product = loopbackAgent;
             await WaitUiAsync(); WindowState = Forms.FormWindowState.Minimized;
             ResizeProductWindow(1060, 720); Native.FocusWindow(product.Id);
+            if (Find("internetSetup", 100) != null)
+                throw new IOException("The installed app still exposes a manual internet setup step.");
+            if (Find("enableSupport", 100) is not { } enable || Value(enable) != "Activer l’assistance")
+                throw new IOException("The installed app does not expose its single Enable support action.");
+            if (Find("supportId", 100) != null || Find("agentPairCode", 100) != null ||
+                (await settings.FindAsync(stop.Token)).Any(peer => peer.Name == Environment.MachineName))
+                throw new IOException("The private client exposes a code or grants access before Enable support.");
+            Pass("installer.seamless_ui", "First launch waits for Enable support, with no ID, code, or manual Internet setup");
+            CaptureDesktop("installed-awaiting-enable.png");
+            if (scope == "demo") { await WaitForHostDemonstrationAsync(); await FinishAsync(); return; }
+            // Automated transport qualification opts in explicitly at launch.
+            // The interactive demo separately exercises the Windows activation button.
+            await CleanupLoopbackProcessesAsync();
+            loopbackAgent = LaunchInternetProduct(true, Vault.DefaultRoot, enableSupport: true); product = loopbackAgent;
+            await WaitUiAsync(); ResizeProductWindow(1060, 720); Native.FocusWindow(product.Id);
             var deadline = Stopwatch.StartNew();
-            string supportId = "";
+            bool online = false;
             while (deadline.Elapsed < TimeSpan.FromSeconds(75))
             {
-                var field = Find("supportId", 100);
-                supportId = field == null ? "" : Value(field);
-                if (InternetSettings.IsSupportId(supportId)) break;
+                online = (await settings.FindAsync(stop.Token)).Any(peer => peer.Name == Environment.MachineName);
+                if (online) break;
                 await Task.Delay(500, stop.Token);
             }
-            if (!InternetSettings.IsSupportId(supportId)) throw new IOException("The installed app did not register with its bundled relay settings.");
-            await WaitPairingCodeAsync();
+            if (!online) throw new IOException("The installed app did not appear in private discovery.");
+            if (Find("supportId", 100) != null || Find("copySupportId", 100) != null)
+                throw new IOException("The client still displays a support ID.");
             CaptureDesktop("installed-internet-ready.png");
-            Pass("installer.internet_ready", "First launch registers with the live relay and displays a code without manual configuration", new { supportId });
+            Pass("installer.internet_ready", "Explicit support activation is discoverable by computer name without codes", new { computer = Environment.MachineName });
             await FinishAsync();
         }
         finally { await CleanupLoopbackProcessesAsync(); }
+    }
+
+    private async Task WaitForHostDemonstrationAsync()
+    {
+        var deadline = Stopwatch.StartNew();
+        bool connected = false;
+        string managedApplication = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "RemoteDebugger", "RemoteDebugger.exe");
+        while (deadline.Elapsed < TimeSpan.FromMinutes(15))
+        {
+            if (product is { HasExited: true })
+            {
+                // Enable support relaunches the same signed app from Program Files.
+                var replacement = Process.GetProcessesByName("RemoteDebugger").FirstOrDefault(candidate =>
+                {
+                    try { return candidate.MainWindowHandle != IntPtr.Zero && string.Equals(candidate.MainModule?.FileName,
+                        managedApplication, StringComparison.OrdinalIgnoreCase); }
+                    catch { return false; }
+                });
+                if (replacement != null) { product = loopbackAgent = replacement; application = managedApplication; }
+            }
+            connected |= IsConnected(TryValue("connectionStatus"));
+            if (TryValue("agentHeading") == "Assistance terminée" && connected)
+            {
+                Pass("installer.host_demo", "The host connected to the installed VM client and ended support without an ID or code");
+                CaptureDesktop("host-demo-final.png"); return;
+            }
+            await Task.Delay(1000, stop.Token);
+        }
+        throw new IOException("The host demonstration did not complete a connected session followed by End support.");
     }
 }

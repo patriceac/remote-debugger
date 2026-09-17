@@ -41,7 +41,8 @@ public static class Program
         }
         Native.FreeConsole(); ApplicationConfiguration.Initialize();
         bool controllerOnly = args.Contains("--controller");
-        var form = new MainForm(!controllerOnly, dataRoot, loopbackOnly, startupPreparationError, languageOverride);
+        var form = new MainForm(!controllerOnly, dataRoot, loopbackOnly, startupPreparationError, languageOverride,
+            enableSupport: args.Contains("--enable-support") || args.Contains("--resume-update"));
         form.Shown += (_, _) => instance.StartListening(form.ActivateExistingWindow);
         SupportPlatform.ManagedRelaunchRequested += () =>
         {
@@ -113,12 +114,20 @@ public static class Program
                 Console.WriteLine(Json.Text(new { ok = status.Provisioned, status, receipt = SupportPlatformPaths.ProvisioningReceiptPath }));
                 return status.Provisioned ? 0 : 1;
             }
-            if (verb == "discover") { Console.WriteLine(Json.Text(new { ok = true, peers = await Discovery.FindAsync(2500, ct.Token) })); return 0; }
+            if (verb == "discover")
+            {
+                var settings = InternetSettings.Load(Option("--data-root", Vault.DefaultRoot));
+                var found = settings == null ? await Discovery.FindAsync(2500, ct.Token) : await settings.FindAsync(ct.Token);
+                Console.WriteLine(Json.Text(new { ok = true, peers = found })); return 0;
+            }
             if (verb == "pair")
             {
                 string fingerprint = Option("--fingerprint"); if (fingerprint.Length != 0 && fingerprint.Replace(":", "").Length != 64) throw new ArgumentException("When supplied, --fingerprint must be a SHA-256 certificate fingerprint.");
                 var client = new RemoteClient(InternetSettings.Target(Option("--host"), int.Parse(Option("--port", "45832")), fingerprint, Option("--data-root", Vault.DefaultRoot)));
-                string code = (await Console.In.ReadLineAsync(ct.Token) ?? "").Trim(); await client.PairAsync(code, ct.Token); client.Save(config);
+                string secret = client.Connection.RelayUrl.Length != 0
+                    ? InternetSettings.Load(Option("--data-root", Vault.DefaultRoot))!.AuthenticationSecret(client.Connection.Host)
+                    : (await Console.In.ReadLineAsync(ct.Token) ?? "").Trim();
+                await client.PairAsync(secret, ct.Token); client.Save(config);
                 Console.WriteLine(Json.Text(new { ok = true, paired = true, connection = config })); return 0;
             }
             if (verb == "help")

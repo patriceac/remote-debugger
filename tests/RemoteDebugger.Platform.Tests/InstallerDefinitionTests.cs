@@ -37,6 +37,19 @@ public sealed class InstallerDefinitionTests
     }
 
     [Fact]
+    public void PrivateInstallerImportsItsEmbeddedProfileBeforeTheNormalLaunchEvenWhenSilent()
+    {
+        string definition = File.ReadAllText(ProjectFile("installer", "RemoteDebugger.iss"));
+        Assert.Contains("Source: \"{#RelayProfilePath}\"; DestName: \"RemoteDebugger-Internet.rdrelay\"; Flags: dontcopy", definition);
+        Assert.Contains("if CurStep = ssPostInstall then", definition);
+        Assert.Contains("cli internet-import --file", definition);
+        Assert.Contains("SW_HIDE, ewWaitUntilTerminated, ResultCode", definition);
+        Assert.Contains("if ResultCode <> 0 then", definition);
+        Assert.Contains("finally\n      DeleteFile(ProfilePath);", definition.Replace("\r\n", "\n"));
+        Assert.DoesNotContain("WizardSilent", definition);
+    }
+
+    [Fact]
     public void InstallerUsesWindowsUiLanguageWithEnglishFirstAsFallback()
     {
         string definition = File.ReadAllText(ProjectFile("installer", "RemoteDebugger.iss"));

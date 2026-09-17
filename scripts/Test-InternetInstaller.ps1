@@ -1,4 +1,4 @@
-param([string]$InstallerPath)
+param([string]$InstallerPath, [switch]$Demo)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($InstallerPath)) {
@@ -10,15 +10,15 @@ $runner = Join-Path $env:USERPROFILE '.agents\skills\hyperv-test-executables\scr
 $request = @{
     ArtifactPath = Join-Path $projectRoot 'artifacts\lab'
     ExecutableRelativePath = 'RemoteDebugger.Lab.exe'
-    Arguments = 'internetinstaller "{OUTDIR}" runtime none "{HOSTINPUT:installer}"'
+    Arguments = 'internetinstaller "{OUTDIR}" ' + $(if ($Demo) { 'demo' } else { 'runtime' }) + ' none "{HOSTINPUT:installer}"'
     ReadOnlyHostInput = @(@{ Name = 'installer'; Path = $resolvedInstaller; Mode = 'Vhdx' })
     AllowNetworkWithHostInputs = $true
     NetworkProfile = 'InternetOnly'
-    ActionsJson = '[{"type":"wait_result_file","path":"{OUTDIR}\\lab-result.json","timeoutMs":300000},{"type":"screenshot","name":"installer-final.png"}]'
+    ActionsJson = '[{"type":"wait_result_file","path":"{OUTDIR}\\lab-result.json","timeoutMs":' + $(if ($Demo) { '1080000' } else { '300000' }) + '},{"type":"screenshot","name":"installer-final.png"}]'
     AssertResultFile = '{OUTDIR}\lab-result.json'
     AssertResultJsonPointer = '/passed'
     AssertResultEqualsJson = 'true'
-    ExecutionTimeoutSeconds = 360
+    ExecutionTimeoutSeconds = $(if ($Demo) { 1200 } else { 360 })
     ThrowOnFailure = $true
 }
 & $runner @request

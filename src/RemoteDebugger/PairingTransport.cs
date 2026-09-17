@@ -21,7 +21,7 @@ internal static class PairingTransport
 {
     public static async Task<Connection> PairAsync(Connection target, string code, CancellationToken ct)
     {
-        if (code.Length != 6 || !code.All(char.IsAsciiDigit)) throw new ArgumentException("Enter exactly six digits.");
+        if (!PairingExchange.ValidSecret(code)) throw new ArgumentException("Invalid pairing secret.");
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct); deadline.CancelAfter(TimeSpan.FromSeconds(30));
         await using var transport = await ConnectionTransport.OpenAsync(target, deadline.Token).ConfigureAwait(false);
         string fingerprint = "";
