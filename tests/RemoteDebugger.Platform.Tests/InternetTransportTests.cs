@@ -1,9 +1,31 @@
 using System.Net.WebSockets;
+using System.Text;
+using System.Text.Json;
 using RemoteDebugger;
 using Xunit;
 
 public sealed class InternetTransportTests
 {
+    [Fact]
+    public void InstallerProfileImportProtectsSettingsAndPreservesThemWhenAnImportIsInvalid()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "RemoteDebugger-ImportTest-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            string profile = Path.Combine(directory, "setup.rdrelay"), settingsRoot = Path.Combine(directory, "settings");
+            var expected = new InternetSettings("https://relay.example", new string('a', 64));
+            File.WriteAllText(profile, JsonSerializer.Serialize(expected));
+            InternetSettings.Import(profile, settingsRoot);
+            Assert.Equal(expected, InternetSettings.Load(settingsRoot));
+            Assert.DoesNotContain(expected.AccessKey, Encoding.UTF8.GetString(File.ReadAllBytes(Path.Combine(settingsRoot, "internet.dpapi"))));
+            File.WriteAllText(profile, JsonSerializer.Serialize(expected with { RelayUrl = "http://relay.example" }));
+            Assert.Throws<ArgumentException>(() => InternetSettings.Import(profile, settingsRoot));
+            Assert.Equal(expected, InternetSettings.Load(settingsRoot));
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
     [Theory]
     [InlineData("http://relay.example/")]
     [InlineData("https://relay.example/path")]

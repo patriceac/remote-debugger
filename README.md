@@ -6,6 +6,8 @@ The command path is **Codex → local controller CLI → encrypted connection �
 
 ## Get started
 
+For your personal internet-enabled installation, use `RemoteDebugger-<version>-Private-Setup.exe`. It imports the bundled relay settings automatically. The private installer is sufficient on each PC; no separate `.rdrelay` file needs to be selected.
+
 Build with .NET SDK 8 on Windows:
 
 ```powershell

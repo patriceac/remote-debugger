@@ -1,5 +1,15 @@
 # Validation record
 
+## 0.3.0 — preconfigured private installer
+
+September 17, 2026: **208 .NET unit tests pass** (151 Core, 57 platform). The added profile-import regression checks that imported settings are protected for the current user and that an invalid replacement preserves the existing configuration. This packaging change retains the previously tested Release executable, SHA-256 `74BD0AACFB48DED289194E2A4853A642BC7AADCF9FF08305864FA8AFEC210806`.
+
+The signed personal installer `RemoteDebugger-0.3.0-Private-Setup.exe` has SHA-256 `75F1777F22F6981456D9004E8F18B952F9481D14639E40F490C6116376751EDE`. It embeds the ignored local `.rdrelay` profile, imports it through the installed Release CLI before first launch, saves the settings with DPAPI CurrentUser and deletes the extracted plaintext profile. The installer contains the relay credential and remains a private local artifact; it does not contain the publisher's signing private key. `-WithoutInternetProfile` retains the credential-free packaging option.
+
+Request `executable-test-20260917T173818998Z-f3ec4fd3` passed **all six assertions**: a fresh profile before installation, successful silent installation, readable DPAPI-protected configuration, removal of the plaintext profile from temporary and installed files, per-user Start menu/uninstall registration, and first-launch registration with the live Cloudflare relay without a separate profile file or manual import. The installed executable matched the Release hash above. The installation log confirmed no administrator privileges, successful import and no required restart. The final French screenshot at 1060×720 was visually reviewed and showed **Internet ready**, a support ID, public IP and current authorization code. Interactive installer-page rendering was outside this silent-install check. Pairing and transport behavior retain the preceding Release's evidence below.
+
+The test used the broker's approved `InternetOnly` profile and the canonical private installer as one immutable read-only VHDX input; no loose relay profile was supplied to the guest. Broker and guest harnesses succeeded, application assertions were evaluated and passed, process cleanup verified no survivors, and worker 1 ended Off. Payload and input children were deleted and independently absent on disk; input and network cleanup succeeded, the network lease and adapter were removed, all adapters were disconnected, and evidence warnings were empty. Independent disk-attachment enumeration is unavailable to the development token, so that part of cleanup relies on broker evidence.
+
 ## 0.3.0 — private internet discovery and transport
 
 September 17, 2026: **207 .NET unit tests pass** (151 Core, 56 platform), along with all **four Worker tests** and TypeScript checking. Added coverage checks support-ID parsing, HTTPS settings validation, bounded encrypted frames, unexpected frame rejection, ordered connection closure, transport error recovery, relay authentication, invitation ownership and replacement-registration isolation. The Worker dependency audit reports no known vulnerabilities.

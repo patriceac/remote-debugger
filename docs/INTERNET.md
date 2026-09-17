@@ -4,12 +4,13 @@ Internet mode connects both PCs outward over HTTPS/WebSockets (port 443). No VPN
 
 ## Set up your devices
 
-1. Obtain your private `RemoteDebugger-Internet.rdrelay` setup file from the relay owner.
-2. On each PC, open **Give control → Internet setup…** and select that file. The app stores the settings with Windows DPAPI protection for the current user.
-3. Wait for **Internet ready**. The assisted PC displays a support ID such as `RD-0123-4567-89AB-CDEF`, its public IP for diagnostics, and its six-digit authorization code.
-4. On the controlling PC, enter the support ID in **Take control**, enter the six-digit code, and connect.
+1. Run your personal `RemoteDebugger-<version>-Private-Setup.exe` on each PC. It embeds the `.rdrelay` settings and imports them automatically for the current Windows user, including during silent installation. No separate setup file or import step is needed.
+2. Open the app and wait for **Internet ready**. The assisted PC displays a support ID such as `RD-0123-4567-89AB-CDEF`, its public IP for diagnostics, and its six-digit authorization code.
+3. On the controlling PC, enter the support ID in **Take control**, enter the six-digit code, and connect.
 
-The setup file is private: it permits use of your hosting service. It does not authorize control of a PC. That still requires the current authorization code. Keep this file out of public releases, repositories, and logs. Sharing it once with the intended 3–5 devices is sufficient; each device generates its own invitation.
+The installer stores settings with Windows DPAPI protection and deletes its temporary plaintext profile after import. The installer itself contains the relay credential and is intended for private distribution to your 3–5 devices. It does not embed the publisher's signing private key or authorize control of a PC; the current authorization code is still required. Keep private installers and `.rdrelay` files out of public releases, repositories and logs.
+
+For the portable executable or an installer built without bundled settings, use **Give control → Internet setup…** to import your private `.rdrelay` file once. That control also remains available for later configuration changes.
 
 Support IDs locate a currently running invitation. New support sessions generate new IDs. Codes expire and are single-use. **End support** revokes the endpoint grant immediately. Transient relay failures reconnect with backoff while the existing support-session grace period applies. The displayed public IP is informational; it is not used to bypass routers.
 

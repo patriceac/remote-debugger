@@ -18,7 +18,11 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\artifacts\installer
+#ifdef RelayProfilePath
+OutputBaseFilename=RemoteDebugger-{#AppVersion}-Private-Setup
+#else
 OutputBaseFilename=RemoteDebugger-{#AppVersion}-Setup
+#endif
 SetupIconFile=..\src\RemoteDebugger\Assets\RemoteDebugger.ico
 UninstallDisplayIcon={app}\{#AppExeName}
 Compression=lzma2/ultra64
@@ -40,6 +44,10 @@ Name: "french"; MessagesFile: "compiler:Languages\French.isl"
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 
 [Files]
+#ifdef RelayProfilePath
+; Embedded in the private installer, extracted only for the per-user import.
+Source: "{#RelayProfilePath}"; DestName: "RemoteDebugger-Internet.rdrelay"; Flags: dontcopy
+#endif
 Source: "..\artifacts\release\RemoteDebugger.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\artifacts\release\RemoteDebugger.publisher.cer"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
@@ -50,3 +58,34 @@ Name: "{group}\Remote Debugger"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,Remote Debugger}"; Flags: nowait postinstall skipifsilent
+
+#ifdef RelayProfilePath
+[CustomMessages]
+english.InternetSetupFailed=Internet setup could not be saved. Run this installer again before using internet support.
+french.InternetSetupFailed=La configuration Internet n'a pas pu être enregistrée. Relancez l'installation avant d'utiliser l'assistance Internet.
+spanish.InternetSetupFailed=No se pudo guardar la configuración de Internet. Ejecute de nuevo el instalador antes de usar la asistencia por Internet.
+
+[Code]
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ProfilePath: String;
+  ResultCode: Integer;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    ExtractTemporaryFile('RemoteDebugger-Internet.rdrelay');
+    ProfilePath := ExpandConstant('{tmp}\RemoteDebugger-Internet.rdrelay');
+    try
+      if not Exec(ExpandConstant('{app}\{#AppExeName}'),
+        'cli internet-import --file "' + ProfilePath + '"',
+        ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+        RaiseException(CustomMessage('InternetSetupFailed'));
+      if ResultCode <> 0 then
+        RaiseException(CustomMessage('InternetSetupFailed'));
+      Log('Private internet settings imported for the current Windows user.');
+    finally
+      DeleteFile(ProfilePath);
+    end;
+  end;
+end;
+#endif

@@ -8,6 +8,12 @@ registers an uninstaller without requesting administrator privileges. Launching
 the shortcut starts the application normally at medium integrity. The portable
 single executable remains supported and behaves the same way.
 
+The personal `RemoteDebugger-<version>-Private-Setup.exe` also embeds the private
+internet setup file. Installation automatically imports it into the current
+user's DPAPI-protected settings before the app launches, then deletes the
+temporary plaintext copy. This works in interactive and silent installations.
+The installer stays private because it contains the relay credential.
+
 The desktop installer is deliberately separate from protected support setup.
 Choosing **Enable on this PC** still requests one explicit Windows administrator
 approval so the application can provision its Program Files copy, local broker,
@@ -19,6 +25,14 @@ Build the installer after producing a signed Release:
 ```powershell
 ./scripts/Build-Installer.ps1 -Sign
 ```
+
+The default private build reads `dist/internet/RemoteDebugger-Internet.rdrelay`,
+which is ignored by Git. Use `-InternetProfilePath PATH` for another private
+profile, or `-WithoutInternetProfile` to build the distributable installer
+without credentials. A missing or invalid requested profile fails the build.
+The executable and publisher signing key are unchanged by profile embedding.
+Run `scripts/Test-InternetInstaller.ps1` after publishing the acceptance Lab to
+verify automatic configuration and first-launch relay registration in Hyper-V.
 
 Inno Setup must be installed or its compiler path supplied with
 `-CompilerPath`. Uninstalling the per-user package removes its files and Start
