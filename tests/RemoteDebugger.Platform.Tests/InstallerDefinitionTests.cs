@@ -17,6 +17,20 @@ public sealed class InstallerDefinitionTests
     }
 
     [Fact]
+    public void InstallerStartsInTrayAtSignInForTheCurrentUser()
+    {
+        string definition = File.ReadAllText(ProjectFile("installer", "RemoteDebugger.iss"));
+        string startup = Assert.Single(definition.Split('\n'), line => line.StartsWith("Name: \"{userstartup}\\", StringComparison.Ordinal));
+        Assert.Contains("Filename: \"{app}\\{#AppExeName}\"", startup, StringComparison.Ordinal);
+        Assert.Contains("WorkingDir: \"{app}\"", startup, StringComparison.Ordinal);
+        Assert.Contains("Parameters: \"--startup\"", startup, StringComparison.Ordinal);
+        Assert.DoesNotContain("--enable-support", startup, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Tasks:", startup, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("uninsneveruninstall", startup, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("{commonstartup}", definition, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void InstallerPackagesTheReleaseExecutableAndCanLaunchItNormally()
     {
         string definition = File.ReadAllText(ProjectFile("installer", "RemoteDebugger.iss"));

@@ -73,6 +73,7 @@ internal sealed partial class LabForm : Forms.Form
         this.role = role.Trim().ToLowerInvariant();
         this.output = Path.GetFullPath(output);
         this.scope = scope.Trim().ToLowerInvariant();
+        if (this.role == "internetinstaller" && this.scope == "demo-hold") stop.CancelAfter(TimeSpan.FromHours(2));
         this.updateVariant = updateVariant.Trim().ToLowerInvariant();
         application = applicationPath == null ? ResolveApplicationPath(this.role, this.updateVariant) : Path.GetFullPath(applicationPath);
         if (!File.Exists(application)) throw new FileNotFoundException("Release artifact missing.", application);

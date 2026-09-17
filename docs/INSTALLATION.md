@@ -4,8 +4,11 @@
 
 `RemoteDebugger-<version>-Setup.exe` is a per-user installer. It writes beneath
 `%LOCALAPPDATA%\Programs\Remote Debugger`, creates a Start menu shortcut, and
-registers an uninstaller without requesting administrator privileges. Launching
-the shortcut starts the application normally at medium integrity. The portable
+registers an uninstaller without requesting administrator privileges. It also
+creates a shortcut in the current user's Windows Startup folder, so the app
+starts in the system tray when that user signs in after boot. Use the tray icon
+to open its window; private support still waits for **Enable support**. The Start
+menu shortcut opens the window normally. Both launch at medium integrity. The portable
 single executable remains supported and behaves the same way.
 
 The personal `RemoteDebugger-<version>-Private-Setup.exe` also embeds the private
@@ -36,7 +39,7 @@ verify automatic configuration and first-launch relay registration in Hyper-V.
 
 Inno Setup must be installed or its compiler path supplied with
 `-CompilerPath`. Uninstalling the per-user package removes its files and Start
-menu shortcut. Protected support provisioned by **Enable support** is managed
+menu and Windows Startup shortcuts. Protected support provisioned by **Enable support** is managed
 separately because removing a Windows service and Program Files state requires
 administrator authorization.
 

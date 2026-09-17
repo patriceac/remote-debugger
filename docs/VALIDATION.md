@@ -1,5 +1,11 @@
 # Validation record
 
+## 0.3.0 — Windows startup and VM handoff
+
+September 17, 2026: **214 .NET unit tests pass** (154 Core, 60 platform). The installer now creates a current-user Windows Startup shortcut with `--startup`; that launch stays in the system tray and does not enable support. A normal Start menu launch continues to open the window. The signed Release executable has SHA-256 `0E1E8093C97ECA7304C81D3FBD7486B9EB4E490715D1649CF9F19980D3C83B5F`, and the private installer has SHA-256 `9EBF7F1E7C784812D6782ABFAA6F1DDC183817BFEDA59CE3A1E573BB9A7DCB71`.
+
+Handoff request `executable-test-20260917T191416382Z-74567fc2` installed that exact private package in **Codex-Harness-02** with the broker's approved `InternetOnly` profile. Its application-produced result passed all six checks: fresh settings, installation, DPAPI-protected private settings, plaintext-profile cleanup, desktop integration, and the installed app open for user handoff. Fresh broker-mediated evidence showed the request and application still running when handed to the user. This is live handoff evidence; final process, disk and network cleanup occurs when the user exits or the broker's two-hour deadline expires and is not claimed here.
+
 ## 0.3.0 — code-free private support and host-to-VM demonstration
 
 September 17, 2026: **213 .NET unit tests pass** (154 Core, 59 platform), along with **five Worker tests**, TypeScript checking and the Worker build. New coverage checks private authentication without a displayed code, wrong-secret rejection, single-use and revoked grants, protection of both installer secrets, session-bound secret derivation, embedded-profile cleanup, and authenticated discovery including accented computer names and registration ownership.

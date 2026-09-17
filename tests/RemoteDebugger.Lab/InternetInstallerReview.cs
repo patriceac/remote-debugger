@@ -12,6 +12,9 @@ internal sealed partial class LabForm
     private async Task InternetInstallerReviewAsync()
     {
         string installer = application;
+        string localInstaller = Path.Combine(output, Path.GetFileName(installer));
+        File.Copy(installer, localInstaller, overwrite: true);
+        installer = localInstaller;
         if (InternetSettings.Load(Vault.DefaultRoot) != null)
             throw new IOException("The installation test requires a fresh internet configuration.");
         Pass("installer.fresh_profile", "Internet settings are absent before installation");
@@ -47,9 +50,51 @@ internal sealed partial class LabForm
             if (!File.Exists(shortcut) || uninstall == null) throw new IOException("Per-user Start menu or uninstall registration is missing.");
             Pass("installer.desktop_integration", "Installation retains the per-user Start menu shortcut and uninstaller");
 
-            loopbackAgent = LaunchInternetProduct(true, Vault.DefaultRoot); product = loopbackAgent;
+            string startupShortcut = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Startup), "Remote Debugger.lnk");
+            if (!File.Exists(startupShortcut)) throw new IOException("The current user's Windows startup shortcut is missing.");
+            if (scope == "handoff")
+            {
+                loopbackAgent = Process.Start(new ProcessStartInfo(application) { UseShellExecute = false, WorkingDirectory = installedDirectory })
+                    ?? throw new IOException("The installed app did not start for handoff.");
+                product = loopbackAgent;
+                await WaitUiAsync();
+                Pass("installer.handoff", "The Internet-enabled VM has Remote Debugger installed and open for the user");
+                CaptureDesktop("installed-handoff.png");
+                await FinishAsync();
+                while (!product.HasExited) await Task.Delay(1000, stop.Token);
+                Close();
+                return;
+            }
+            using var launched = Process.Start(new ProcessStartInfo(startupShortcut) { UseShellExecute = true });
+            var startupDeadline = Stopwatch.StartNew();
+            while (startupDeadline.Elapsed < TimeSpan.FromSeconds(30) && loopbackAgent == null)
+            {
+                foreach (var candidate in Process.GetProcessesByName("RemoteDebugger"))
+                {
+                    bool matches = false;
+                    try { matches = !candidate.HasExited && string.Equals(candidate.MainModule?.FileName, application, StringComparison.OrdinalIgnoreCase); }
+                    catch (System.ComponentModel.Win32Exception) { }
+                    if (matches) { loopbackAgent = candidate; break; }
+                    candidate.Dispose();
+                }
+                if (loopbackAgent == null) await Task.Delay(250, stop.Token);
+            }
+            product = loopbackAgent ?? throw new IOException("The Windows startup shortcut did not launch the installed app.");
+            WindowState = Forms.FormWindowState.Minimized;
+            var trayContext = await OpenTrayContextAsync();
+            if (trayContext.OpenItem == null || Native.NativeWindows().Any(window => window.Pid == product.Id && window.Name == "Remote Debugger"))
+                throw new IOException("Automatic startup did not stay in the system tray.");
+            Pass("installer.startup", "The installed Windows startup shortcut starts the Release in the system tray");
+            CaptureDesktop("installed-startup-tray.png", focusProduct: false);
+            using var duplicateStartup = Process.Start(new ProcessStartInfo(startupShortcut) { UseShellExecute = true });
+            if (duplicateStartup != null) await duplicateStartup.WaitForExitAsync(stop.Token);
+            if (Native.NativeWindows().Any(window => window.Pid == product.Id && window.Name == "Remote Debugger"))
+                throw new IOException("A repeated automatic startup restored the hidden window.");
+            Pass("installer.startup_quiet", "Repeated automatic startup leaves the existing window in the tray");
+            InvokeElement(trayContext.OpenItem);
             await WaitUiAsync(); WindowState = Forms.FormWindowState.Minimized;
             ResizeProductWindow(1060, 720); Native.FocusWindow(product.Id);
+            Pass("installer.startup_restore", "The tray Open action restores the installed app");
             if (Find("internetSetup", 100) != null)
                 throw new IOException("The installed app still exposes a manual internet setup step.");
             if (Find("enableSupport", 100) is not { } enable || Value(enable) != "Activer l’assistance")
@@ -59,7 +104,18 @@ internal sealed partial class LabForm
                 throw new IOException("The private client exposes a code or grants access before Enable support.");
             Pass("installer.seamless_ui", "First launch waits for Enable support, with no ID, code, or manual Internet setup");
             CaptureDesktop("installed-awaiting-enable.png");
-            if (scope == "demo") { await WaitForHostDemonstrationAsync(); await FinishAsync(); return; }
+            if (scope is "demo" or "demo-hold")
+            {
+                await WaitForHostDemonstrationAsync(); await FinishAsync();
+                if (scope == "demo-hold")
+                {
+                    // The user owns the live demo until they exit the client;
+                    // the broker still enforces its approved two-hour limit.
+                    while (product is { HasExited: false }) await Task.Delay(1000, stop.Token);
+                    Close();
+                }
+                return;
+            }
             // Automated transport qualification opts in explicitly at launch.
             // The interactive demo separately exercises the Windows activation button.
             await CleanupLoopbackProcessesAsync();
@@ -102,6 +158,11 @@ internal sealed partial class LabForm
                 if (replacement != null) { product = loopbackAgent = replacement; application = managedApplication; }
             }
             connected |= IsConnected(TryValue("connectionStatus"));
+            if (scope == "demo-hold" && connected)
+            {
+                Pass("installer.host_demo", "The host connected without an ID or code; the user retains the live session");
+                CaptureDesktop("host-demo-live.png"); return;
+            }
             if (TryValue("agentHeading") == "Assistance terminée" && connected)
             {
                 Pass("installer.host_demo", "The host connected to the installed VM client and ended support without an ID or code");

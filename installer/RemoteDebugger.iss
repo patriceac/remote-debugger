@@ -55,6 +55,7 @@ Source: "..\docs\*.md"; DestDir: "{app}\docs"; Excludes: "VALIDATION*.md"; Flags
 
 [Icons]
 Name: "{group}\Remote Debugger"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"
+Name: "{userstartup}\Remote Debugger"; Filename: "{app}\{#AppExeName}"; Parameters: "--startup"; WorkingDir: "{app}"
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,Remote Debugger}"; Flags: nowait postinstall skipifsilent

@@ -32,9 +32,12 @@ public static class Program
             catch (Exception ex) { startupPreparationError = ex.Message; }
         }
         bool loopbackOnly = args.Contains("--loopback-only");
+        bool startInTray = args.Contains("--startup");
         using var instance = SingleInstance.ForCurrentSession(loopbackOnly, dataRoot);
         if (!instance.TryAcquire())
         {
+            // Windows startup must not surface an already-running workspace.
+            if (startInTray) return 0;
             if (instance.ActivateExistingAsync().GetAwaiter().GetResult()) return 0;
             // Recover if the owner exited or crashed while activation was attempted.
             if (!instance.TryAcquire()) return 1;
@@ -42,7 +45,7 @@ public static class Program
         Native.FreeConsole(); ApplicationConfiguration.Initialize();
         bool controllerOnly = args.Contains("--controller");
         var form = new MainForm(!controllerOnly, dataRoot, loopbackOnly, startupPreparationError, languageOverride,
-            enableSupport: args.Contains("--enable-support") || args.Contains("--resume-update"));
+            enableSupport: args.Contains("--enable-support") || args.Contains("--resume-update"), startInTray: startInTray);
         form.Shown += (_, _) => instance.StartListening(form.ActivateExistingWindow);
         SupportPlatform.ManagedRelaunchRequested += () =>
         {

@@ -8,6 +8,8 @@ Internet mode connects both PCs outward over HTTPS/WebSockets (port 443). No VPN
 2. Open the app and click **Enable support** on the assisted PC. Approve Windows administrator setup on first use. Opening the app alone does not grant access. The client then appears by computer name on your other PCs.
 3. On the controlling PC, choose **Take control**, select the computer and click **Connect**. No support ID, IP address, authorization code, or Internet setup screen is required.
 
+The installer also starts the app in the system tray when you sign in to Windows. Open it from the tray to enable support or take control. A normal Start menu launch opens the window immediately.
+
 The installer contains a relay credential and a separate private authentication secret shared by your 3–5 devices. It stores both with Windows DPAPI protection and deletes its temporary plaintext profile after import. The authentication secret is never uploaded to Cloudflare and is not the publisher's signing private key. A PC with this private installer can connect while the receiving user has enabled support. Keep private installers and `.rdrelay` files out of public releases, repositories and logs.
 
 Use the private installer for the normal setup and for relay configuration updates. The developer CLI can still import a `.rdrelay` profile for a portable build; this is not part of the app's setup flow.
@@ -64,3 +66,5 @@ The relay limits an invitation to twelve concurrent request/stream channels, bin
 Run `scripts/Test-Unit.ps1` and the Worker tests before building. `scripts/Build.ps1 -IncludeLab -Sign` produces the release and acceptance Lab. `scripts/Test-Internet.ps1` requests the broker's `InternetOnly` network and tests the actual release GUI and CLI through the deployed service: discovery by name, wrong-installer rejection, code-free connection, endpoint pinning, live desktop, file integrity, and revocation. Its private profile and release executable are separate immutable read-only inputs. The automated transport fixture explicitly enables support with `--enable-support`; `scripts/Test-InternetInstaller.ps1 -Demo` exercises the normal activation button with the user handling Windows approval. Tests never fall back to host execution or another network profile.
 
 Two product processes in one isolated guest exercise the public relay path; this does not constitute a two-site ISP or corporate-proxy compatibility test.
+
+For a user-operated host-to-VM demo, `scripts/Test-InternetInstaller.ps1 -Demo -LeaveRunning` validates tray startup and records the live connection, then leaves it available until the client exits or the broker's two-hour execution deadline. The running demo is live application evidence, not a completed cleanup qualification.

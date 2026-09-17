@@ -150,6 +150,7 @@ public sealed partial class MainForm : Forms.Form
     private readonly string root;
     private readonly bool loopbackOnly;
     private readonly bool startAgentOnLaunch;
+    private readonly bool startInTray;
     private readonly Forms.Timer renderTimer = new() { Interval = 250 };
     private readonly Forms.Timer discoveryTimer = new() { Interval = 30000 };
     private readonly Forms.NotifyIcon tray = new();
@@ -186,7 +187,7 @@ public sealed partial class MainForm : Forms.Form
 
     private readonly string? startupPreparationError;
 
-    public MainForm(bool startAgent = true, string? dataRoot = null, bool loopbackOnly = false, string? startupPreparationError = null, string? languageOverride = null, bool enableSupport = false)
+    public MainForm(bool startAgent = true, string? dataRoot = null, bool loopbackOnly = false, string? startupPreparationError = null, string? languageOverride = null, bool enableSupport = false, bool startInTray = false)
     {
         // Build the entire 96-DPI layout before WinForms applies startup DPI.
         // Otherwise early layout can consume the scale factor while later
@@ -196,6 +197,7 @@ public sealed partial class MainForm : Forms.Form
         this.loopbackOnly = loopbackOnly;
         this.startupPreparationError = startupPreparationError;
         startAgentOnLaunch = startAgent;
+        this.startInTray = startInTray;
         privateSupportEnabled = enableSupport;
 
         Text = "Remote Debugger";
@@ -221,7 +223,16 @@ public sealed partial class MainForm : Forms.Form
 
         renderTimer.Tick += (_, _) => RefreshUiState();
         discoveryTimer.Tick += async (_, _) => await DiscoverAsync(false);
-        Load += (_, _) => RestoreWindowPlacement();
+        Load += (_, _) =>
+        {
+            RestoreWindowPlacement();
+            if (startInTray)
+            {
+                trayWindowState = WindowState;
+                ShowInTaskbar = false;
+                WindowState = Forms.FormWindowState.Minimized;
+            }
+        };
         Shown += MainFormShown;
         FormClosing += MainFormClosing;
         FormClosed += (_, _) => DisposeResources();
@@ -616,6 +627,11 @@ public sealed partial class MainForm : Forms.Form
 
     private async void MainFormShown(object? sender, EventArgs e)
     {
+        if (startInTray)
+        {
+            trayVisible = true;
+            Hide();
+        }
         renderTimer.Start();
         discoveryTimer.Start();
         _ = PumpInputAsync();
@@ -1535,7 +1551,7 @@ public sealed partial class MainForm : Forms.Form
 
     private void RestoreFromTray()
     {
-        trayVisible = false; Show(); WindowState = trayWindowState == Forms.FormWindowState.Maximized ? trayWindowState : Forms.FormWindowState.Normal; Activate();
+        trayVisible = false; ShowInTaskbar = true; Show(); WindowState = trayWindowState == Forms.FormWindowState.Maximized ? trayWindowState : Forms.FormWindowState.Normal; Activate();
         if (resumeViewingOnRestore && supportSession && controllerPages.SelectedIndex == 1) _ = StartStreamAsync();
         resumeViewingOnRestore = false;
     }
@@ -1563,7 +1579,7 @@ public sealed partial class MainForm : Forms.Form
     private void SaveWindowPlacement()
     {
         Rectangle bounds = WindowState == Forms.FormWindowState.Normal ? Bounds : RestoreBounds;
-        WindowPlacementStore.Save(root, bounds, WindowState == Forms.FormWindowState.Maximized);
+        WindowPlacementStore.Save(root, bounds, (trayVisible ? trayWindowState : WindowState) == Forms.FormWindowState.Maximized);
     }
 
     private async Task<bool> ShutdownAsync()
