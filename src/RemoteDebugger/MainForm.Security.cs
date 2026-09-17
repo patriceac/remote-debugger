@@ -15,7 +15,9 @@ public sealed partial class MainForm
         dialog.ShowDialog(this);
         if (!dialog.SettingsChanged) return;
         internetConfigured = InternetSettings.Load(root) != null;
-        if (agent != null) { agent.Dispose(); agent = null; StartAgent(); }
+        privateSupportEnabled = HasConfiguredPrivateSupport();
+        if (agent != null) { agent.Dispose(); agent = null; StartAgent(); _ = PrepareAgentAsync(); }
+        else if (rolePages.SelectedIndex == 0 && privateSupportEnabled) { StartAgent(); _ = PrepareAgentAsync(); }
         RefreshUiState();
         _ = DiscoverAsync(false);
     }

@@ -81,15 +81,12 @@ internal sealed partial class LabForm
         product = loopbackAgent;
         Native.FocusWindow(product.Id);
         CaptureDesktop("agent-session-ended.png");
-        string endCountdown = TryValue("pairingCountdown");
-        Click("restartAgent");
         string newCode = await WaitPairingCodeAsync();
         if (IsWorkspaceAudit)
         {
-            string restartedCountdown = TryValue("pairingCountdown");
-            bool cancelled = endCountdown.Contains("Fermeture automatique dans") && !restartedCountdown.Contains("Fermeture automatique");
-            if (cancelled) Pass("ui.exit_countdown_cancelled", "New assistance cancels the previous exit countdown and issues a new pairing code", new { endCountdown, restartedCountdown });
-            else Fail("ui.exit_countdown_cancelled", "New assistance cancels the previous exit countdown and issues a new pairing code", new { endCountdown, restartedCountdown });
+            bool automatic = SixDigits.IsMatch(newCode) && !TryValue("agentHeading").Equals("Assistance terminée", StringComparison.Ordinal);
+            if (automatic) Pass("ui.support_auto_restart", "Support automatically returns to a fresh pairing state after the previous session ends", new { restartedCode = CodeEvidence(newCode) });
+            else Fail("ui.support_auto_restart", "Support automatically returns to a fresh pairing state after the previous session ends", new { restartedCode = CodeEvidence(newCode), heading = TryValue("agentHeading") });
         }
         product = loopbackController;
         Native.FocusWindow(product.Id);
@@ -100,11 +97,12 @@ internal sealed partial class LabForm
         else Fail("loopback.second_session", "The same agent and controller processes can establish a new live session after termination", new { connected, live.BadgeVisible });
         product = loopbackAgent;
         Click("terminateSession");
-        bool idle = await WaitForTextAsync("agentHeading", text => text == "Assistance terminée", 30);
+        string restartedAfterAgentEnd = await WaitPairingCodeAsync();
         product = loopbackController;
         bool controllerReset = await WaitForTextAsync("connectionStatus", text => !IsConnected(text), 35);
         bool alive = !loopbackAgent.HasExited && !loopbackController.HasExited;
-        if (idle && controllerReset && alive) Pass("loopback.agent_ends_session", "Ending support on the agent keeps both processes open and returns the controller to connection", new { idle, controllerReset, alive });
-        else Fail("loopback.agent_ends_session", "Ending support on the agent keeps both processes open and returns the controller to connection", new { idle, controllerReset, alive });
+        bool restarted = SixDigits.IsMatch(restartedAfterAgentEnd);
+        if (restarted && controllerReset && alive) Pass("loopback.agent_ends_session", "Ending support on the agent keeps both processes open and automatically returns it to a fresh pairing state", new { restarted, restartedCode = CodeEvidence(restartedAfterAgentEnd), controllerReset, alive });
+        else Fail("loopback.agent_ends_session", "Ending support on the agent keeps both processes open and automatically returns it to a fresh pairing state", new { restarted, restartedCode = CodeEvidence(restartedAfterAgentEnd), controllerReset, alive });
     }
 }

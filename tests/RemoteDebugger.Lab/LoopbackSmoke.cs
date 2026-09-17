@@ -771,17 +771,18 @@ internal sealed partial class LabForm
             return;
         }
         bool disconnected = await WaitForTextAsync("connectionStatus", text => !IsConnected(text), 30);
-        bool agentIdle = false;
+        string restartedCode = "";
         product = loopbackAgent;
-        try { agentIdle = await WaitForTextAsync("agentHeading", text => text == "Assistance terminée", 30); }
+        try { restartedCode = await WaitPairingCodeAsync(); }
         finally { product = loopbackController; }
         bool bothAlive = !loopbackAgent.HasExited && loopbackController is { HasExited: false };
-        if (disconnected && agentIdle && bothAlive)
+        bool supportRestarted = SixDigits.IsMatch(restartedCode);
+        if (disconnected && supportRestarted && bothAlive)
         {
             sawTermination = true;
-            Pass("loopback.terminate", "Ending support revokes access and keeps both applications open", new { disconnected, agentIdle, bothAlive });
+            Pass("loopback.terminate", "Ending support revokes the old grant and automatically starts a fresh support listener", new { disconnected, supportRestarted, restartedCode = CodeEvidence(restartedCode), bothAlive });
         }
-        else Fail("loopback.terminate", "Ending support revokes access and keeps both applications open", new { disconnected, agentIdle, bothAlive });
+        else Fail("loopback.terminate", "Ending support revokes the old grant and automatically starts a fresh support listener", new { disconnected, supportRestarted, restartedCode = CodeEvidence(restartedCode), bothAlive });
         JsonElement denied = Json.Element(new { ok = false, error = "transport_after_termination" });
         try { denied = await CallAsync("status", requireSuccess: false, seconds: 15); } catch (Exception ex) { denied = Json.Element(new { ok = false, error = ex.Message }); }
         bool accessClosed = !denied.TryGetProperty("ok", out var accessOk) || accessOk.ValueKind != JsonValueKind.True;
@@ -798,7 +799,7 @@ internal sealed partial class LabForm
         catch (Exception ex) { endReply = Json.Element(new { ok = false, error = ex.Message }); }
 
         bool endAccepted = endReply.TryGetProperty("ok", out var endOk) && endOk.ValueKind == JsonValueKind.True;
-        bool agentExited = false;
+        bool agentAlive = false;
         if (loopbackAgent != null)
         {
             for (int n = 0; n < 30; n++)
@@ -806,19 +807,19 @@ internal sealed partial class LabForm
                 try
                 {
                     loopbackAgent.Refresh();
-                    if (loopbackAgent.HasExited) { agentExited = true; break; }
+                    if (!loopbackAgent.HasExited) { agentAlive = true; break; }
                 }
-                catch (InvalidOperationException) { agentExited = true; break; }
+                catch (InvalidOperationException) { agentAlive = false; break; }
                 await Task.Delay(1000, stop.Token);
             }
         }
 
         // This is cleanup evidence only. It never upgrades the GUI terminate
         // check: a missing or unusable terminate control remains a failure.
-        if (endAccepted && agentExited)
-            Pass("loopback.termination_cleanup", "The saved authenticated session.end operation is available as bounded cleanup and the real agent process exits", new { reason, endAccepted, agentExited }, required: false);
+        if (endAccepted && agentAlive)
+            Pass("loopback.termination_cleanup", "The saved authenticated session.end operation is available as bounded cleanup and the agent remains available", new { reason, endAccepted, agentAlive }, required: false);
         else
-            Fail("loopback.termination_cleanup", "The saved authenticated session.end operation is available as bounded cleanup and the real agent process exits", new { reason, endAccepted, agentExited, endReply }, required: false);
+            Fail("loopback.termination_cleanup", "The saved authenticated session.end operation is available as bounded cleanup and the agent remains available", new { reason, endAccepted, agentAlive, endReply }, required: false);
 
         if (includeAccessDenied)
         {

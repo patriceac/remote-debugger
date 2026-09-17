@@ -61,7 +61,6 @@ public sealed partial class MainForm : Forms.Form
     private readonly Forms.Button copyAgentCode = Button(() => UiText.Copy, "copyAgentCode", 86);
     private readonly Forms.Button restartAgent = Button(() => UiText.NewSupport, "restartAgent", primary: true);
     private bool agentIdle;
-    private readonly SessionExitCountdown sessionExit = new();
     private readonly Forms.ProgressBar pairingCountdown = new() { Name = "pairingCountdown", Minimum = 0, Maximum = 300, Value = 0, Height = 4, Style = Forms.ProgressBarStyle.Continuous };
     private readonly Forms.Label pairingCountdownText = new WorkspaceLabel() { Name = "pairingCountdownText", AutoSize = true, ForeColor = SecondaryText };
     private readonly Forms.Label agentState = new WorkspaceLabel() { Name = "agentState", AutoSize = true, ForeColor = PrimaryText };
@@ -642,6 +641,11 @@ public sealed partial class MainForm : Forms.Form
         discoveryTimer.Start();
         _ = PumpInputAsync();
         if (!startInTray && File.Exists(new SecurityMigrationStore(root).PendingSetupPath)) ShowSecuritySetup();
+        // A protected relay profile is already the user's authorization to keep
+        // this managed computer available. Re-enable its listener on every
+        // normal launch without requiring a second button click.
+        privateSupportEnabled = WindowLifetime.EnableSupportAtStartup(
+            PrivateInternet, HasConfiguredPrivateSupport(), privateSupportEnabled);
         SelectRole(startAgentOnLaunch ? 0 : 1);
         if (!startAgentOnLaunch) _ = DiscoverAsync(false);
         await Task.Yield();
@@ -674,7 +678,6 @@ public sealed partial class MainForm : Forms.Form
     public void StartAgent()
     {
         if (agent != null) return;
-        sessionExit.Cancel();
         try
         {
             // Pairing can appear immediately without triggering the broad Windows
@@ -691,7 +694,7 @@ public sealed partial class MainForm : Forms.Form
                 {
                     if (!ReferenceEquals(agent, started)) return;
                     if (WindowLifetime.ExitAfterAgentStop(reason)) { agent = null; RequestQuit(); }
-                    else TerminateAgentFromRemote();
+                    else if (WindowLifetime.RestartAfterAgentStop(reason)) _ = RestartAgentAfterSupportEndAsync(started);
                 });
             };
             agent.Start();
@@ -723,9 +726,28 @@ public sealed partial class MainForm : Forms.Form
         finally { suppressTerminationEvent = false; }
         local.Dispose();
         if (ReferenceEquals(agent, local)) agent = null;
-        privateSupportEnabled = false;
+        privateSupportEnabled = PrivateInternet && HasConfiguredPrivateSupport();
         powerHold?.Dispose(); powerHold = null; CurrentPairingCode = null; RefreshUiState();
         return true;
+    }
+
+    private async Task RestartAgentAfterSupportEndAsync(AgentServer ended)
+    {
+        if (quitting || !ReferenceEquals(agent, ended)) return;
+        // A terminated AgentServer deliberately keeps its listener in a
+        // revoked state. Dispose that instance before starting a fresh one so
+        // a new pairing grant/code is created and the relay becomes reachable
+        // again without user interaction.
+        agent = null;
+        agentIdle = false;
+        CurrentPairingCode = null;
+        try { ended.Dispose(); } catch { }
+        powerHold?.Dispose(); powerHold = null;
+        if (PrivateInternet)
+            privateSupportEnabled = HasConfiguredPrivateSupport();
+        if (PrivateInternet && !privateSupportEnabled) { RefreshUiState(); return; }
+        StartAgent();
+        await PrepareAgentAsync();
     }
 
     private async Task PrepareAgentAsync()
@@ -782,7 +804,6 @@ public sealed partial class MainForm : Forms.Form
 
     private void RefreshUiState()
     {
-        if (sessionExit.Expired && !quitting) { RequestQuit(); return; }
         if (IsDisposed) return;
         UpdateAgentState(); if (PrivateInternet) UpdatePrivateAgentState(); UpdateInternetState(); UpdateHeader(); RefreshControllerControls(); RefreshFooter(); RefreshInputStatus();
         if (supportSession && liveStream != null && lastFrameUtc is { } presented && DateTimeOffset.UtcNow - presented > TimeSpan.FromSeconds(3))
@@ -828,8 +849,7 @@ public sealed partial class MainForm : Forms.Form
             agentEyebrow.SetText(() => agentIdle ? UiText.SessionClosedCaption : UiText.PairingCodeCaption);
             agentState.SetText(() => agentIdle ? UiText.NoActiveConnection : UiText.AgentAwaitingPreparation);
             agentSessionNote.SetText(() => agentIdle ? UiText.RevokedAccessNote : UiText.PreparingSupport);
-            pairingCountdown.Value = 0; pairingCountdownText.SetText(() => agentIdle && sessionExit.Active
-                ? UiText.Format(UiText.AutoCloseCountdown, TimeSpan.FromSeconds(Math.Ceiling(sessionExit.Remaining.TotalSeconds))) : "");
+            pairingCountdown.Value = 0; pairingCountdownText.SetText("");
             agentNetworkState.SetText(() => agentIdle ? UiText.Waiting : UiText.Preparing); agentMaintenanceState.SetText(() => UiText.Inactive);
             setupNotice.Visible = false; return;
         }
@@ -1053,7 +1073,6 @@ public sealed partial class MainForm : Forms.Form
                 try { await pairedClient.PairAsync(PrivateInternet ? InternetSettings.Load(root)!.AuthenticationSecret(host.Text) : code.Text, handshake.Token); }
                 catch (OperationCanceledException) when (!pairingCts.IsCancellationRequested) { throw new TimeoutException(UiText.PairingTimedOut); }
             }
-            sessionExit.Cancel();
             pairedClient.Save(); synchronizingAgent = true; connectionState.SetText(() => UiText.AgentSynchronizing); SetFooterMessage(() => UiText.AgentSynchronizing); SetFooterDetail(() => UiText.TransferValidateVersion); ShowUpdateProgress(new AgentUpdateProgress("idle", 0, 0)); UpdateHeader(); RefreshFooter();
             using (var synchronization = CancellationTokenSource.CreateLinkedTokenSource(pairingCts.Token))
             {
@@ -1514,9 +1533,10 @@ public sealed partial class MainForm : Forms.Form
         }
         ClearControllerSession();
         terminateSession.Enabled = true; terminating = false;
-        if (wasAgent)
+        if (wasAgent && agent != null)
         {
-            agentIdle = true; sessionExit.Start(); SetFooterMessage(() => UiText.SupportEnded); SetFooterDetail(() => UiText.AutoCloseTenMinutes); RefreshUiState();
+            await RestartAgentAfterSupportEndAsync(agent);
+            SetFooterMessage(() => UiText.WaitingForController); SetFooterDetail(() => UiText.CloseToTray); RefreshUiState();
             return;
         }
         if (selectControllerAfter)
@@ -1524,15 +1544,6 @@ public sealed partial class MainForm : Forms.Form
             SelectRole(1); SelectControllerPage(0); _ = DiscoverAsync(false);
         }
         SetFooterMessage(() => UiText.SupportEnded); SetFooterDetail(() => UiText.SelectPcToRestart); RefreshFooter();
-    }
-
-    private void TerminateAgentFromRemote()
-    {
-        if (quitting) return;
-        agentIdle = true; sessionExit.Start(); CurrentPairingCode = null;
-        powerHold?.Dispose(); powerHold = null;
-        SetFooterMessage(() => UiText.SupportEnded); SetFooterDetail(() => PrivateInternet ? UiText.PrivateEnableInstructions : UiText.NewSupportForCode);
-        RefreshUiState();
     }
 
     private void ClearControllerSession()

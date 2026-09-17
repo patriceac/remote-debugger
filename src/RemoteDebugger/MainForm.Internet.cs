@@ -12,6 +12,13 @@ public sealed partial class MainForm
     private bool privateSupportEnabled;
     private readonly Forms.Button enableSupport = Button(() => UiText.EnableOnThisPc, "enableSupport", 200, primary: true);
 
+    private bool HasConfiguredPrivateSupport()
+    {
+        if (!PrivateInternet || File.Exists(new SecurityMigrationStore(root).PendingSetupPath)) return false;
+        try { return InternetSettings.Load(root) != null; }
+        catch { return false; }
+    }
+
     private async Task EnablePrivateSupportAsync()
     {
         if (File.Exists(new SecurityMigrationStore(root).PendingSetupPath)) { ShowSecuritySetup(); return; }
@@ -33,7 +40,7 @@ public sealed partial class MainForm
     private void UpdatePrivateAgentState()
     {
         CurrentPairingCode = null;
-        enableSupport.Visible = agent == null || agentIdle;
+        enableSupport.Visible = (agent == null || agentIdle) && !privateSupportEnabled;
         restartAgent.Visible = false; copyAgentCode.Visible = false;
         pairingCountdownText.Visible = agentIdle;
         if (agent?.Session.HasPaired == true) return;
