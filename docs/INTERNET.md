@@ -4,13 +4,13 @@ Internet mode connects both PCs outward over HTTPS/WebSockets (port 443). No VPN
 
 ## Set up your devices
 
-1. Run your personal `RemoteDebugger-<version>-Private-Setup.exe` on each PC. It embeds the `.rdrelay` settings and imports them automatically for the current Windows user, including during silent installation. No separate setup file or import step is needed.
+1. Run your personal `RemoteDebugger-<version>-Private-Setup.exe` on each new PC. It embeds an encrypted `.rdrelay` setup and stages it for the current Windows user, including during silent installation. Enter your setup passphrase once in the Security window at first normal launch. Existing PCs can instead receive new credentials through [remote security migration](SECURITY_SETUP.md).
 2. Open the app and click **Enable support** on the assisted PC. Approve Windows administrator setup on first use. Opening the app alone does not grant access. The client then appears by computer name on your other PCs.
 3. On the controlling PC, choose **Take control**, select the computer and click **Connect**. No support ID, IP address, authorization code, or Internet setup screen is required.
 
 The installer also starts the app in the system tray when you sign in to Windows. Open it from the tray to enable support or take control. A normal Start menu launch opens the window immediately.
 
-The installer contains a relay credential and a separate private authentication secret shared by your 3–5 devices. It stores both with Windows DPAPI protection and deletes its temporary plaintext profile after import. The authentication secret is never uploaded to Cloudflare and is not the publisher's signing private key. A PC with this private installer can connect while the receiving user has enabled support. Keep private installers and `.rdrelay` files out of public releases, repositories and logs.
+The installer contains passphrase-encrypted relay and pairing credentials. After successful unlock, the app remembers credentials with Windows DPAPI protection; it does not save the passphrase. The pairing secret is never uploaded to Cloudflare and is separate from the publisher's signing key. Possessing the installer alone no longer supplies usable connection credentials. Keep private installers and `.rdrelay` files out of public releases, repositories and logs, and use a strong passphrase against offline guessing.
 
 Use the private installer for the normal setup and for relay configuration updates. The developer CLI can still import a `.rdrelay` profile for a portable build; this is not part of the app's setup flow.
 
@@ -53,7 +53,7 @@ Use a cryptographically random 32-byte key encoded as 64 hexadecimal characters.
 }
 ```
 
-The account-connected Cloudflare plugin can upload the built `relay/dist/index.js` module with the same bindings, relay secret and SQLite migrations instead of using Wrangler OAuth. `v1` creates sessions; `v2` adds the directory. Never upload `pairingKey` to the relay or put either secret in committed configuration. `/health` reports service/protocol readiness without revealing invitations or credentials. Updating credentials requires rebuilding and running the private installer on each device.
+The account-connected Cloudflare plugin can upload the built `relay/dist/index.js` module with the same bindings, relay secrets and SQLite migrations instead of using Wrangler OAuth. `v1` creates sessions; `v2` adds the directory. Never upload `pairingKey` to the relay or put either secret in committed configuration. `/health` reports service/protocol readiness without revealing invitations or credentials. `ACCESS_KEY` is the legacy credential; `PROTECTED_ACCESS_KEY` serves the protected directory. During migration, both work in separate scopes. Remove `ACCESS_KEY` after every intended PC is migrated. See [the security migration procedure](SECURITY_SETUP.md).
 
 ## Security and operating limits
 

@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 
-type RelayEnv = Env & { ACCESS_KEY: string };
+type RelayEnv = Env & { ACCESS_KEY?: string; PROTECTED_ACCESS_KEY?: string };
 type SocketState = {
   role: "agent" | "controller" | "stream";
   channel: string;
@@ -9,24 +9,30 @@ type SocketState = {
   bytes: number;
   generation: string;
   name?: string;
+  scope?: string;
 };
 const unavailable = () => new Response("Session unavailable", { status: 404 });
 const validId = (s: string) => /^[A-F0-9]{16}$/.test(s);
 const validKey = (s: string) => /^[a-fA-F0-9]{64}$/.test(s);
 const hex = (bytes: ArrayBuffer) => Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, "0")).join("");
 const hash = async (value: string) => hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)));
+const equalSecret = (left: string, right?: string) => !!right && left.length === right.length &&
+  crypto.subtle.timingSafeEqual(new TextEncoder().encode(left), new TextEncoder().encode(right));
 
 export default {
   async fetch(request: Request, env: RelayEnv): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/health")
-      return Response.json({ ok: true, protocol: env.PROTOCOL });
-    // Hosting access is private. This credential never grants control of a PC:
-    // endpoint J-PAKE, the displayed code, and pinned inner TLS still do that.
-    if (!env.ACCESS_KEY || request.headers.get("Authorization") !== `Bearer ${env.ACCESS_KEY}`)
+      return Response.json({ ok: true, protocol: env.PROTOCOL, securityMigration: 1 });
+    const authorization = request.headers.get("Authorization") ?? "";
+    const credential = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+    if (!validKey(credential)) return new Response("Unauthorized", { status: 401 });
+    const scope = equalSecret(credential, env.PROTECTED_ACCESS_KEY) ? await hash(credential)
+      : equalSecret(credential, env.ACCESS_KEY) ? "legacy" : null;
+    if (!scope)
       return new Response("Unauthorized", { status: 401 });
     if (request.method === "GET" && url.pathname === "/v1/clients")
-      return Response.json(await env.DIRECTORY.getByName("private-clients").list(), {
+      return Response.json(await env.DIRECTORY.getByName(scope === "legacy" ? "private-clients" : `private-clients-${scope}`).list(scope), {
         headers: { "Cache-Control": "no-store" }
       });
     if (request.method !== "GET" || request.headers.get("Upgrade")?.toLowerCase() !== "websocket")
@@ -37,7 +43,11 @@ export default {
     const action = parts.slice(4).join("/");
     if (action !== "agent" && action !== "connect" && !/^channels\/[a-f0-9]{32}$/.test(action))
       return unavailable();
-    return env.SESSIONS.getByName(parts[3]).fetch(request);
+    // Overwrite any caller-supplied scope. Old installers cannot discover or
+    // open channels to a protected registration, even if they know its ID.
+    const forwarded = new Request(request);
+    forwarded.headers.set("X-Access-Scope", scope);
+    return env.SESSIONS.getByName(parts[3]).fetch(forwarded);
   }
 } satisfies ExportedHandler<RelayEnv>;
 
@@ -54,10 +64,10 @@ export class ClientDirectory extends DurableObject<RelayEnv> {
     this.ctx.storage.sql.exec("DELETE FROM clients WHERE id NOT IN (SELECT id FROM clients ORDER BY registered DESC LIMIT 32)");
   }
 
-  async list(): Promise<{ id: string; name: string }[]> {
+  async list(scope: string): Promise<{ id: string; name: string }[]> {
     const rows = this.ctx.storage.sql.exec<{ id: string }>("SELECT id FROM clients").toArray();
     const clients = await Promise.all(rows.map(async ({ id }) => {
-      const name = await this.env.SESSIONS.getByName(id).presence();
+      const name = await this.env.SESSIONS.getByName(id).presence(scope);
       return name ? { id, name } : null;
     }));
     return clients.filter((client): client is { id: string; name: string } => client !== null);
@@ -74,6 +84,8 @@ export class SupportSession extends DurableObject<RelayEnv> {
 
   async fetch(request: Request): Promise<Response> {
     const action = new URL(request.url).pathname.split("/").slice(4).join("/");
+    const scope = request.headers.get("X-Access-Scope");
+    if (!scope) return unavailable();
     if (action === "agent") {
       let name = "";
       try { name = decodeURIComponent(request.headers.get("X-Computer-Name") ?? "").trim(); }
@@ -84,19 +96,21 @@ export class SupportSession extends DurableObject<RelayEnv> {
       const owner = await hash(key);
       const accepted = await this.ctx.blockConcurrencyWhile(async () => {
         const existing = await this.ctx.storage.get<string>("owner");
-        if (existing && existing !== owner) return false;
-        if (!existing) await this.ctx.storage.put("owner", owner);
+        const existingScope = await this.ctx.storage.get<string>("scope") ?? "legacy";
+        if (existing && (existing !== owner || existingScope !== scope)) return false;
+        if (!existing) await this.ctx.storage.put({ owner, scope });
         return true;
       });
       if (!accepted) return unavailable();
       for (const socket of this.ctx.getWebSockets()) this.close(socket, "Agent reconnected");
       const [client, server] = Object.values(new WebSocketPair());
-      this.accept(server, "agent", "", crypto.randomUUID(), name);
-      if (name) await this.env.DIRECTORY.getByName("private-clients").register(new URL(request.url).pathname.split("/")[3]);
+      this.accept(server, "agent", "", crypto.randomUUID(), scope, name);
+      if (name) await this.env.DIRECTORY.getByName(scope === "legacy" ? "private-clients" : `private-clients-${scope}`).register(new URL(request.url).pathname.split("/")[3]);
       server.send(JSON.stringify({ type: "registered", publicIp: request.headers.get("CF-Connecting-IP") ?? "" }));
       await this.scheduleCleanup();
       return new Response(null, { status: 101, webSocket: client });
     }
+    if ((await this.ctx.storage.get<string>("scope") ?? "legacy") !== scope) return unavailable();
     const agents = this.ctx.getWebSockets("agent").filter(s => s.readyState === WebSocket.OPEN);
     if (agents.length !== 1) return unavailable();
     if (action === "connect") {
@@ -104,7 +118,7 @@ export class SupportSession extends DurableObject<RelayEnv> {
         return new Response("Session busy", { status: 429 });
       const channel = crypto.randomUUID().replaceAll("-", "");
       const [client, server] = Object.values(new WebSocketPair());
-      this.accept(server, "controller", channel, agents[0].deserializeAttachment().generation);
+      this.accept(server, "controller", channel, agents[0].deserializeAttachment().generation, scope);
       agents[0].send(JSON.stringify({ type: "open", channel }));
       await this.scheduleCleanup();
       return new Response(null, { status: 101, webSocket: client });
@@ -116,14 +130,15 @@ export class SupportSession extends DurableObject<RelayEnv> {
       const pending = this.ctx.getWebSockets(`channel:${channel}`);
       if (pending.length !== 1 || pending[0].deserializeAttachment()?.role !== "controller") return unavailable();
       const [client, server] = Object.values(new WebSocketPair());
-      this.accept(server, "stream", channel, pending[0].deserializeAttachment().generation);
+      this.accept(server, "stream", channel, pending[0].deserializeAttachment().generation, scope);
       pending[0].send("ready");
       return new Response(null, { status: 101, webSocket: client });
     }
     return unavailable();
   }
 
-  presence(): string | null {
+  async presence(scope: string): Promise<string | null> {
+    if ((await this.ctx.storage.get<string>("scope") ?? "legacy") !== scope) return null;
     const socket = this.ctx.getWebSockets("agent").find(s => s.readyState === WebSocket.OPEN);
     if (!socket) return null;
     const state = socket.deserializeAttachment() as SocketState;
@@ -131,13 +146,14 @@ export class SupportSession extends DurableObject<RelayEnv> {
     return Date.now() - lastSeen < 60000 ? state.name || null : null;
   }
 
-  private accept(socket: WebSocket, role: SocketState["role"], channel: string, generation: string, name?: string): void {
+  private accept(socket: WebSocket, role: SocketState["role"], channel: string, generation: string, scope: string, name?: string): void {
     this.ctx.acceptWebSocket(socket, [role, `channel:${channel}`]);
-    socket.serializeAttachment({ role, channel, created: Date.now(), window: Date.now(), bytes: 0, generation, name } satisfies SocketState);
+    socket.serializeAttachment({ role, channel, created: Date.now(), window: Date.now(), bytes: 0, generation, scope, name } satisfies SocketState);
   }
 
   webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): void {
     const state = socket.deserializeAttachment() as SocketState;
+    if ((state.scope ?? "legacy") === "legacy" && !this.env.ACCESS_KEY) { this.closePair(socket, "Access retired"); return; }
     if (state.role === "agent" || typeof message === "string" || message.byteLength > 65536) {
       this.closePair(socket, "Invalid relay frame"); return;
     }

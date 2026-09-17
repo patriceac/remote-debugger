@@ -1,7 +1,8 @@
-param([string]$InstallerPath, [switch]$Demo, [switch]$LeaveRunning, [switch]$Handoff)
+param([string]$InstallerPath, [switch]$Demo, [switch]$LeaveRunning, [switch]$Handoff, [switch]$LockedSetup)
 $ErrorActionPreference = 'Stop'
 if ($LeaveRunning -and -not $Demo) { throw 'LeaveRunning requires Demo.' }
 if ($Handoff -and ($Demo -or $LeaveRunning)) { throw 'Handoff cannot be combined with Demo or LeaveRunning.' }
+if ($LockedSetup -and ($Demo -or $LeaveRunning -or $Handoff)) { throw 'LockedSetup is a disconnected first-launch check.' }
 $projectRoot = Split-Path $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($InstallerPath)) {
     [xml]$properties = Get-Content -LiteralPath (Join-Path $projectRoot 'Directory.Build.props') -Raw
@@ -19,8 +20,8 @@ $request = @{
     ExecutableRelativePath = 'RemoteDebugger.Lab.exe'
     Arguments = 'internetinstaller "{OUTDIR}" ' + $(if ($Handoff) { 'handoff' } elseif ($LeaveRunning) { 'demo-hold' } elseif ($Demo) { 'demo' } else { 'runtime' }) + ' none "{HOSTINPUT:installer}"'
     ReadOnlyHostInput = @(@{ Name = 'installer'; Path = $resolvedInstaller; Mode = 'Vhdx' })
-    AllowNetworkWithHostInputs = $true
-    NetworkProfile = 'InternetOnly'
+    AllowNetworkWithHostInputs = -not $LockedSetup
+    NetworkProfile = $(if ($LockedSetup) { 'None' } else { 'InternetOnly' })
     ActionsJson = ConvertTo-Json -InputObject $actions -Compress
     AssertResultFile = '{OUTDIR}\lab-result.json'
     AssertResultJsonPointer = '/passed'

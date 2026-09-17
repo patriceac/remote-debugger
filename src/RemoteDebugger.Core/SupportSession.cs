@@ -29,6 +29,10 @@ public sealed class SupportSession(TimeProvider? clock = null)
         lock (sync) { if (paired && !ended && disconnected == null) { disconnected = time.GetTimestamp(); disconnectUtc = time.GetUtcNow(); } }
     }
     public void End() { lock (sync) { ended = true; paired = false; matched = false; } }
+    public void ResetForPairing()
+    {
+        lock (sync) { paired = false; matched = false; ended = false; disconnected = null; disconnectUtc = null; startedUtc = null; }
+    }
     private void DetectDisconnect()
     {
         if (paired && !ended && disconnected == null && time.GetElapsedTime(lastSeen) >= HeartbeatTimeout)

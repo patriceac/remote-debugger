@@ -12,10 +12,11 @@ menu shortcut opens the window normally. Both launch at medium integrity. The po
 single executable remains supported and behaves the same way.
 
 The personal `RemoteDebugger-<version>-Private-Setup.exe` also embeds the private
-internet setup file. Installation automatically imports it into the current
-user's DPAPI-protected settings before the app launches, then deletes the
-temporary plaintext copy. This works in interactive and silent installations.
-The installer stays private because it contains the relay credential.
+encrypted internet setup file. Installation stages ciphertext for a one-time
+passphrase unlock in the app, then deletes the temporary extraction. Silent
+installation also waits for unlock at the first normal launch. Reinstalling
+the same unlocked profile preserves remembered access. The passphrase is never
+an installer argument. See [security setup](SECURITY_SETUP.md).
 
 The desktop installer is deliberately separate from protected support setup.
 Choosing **Enable support** still requests one explicit Windows administrator
@@ -29,10 +30,11 @@ Build the installer after producing a signed Release:
 ./scripts/Build-Installer.ps1 -Sign
 ```
 
-The default private build reads `dist/internet/RemoteDebugger-Internet.rdrelay`,
-which is ignored by Git. Use `-InternetProfilePath PATH` for another private
-profile, or `-WithoutInternetProfile` to build the distributable installer
-without credentials. A missing or invalid requested profile fails the build.
+The default private build reads `%LOCALAPPDATA%\RemoteDebugger\RemoteDebugger-Protected.rdrelay`,
+created by the app's Security window. Use `-InternetProfilePath PATH` for another
+encrypted profile, or `-WithoutInternetProfile` to build the distributable
+installer without credentials. A missing, invalid or plaintext requested
+profile fails the build.
 The executable and publisher signing key are unchanged by profile embedding.
 Run `scripts/Test-InternetInstaller.ps1` after publishing the acceptance Lab to
 verify automatic configuration and first-launch relay registration in Hyper-V.

@@ -279,6 +279,9 @@ public sealed partial class MainForm : Forms.Form
         var work = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false, Margin = Forms.Padding.Empty, Padding = new Forms.Padding(0, 14, 0, 0), BackColor = Rail };
         work.Controls.Add(controllerNavCaption);
         work.Controls.Add(navConnection); work.Controls.Add(navScreen); work.Controls.Add(navProcesses); work.Controls.Add(navFiles); work.Controls.Add(navDiagnostics);
+        var security = RailSubButton(() => UiText.SecurityTitle, "securitySettings");
+        security.Click += (_, _) => BeginInvoke(ShowSecuritySetup);
+        work.Controls.Add(security);
         layout.Controls.Add(work, 0, 2);
 
         var local = new Forms.Panel { Dock = Forms.DockStyle.Fill };
@@ -635,6 +638,7 @@ public sealed partial class MainForm : Forms.Form
         renderTimer.Start();
         discoveryTimer.Start();
         _ = PumpInputAsync();
+        if (!startInTray && File.Exists(new SecurityMigrationStore(root).PendingSetupPath)) ShowSecuritySetup();
         SelectRole(startAgentOnLaunch ? 0 : 1);
         if (!startAgentOnLaunch) _ = DiscoverAsync(false);
         await Task.Yield();

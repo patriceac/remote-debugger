@@ -44,4 +44,13 @@ public sealed class SupportSessionTests
         var session = new SupportSession(); session.Pair(false); Assert.Equal("synchronizing", session.Snapshot.State);
         session.SetBinaryMatched(true); Assert.Equal("connected", session.Snapshot.State); session.End(); Assert.True(session.ShouldExit);
     }
+    [Fact] public void CompletedSecurityMigrationCanReleaseItsSessionWithoutStoppingSupport()
+    {
+        var clock = new Clock(); var session = new SupportSession(clock);
+        session.Pair(true); session.Disconnect(); session.ResetForPairing();
+        clock.Advance(TimeSpan.FromHours(1));
+        Assert.False(session.ShouldExit); Assert.False(session.Snapshot.HasPaired);
+        Assert.Null(session.Snapshot.DisconnectDeadlineUtc); Assert.Equal("pairing", session.Snapshot.State);
+        session.Pair(true); Assert.True(session.Snapshot.Connected);
+    }
 }

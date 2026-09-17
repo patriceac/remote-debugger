@@ -19,6 +19,23 @@ async function connect(room: string, action: string, ownerKey?: string, name?: s
 afterEach(() => { for (const ws of sockets.splice(0)) ws.close(); });
 
 describe("private encrypted transport relay", () => {
+  it("isolates migrated computers from every legacy directory and channel request", async () => {
+    const room = id();
+    const response = await SELF.fetch(`https://relay/v1/sessions/${room}/agent`, {
+      headers: { Authorization: `Bearer ${"d".repeat(64)}`, Upgrade: "websocket", "X-Session-Key": owner, "X-Computer-Name": "Protected PC" }
+    });
+    expect(response.status).toBe(101);
+    const agent = response.webSocket!; agent.accept(); sockets.push(agent); await receive(agent);
+    const oldList = await SELF.fetch("https://relay/v1/clients", { headers: { Authorization: `Bearer ${key}` } });
+    expect(await oldList.json()).not.toContainEqual({ id: room, name: "Protected PC" });
+    const newList = await SELF.fetch("https://relay/v1/clients", { headers: { Authorization: `Bearer ${"d".repeat(64)}` } });
+    expect(await newList.json()).toContainEqual({ id: room, name: "Protected PC" });
+    for (const action of ["connect", "agent", `channels/${"e".repeat(32)}`]) {
+      expect((await SELF.fetch(`https://relay/v1/sessions/${room}/${action}`, {
+        headers: { Authorization: `Bearer ${key}`, Upgrade: "websocket", "X-Session-Key": owner, "X-Access-Scope": "forged" }
+      })).status).toBe(404);
+    }
+  });
   it("privately discovers live computers by name and removes disconnected clients", async () => {
     expect((await SELF.fetch("https://relay/v1/clients")).status).toBe(401);
     expect((await SELF.fetch("https://relay/v1/clients", { headers: { Authorization: `Bearer ${owner}` } })).status).toBe(401);

@@ -30,6 +30,23 @@ internal sealed partial class LabForm
             if (setup.ExitCode != 0) throw new IOException("The private installer failed with exit code " + setup.ExitCode);
             Pass("installer.completed", "The signed private installer completes without interactive setup", new { sha256 = await HashFileAsync(installer) });
 
+            string pendingSetup = new SecurityMigrationStore(Vault.DefaultRoot).PendingSetupPath;
+            if (File.Exists(pendingSetup))
+            {
+                _ = ProtectedSetup.Read(await File.ReadAllBytesAsync(pendingSetup, stop.Token));
+                if (InternetSettings.Load(Vault.DefaultRoot) != null) throw new IOException("The encrypted installer unlocked without a passphrase.");
+                Pass("installer.locked_setup", "The private installer stages a valid encrypted envelope without authorizing the Windows account");
+                application = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Remote Debugger", "RemoteDebugger.exe");
+                loopbackAgent = LaunchInternetProduct(true, Vault.DefaultRoot); product = loopbackAgent;
+                await WaitUiAsync(); WindowState = Forms.FormWindowState.Minimized;
+                if (!SecurityControl("securityPassphrase").Current.IsPassword || !SecurityControl("securityCreate").Current.IsEnabled)
+                    throw new IOException("First launch did not offer an enabled, masked passphrase unlock.");
+                CaptureDesktop("installed-passphrase-required.png", focusProduct: false);
+                if (InternetSettings.Load(Vault.DefaultRoot) != null) throw new IOException("First launch silently authorized access.");
+                Pass("installer.passphrase_required", "The installed Release automatically requests the passphrase on first normal launch");
+                await FinishAsync(); return;
+            }
+
             var settings = InternetSettings.Load(Vault.DefaultRoot) ?? throw new IOException("The installer did not import internet settings.");
             byte[] encrypted = await File.ReadAllBytesAsync(Path.Combine(Vault.DefaultRoot, "internet.dpapi"), stop.Token);
             if (Encoding.UTF8.GetString(encrypted).Contains(settings.AccessKey, StringComparison.Ordinal))

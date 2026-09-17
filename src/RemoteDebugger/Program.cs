@@ -47,6 +47,7 @@ public static class Program
         var form = new MainForm(!controllerOnly, dataRoot, loopbackOnly, startupPreparationError, languageOverride,
             enableSupport: args.Contains("--enable-support") || args.Contains("--resume-update"), startInTray: startInTray);
         form.Shown += (_, _) => instance.StartListening(form.ActivateExistingWindow);
+        if (args.Contains("--security")) form.Shown += (_, _) => form.BeginInvoke(form.ShowSecuritySetup);
         SupportPlatform.ManagedRelaunchRequested += () =>
         {
             if (!form.IsDisposed && form.IsHandleCreated) form.BeginInvoke(Forms.Application.Exit);
@@ -100,6 +101,18 @@ public static class Program
         try
         {
             string verb = args.FirstOrDefault() ?? "help", config = Option("--connection", RemoteClient.DefaultPath);
+            if (verb is "security-migrate" or "security-status")
+            {
+                string root = Option("--data-root", Vault.DefaultRoot);
+                string onlyHost = Option("--host");
+                var state = verb == "security-migrate" ? await new SecurityMigrationClient(root).RunAsync(null, ct.Token, onlyHost) : new SecurityMigrationStore(root).Load();
+                // Output a deliberately restricted view; the saved state includes secrets.
+                var devices = state?.Devices.Select(d => new { d.Name, d.State, d.Error }).ToArray();
+                var selected = state?.Devices.Where(d => onlyHost.Length == 0 || d.LegacyHost == onlyHost).ToArray();
+                bool complete = selected is { Length: > 0 } && selected.All(d => d.State == "protected");
+                Console.WriteLine(Json.Text(new { ok = verb == "security-status" || complete, configured = state != null, complete, devices }));
+                return verb == "security-status" || complete ? 0 : 1;
+            }
             if (verb == "internet-import")
             {
                 InternetSettings.Import(Option("--file"), Option("--data-root", Vault.DefaultRoot));

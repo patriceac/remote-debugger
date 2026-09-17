@@ -4,7 +4,7 @@ import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
 export default defineConfig({
   plugins: [cloudflareTest({
     wrangler: { configPath: "./wrangler.jsonc" },
-    miniflare: { bindings: { ACCESS_KEY: "a".repeat(64) } }
+    miniflare: { bindings: { ACCESS_KEY: "a".repeat(64), PROTECTED_ACCESS_KEY: "d".repeat(64) } }
   })],
   test: { testTimeout: 15000 }
 });

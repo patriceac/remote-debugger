@@ -16,7 +16,7 @@ $pairingCode | ./RemoteDebugger.exe cli pair --host 192.168.1.42
 ./RemoteDebugger.exe cli sync
 ```
 
-For private internet access, the personal installer supplies the credentials on each PC. Enable support on the receiving PC, discover its internal routing address, then connect without a code:
+For private internet access, unlock the personal installer's encrypted setup once in the app's Security window. Existing computers can receive credentials through remote migration. Enable support on the receiving PC, discover its internal routing address, then connect without a code:
 
 ```powershell
 ./RemoteDebugger.exe cli discover
@@ -29,6 +29,12 @@ For private internet access, the personal installer supplies the credentials on 
 The pairing token is never printed. GUI and CLI share `%LOCALAPPDATA%\RemoteDebugger\controller.connection`, encrypted for the Windows user. `--connection FILE` selects a different DPAPI-protected controller profile. `--port` can be specified when pairing; the GUI uses 45832. An optional `--fingerprint SHA256` enforces a previously verified certificate pin. `sync` uses the executable actually running this CLI as the required agent binary, including downgrades and different builds with the same version. Normal support operations reject mismatched binaries. A normal agent restart requires fresh pairing; only a bounded planned-update grant resumes automatically.
 
 `cli platform-status` reports installed broker readiness and the provisioning receipt path. `cli platform-provision` performs the one-time administrator setup and may require local Windows consent.
+
+`cli security-status` reports migration progress without exposing credentials.
+After creating a protected setup in the GUI, `cli security-migrate` updates
+reachable existing computers; `--host RD-...` restricts it to one observed route.
+Both accept `--data-root`. Offline work stays pending and can be retried. See
+[security setup](SECURITY_SETUP.md) before retiring the legacy relay credential.
 
 ## Structured call
 

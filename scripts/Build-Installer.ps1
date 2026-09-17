@@ -2,7 +2,7 @@
 param(
     [string]$CompilerPath,
     [switch]$Sign,
-    [string]$InternetProfilePath = (Join-Path (Split-Path $PSScriptRoot) 'dist\internet\RemoteDebugger-Internet.rdrelay'),
+    [string]$InternetProfilePath = (Join-Path $env:LOCALAPPDATA 'RemoteDebugger\RemoteDebugger-Protected.rdrelay'),
     [switch]$WithoutInternetProfile
 )
 $ErrorActionPreference = 'Stop'
@@ -38,15 +38,20 @@ if ([string]::IsNullOrWhiteSpace($version)) { throw 'Directory.Build.props does 
 $compilerArguments = @('/DAppVersion=' + $version)
 if (-not $WithoutInternetProfile) {
     $profileFile = Get-Item -LiteralPath $InternetProfilePath -ErrorAction Stop
-    if ($profileFile.PSIsContainer -or $profileFile.Length -gt 4096) { throw 'Invalid internet setup file.' }
+    if ($profileFile.PSIsContainer -or $profileFile.Length -gt 16384) { throw 'Invalid internet setup file.' }
     try { $profile = Get-Content -LiteralPath $profileFile.FullName -Raw | ConvertFrom-Json -ErrorAction Stop }
     catch { throw 'Invalid internet setup JSON.' }
-    $relayUri = $null
-    if (-not [Uri]::TryCreate([string]$profile.relayUrl, [UriKind]::Absolute, [ref]$relayUri) -or
-        $relayUri.Scheme -ne 'https' -or $relayUri.AbsolutePath -ne '/' -or
-        $relayUri.UserInfo.Length -ne 0 -or $relayUri.Query.Length -ne 0 -or $relayUri.Fragment.Length -ne 0 -or
-        [string]$profile.accessKey -cnotmatch '^[A-Fa-f0-9]{64}$' -or
-        [string]$profile.pairingKey -cnotmatch '^[A-Fa-f0-9]{64}$') { throw 'Invalid private internet setup settings.' }
+    if ($profile.format -cne 'RemoteDebugger.ProtectedSetup.v1' -or
+        [string]$profile.profileId -cnotmatch '^[a-f0-9]{32}$' -or
+        $null -ne $profile.accessKey -or $null -ne $profile.pairingKey) {
+        throw 'Create a passphrase-protected setup in the application Security window. Plaintext profiles cannot be packaged.'
+    }
+    try {
+        if ([Convert]::FromBase64String($profile.salt).Length -ne 16 -or
+            [Convert]::FromBase64String($profile.nonce).Length -ne 12 -or
+            [Convert]::FromBase64String($profile.tag).Length -ne 16 -or
+            [Convert]::FromBase64String($profile.ciphertext).Length -notin 1..8192) { throw 'Invalid encrypted profile.' }
+    } catch { throw 'Invalid encrypted profile.' }
     # Pass the local filename to the compiler, never the credential itself.
     $compilerArguments += '/DRelayProfilePath=' + $profileFile.FullName
 }

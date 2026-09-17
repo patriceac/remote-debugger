@@ -59,7 +59,7 @@ public static class Discovery
     }
 }
 
-public sealed class AgentServer : IDisposable
+public sealed partial class AgentServer : IDisposable
 {
     private readonly object transportLock = new();
     private TcpListener listener;
@@ -100,6 +100,7 @@ public sealed class AgentServer : IDisposable
     public SupportSessionSnapshot Session => session.Snapshot;
     public AgentServer(string root, int port = 45832, bool loopbackOnly = false, bool enableInternet = true)
     {
+        securityRoot = root;
         resumeStore = new(root);
         Directory.CreateDirectory(root); Port = port; authPath = Path.Combine(root, "agent.auth");
         string certPath = Path.Combine(root, "identity.pfx.dpapi");
@@ -255,6 +256,7 @@ public sealed class AgentServer : IDisposable
             while (!stop.IsCancellationRequested)
             {
                 await Task.Delay(500, stop.Token); _ = Pairing.CurrentCode;
+                if (securityCandidate is { Promoted: false } candidate && candidate.Expires <= DateTimeOffset.UtcNow) candidate.Agent.Dispose();
                 if (session.ShouldExit)
                 {
                     try { await TerminateAsync(); return; }
@@ -290,6 +292,7 @@ public sealed class AgentServer : IDisposable
     }
     public void Revoke()
     {
+        if (securityCandidate is { Promoted: false } staged) staged.Agent.Dispose();
         resumeStore.Clear(); resumed = null; resumeAccepted = false;
         lock (authLock) { tokenHash = ""; grantLifetime.Cancel(); grantLifetime = new(); Vault.Save(authPath, []); Pairing.Close(); }
         foreach (var job in running.Values) job.Cancel();
@@ -330,7 +333,7 @@ public sealed class AgentServer : IDisposable
         if (Volatile.Read(ref disposed) != 0 || !slots.Wait(0)) return;
         await ServeAsync(transport);
     }
-    private async Task ServeAsync(Stream transport)
+    private async Task ServeAsync(Stream transport, SecurityCandidate? candidate = null)
     {
         using (var tls = new SslStream(transport, true))
         using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(stop.Token))
@@ -341,6 +344,11 @@ public sealed class AgentServer : IDisposable
                 using var handshake = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token); handshake.CancelAfter(10000);
                 await tls.AuthenticateAsServerAsync(new SslServerAuthenticationOptions { ServerCertificate = certificate, EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13, ClientCertificateRequired = false }, handshake.Token);
                 var r = await Wire.ReadAsync<Request>(tls, handshake.Token);
+                if (candidate != null && !candidate.Promoted)
+                {
+                    await ServeSecurityCandidateAsync(tls, r, candidate, timeout.Token);
+                    return;
+                }
                 Reply reply;
                 if (r.Operation == "pair.v2")
                 {
@@ -472,6 +480,34 @@ public sealed class AgentServer : IDisposable
                     }
                     else if (!Session.BinaryMatched && r.Operation is not ("status" or "maintenance.status" or "cancel"))
                         reply = Reply.Failure(r.Id, "binary_mismatch", "Synchronize the agent with the controller executable before starting support.");
+                    else if (r.Operation == "security.stage")
+                    {
+                        await updateGate.WaitAsync(timeout.Token);
+                        try { reply = Reply.Success(r.Id, await StageSecurityAsync(r.Args, timeout.Token)); }
+                        finally { updateGate.Release(); }
+                    }
+                    else if (r.Operation == "security.status")
+                        reply = Reply.Success(r.Id, new { securityId = InternetSettings.Load(securityRoot)?.SecurityId ?? "", fingerprint = Fingerprint, computer = Environment.MachineName });
+                    else if (r.Operation is "security.commit" or "security.release")
+                    {
+                        var currentSecurity = InternetSettings.Load(securityRoot);
+                        if (currentSecurity?.SecurityId.Length is not > 0 || currentSecurity.SecurityId != r.Args.Str("securityId"))
+                            reply = Reply.Failure(r.Id, "security_identity_mismatch", "The requested security profile is not active.");
+                        else if (r.Operation == "security.commit")
+                            reply = Reply.Success(r.Id, new { securityId = currentSecurity.SecurityId, protectedAccess = true });
+                        else
+                        {
+                            await Wire.WriteAsync(tls, Reply.Success(r.Id, new { released = true }), timeout.Token);
+                            lock (authLock)
+                            {
+                                tokenHash = ""; controllerBinaryHash = ""; grantLifetime.Cancel(); grantLifetime = new();
+                                foreach (var job in running.Values) job.Cancel(); requests.Clear();
+                                Operations.Maintenance.End(); updates.ResetControllerSynchronization();
+                                session.ResetForPairing(); Pairing.OpenPrivate(Internet!.AuthenticationSecret);
+                            }
+                            return;
+                        }
+                    }
                     else if (r.Operation == "screen.stream") { using var streamGrant = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, grant); await StreamAsync(tls, r, streamGrant.Token); return; }
                     else if (r.Operation == "cancel") { if (running.TryGetValue(r.Args.Str("id"), out var job)) job.Cancel(); reply = Reply.Success(r.Id, new { cancellationRequested = true }); }
                     else if (!Guid.TryParse(r.Id, out _)) reply = Reply.Failure(r.Id, "invalid_id", "Request id must be a UUID.");
@@ -545,7 +581,7 @@ public sealed class AgentServer : IDisposable
             activeListener = listener;
             activeDiscovery = discovery;
         }
-        Pairing.Close(); stop.Cancel(); Internet?.Dispose(); Operations.Maintenance.Dispose(); Native.ReleaseAllInput();
+        Pairing.Close(); stop.Cancel(); Internet?.Dispose(); securityCandidate?.Agent.Dispose(); Operations.Maintenance.Dispose(); Native.ReleaseAllInput();
         try { activeListener.Stop(); } catch { }
         try { activeDiscovery.Dispose(); } catch { }
         updates.Dispose();

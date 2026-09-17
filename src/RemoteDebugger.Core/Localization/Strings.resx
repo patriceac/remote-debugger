@@ -800,4 +800,29 @@
   <data name="SelectComputer" xml:space="preserve"><value>Select a computer</value></data>
   <data name="InternetLabel" xml:space="preserve"><value>Internet</value></data>
   <data name="InternetMaintenanceNotice" xml:space="preserve"><value>Windows activation is needed only for local network access and administrator maintenance.</value></data>
+  <data name="SecurityTitle" xml:space="preserve"><value>Security</value></data>
+  <data name="SecurityPassphrase" xml:space="preserve"><value>Passphrase</value></data>
+  <data name="SecurityConfirmPassphrase" xml:space="preserve"><value>Confirm passphrase</value></data>
+  <data name="SecurityUnlock" xml:space="preserve"><value>Unlock this PC</value></data>
+  <data name="SecurityCreate" xml:space="preserve"><value>Create protected setup</value></data>
+  <data name="SecurityMigrate" xml:space="preserve"><value>Update existing computers</value></data>
+  <data name="SecurityComputer" xml:space="preserve"><value>Computer</value></data>
+  <data name="SecurityState" xml:space="preserve"><value>Security status</value></data>
+  <data name="SecuritySetupHelp" xml:space="preserve"><value>Choose a passphrase for new installations. This Windows account remembers access. Existing computers can be updated remotely below.</value></data>
+  <data name="SecurityUnlockHelp" xml:space="preserve"><value>Enter the setup passphrase once for this Windows account. You will not need it for each connection.</value></data>
+  <data name="SecurityPassphraseHelp" xml:space="preserve"><value>Use several random words, at least 16 characters. Keep the passphrase in your password manager; the app does not save it.</value></data>
+  <data name="SecurityMigrationHelp" xml:space="preserve"><value>Protected computers reject old installer credentials. Offline computers remain pending; enable support and retry. Retire the old relay access only after every intended computer is protected.</value></data>
+  <data name="SecurityPreparing" xml:space="preserve"><value>Relay security preparation is required before creating the setup.</value></data>
+  <data name="SecurityPassphraseMismatch" xml:space="preserve"><value>Use at least 16 characters and enter the same passphrase in both fields.</value></data>
+  <data name="SecurityWorking" xml:space="preserve"><value>Working… Please keep this window open.</value></data>
+  <data name="SecurityWrongPassphrase" xml:space="preserve"><value>Incorrect passphrase or damaged setup file. Existing access has not changed.</value></data>
+  <data name="SecuritySetupFailed" xml:space="preserve"><value>Setup could not complete. Check the connection and retry; saved migration progress is retained.</value></data>
+  <data name="SecuritySessionActive" xml:space="preserve"><value>Finish the current support session before configuring security.</value></data>
+  <data name="SecurityProtected" xml:space="preserve"><value>Protected</value></data>
+  <data name="SecurityUpdating" xml:space="preserve"><value>Updating application…</value></data>
+  <data name="SecurityVerifying" xml:space="preserve"><value>Verifying new access…</value></data>
+  <data name="SecurityPending" xml:space="preserve"><value>Pending — enable support</value></data>
+  <data name="SecurityRetry" xml:space="preserve"><value>Incomplete — retry</value></data>
+  <data name="SecurityStopping" xml:space="preserve"><value>Stopping safely… Saved progress will be kept.</value></data>
+  <data name="SecurityStopped" xml:space="preserve"><value>Stopped. You can resume the migration from this window.</value></data>
 </root>

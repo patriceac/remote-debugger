@@ -45,7 +45,8 @@ Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 
 [Files]
 #ifdef RelayProfilePath
-; Embedded in the private installer, extracted only for the per-user import.
+; Only passphrase-encrypted credentials may be embedded. Import stages ciphertext
+; for the first-launch unlock; no passphrase is passed to the installer or CLI.
 Source: "{#RelayProfilePath}"; DestName: "RemoteDebugger-Internet.rdrelay"; Flags: dontcopy
 #endif
 Source: "..\artifacts\release\RemoteDebugger.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -83,7 +84,7 @@ begin
         RaiseException(CustomMessage('InternetSetupFailed'));
       if ResultCode <> 0 then
         RaiseException(CustomMessage('InternetSetupFailed'));
-      Log('Private internet settings imported for the current Windows user.');
+      Log('Protected internet setup staged for the current Windows user.');
     finally
       DeleteFile(ProfilePath);
     end;

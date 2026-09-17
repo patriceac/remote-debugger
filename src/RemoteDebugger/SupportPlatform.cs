@@ -66,6 +66,7 @@ public static class SupportPlatform
         ArgumentNullException.ThrowIfNull(launchArguments);
         if (launchArguments.Count > 0 && string.Equals(launchArguments[0], "cli", StringComparison.OrdinalIgnoreCase)) return false;
         if (launchArguments.Any(argument => argument.Equals("--controller", StringComparison.OrdinalIgnoreCase) ||
+                                            argument.Equals("--security", StringComparison.OrdinalIgnoreCase) ||
                                             argument.Equals("--platform-service", StringComparison.OrdinalIgnoreCase) ||
                                             argument.Equals("--support-provision", StringComparison.OrdinalIgnoreCase) ||
                                             argument.Equals("--elevated-job", StringComparison.OrdinalIgnoreCase) ||

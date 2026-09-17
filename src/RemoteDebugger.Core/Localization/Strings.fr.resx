@@ -800,4 +800,29 @@
   <data name="SelectComputer" xml:space="preserve"><value>Sélectionnez un ordinateur</value></data>
   <data name="InternetLabel" xml:space="preserve"><value>Internet</value></data>
   <data name="InternetMaintenanceNotice" xml:space="preserve"><value>L’activation Windows sert uniquement au réseau local et à la maintenance administrateur.</value></data>
+  <data name="SecurityTitle" xml:space="preserve"><value>Sécurité</value></data>
+  <data name="SecurityPassphrase" xml:space="preserve"><value>Phrase secrète</value></data>
+  <data name="SecurityConfirmPassphrase" xml:space="preserve"><value>Confirmer la phrase secrète</value></data>
+  <data name="SecurityUnlock" xml:space="preserve"><value>Autoriser ce PC</value></data>
+  <data name="SecurityCreate" xml:space="preserve"><value>Créer la configuration protégée</value></data>
+  <data name="SecurityMigrate" xml:space="preserve"><value>Sécuriser les ordinateurs existants</value></data>
+  <data name="SecurityComputer" xml:space="preserve"><value>Ordinateur</value></data>
+  <data name="SecurityState" xml:space="preserve"><value>État de sécurité</value></data>
+  <data name="SecuritySetupHelp" xml:space="preserve"><value>Choisissez une phrase secrète pour les nouvelles installations. Ce compte Windows mémorise l’accès. Les ordinateurs existants peuvent être sécurisés à distance ci-dessous.</value></data>
+  <data name="SecurityUnlockHelp" xml:space="preserve"><value>Saisissez une fois la phrase secrète pour ce compte Windows. Elle ne sera pas demandée à chaque connexion.</value></data>
+  <data name="SecurityPassphraseHelp" xml:space="preserve"><value>Utilisez plusieurs mots aléatoires, au moins 16 caractères. Conservez la phrase dans votre gestionnaire de mots de passe ; l’application ne l’enregistre pas.</value></data>
+  <data name="SecurityMigrationHelp" xml:space="preserve"><value>Les ordinateurs protégés refusent les anciens identifiants. Les PC hors ligne restent en attente : activez l’assistance et réessayez. L’ancien accès au relais doit être supprimé une fois tous les PC prévus protégés.</value></data>
+  <data name="SecurityPreparing" xml:space="preserve"><value>La préparation de la sécurité du relais est nécessaire avant de créer la configuration.</value></data>
+  <data name="SecurityPassphraseMismatch" xml:space="preserve"><value>Utilisez au moins 16 caractères et saisissez la même phrase dans les deux champs.</value></data>
+  <data name="SecurityWorking" xml:space="preserve"><value>Opération en cours… Gardez cette fenêtre ouverte.</value></data>
+  <data name="SecurityWrongPassphrase" xml:space="preserve"><value>Phrase incorrecte ou fichier endommagé. L’accès existant n’a pas changé.</value></data>
+  <data name="SecuritySetupFailed" xml:space="preserve"><value>La configuration n’a pas abouti. Vérifiez la connexion et réessayez ; la progression est conservée.</value></data>
+  <data name="SecuritySessionActive" xml:space="preserve"><value>Terminez l’assistance en cours avant de configurer la sécurité.</value></data>
+  <data name="SecurityProtected" xml:space="preserve"><value>Protégé</value></data>
+  <data name="SecurityUpdating" xml:space="preserve"><value>Mise à jour de l’application…</value></data>
+  <data name="SecurityVerifying" xml:space="preserve"><value>Vérification du nouvel accès…</value></data>
+  <data name="SecurityPending" xml:space="preserve"><value>En attente — activer l’assistance</value></data>
+  <data name="SecurityRetry" xml:space="preserve"><value>Incomplet — réessayer</value></data>
+  <data name="SecurityStopping" xml:space="preserve"><value>Arrêt en cours… La progression sera conservée.</value></data>
+  <data name="SecurityStopped" xml:space="preserve"><value>Arrêté. Vous pouvez reprendre la migration depuis cette fenêtre.</value></data>
 </root>

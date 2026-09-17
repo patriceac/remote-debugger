@@ -800,4 +800,29 @@
   <data name="SelectComputer" xml:space="preserve"><value>Seleccione un equipo</value></data>
   <data name="InternetLabel" xml:space="preserve"><value>Internet</value></data>
   <data name="InternetMaintenanceNotice" xml:space="preserve"><value>La activación de Windows solo es necesaria para la red local y el mantenimiento de administrador.</value></data>
+  <data name="SecurityTitle" xml:space="preserve"><value>Seguridad</value></data>
+  <data name="SecurityPassphrase" xml:space="preserve"><value>Frase de acceso</value></data>
+  <data name="SecurityConfirmPassphrase" xml:space="preserve"><value>Confirmar frase de acceso</value></data>
+  <data name="SecurityUnlock" xml:space="preserve"><value>Autorizar este equipo</value></data>
+  <data name="SecurityCreate" xml:space="preserve"><value>Crear configuración protegida</value></data>
+  <data name="SecurityMigrate" xml:space="preserve"><value>Proteger los equipos existentes</value></data>
+  <data name="SecurityComputer" xml:space="preserve"><value>Equipo</value></data>
+  <data name="SecurityState" xml:space="preserve"><value>Estado de seguridad</value></data>
+  <data name="SecuritySetupHelp" xml:space="preserve"><value>Elija una frase de acceso para las nuevas instalaciones. Esta cuenta de Windows recuerda el acceso. Puede proteger los equipos existentes a distancia.</value></data>
+  <data name="SecurityUnlockHelp" xml:space="preserve"><value>Introduzca la frase de acceso una vez para esta cuenta de Windows. No se pedirá en cada conexión.</value></data>
+  <data name="SecurityPassphraseHelp" xml:space="preserve"><value>Use varias palabras aleatorias, al menos 16 caracteres. Guarde la frase en su gestor de contraseñas; la aplicación no la guarda.</value></data>
+  <data name="SecurityMigrationHelp" xml:space="preserve"><value>Los equipos protegidos rechazan las credenciales antiguas. Los equipos sin conexión quedan pendientes: active la asistencia y reintente. Retire el acceso antiguo al relay cuando todos los equipos previstos estén protegidos.</value></data>
+  <data name="SecurityPreparing" xml:space="preserve"><value>Es necesario preparar la seguridad del relay antes de crear la configuración.</value></data>
+  <data name="SecurityPassphraseMismatch" xml:space="preserve"><value>Use al menos 16 caracteres e introduzca la misma frase en ambos campos.</value></data>
+  <data name="SecurityWorking" xml:space="preserve"><value>Operación en curso… Mantenga esta ventana abierta.</value></data>
+  <data name="SecurityWrongPassphrase" xml:space="preserve"><value>Frase incorrecta o archivo dañado. El acceso existente no ha cambiado.</value></data>
+  <data name="SecuritySetupFailed" xml:space="preserve"><value>No se pudo completar la configuración. Compruebe la conexión y reintente; el progreso se conserva.</value></data>
+  <data name="SecuritySessionActive" xml:space="preserve"><value>Finalice la sesión de asistencia actual antes de configurar la seguridad.</value></data>
+  <data name="SecurityProtected" xml:space="preserve"><value>Protegido</value></data>
+  <data name="SecurityUpdating" xml:space="preserve"><value>Actualizando la aplicación…</value></data>
+  <data name="SecurityVerifying" xml:space="preserve"><value>Verificando el nuevo acceso…</value></data>
+  <data name="SecurityPending" xml:space="preserve"><value>Pendiente — active la asistencia</value></data>
+  <data name="SecurityRetry" xml:space="preserve"><value>Incompleto — reintente</value></data>
+  <data name="SecurityStopping" xml:space="preserve"><value>Deteniendo… Se conservará el progreso.</value></data>
+  <data name="SecurityStopped" xml:space="preserve"><value>Detenido. Puede reanudar la migración desde esta ventana.</value></data>
 </root>

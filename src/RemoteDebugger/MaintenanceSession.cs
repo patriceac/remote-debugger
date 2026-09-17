@@ -96,6 +96,8 @@ public sealed class MaintenanceSession(string root) : IDisposable
         finally { gate.Release(); }
     }
 
+    public void End() => DisposePipe();
+
     private void DisposePipe()
     {
         NamedPipeClientStream? current;

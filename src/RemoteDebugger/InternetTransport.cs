@@ -9,7 +9,7 @@ using RemoteDebugger.Core;
 
 namespace RemoteDebugger;
 
-public sealed record InternetSettings(string RelayUrl, string AccessKey, string PairingKey = "")
+public sealed record InternetSettings(string RelayUrl, string AccessKey, string PairingKey = "", string SecurityId = "")
 {
     private sealed record OnlineClient(string Id, string Name);
 
@@ -46,6 +46,8 @@ public sealed record InternetSettings(string RelayUrl, string AccessKey, string 
             throw new ArgumentException("Invalid private relay access key.");
         if (requirePairingKey && !PairingExchange.ValidHash(PairingKey))
             throw new ArgumentException(UiText.InternetSetupRequired);
+        if (SecurityId.Length > 0 && !Guid.TryParseExact(SecurityId, "N", out _))
+            throw new ArgumentException("Invalid security profile identity.");
     }
 
     // This separate installer secret is never sent to or stored by the relay.
@@ -60,11 +62,29 @@ public sealed record InternetSettings(string RelayUrl, string AccessKey, string 
 
     public static void Import(string file, string root)
     {
-        if (new FileInfo(file).Length > 4096) throw new IOException("Internet setup file is too large.");
-        var settings = JsonSerializer.Deserialize<InternetSettings>(File.ReadAllBytes(file), Json.Options)
+        if (new FileInfo(file).Length > ProtectedSetup.MaximumBytes) throw new IOException("Internet setup file is too large.");
+        byte[] bytes = File.ReadAllBytes(file);
+        using var document = JsonDocument.Parse(bytes);
+        if (document.RootElement.TryGetProperty("format", out _))
+        {
+            var envelope = ProtectedSetup.Read(bytes);
+            // Installing an update with the same profile must not prompt again.
+            if (Load(root)?.SecurityId == envelope.ProfileId) return;
+            Directory.CreateDirectory(root);
+            File.WriteAllBytes(Path.Combine(root, "internet.pending.rdrelay"), bytes);
+            return;
+        }
+        var settings = JsonSerializer.Deserialize<InternetSettings>(bytes, Json.Options)
             ?? throw new IOException("Invalid internet setup file.");
         settings.Validate(requirePairingKey: true);
-        Vault.Save(Path.Combine(root, "internet.dpapi"), JsonSerializer.SerializeToUtf8Bytes(settings, Json.Options));
+        if (Load(root)?.SecurityId.Length > 0) throw new InvalidOperationException("An unprotected profile cannot replace protected access.");
+        settings.Save(root);
+    }
+
+    public void Save(string root)
+    {
+        Validate(requirePairingKey: true);
+        Vault.Save(Path.Combine(root, "internet.dpapi"), JsonSerializer.SerializeToUtf8Bytes(this, Json.Options));
     }
 
     public static bool IsSupportId(string value) => value.Trim().StartsWith("RD-", StringComparison.OrdinalIgnoreCase);

@@ -6,7 +6,7 @@ The command path is **Codex → local controller CLI → encrypted connection �
 
 ## Get started
 
-For your personal internet-enabled installation, use `RemoteDebugger-<version>-Private-Setup.exe` on each PC. The installer starts the app in the system tray when you sign in to Windows. Open it from the tray and click **Enable support** on the receiving PC. On your support PC, select its computer name and click **Connect**. The installer supplies private authentication automatically; there is no support ID, authorization code, or separate Internet setup step.
+For your personal internet-enabled installation, use `RemoteDebugger-<version>-Private-Setup.exe` on each PC. Enter your setup passphrase once at first launch; this Windows account then remembers access. The installer starts the app in the system tray when you sign in to Windows. Open it from the tray and click **Enable support** on the receiving PC. On your support PC, select its computer name and click **Connect**. Use **Security** to create a protected setup and remotely migrate existing computers without entering the passphrase on those PCs. See [security setup and migration](docs/SECURITY_SETUP.md).
 
 Build with .NET SDK 8 on Windows:
 
