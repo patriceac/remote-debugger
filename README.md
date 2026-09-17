@@ -1,8 +1,8 @@
 # Remote Debugger
 
-A portable Windows tool for controlling and diagnosing another PC on a trusted local network. One executable provides **Give control** (visible interactive agent) and **Take control** (GUI and JSON command line controller).
+A portable Windows tool for controlling and diagnosing another PC on a trusted local network or through a private internet relay. One executable provides **Give control** (visible interactive agent) and **Take control** (GUI and JSON command line controller).
 
-The command path is **Codex → local controller CLI → encrypted connection → remote agent → Windows application**. GUI buttons and the CLI use the same controller implementation and remote operations. No cloud relay or Internet-facing service is involved.
+The command path is **Codex → local controller CLI → encrypted connection → remote agent → Windows application**. GUI buttons and the CLI use the same controller implementation and remote operations. Optional internet support uses outbound WebSockets on port 443 through a private Cloudflare relay, with the existing endpoint authentication and encryption inside that connection. See [internet setup](docs/INTERNET.md).
 
 ## Get started
 

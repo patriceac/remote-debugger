@@ -23,12 +23,11 @@ internal static class PairingTransport
     {
         if (code.Length != 6 || !code.All(char.IsAsciiDigit)) throw new ArgumentException("Enter exactly six digits.");
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct); deadline.CancelAfter(TimeSpan.FromSeconds(30));
-        using var tcp = new TcpClient { NoDelay = true };
-        await tcp.ConnectAsync(target.Host, target.Port, deadline.Token).ConfigureAwait(false);
+        await using var transport = await ConnectionTransport.OpenAsync(target, deadline.Token).ConfigureAwait(false);
         string fingerprint = "";
         // This channel is provisional until the code exchange confirms its actual
         // certificate. No reusable credential or plaintext pairing code is sent.
-        using var tls = new SslStream(tcp.GetStream(), false, (_, certificate, _, _) =>
+        using var tls = new SslStream(transport, true, (_, certificate, _, _) =>
         {
             if (certificate == null) return false;
             fingerprint = Convert.ToHexString(SHA256.HashData(certificate.GetRawCertData()));

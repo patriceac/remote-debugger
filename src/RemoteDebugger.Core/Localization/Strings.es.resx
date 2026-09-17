@@ -310,7 +310,7 @@
     <value>Argumentos JSON no válidos · corrija los parámetros.</value>
   </data>
   <data name="IpOrManual" xml:space="preserve">
-    <value>Dirección IP (o entrada manual)</value>
+    <value>Dirección IP o ID de asistencia por Internet</value>
   </data>
   <data name="ItemCount" xml:space="preserve">
     <value>Elementos: {0}</value>
@@ -783,4 +783,15 @@
   <data name="Language" xml:space="preserve"><value>Idioma</value></data>
   <data name="SystemDefault" xml:space="preserve"><value>Idioma del sistema</value></data>
   <data name="LanguageSaveFailed" xml:space="preserve"><value>Idioma aplicado, pero no se ha podido guardar.</value></data>
+  <data name="InternetSetup" xml:space="preserve"><value>Configurar Internet…</value></data>
+  <data name="InternetSetupRequired" xml:space="preserve"><value>Importe su archivo privado de configuración de Internet una vez en cada PC.</value></data>
+  <data name="InternetReady" xml:space="preserve"><value>Internet listo</value></data>
+  <data name="InternetConnecting" xml:space="preserve"><value>Conectando al relé de Internet…</value></data>
+  <data name="InternetRetrying" xml:space="preserve"><value>Internet no disponible · reintentando…</value></data>
+  <data name="InternetUnavailable" xml:space="preserve"><value>Internet no disponible</value></data>
+  <data name="PublicIp" xml:space="preserve"><value>IP pública</value></data>
+  <data name="SupportId" xml:space="preserve"><value>ID de asistencia</value></data>
+  <data name="InternetInstructions" xml:space="preserve"><value>Para Internet, comparta este identificador y el código de abajo.</value></data>
+  <data name="InternetSupportSuffix" xml:space="preserve"><value> · Asistencia por Internet y red local</value></data>
+  <data name="InternetMaintenanceNotice" xml:space="preserve"><value>La activación de Windows solo es necesaria para la red local y el mantenimiento de administrador.</value></data>
 </root>

@@ -310,7 +310,7 @@
     <value>Invalid JSON arguments · correct the parameters.</value>
   </data>
   <data name="IpOrManual" xml:space="preserve">
-    <value>IP address (or enter manually)</value>
+    <value>IP address or internet support ID</value>
   </data>
   <data name="ItemCount" xml:space="preserve">
     <value>Items: {0}</value>
@@ -783,4 +783,15 @@
   <data name="Language" xml:space="preserve"><value>Language</value></data>
   <data name="SystemDefault" xml:space="preserve"><value>System default</value></data>
   <data name="LanguageSaveFailed" xml:space="preserve"><value>Language applied, but could not be saved.</value></data>
+  <data name="InternetSetup" xml:space="preserve"><value>Internet setup…</value></data>
+  <data name="InternetSetupRequired" xml:space="preserve"><value>Import your private internet setup file once on each PC.</value></data>
+  <data name="InternetReady" xml:space="preserve"><value>Internet ready</value></data>
+  <data name="InternetConnecting" xml:space="preserve"><value>Connecting to the internet relay…</value></data>
+  <data name="InternetRetrying" xml:space="preserve"><value>Internet unavailable · retrying…</value></data>
+  <data name="InternetUnavailable" xml:space="preserve"><value>Internet unavailable</value></data>
+  <data name="PublicIp" xml:space="preserve"><value>Public IP</value></data>
+  <data name="SupportId" xml:space="preserve"><value>Support ID</value></data>
+  <data name="InternetInstructions" xml:space="preserve"><value>For internet access, share this support ID and the code below.</value></data>
+  <data name="InternetSupportSuffix" xml:space="preserve"><value> · Internet and local network support</value></data>
+  <data name="InternetMaintenanceNotice" xml:space="preserve"><value>Windows activation is needed only for local network access and administrator maintenance.</value></data>
 </root>

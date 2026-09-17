@@ -96,6 +96,11 @@ public static class Program
         try
         {
             string verb = args.FirstOrDefault() ?? "help", config = Option("--connection", RemoteClient.DefaultPath);
+            if (verb == "internet-import")
+            {
+                InternetSettings.Import(Option("--file"), Option("--data-root", Vault.DefaultRoot));
+                Console.WriteLine(Json.Text(new { ok = true, configured = true })); return 0;
+            }
             if (verb == "platform-status")
             {
                 var status = await SupportPlatform.GetStatusAsync(ct.Token);
@@ -112,13 +117,13 @@ public static class Program
             if (verb == "pair")
             {
                 string fingerprint = Option("--fingerprint"); if (fingerprint.Length != 0 && fingerprint.Replace(":", "").Length != 64) throw new ArgumentException("When supplied, --fingerprint must be a SHA-256 certificate fingerprint.");
-                var client = new RemoteClient(new Connection(Option("--host"), int.Parse(Option("--port", "45832")), fingerprint, ""));
+                var client = new RemoteClient(InternetSettings.Target(Option("--host"), int.Parse(Option("--port", "45832")), fingerprint, Option("--data-root", Vault.DefaultRoot)));
                 string code = (await Console.In.ReadLineAsync(ct.Token) ?? "").Trim(); await client.PairAsync(code, ct.Token); client.Save(config);
                 Console.WriteLine(Json.Text(new { ok = true, paired = true, connection = config })); return 0;
             }
             if (verb == "help")
             {
-                Console.WriteLine("RemoteDebugger cli discover | pair --host IP [--fingerprint SHA256] (code on stdin) | sync | platform-status | platform-provision | call --request FILE | upload --file FILE --path RELATIVE | download --path REMOTE --file LOCAL | screenshot --file IMAGE | stream --seconds 10 --fps 5\nOptional: --connection FILE. Request JSON: {\"operation\":\"status\",\"args\":{},\"timeoutSeconds\":60,\"id\":\"UUID\"}. Exit 0=success, 1=operation failure, 2=transport/input failure. See docs/CLI.md."); return 0;
+                Console.WriteLine("RemoteDebugger cli discover | internet-import --file SETUP.rdrelay | pair --host IP_OR_SUPPORT_ID [--fingerprint SHA256] (code on stdin) | sync | platform-status | platform-provision | call --request FILE | upload --file FILE --path RELATIVE | download --path REMOTE --file LOCAL | screenshot --file IMAGE | stream --seconds 10 --fps 5\nOptional: --connection FILE; --data-root DIRECTORY for internet-import and pair. Request JSON: {\"operation\":\"status\",\"args\":{},\"timeoutSeconds\":60,\"id\":\"UUID\"}. Exit 0=success, 1=operation failure, 2=transport/input failure. See docs/CLI.md."); return 0;
             }
             var remote = RemoteClient.Load(config);
             if (verb == "sync")

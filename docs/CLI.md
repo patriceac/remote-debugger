@@ -16,6 +16,16 @@ $pairingCode | ./RemoteDebugger.exe cli pair --host 192.168.1.42
 ./RemoteDebugger.exe cli sync
 ```
 
+For internet access, import the private relay setup file once on each PC, then use the assisted PC's displayed support ID instead of its IP address:
+
+```powershell
+./RemoteDebugger.exe cli internet-import --file RemoteDebugger-Internet.rdrelay
+$pairingCode | ./RemoteDebugger.exe cli pair --host RD-0123-4567-89AB-CDEF
+./RemoteDebugger.exe cli sync
+```
+
+`--data-root DIRECTORY` selects the settings directory for `internet-import` and `pair`; `--connection FILE` still selects the saved connection. Both PCs connect outward over port 443, and later commands automatically use the relay route and pinned endpoint from that protected connection. `discover` lists local-network peers only. See [internet setup](INTERNET.md).
+
 The pairing token is never printed. GUI and CLI share `%LOCALAPPDATA%\RemoteDebugger\controller.connection`, encrypted for the Windows user. `--connection FILE` selects a different DPAPI-protected controller profile. `--port` can be specified when pairing; the GUI uses 45832. An optional `--fingerprint SHA256` enforces a previously verified certificate pin. `sync` uses the executable actually running this CLI as the required agent binary, including downgrades and different builds with the same version. Normal support operations reject mismatched binaries. A normal agent restart requires fresh pairing; only a bounded planned-update grant resumes automatically.
 
 `cli platform-status` reports installed broker readiness and the provisioning receipt path. `cli platform-provision` performs the one-time administrator setup and may require local Windows consent.

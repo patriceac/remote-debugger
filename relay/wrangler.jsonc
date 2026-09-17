@@ -1,0 +1,14 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "remote-debugger-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "durable_objects": {
+    "bindings": [{ "name": "SESSIONS", "class_name": "SupportSession" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SupportSession"] }],
+  "observability": { "enabled": true, "head_sampling_rate": 0.01 },
+  "vars": { "PROTOCOL": "remote-debugger-relay-v1" }
+}

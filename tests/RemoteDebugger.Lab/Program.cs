@@ -88,6 +88,7 @@ internal sealed partial class LabForm : Forms.Form
             try
             {
                 guestElevated = Native.IsElevated();
+                if (role == "internet") { await InternetReviewAsync(); return; }
                 if (!IsLoopback)
                     await PrepareBrokerProvisioningAsync();
                 if (role == "localization") await LocalizationReviewAsync();

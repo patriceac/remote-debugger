@@ -25,7 +25,7 @@ public static class Vault
     public static byte[] Read(string path) => ProtectedData.Unprotect(File.ReadAllBytes(path), null, DataProtectionScope.CurrentUser);
 }
 public sealed record Peer(string Name, string Host, int Port, string Fingerprint);
-public sealed record Connection(string Host, int Port, string Fingerprint, string Token);
+public sealed record Connection(string Host, int Port, string Fingerprint, string Token, string RelayUrl = "", string RelayAccessKey = "");
 
 public static class Discovery
 {
@@ -94,10 +94,11 @@ public sealed class AgentServer : IDisposable
     public bool IsListening => Volatile.Read(ref listening) != 0 && Volatile.Read(ref disposed) == 0;
     public bool Paired { get { lock (authLock) return tokenHash.Length != 0; } }
     public AgentUpdateProgress UpdateProgress => updates.Progress;
+    public InternetAgent? Internet { get; private set; }
     public event Action<string>? Status;
     public event Action<AgentStopReason>? TerminationRequested;
     public SupportSessionSnapshot Session => session.Snapshot;
-    public AgentServer(string root, int port = 45832, bool loopbackOnly = false)
+    public AgentServer(string root, int port = 45832, bool loopbackOnly = false, bool enableInternet = true)
     {
         resumeStore = new(root);
         Directory.CreateDirectory(root); Port = port; authPath = Path.Combine(root, "agent.auth");
@@ -141,6 +142,8 @@ public sealed class AgentServer : IDisposable
         privateNetworkEnabled = !loopbackOnly;
         listener = new TcpListener(loopbackOnly ? IPAddress.Loopback : IPAddress.Any, port);
         discovery = new UdpClient(new IPEndPoint(loopbackOnly ? IPAddress.Loopback : IPAddress.Any, Discovery.Port));
+        if (enableInternet && InternetSettings.Load(root) is { } internetSettings)
+            Internet = new InternetAgent(root, internetSettings, resumed != null, AcceptInternetAsync);
     }
     public void Start()
     {
@@ -156,6 +159,7 @@ public sealed class AgentServer : IDisposable
         }
         _ = Task.Run(WatchSessionAsync);
         Status?.Invoke("Agent ready for pairing; access is visible in this window.");
+        Internet?.Start();
         if (Paired) _ = StartMaintenanceAsync();
     }
     public void EnablePrivateNetwork()
@@ -315,8 +319,16 @@ public sealed class AgentServer : IDisposable
     }
     private async Task ServeAsync(TcpClient tcp)
     {
-        using (tcp)
-        using (var tls = new SslStream(tcp.GetStream(), false))
+        using (tcp) await ServeAsync(tcp.GetStream());
+    }
+    private async Task AcceptInternetAsync(Stream transport)
+    {
+        if (Volatile.Read(ref disposed) != 0 || !slots.Wait(0)) return;
+        await ServeAsync(transport);
+    }
+    private async Task ServeAsync(Stream transport)
+    {
+        using (var tls = new SslStream(transport, true))
         using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(stop.Token))
         {
             timeout.CancelAfter(TimeSpan.FromMinutes(6));
@@ -529,7 +541,7 @@ public sealed class AgentServer : IDisposable
             activeListener = listener;
             activeDiscovery = discovery;
         }
-        Pairing.Close(); stop.Cancel(); Operations.Maintenance.Dispose(); Native.ReleaseAllInput();
+        Pairing.Close(); stop.Cancel(); Internet?.Dispose(); Operations.Maintenance.Dispose(); Native.ReleaseAllInput();
         try { activeListener.Stop(); } catch { }
         try { activeDiscovery.Dispose(); } catch { }
         updates.Dispose();
@@ -566,8 +578,8 @@ public sealed class RemoteClient(Connection connection)
     public async Task<Reply> CallAsync(string operation, object? args = null, CancellationToken ct = default, string? id = null, int seconds = 60)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(seconds, 1, 300) + 15));
-        using var tcp = new TcpClient { NoDelay = true }; await tcp.ConnectAsync(Connection.Host, Connection.Port, timeout.Token);
-        using var tls = new SslStream(tcp.GetStream(), false, (_, cert, _, _) => cert != null && Safety.Equal(Convert.ToHexString(SHA256.HashData(cert.GetRawCertData())), Connection.Fingerprint.ToUpperInvariant().Replace(":", "")));
+        await using var transport = await ConnectionTransport.OpenAsync(Connection, timeout.Token);
+        using var tls = new SslStream(transport, true, (_, cert, _, _) => cert != null && Safety.Equal(Convert.ToHexString(SHA256.HashData(cert.GetRawCertData())), Connection.Fingerprint.ToUpperInvariant().Replace(":", "")));
         await tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions { TargetHost = "RemoteDebugger", EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13 }, timeout.Token);
         var request = new Request(id ?? Guid.NewGuid().ToString(), Connection.Token, operation, args is JsonElement e ? e : Json.Element(args ?? new { }), seconds, ExecutableIdentity.Sha256);
         await Wire.WriteAsync(tls, request, timeout.Token); return await Wire.ReadAsync<Reply>(tls, timeout.Token);
@@ -580,8 +592,9 @@ public sealed class RemoteClient(Connection connection)
 
     private async Task ReceiveFramesAsync(Action<ScreenFrame> publish, int fps, int monitor, int seconds, CancellationToken ct)
     {
-        using var tcp = new TcpClient(); await tcp.ConnectAsync(Connection.Host, Connection.Port, ct); tcp.NoDelay = true;
-        using var tls = new SslStream(tcp.GetStream(), false, (_, cert, _, _) => cert != null && Safety.Equal(Convert.ToHexString(SHA256.HashData(cert.GetRawCertData())), Connection.Fingerprint.ToUpperInvariant().Replace(":", "")));
+        using var connecting = CancellationTokenSource.CreateLinkedTokenSource(ct); connecting.CancelAfter(TimeSpan.FromSeconds(30));
+        await using var transport = await ConnectionTransport.OpenAsync(Connection, connecting.Token);
+        using var tls = new SslStream(transport, true, (_, cert, _, _) => cert != null && Safety.Equal(Convert.ToHexString(SHA256.HashData(cert.GetRawCertData())), Connection.Fingerprint.ToUpperInvariant().Replace(":", "")));
         await tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions { TargetHost = "RemoteDebugger", EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13 }, ct);
         await Wire.WriteAsync(tls, new Request(Guid.NewGuid().ToString(), Connection.Token, "screen.stream", Json.Element(new { fps, monitor, maxWidth = 1920, quality = 65 }), seconds, ExecutableIdentity.Sha256), ct);
         while (!ct.IsCancellationRequested)

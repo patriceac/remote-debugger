@@ -339,7 +339,7 @@ public sealed partial class MainForm : Forms.Form
 
         agentEyebrow.Dock = Forms.DockStyle.Fill; layout.Controls.Add(agentEyebrow, 0, 0);
         layout.Controls.Add(agentHeading, 0, 1);
-        layout.Controls.Add(agentSubtitle, 0, 2);
+        layout.Controls.Add(BuildInternetSection(), 0, 2);
 
         var codeRow = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, Height = 96, WrapContents = false, FlowDirection = Forms.FlowDirection.LeftToRight, Padding = new Forms.Padding(0, 10, 0, 0), Margin = Forms.Padding.Empty };
         agentPairCode.Margin = new Forms.Padding(0, 0, 14, 0); copyAgentCode.Margin = new Forms.Padding(0, 4, 0, 0); codeRow.Controls.Add(agentPairCode); codeRow.Controls.Add(copyAgentCode); restartAgent.Visible = false; codeRow.Controls.Add(restartAgent); layout.Controls.Add(codeRow, 0, 3);
@@ -642,7 +642,7 @@ public sealed partial class MainForm : Forms.Form
             // firewall consent dialog. LAN listening starts only after the
             // provisioned broker has verified the Private/LocalSubnet rules.
             agentIdle = false;
-            var started = new AgentServer(root, loopbackOnly: loopbackOnly || !agentNetworkPrepared);
+            var started = new AgentServer(root, loopbackOnly: loopbackOnly || !agentNetworkPrepared, enableInternet: !loopbackOnly);
             agent = started;
             started.Status += text => PostUi(() => { if (ReferenceEquals(agent, started)) { agentLog.SetText(text); RefreshFooter(); } });
             started.TerminationRequested += reason =>
@@ -725,7 +725,7 @@ public sealed partial class MainForm : Forms.Form
         agentNetworkState.ForeColor = status.FirewallReady ? ConnectedText : WarningText;
         agentSleepState.SetText(() => powerHold != null ? UiText.Suspended : UiText.Active);
         agentSleepState.ForeColor = powerHold != null ? PrimaryText : SecondaryText;
-        if (status.RequiresAdministratorConsent) ShowSetupNotice(() => UiText.EnableSupportNotice);
+        if (status.RequiresAdministratorConsent) ShowSetupNotice(() => internetConfigured ? UiText.InternetMaintenanceNotice : UiText.EnableSupportNotice);
         else if (status.Available || status.Provisioned) HideSetupNotice();
         output.SetText(Pretty(status));
         SetFooterMessage(() => status.FirewallReady ? UiText.ReadyForConnection : UiText.EnablePrivateNetwork); RefreshFooter();
@@ -743,7 +743,7 @@ public sealed partial class MainForm : Forms.Form
     {
         if (sessionExit.Expired && !quitting) { RequestQuit(); return; }
         if (IsDisposed) return;
-        UpdateAgentState(); UpdateHeader(); RefreshControllerControls(); RefreshFooter(); RefreshInputStatus();
+        UpdateAgentState(); UpdateInternetState(); UpdateHeader(); RefreshControllerControls(); RefreshFooter(); RefreshInputStatus();
         if (supportSession && liveStream != null && lastFrameUtc is { } presented && DateTimeOffset.UtcNow - presented > TimeSpan.FromSeconds(3))
         {
             // A frozen bitmap must never continue to look like a live view or
@@ -769,7 +769,7 @@ public sealed partial class MainForm : Forms.Form
         bool paired = agent?.Session.HasPaired == true;
         agentEyebrow.SetText(() => paired ? UiText.SupportSessionCaption : UiText.PairingCodeCaption);
         agentHeading.SetText(() => agent?.Session.State == "reconnecting" ? UiText.ConnectionInterruptedHeading : paired ? UiText.PcBeingAssisted : UiText.ShareCode);
-        agentSubtitle.SetText(() => paired ? UiText.ConnectionStaysVisible : UiText.EnterCodeOnController);
+        agentSubtitle.SetText(() => paired ? UiText.ConnectionStaysVisible : internetConfigured && !loopbackOnly ? UiText.InternetInstructions : UiText.EnterCodeOnController);
         copyAgentCode.Visible = !paired && !agentIdle;
         restartAgent.Visible = agentIdle;
         float stateFontSize = paired ? 24 : 42;
@@ -822,7 +822,7 @@ public sealed partial class MainForm : Forms.Form
         tray.Text = onAgent ? UiText.TrayAssistedPc : UiText.TrayController;
         if (onAgent)
         {
-            headerTitle.SetText(() => UiText.GiveControl); headerSubtitle.SetText(() => Environment.MachineName + UiText.PrivateSupportSuffix);
+            headerTitle.SetText(() => UiText.GiveControl); headerSubtitle.SetText(() => Environment.MachineName + (internetConfigured && !loopbackOnly ? UiText.InternetSupportSuffix : UiText.PrivateSupportSuffix));
         }
         else
         {
@@ -984,7 +984,7 @@ public sealed partial class MainForm : Forms.Form
         updateProgressArea.Visible = false;
         try
         {
-            pairedClient = new RemoteClient(new Connection(host.Text.Trim(), 45832, selectedFingerprint, "")); client = pairedClient; connectionState.SetText(() => UiText.Pairing); SetFooterMessage(() => UiText.Pairing); UpdateHeader(); RefreshFooter();
+            pairedClient = new RemoteClient(InternetSettings.Target(host.Text.Trim(), 45832, selectedFingerprint, root)); client = pairedClient; connectionState.SetText(() => UiText.Pairing); SetFooterMessage(() => UiText.Pairing); UpdateHeader(); RefreshFooter();
             using (var handshake = CancellationTokenSource.CreateLinkedTokenSource(pairingCts.Token))
             {
                 handshake.CancelAfter(TimeSpan.FromSeconds(SupportOperationTimeouts.PairingHandshakeSeconds));
