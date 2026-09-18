@@ -304,7 +304,7 @@ public sealed partial class MainForm : Forms.Form
         var actions = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.LeftToRight, WrapContents = false, AutoSize = true, Padding = new Forms.Padding(0, 20, 0, 0) };
         statusPill.SizeChanged += (_, _) => RefreshStatusPillRegion();
         statusPill.Width = 176; statusPill.Height = 30; statusPill.Margin = new Forms.Padding(0, 3, 12, 0);
-        terminateSession.Margin = Forms.Padding.Empty;
+        terminateSession.Margin = Forms.Padding.Empty; terminateSession.Visible = false;
         statusDot.Location = new Point(12, 7); statusLabel.Location = new Point(28, 6); statusPill.Controls.Add(statusDot); statusPill.Controls.Add(statusLabel); RefreshStatusPillRegion();
         actions.Controls.Add(statusPill); actions.Controls.Add(terminateSession);
         layout.Controls.Add(titles, 0, 0); layout.Controls.Add(actions, 1, 0);
@@ -892,20 +892,20 @@ public sealed partial class MainForm : Forms.Form
                 SetFooterMessage(() => session.State switch { "connected" => UiText.SupportActive, "synchronizing" => UiText.AgentSynchronizing, _ => UiText.WaitingForController });
         if (session.Connected && session.BinaryMatched)
         {
-            CurrentPairingCode = null; pairingCountdownText.SetText(() => UiText.CodeConsumed); pairingCountdown.Value = 0; string duration = session.StartedUtc is { } started ? FormatDuration(DateTimeOffset.UtcNow - started) : UiText.JustNow; agentPairCode.SetText(() => UiText.ControllerConnected); agentState.SetText(() => UiText.Format(UiText.ConnectedDuration, duration)); agentSessionNote.SetText(() => UiText.AuthenticatedControllerNote); terminateSession.Visible = true;
+            CurrentPairingCode = null; pairingCountdownText.SetText(() => UiText.CodeConsumed); pairingCountdown.Value = 0; string duration = session.StartedUtc is { } started ? FormatDuration(DateTimeOffset.UtcNow - started) : UiText.JustNow; agentPairCode.SetText(() => UiText.ControllerConnected); agentState.SetText(() => UiText.Format(UiText.ConnectedDuration, duration)); agentSessionNote.SetText(() => UiText.AuthenticatedControllerNote);
         }
         else if (session.Connected)
         {
             var updateProgress = agent.UpdateProgress;
-            CurrentPairingCode = null; pairingCountdown.Value = updateProgress.TransferPercent * 3; pairingCountdownText.SetText(() => UpdateProgressDescription(updateProgress)); agentPairCode.SetText(() => UiText.Synchronizing); agentState.SetText(() => UiText.SessionPreparingAgent); agentSessionNote.SetText(() => UiText.CommandsDisabledUntilVersions); terminateSession.Visible = true;
+            CurrentPairingCode = null; pairingCountdown.Value = updateProgress.TransferPercent * 3; pairingCountdownText.SetText(() => UpdateProgressDescription(updateProgress)); agentPairCode.SetText(() => UiText.Synchronizing); agentState.SetText(() => UiText.SessionPreparingAgent); agentSessionNote.SetText(() => UiText.CommandsDisabledUntilVersions);
         }
         else if (session.HasPaired && session.State == "reconnecting")
         {
-            agentPairCode.SetText(() => UiText.SessionInterrupted); CurrentPairingCode = null; var remaining = session.DisconnectDeadlineUtc is { } d ? d - DateTimeOffset.UtcNow : TimeSpan.Zero; pairingCountdownText.SetText(() => remaining > TimeSpan.Zero ? UiText.Format(UiText.ReconnectionCountdown, remaining) : UiText.WaitingForReconnection); pairingCountdown.Value = 0; agentState.SetText(() => UiText.WaitingForReconnection); agentSessionNote.SetText(() => UiText.ReconnectionGraceNote); terminateSession.Visible = true;
+            agentPairCode.SetText(() => UiText.SessionInterrupted); CurrentPairingCode = null; var remaining = session.DisconnectDeadlineUtc is { } d ? d - DateTimeOffset.UtcNow : TimeSpan.Zero; pairingCountdownText.SetText(() => remaining > TimeSpan.Zero ? UiText.Format(UiText.ReconnectionCountdown, remaining) : UiText.WaitingForReconnection); pairingCountdown.Value = 0; agentState.SetText(() => UiText.WaitingForReconnection); agentSessionNote.SetText(() => UiText.ReconnectionGraceNote);
         }
         else
         {
-            string current = agent.Pairing.CurrentCode ?? ""; CurrentPairingCode = current.Length == 6 ? current : null; agentPairCode.SetText(FormatPairingCode(current)); var expires = agent.Pairing.ExpiresUtc; var remaining = expires - DateTimeOffset.UtcNow; int seconds = Math.Clamp((int)Math.Ceiling(remaining.TotalSeconds), 0, 300); pairingCountdown.Value = seconds; pairingCountdownText.SetText(() => seconds > 0 ? UiText.Format(UiText.NewCodeCountdown, TimeSpan.FromSeconds(seconds)) : UiText.PreparingNextCode); agentState.SetText(() => UiText.WaitingForConnection); agentSessionNote.SetText(() => UiText.CodeRotatesNote); terminateSession.Visible = false;
+            string current = agent.Pairing.CurrentCode ?? ""; CurrentPairingCode = current.Length == 6 ? current : null; agentPairCode.SetText(FormatPairingCode(current)); var expires = agent.Pairing.ExpiresUtc; var remaining = expires - DateTimeOffset.UtcNow; int seconds = Math.Clamp((int)Math.Ceiling(remaining.TotalSeconds), 0, 300); pairingCountdown.Value = seconds; pairingCountdownText.SetText(() => seconds > 0 ? UiText.Format(UiText.NewCodeCountdown, TimeSpan.FromSeconds(seconds)) : UiText.PreparingNextCode); agentState.SetText(() => UiText.WaitingForConnection); agentSessionNote.SetText(() => UiText.CodeRotatesNote);
         }
     }
 
@@ -944,7 +944,9 @@ public sealed partial class MainForm : Forms.Form
         statusLabel.ForeColor = connected ? ConnectedText : reconnecting ? WarningText : Color.FromArgb(80, 103, 113);
         statusLabel.SetText(() => connected ? UiText.Connected : reconnecting ? UiText.Reconnecting : synchronizing ? UiText.SynchronizingEllipsis : pairing ? UiText.Pairing : agentIdle && onAgent ? UiText.SessionClosed : UiText.Waiting);
         statusPill.AccessibleName = statusLabel.Text; RefreshStatusPillRegion();
-        terminateSession.Visible = onAgent ? PrivateInternet && agent != null && !agentIdle || agent?.Session.Connected == true || agent?.Session.State == "reconnecting" : supportSession || synchronizingAgent;
+        bool showTerminateSession = ShouldShowTerminateSession(onAgent, agentIdle, agent?.Session.Connected == true,
+            agent?.Session.State, supportSession, synchronizingAgent);
+        if (terminateSession.Visible != showTerminateSession) terminateSession.Visible = showTerminateSession;
         roleAgent.BackColor = onAgent ? SelectedRail : Rail; roleController.BackColor = onController ? SelectedRail : Rail; navConnection.BackColor = onController && controllerPages.SelectedIndex == 0 ? SelectedRail : Rail; navScreen.BackColor = onController && controllerPages.SelectedIndex == 1 ? SelectedRail : Rail; navProcesses.BackColor = onController && controllerPages.SelectedIndex == 2 ? SelectedRail : Rail; navFiles.BackColor = onController && controllerPages.SelectedIndex == 3 ? SelectedRail : Rail; navDiagnostics.BackColor = onController && controllerPages.SelectedIndex == 4 ? SelectedRail : Rail;
     }
 
@@ -1774,6 +1776,12 @@ public sealed partial class MainForm : Forms.Form
         4 => (UiText.Diagnostics, UiText.DiagnosticsSubtitle),
         _ => (UiText.TakeControl, UiText.ConnectionSubtitle)
     };
+
+    internal static bool ShouldShowTerminateSession(bool onAgent, bool agentIdle, bool agentConnected,
+        string? agentState, bool supportSession, bool synchronizingAgent) => onAgent
+            ? !agentIdle && (agentConnected || agentState == "reconnecting")
+            : supportSession || synchronizingAgent;
+
     private static ProcessSortColumn ProcessColumn(int index) => index switch { 0 => ProcessSortColumn.Pid, 1 => ProcessSortColumn.Name, 2 => ProcessSortColumn.CpuPercentTotalMachine, 3 => ProcessSortColumn.WorkingSetBytes, 4 => ProcessSortColumn.Responding, _ => ProcessSortColumn.Window };
     private static FileSortColumn FileColumn(int index) => index switch { 0 => FileSortColumn.Name, 1 => FileSortColumn.Type, 2 => FileSortColumn.SizeBytes, _ => FileSortColumn.ModifiedUtc };
     private static string Pretty(object value) => JsonSerializer.Serialize(value, new JsonSerializerOptions(Json.Options) { WriteIndented = true });
