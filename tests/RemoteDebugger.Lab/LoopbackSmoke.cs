@@ -77,7 +77,7 @@ internal sealed partial class LabForm
         else Fail("loopback.agent_pairing_code", "The loopback agent exposes six pairing digits", new { code = CodeEvidence(agentCode) });
         if (TimeText.IsMatch(countdown)) Pass("loopback.agent_pairing_countdown", "The loopback agent exposes its pairing expiry countdown", new { countdown });
         else Fail("loopback.agent_pairing_countdown", "The loopback agent exposes its pairing expiry countdown", new { countdown });
-        await ProbeSleepRequestAsync();
+        await ProbeSleepRequestAsync(expectedHeld: false, checkId: "agent.sleep_idle", requirement: "The idle agent allows system sleep while waiting for a controller");
         var platformStatus = await TryPlatformStatusAsync();
         if (platformStatus.HasValue) Pass("loopback.platform_status", "The Release CLI exposes the local platform status without changing the loopback setup", platformStatus.Value, required: false);
         else Block("loopback.platform_status", "The Release CLI exposes the local platform status without changing the loopback setup", "The artifact did not return a local platform-status response.", required: false);
@@ -116,6 +116,10 @@ internal sealed partial class LabForm
         bool matched = remoteHash.Equals(releaseHash, StringComparison.OrdinalIgnoreCase) && heartbeatHash.Equals(releaseHash, StringComparison.OrdinalIgnoreCase) && (!heartbeat.TryGetProperty("binaryMatched", out var binaryMatched) || binaryMatched.GetBoolean());
         if (matched) Pass("loopback.sync_exact_release", "The loopback agent reports the controller's exact Release bytes before live viewing", new { releaseHash, remoteHash, heartbeatHash, heartbeat });
         else Fail("loopback.sync_exact_release", "The loopback agent reports the controller's exact Release bytes before live viewing", new { releaseHash, remoteHash, heartbeatHash, heartbeat });
+
+        product = loopbackAgent;
+        await ProbeSleepRequestAsync();
+        product = loopbackController;
 
         LiveEvidence liveEvidence = await WaitForLiveEvidenceAsync(60);
         var firstFrame = await CliAsync(["screenshot", "--file", Path.Combine(output, "loopback-screen.jpg")]);

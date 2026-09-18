@@ -5,7 +5,7 @@ using Microsoft.Win32.SafeHandles;
 namespace RemoteDebugger;
 
 /// <summary>
-/// Keeps Windows awake while the visible Remote Debugger session is active.
+/// Keeps Windows awake while an authenticated Remote Debugger session is active.
 /// Power requests are process handles, so cleanup remains correct when the
 /// asynchronous session work resumes on a different thread. The user's saved
 /// power plan is never changed.

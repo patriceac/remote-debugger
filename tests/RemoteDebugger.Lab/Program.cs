@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text;
@@ -29,6 +30,28 @@ internal static class Program
 internal sealed partial class LabForm : Forms.Form
 {
     private const int CoordinationPort = 45835;
+    private const uint ExecutionStateContinuous = 0x80000000;
+    private const uint ExecutionStateSystemRequired = 0x00000001;
+    private const uint PowerRequestSystemRequired = 1;
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ReasonContext
+    {
+        public uint Version;
+        public uint Flags;
+        public IntPtr Reason;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern uint SetThreadExecutionState(uint flags);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr PowerCreateRequest(ref ReasonContext context);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool PowerSetRequest(IntPtr request, uint requestType);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool PowerClearRequest(IntPtr request, uint requestType);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CloseHandle(IntPtr handle);
+
     private static readonly Regex SixDigits = new("^[0-9]{6}$", RegexOptions.CultureInvariant);
     private static readonly Regex TimeText = new("(?:^|\\s)(?:[0-5]?\\d):[0-5]\\d(?:$|\\s)", RegexOptions.CultureInvariant);
     private readonly string role;
@@ -38,6 +61,9 @@ internal sealed partial class LabForm : Forms.Form
     private string application;
     private readonly string productData;
     private readonly Forms.TextBox log = new() { Dock = Forms.DockStyle.Fill, Multiline = true, ScrollBars = Forms.ScrollBars.Vertical, ReadOnly = true };
+    private readonly bool labKeepsGuestAwake;
+    private readonly IntPtr labPowerRequest;
+    private readonly Forms.Timer labPowerRefresh = new() { Interval = 15000 };
     private readonly CancellationTokenSource stop = new(TimeSpan.FromMinutes(22));
     private readonly List<CheckRecord> checks = [];
     private readonly object checkLock = new();
@@ -84,6 +110,17 @@ internal sealed partial class LabForm : Forms.Form
         Width = 820;
         Height = 480;
         Controls.Add(log);
+        // Keep the disposable guest awake while the Lab orchestrates pairing.
+        // This is separate from the product-owned request being asserted: the
+        // idle agent is still expected to show no RemoteDebugger request and
+        // may sleep on a real PC.
+        labKeepsGuestAwake = SetThreadExecutionState(ExecutionStateContinuous | ExecutionStateSystemRequired) != 0;
+        labPowerRequest = CreateLabPowerRequest();
+        labPowerRefresh.Tick += (_, _) =>
+        {
+            if (labKeepsGuestAwake) _ = SetThreadExecutionState(ExecutionStateContinuous | ExecutionStateSystemRequired);
+        };
+        labPowerRefresh.Start();
         Shown += async (_, _) =>
         {
             try
@@ -112,7 +149,37 @@ internal sealed partial class LabForm : Forms.Form
                 await FinishAsync(ex.ToString());
             }
         };
-        FormClosed += (_, _) => stop.Cancel();
+        FormClosed += (_, _) =>
+        {
+            labPowerRefresh.Stop();
+            if (labKeepsGuestAwake) _ = SetThreadExecutionState(ExecutionStateContinuous);
+            ReleaseLabPowerRequest(labPowerRequest);
+            stop.Cancel();
+        };
+    }
+
+    private static IntPtr CreateLabPowerRequest()
+    {
+        IntPtr reason = Marshal.StringToHGlobalUni("Remote Debugger acceptance Lab is orchestrating an isolated test.");
+        try
+        {
+            var context = new ReasonContext { Version = 0, Flags = 0x1, Reason = reason };
+            IntPtr request = PowerCreateRequest(ref context);
+            if (request == IntPtr.Zero || !PowerSetRequest(request, PowerRequestSystemRequired))
+            {
+                if (request != IntPtr.Zero) _ = CloseHandle(request);
+                return IntPtr.Zero;
+            }
+            return request;
+        }
+        finally { Marshal.FreeHGlobal(reason); }
+    }
+
+    private static void ReleaseLabPowerRequest(IntPtr request)
+    {
+        if (request == IntPtr.Zero) return;
+        _ = PowerClearRequest(request, PowerRequestSystemRequired);
+        _ = CloseHandle(request);
     }
 
     private static string ResolveApplicationPath(string role, string variant)
@@ -182,6 +249,7 @@ internal sealed partial class LabForm : Forms.Form
             scope,
             updateVariant,
             machine = Environment.MachineName,
+            labKeepAwake = new { threadExecutionState = labKeepsGuestAwake, powerRequest = labPowerRequest != IntPtr.Zero },
             release = new { path = application, sha256 = releaseHash },
             checks = snapshot,
             fatal
@@ -236,7 +304,7 @@ internal sealed partial class LabForm : Forms.Form
                 var found = Root().FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.AutomationIdProperty, id));
                 if (found != null) return found;
             }
-            catch (ElementNotAvailableException) { }
+            catch (Exception ex) when (ex is ElementNotAvailableException or InvalidOperationException) { }
             Thread.Sleep(100);
         }
         return null;
@@ -518,7 +586,7 @@ internal sealed partial class LabForm : Forms.Form
         if (TimeText.IsMatch(countdown)) Pass("agent.pairing_countdown_visible", "The pairing expiry is visible in the agent view", new { countdown });
         else Fail("agent.pairing_countdown_visible", "The pairing expiry is visible in the agent view", new { countdown });
 
-        await ProbeSleepRequestAsync();
+        await ProbeSleepRequestAsync(expectedHeld: false, checkId: "agent.sleep_idle", requirement: "The idle agent allows system sleep while waiting for a controller");
 
         await ProbeFirewallAndProvisioningAsync();
         await AgentCoordinationAsync(code);
@@ -615,6 +683,7 @@ internal sealed partial class LabForm : Forms.Form
                 {
                     sawPairing = true;
                     await ProbeMaintenanceAfterPairingAsync();
+                    await ProbeSleepRequestAsync();
                 }
                 response = new { alive = product != null && !product.HasExited, ended = TryValue("agentHeading") == "Assistance terminée", paired, machine = Environment.MachineName, state, coordinationAlive = true, rollbackCandidateKilled };
             }
@@ -1051,7 +1120,7 @@ internal sealed partial class LabForm : Forms.Form
     private static bool ContainsSleepHeld(string value)
         => value.Contains("mise en veille", StringComparison.OrdinalIgnoreCase) && (value.Contains("suspend", StringComparison.OrdinalIgnoreCase) || value.Contains("bloqu", StringComparison.OrdinalIgnoreCase) || value.Contains("prevent", StringComparison.OrdinalIgnoreCase));
 
-    private async Task ProbeSleepRequestAsync()
+    private async Task ProbeSleepRequestAsync(bool expectedHeld = true, string checkId = "agent.sleep_request", string requirement = "The agent holds a Windows system power request during authenticated support")
     {
         string[] texts = UiTexts();
         (int ExitCode, string Stdout, string Stderr) request;
@@ -1069,11 +1138,14 @@ internal sealed partial class LabForm : Forms.Form
         else request = await RunGuestPowerShellAsync("powercfg /requests");
         bool osHeld = request.ExitCode == 0 && (request.Stdout.Contains("RemoteDebugger", StringComparison.OrdinalIgnoreCase) || request.Stdout.Contains("Remote Debugger", StringComparison.OrdinalIgnoreCase));
         bool visible = texts.Any(ContainsSleepHeld);
-        sleepRequestObserved = osHeld;
-        if (osHeld)
-            Pass("agent.sleep_request", "The agent holds a Windows system power request while it is running", new { osEvidence = request.Stdout, observer = observation?.EvidencePath, visible = texts.Where(ContainsSleepHeld).Take(4).ToArray() });
+        sleepRequestObserved = expectedHeld && osHeld;
+        var evidence = new { expectedHeld, observedHeld = osHeld, osEvidence = request.Stdout, observer = observation?.EvidencePath, visible = texts.Where(ContainsSleepHeld).Take(4).ToArray() };
+        if (request.ExitCode != 0)
+            Block(checkId, requirement, brokerProvisioning == null ? "The read-only powercfg query was unavailable." : "The broker's fresh read-only observer was unavailable.", new { commandExitCode = request.ExitCode, stderr = request.Stderr, observerError, visible }, required: false);
+        else if (osHeld == expectedHeld)
+            Pass(checkId, requirement, evidence);
         else
-            Block("agent.sleep_request", "The agent holds a Windows system power request while it is running", brokerProvisioning == null ? "No product-owned power request was visible in the read-only powercfg output." : "The broker's fresh read-only observer did not show a product-owned power request.", new { commandExitCode = request.ExitCode, osEvidence = request.Stdout, stderr = request.Stderr, observer = observation?.EvidencePath, observerError, visible }, required: false);
+            Fail(checkId, requirement, evidence);
     }
 
     private async Task ProbeSleepReleasedAsync()

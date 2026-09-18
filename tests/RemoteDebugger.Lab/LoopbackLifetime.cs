@@ -49,7 +49,7 @@ internal sealed partial class LabForm
 
         guestElevated = Native.IsElevated();
         Pass("lifetime.agent_elevation_context", "The lifetime Lab records the actual Windows elevation context supplied to the guest", new { elevated = guestElevated, user = Environment.UserName }, required: false);
-        await ProbeSleepRequestAsync();
+        await ProbeSleepRequestAsync(expectedHeld: false, checkId: "agent.sleep_idle", requirement: "The idle agent allows system sleep while waiting for a controller");
         string initialCode = await WaitPairingCodeAsync();
         string initialCountdown = TryValue("pairingCountdown");
         int? initialRemaining = ParseCountdownSeconds(initialCountdown);
@@ -118,6 +118,9 @@ internal sealed partial class LabForm
             Pass("lifetime.heartbeat_before_disconnect", "A real paired heartbeat is established before the controller is disconnected", new { heartbeatHash, heartbeat });
         else
             Fail("lifetime.heartbeat_before_disconnect", "A real paired heartbeat is established before the controller is disconnected", new { heartbeatHash, releaseHash, heartbeat });
+
+        product = loopbackAgent;
+        await ProbeSleepRequestAsync();
 
         // Capture the agent's own connected state before dropping the viewer;
         // the following reconnect capture is taken from that same window.

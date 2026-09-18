@@ -729,7 +729,6 @@ public sealed partial class MainForm : Forms.Form
                 });
             };
             agent.Start();
-            powerHold ??= PowerHold.Acquire();
             agentFingerprint.SetText(agent.Fingerprint);
             SetFooterDetail(() => UiText.CloseToTray);
             RefreshUiState();
@@ -836,6 +835,7 @@ public sealed partial class MainForm : Forms.Form
     private void RefreshUiState()
     {
         if (IsDisposed) return;
+        RefreshPowerHold();
         UpdateAgentState(); if (PrivateInternet) UpdatePrivateAgentState(); UpdateInternetState(); UpdateHeader(); RefreshControllerControls(); RefreshFooter(); RefreshInputStatus();
         if (supportSession && liveStream != null && lastFrameUtc is { } presented && DateTimeOffset.UtcNow - presented > TimeSpan.FromSeconds(3))
         {
@@ -1307,6 +1307,28 @@ public sealed partial class MainForm : Forms.Form
     private void QueueMouse(string kind, Forms.MouseEventArgs e)
     {
         if (!CanSendInput() || geometry == null) return; var point = geometry.MapLetterbox(screen.Width, screen.Height, e.X, e.Y); if (point == null) { if (kind == "up") QueueInput(new { kind = "release" }); return; } QueueInput(new { kind, x = point.Value.X, y = point.Value.Y, layoutId = geometry.LayoutId, button = e.Button == Forms.MouseButtons.Right ? "right" : e.Button == Forms.MouseButtons.Middle ? "middle" : "left", delta = e.Delta });
+    }
+
+    private void RefreshPowerHold()
+    {
+        bool agentSessionRequiresHold = agent is { } activeAgent &&
+            PowerHoldPolicy.ShouldHoldForAgent(activeAgent.Session);
+        bool shouldHold = supportSession || agentSessionRequiresHold;
+        if (!shouldHold)
+        {
+            powerHold?.Dispose();
+            powerHold = null;
+            return;
+        }
+
+        if (powerHold != null) return;
+        try { powerHold = PowerHold.Acquire(); }
+        catch (Exception ex)
+        {
+            // The session remains visible, but the Sleep row stays Active so
+            // the UI does not claim a Windows power request that failed.
+            agentLog.SetText("Unable to prevent system sleep: " + ex.Message);
+        }
     }
 
     private void QueueFocusedText()
