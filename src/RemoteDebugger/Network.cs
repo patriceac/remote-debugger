@@ -337,6 +337,8 @@ public sealed partial class AgentServer : IDisposable
     {
         bool persistentInput = false;
         CancellationTokenRegistration persistentInputGrant = default;
+        bool persistentUpdate = false;
+        CancellationTokenRegistration persistentUpdateGrant = default;
         using (var tls = new SslStream(transport, true))
         using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(stop.Token))
         {
@@ -346,205 +348,228 @@ public sealed partial class AgentServer : IDisposable
                 using var handshake = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token); handshake.CancelAfter(10000);
                 await tls.AuthenticateAsServerAsync(new SslServerAuthenticationOptions { ServerCertificate = certificate, EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13, ClientCertificateRequired = false }, handshake.Token);
                 var r = await Wire.ReadAsync<Request>(tls, handshake.Token);
-                if (candidate != null && !candidate.Promoted)
+                while (true)
                 {
-                    await ServeSecurityCandidateAsync(tls, r, candidate, timeout.Token);
-                    return;
-                }
-                Reply reply;
-                if (r.Operation == "pair.v2")
-                {
-                    if (Volatile.Read(ref terminating) != 0 || Volatile.Read(ref disposed) != 0)
-                        throw new AuthenticationException("This support session has ended.");
-                    if (!await pairingSlot.WaitAsync(0, handshake.Token)) throw new AuthenticationException("Another pairing attempt is in progress.");
-                    try
+                    if (candidate != null && !candidate.Promoted)
                     {
-                        handshake.CancelAfter(TimeSpan.FromSeconds(30));
-                        await PairingTransport.AcceptAsync(tls, r, Pairing, Fingerprint, (token, controllerHash) =>
-                        {
-                            lock (authLock)
-                            {
-                                tokenHash = Safety.Hash(token); controllerBinaryHash = controllerHash; grantLifetime.Cancel(); grantLifetime = new();
-                                updates.ResetControllerSynchronization();
-                                foreach (var job in running.Values) job.Cancel(); requests.Clear();
-                                session.Pair(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
-                            }
-                        }, handshake.Token);
-                        _ = StartMaintenanceAsync(); Status?.Invoke("Controller paired. Synchronizing the support session.");
+                        await ServeSecurityCandidateAsync(tls, r, candidate, timeout.Token);
+                        return;
                     }
-                    finally { pairingSlot.Release(); }
-                    return;
-                }
-                else
-                {
-                    bool authorized; CancellationToken grant; lock (authLock) { authorized = tokenHash.Length != 0 && Safety.Equal(tokenHash, Safety.Hash(r.Token ?? "")); grant = grantLifetime.Token; }
-                    if (authorized && !PairingExchange.ValidHash(r.BinarySha256)) authorized = false;
-                    if (authorized && Volatile.Read(ref terminating) != 0) authorized = false;
-                    if (authorized && !Safety.Equal(controllerBinaryHash, r.BinarySha256!.ToUpperInvariant()))
+                    Reply reply;
+                    if (r.Operation == "pair.v2")
                     {
-                        await updateGate.WaitAsync(timeout.Token);
+                        if (Volatile.Read(ref terminating) != 0 || Volatile.Read(ref disposed) != 0)
+                            throw new AuthenticationException("This support session has ended.");
+                        if (!await pairingSlot.WaitAsync(0, handshake.Token)) throw new AuthenticationException("Another pairing attempt is in progress.");
                         try
                         {
-                            if (Volatile.Read(ref terminating) != 0 || updates.PendingExitPlan != null) authorized = false;
-                            else
+                            handshake.CancelAfter(TimeSpan.FromSeconds(30));
+                            await PairingTransport.AcceptAsync(tls, r, Pairing, Fingerprint, (token, controllerHash) =>
                             {
                                 lock (authLock)
                                 {
-                                    controllerBinaryHash = r.BinarySha256!.ToUpperInvariant();
+                                    tokenHash = Safety.Hash(token); controllerBinaryHash = controllerHash; grantLifetime.Cancel(); grantLifetime = new();
                                     updates.ResetControllerSynchronization();
-                                    session.SetBinaryMatched(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
+                                    foreach (var job in running.Values) job.Cancel(); requests.Clear();
+                                    session.Pair(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
                                 }
-                                Native.ReleaseAllInput();
-                                foreach (var job in running.Values) job.Cancel();
-                            }
+                            }, handshake.Token);
+                            _ = StartMaintenanceAsync(); Status?.Invoke("Controller paired. Synchronizing the support session.");
                         }
-                        finally { updateGate.Release(); }
-                    }
-                    bool resumePending = resumed != null && !Volatile.Read(ref resumeAccepted);
-                    if (resumePending && resumed!.ExpiresUtc <= DateTimeOffset.UtcNow) { session.End(); authorized = false; }
-                    if (authorized && !resumePending && r.Operation != "session.disconnect") session.Observe();
-                    if (!authorized || session.ShouldExit) reply = Reply.Failure(r.Id, "access_denied", "This support session is not authorized or has ended.");
-                    else if (resumePending && r.Operation is not ("update.resume" or "session.end" or "revoke"))
-                        reply = Reply.Failure(r.Id, "resume_required", "Present the bounded update reconnect ticket before resuming support.");
-                    else if (r.Operation == "session.heartbeat")
-                    {
-                        session.Observe();
-                        reply = Reply.Success(r.Id, new { session = Session, agentBinarySha256 = ExecutableIdentity.Sha256, controllerBinarySha256 = controllerBinaryHash, binaryMatched = Session.BinaryMatched, processId = Environment.ProcessId, maintenance = Operations.Maintenance.Status });
-                    }
-                    else if (r.Operation == "session.disconnect") { Native.ReleaseAllInput(); session.Disconnect(); reply = Reply.Success(r.Id, new { session = Session }); }
-                    else if (r.Operation == "update.resume")
-                    {
-                        if (resumed == null || resumed.ExpiresUtc <= DateTimeOffset.UtcNow ||
-                            !Safety.Equal(resumed.TicketHash, Safety.Hash(r.Args.Str("ticket"))))
-                            reply = Reply.Failure(r.Id, "resume_denied", "Update reconnect authorization is invalid or expired.");
-                        else
-                        {
-                            Volatile.Write(ref resumeAccepted, true); session.Observe();
-                            reply = Reply.Success(r.Id, new { resumed = true, agentBinarySha256 = ExecutableIdentity.Sha256, binaryMatched = Session.BinaryMatched });
-                        }
-                    }
-                    else if (r.Operation is "session.end" or "revoke")
-                    {
-                        // Keep this socket alive until the controller knows whether
-                        // an armed replacement was safely cancelled.
-                        if (Interlocked.CompareExchange(ref terminating, 1, 0) == 2) return;
-                        session.End(); Native.ReleaseAllInput();
-                        foreach (var job in running.Values) job.Cancel();
-                        await updateGate.WaitAsync(timeout.Token);
-                        try
-                        {
-                            using var endDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(35));
-                            await updates.CancelActiveAsync(endDeadline.Token);
-                            await Wire.WriteAsync(tls, Reply.Success(r.Id, new { ended = true }), timeout.Token);
-                            Revoke(); Volatile.Write(ref terminating, 2); TerminationRequested?.Invoke(AgentStopReason.SupportEnded);
-                        }
-                        finally { updateGate.Release(); }
+                        finally { pairingSlot.Release(); }
                         return;
                     }
-                    else if (updates.IsOperation(r.Operation))
-                    {
-                        await updateGate.WaitAsync(timeout.Token);
-                        try
-                        {
-                            if (Volatile.Read(ref terminating) != 0) reply = Reply.Failure(r.Id, "session_ended", "The support session is ending.");
-                            else
-                            {
-                                using var updateDeadline = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, grant);
-                                updateDeadline.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(r.TimeoutSeconds, 1, 120)));
-                                reply = await updates.DispatchAsync(r, updateDeadline.Token);
-                                if (r.Operation == "update.confirm" && reply.Ok)
-                                {
-                                    session.SetBinaryMatched(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
-                                    if (Session.BinaryMatched) { resumeStore.Clear(); resumed = null; }
-                                }
-                                if (r.Operation == "update.cancel" && reply.Ok) { resumeStore.Clear(); resumed = null; }
-                            }
-                            try
-                            {
-                                await Wire.WriteAsync(tls, reply, timeout.Token);
-                            }
-                            catch when (r.Operation == "update.commit" && reply.Ok)
-                            {
-                                resumeStore.Clear(); resumed = null; resumeAccepted = false;
-                                using var abortDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(35));
-                                try { await updates.CancelActiveAsync(abortDeadline.Token); }
-                                catch (Exception ex)
-                                {
-                                    Interlocked.CompareExchange(ref terminating, 1, 0); session.End();
-                                    Status?.Invoke("Update reply failed; retrying protected cancellation: " + ex.Message);
-                                }
-                                throw;
-                            }
-                            updates.NotifyReplySent(r, reply);
-                        }
-                        finally { updateGate.Release(); }
-                        return;
-                    }
-                    else if (!Session.BinaryMatched && r.Operation is not ("status" or "maintenance.status" or "cancel"))
-                        reply = Reply.Failure(r.Id, "binary_mismatch", "Synchronize the agent with the controller executable before starting support.");
-                    else if (r.Operation == "ui.input.open" && !Guid.TryParse(r.Id, out _))
-                        reply = Reply.Failure(r.Id, "invalid_id", "Request id must be a UUID.");
-                    else if (r.Operation == "ui.input.open")
-                    {
-                        // The controller keeps this authenticated stream open for
-                        // ordered mouse/keyboard requests. Tie its lifetime to the
-                        // support grant so revocation closes the stream and releases
-                        // any native input that may still be held.
-                        if (!persistentInput)
-                        {
-                            persistentInput = true;
-                            persistentInputGrant = grant.Register(timeout.Cancel);
-                        }
-                        timeout.CancelAfter(TimeSpan.FromHours(12));
-                        reply = Reply.Success(r.Id, new { ready = true });
-                    }
-                    else if (r.Operation == "security.stage")
-                    {
-                        await updateGate.WaitAsync(timeout.Token);
-                        try { reply = Reply.Success(r.Id, await StageSecurityAsync(r.Args, timeout.Token)); }
-                        finally { updateGate.Release(); }
-                    }
-                    else if (r.Operation == "security.status")
-                        reply = Reply.Success(r.Id, new { securityId = InternetSettings.Load(securityRoot)?.SecurityId ?? "", fingerprint = Fingerprint, computer = Environment.MachineName });
-                    else if (r.Operation is "security.commit" or "security.release")
-                    {
-                        var currentSecurity = InternetSettings.Load(securityRoot);
-                        if (currentSecurity?.SecurityId.Length is not > 0 || currentSecurity.SecurityId != r.Args.Str("securityId"))
-                            reply = Reply.Failure(r.Id, "security_identity_mismatch", "The requested security profile is not active.");
-                        else if (r.Operation == "security.commit")
-                            reply = Reply.Success(r.Id, new { securityId = currentSecurity.SecurityId, protectedAccess = true });
-                        else
-                        {
-                            await Wire.WriteAsync(tls, Reply.Success(r.Id, new { released = true }), timeout.Token);
-                            lock (authLock)
-                            {
-                                tokenHash = ""; controllerBinaryHash = ""; grantLifetime.Cancel(); grantLifetime = new();
-                                foreach (var job in running.Values) job.Cancel(); requests.Clear();
-                                Operations.Maintenance.End(); updates.ResetControllerSynchronization();
-                                session.ResetForPairing(); Pairing.OpenPrivate(Internet!.AuthenticationSecret);
-                            }
-                            return;
-                        }
-                    }
-                    else if (r.Operation == "screen.stream") { using var streamGrant = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, grant); await StreamAsync(tls, r, streamGrant.Token); return; }
-                    else if (r.Operation == "cancel") { if (running.TryGetValue(r.Args.Str("id"), out var job)) job.Cancel(); reply = Reply.Success(r.Id, new { cancellationRequested = true }); }
-                    else if (!Guid.TryParse(r.Id, out _)) reply = Reply.Failure(r.Id, "invalid_id", "Request id must be a UUID.");
-                    else if (r.Operation is "screenshot" or "monitors" or "status" or "file.info" or "file.read" or "files" or "processes" or "process.info" or "system" or "network" or "services" or "events" or "history" or "windows" or "ui.inspect" or "upload.chunk" or "upload.status" or "ui.input") reply = await ExecuteAsync(r, grant);
-                    else if (requests.Count >= 2048 && !requests.ContainsKey(r.Id)) reply = Reply.Failure(r.Id, "session_limit", "Restart the agent to clear its 2048-mutation retry cache.");
                     else
                     {
-                        string signature = Safety.Hash(r.Operation + r.Args.GetRawText());
-                        var entry = requests.GetOrAdd(r.Id, _ => (signature, new Lazy<Task<Reply>>(() => ExecuteAsync(r, grant))));
-                        reply = entry.Signature == signature ? await entry.Job.Value : Reply.Failure(r.Id, "id_conflict", "Request id already used with different arguments.");
+                        bool authorized; CancellationToken grant; lock (authLock) { authorized = tokenHash.Length != 0 && Safety.Equal(tokenHash, Safety.Hash(r.Token ?? "")); grant = grantLifetime.Token; }
+                        if (authorized && !PairingExchange.ValidHash(r.BinarySha256)) authorized = false;
+                        if (authorized && Volatile.Read(ref terminating) != 0) authorized = false;
+                        if (authorized && !Safety.Equal(controllerBinaryHash, r.BinarySha256!.ToUpperInvariant()))
+                        {
+                            await updateGate.WaitAsync(timeout.Token);
+                            try
+                            {
+                                if (Volatile.Read(ref terminating) != 0 || updates.PendingExitPlan != null) authorized = false;
+                                else
+                                {
+                                    lock (authLock)
+                                    {
+                                        controllerBinaryHash = r.BinarySha256!.ToUpperInvariant();
+                                        updates.ResetControllerSynchronization();
+                                        session.SetBinaryMatched(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
+                                    }
+                                    Native.ReleaseAllInput();
+                                    foreach (var job in running.Values) job.Cancel();
+                                }
+                            }
+                            finally { updateGate.Release(); }
+                        }
+                        bool resumePending = resumed != null && !Volatile.Read(ref resumeAccepted);
+                        if (resumePending && resumed!.ExpiresUtc <= DateTimeOffset.UtcNow) { session.End(); authorized = false; }
+                        if (authorized && !resumePending && r.Operation != "session.disconnect") session.Observe();
+                        if (!authorized || session.ShouldExit) reply = Reply.Failure(r.Id, "access_denied", "This support session is not authorized or has ended.");
+                        else if (resumePending && r.Operation is not ("update.open" or "update.resume" or "session.end" or "revoke"))
+                            reply = Reply.Failure(r.Id, "resume_required", "Present the bounded update reconnect ticket before resuming support.");
+                        else if (r.Operation == "session.heartbeat")
+                        {
+                            session.Observe();
+                            reply = Reply.Success(r.Id, new { session = Session, agentBinarySha256 = ExecutableIdentity.Sha256, controllerBinarySha256 = controllerBinaryHash, binaryMatched = Session.BinaryMatched, processId = Environment.ProcessId, maintenance = Operations.Maintenance.Status });
+                        }
+                        else if (r.Operation == "session.disconnect") { Native.ReleaseAllInput(); session.Disconnect(); reply = Reply.Success(r.Id, new { session = Session }); }
+                        else if (r.Operation == "update.resume")
+                        {
+                            if (resumed == null || resumed.ExpiresUtc <= DateTimeOffset.UtcNow ||
+                                !Safety.Equal(resumed.TicketHash, Safety.Hash(r.Args.Str("ticket"))))
+                                reply = Reply.Failure(r.Id, "resume_denied", "Update reconnect authorization is invalid or expired.");
+                            else
+                            {
+                                Volatile.Write(ref resumeAccepted, true); session.Observe();
+                                reply = Reply.Success(r.Id, new { resumed = true, agentBinarySha256 = ExecutableIdentity.Sha256, binaryMatched = Session.BinaryMatched });
+                            }
+                        }
+                        else if (r.Operation is "session.end" or "revoke")
+                        {
+                            // Keep this socket alive until the controller knows whether
+                            // an armed replacement was safely cancelled.
+                            if (Interlocked.CompareExchange(ref terminating, 1, 0) == 2) return;
+                            session.End(); Native.ReleaseAllInput();
+                            foreach (var job in running.Values) job.Cancel();
+                            await updateGate.WaitAsync(timeout.Token);
+                            try
+                            {
+                                using var endDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(35));
+                                await updates.CancelActiveAsync(endDeadline.Token);
+                                await Wire.WriteAsync(tls, Reply.Success(r.Id, new { ended = true }), timeout.Token);
+                                Revoke(); Volatile.Write(ref terminating, 2); TerminationRequested?.Invoke(AgentStopReason.SupportEnded);
+                            }
+                            finally { updateGate.Release(); }
+                            return;
+                        }
+                        else if (r.Operation == "update.open" && !Guid.TryParse(r.Id, out _))
+                            reply = Reply.Failure(r.Id, "invalid_id", "Request id must be a UUID.");
+                        else if (r.Operation == "update.open")
+                        {
+                            // The controller keeps this authenticated stream open
+                            // for the ordered update transfer. Tie its lifetime to
+                            // the support grant and extend the normal short RPC
+                            // timeout while chunks are being acknowledged.
+                            if (!persistentUpdate)
+                            {
+                                persistentUpdate = true;
+                                persistentUpdateGrant = grant.Register(timeout.Cancel);
+                            }
+                            timeout.CancelAfter(TimeSpan.FromHours(12));
+                            reply = Reply.Success(r.Id, new { ready = true });
+                        }
+                        else if (updates.IsOperation(r.Operation))
+                        {
+                            await updateGate.WaitAsync(timeout.Token);
+                            try
+                            {
+                                if (Volatile.Read(ref terminating) != 0) reply = Reply.Failure(r.Id, "session_ended", "The support session is ending.");
+                                else
+                                {
+                                    using var updateDeadline = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, grant);
+                                    updateDeadline.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(r.TimeoutSeconds, 1, 120)));
+                                    reply = await updates.DispatchAsync(r, updateDeadline.Token);
+                                    if (r.Operation == "update.confirm" && reply.Ok)
+                                    {
+                                        session.SetBinaryMatched(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
+                                        if (Session.BinaryMatched) { resumeStore.Clear(); resumed = null; }
+                                    }
+                                    if (r.Operation == "update.cancel" && reply.Ok) { resumeStore.Clear(); resumed = null; }
+                                }
+                                try
+                                {
+                                    await Wire.WriteAsync(tls, reply, timeout.Token);
+                                }
+                                catch when (r.Operation == "update.commit" && reply.Ok)
+                                {
+                                    resumeStore.Clear(); resumed = null; resumeAccepted = false;
+                                    using var abortDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(35));
+                                    try { await updates.CancelActiveAsync(abortDeadline.Token); }
+                                    catch (Exception ex)
+                                    {
+                                        Interlocked.CompareExchange(ref terminating, 1, 0); session.End();
+                                        Status?.Invoke("Update reply failed; retrying protected cancellation: " + ex.Message);
+                                    }
+                                    throw;
+                                }
+                                updates.NotifyReplySent(r, reply);
+                            }
+                            finally { updateGate.Release(); }
+                            if (persistentUpdate) { r = await Wire.ReadAsync<Request>(tls, timeout.Token); continue; }
+                            return;
+                        }
+                        else if (!Session.BinaryMatched && r.Operation is not ("status" or "maintenance.status" or "cancel"))
+                            reply = Reply.Failure(r.Id, "binary_mismatch", "Synchronize the agent with the controller executable before starting support.");
+                        else if (r.Operation == "ui.input.open" && !Guid.TryParse(r.Id, out _))
+                            reply = Reply.Failure(r.Id, "invalid_id", "Request id must be a UUID.");
+                        else if (r.Operation == "ui.input.open")
+                        {
+                            // The controller keeps this authenticated stream open for
+                            // ordered mouse/keyboard requests. Tie its lifetime to the
+                            // support grant so revocation closes the stream and releases
+                            // any native input that may still be held.
+                            if (!persistentInput)
+                            {
+                                persistentInput = true;
+                                persistentInputGrant = grant.Register(timeout.Cancel);
+                            }
+                            timeout.CancelAfter(TimeSpan.FromHours(12));
+                            reply = Reply.Success(r.Id, new { ready = true });
+                        }
+                        else if (r.Operation == "security.stage")
+                        {
+                            await updateGate.WaitAsync(timeout.Token);
+                            try { reply = Reply.Success(r.Id, await StageSecurityAsync(r.Args, timeout.Token)); }
+                            finally { updateGate.Release(); }
+                        }
+                        else if (r.Operation == "security.status")
+                            reply = Reply.Success(r.Id, new { securityId = InternetSettings.Load(securityRoot)?.SecurityId ?? "", fingerprint = Fingerprint, computer = Environment.MachineName });
+                        else if (r.Operation is "security.commit" or "security.release")
+                        {
+                            var currentSecurity = InternetSettings.Load(securityRoot);
+                            if (currentSecurity?.SecurityId.Length is not > 0 || currentSecurity.SecurityId != r.Args.Str("securityId"))
+                                reply = Reply.Failure(r.Id, "security_identity_mismatch", "The requested security profile is not active.");
+                            else if (r.Operation == "security.commit")
+                                reply = Reply.Success(r.Id, new { securityId = currentSecurity.SecurityId, protectedAccess = true });
+                            else
+                            {
+                                await Wire.WriteAsync(tls, Reply.Success(r.Id, new { released = true }), timeout.Token);
+                                lock (authLock)
+                                {
+                                    tokenHash = ""; controllerBinaryHash = ""; grantLifetime.Cancel(); grantLifetime = new();
+                                    foreach (var job in running.Values) job.Cancel(); requests.Clear();
+                                    Operations.Maintenance.End(); updates.ResetControllerSynchronization();
+                                    session.ResetForPairing(); Pairing.OpenPrivate(Internet!.AuthenticationSecret);
+                                }
+                                return;
+                            }
+                        }
+                        else if (r.Operation == "screen.stream") { using var streamGrant = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, grant); await StreamAsync(tls, r, streamGrant.Token); return; }
+                        else if (r.Operation == "cancel") { if (running.TryGetValue(r.Args.Str("id"), out var job)) job.Cancel(); reply = Reply.Success(r.Id, new { cancellationRequested = true }); }
+                        else if (!Guid.TryParse(r.Id, out _)) reply = Reply.Failure(r.Id, "invalid_id", "Request id must be a UUID.");
+                        else if (r.Operation is "screenshot" or "monitors" or "status" or "file.info" or "file.read" or "files" or "processes" or "process.info" or "system" or "network" or "services" or "events" or "history" or "windows" or "ui.inspect" or "upload.chunk" or "upload.status" or "ui.input") reply = await ExecuteAsync(r, grant);
+                        else if (requests.Count >= 2048 && !requests.ContainsKey(r.Id)) reply = Reply.Failure(r.Id, "session_limit", "Restart the agent to clear its 2048-mutation retry cache.");
+                        else
+                        {
+                            string signature = Safety.Hash(r.Operation + r.Args.GetRawText());
+                            var entry = requests.GetOrAdd(r.Id, _ => (signature, new Lazy<Task<Reply>>(() => ExecuteAsync(r, grant))));
+                            reply = entry.Signature == signature ? await entry.Job.Value : Reply.Failure(r.Id, "id_conflict", "Request id already used with different arguments.");
+                        }
                     }
+                    await Wire.WriteAsync(tls, reply, timeout.Token);
+                    if (r.Operation == "session.disconnect" || (!persistentInput && !persistentUpdate)) return;
+                    r = await Wire.ReadAsync<Request>(tls, timeout.Token);
                 }
-                await Wire.WriteAsync(tls, reply, timeout.Token);
             }
             catch (OperationCanceledException) { }
             catch (Exception ex) { Status?.Invoke("TLS/session error: " + ex.GetType().Name + ": " + ex.Message); }
             finally
             {
                 persistentInputGrant.Dispose();
+                persistentUpdateGrant.Dispose();
                 if (persistentInput) Native.ReleaseAllInput();
                 slots.Release();
             }
@@ -613,28 +638,32 @@ public sealed partial class AgentServer : IDisposable
 
 public sealed class RemoteClient
 {
-    private readonly Func<Connection, CancellationToken, Task<Stream>> inputTransportFactory;
+    private readonly Func<Connection, CancellationToken, Task<Stream>> transportFactory;
     private readonly SemaphoreSlim inputGate = new(1, 1);
-    private InputChannel? inputChannel;
+    private readonly SemaphoreSlim updateGate = new(1, 1);
+    private PersistentChannel? inputChannel;
+    private PersistentChannel? updateChannel;
     public Connection Connection { get; private set; }
     public static string DefaultPath => Path.Combine(Vault.DefaultRoot, "controller.connection");
     public RemoteClient(Connection connection) : this(connection, OpenAuthenticatedTransportAsync) { }
-    internal RemoteClient(Connection connection, Func<Connection, CancellationToken, Task<Stream>> inputTransportFactory)
+    internal RemoteClient(Connection connection, Func<Connection, CancellationToken, Task<Stream>> transportFactory)
     {
         Connection = connection ?? throw new ArgumentNullException(nameof(connection));
-        this.inputTransportFactory = inputTransportFactory ?? throw new ArgumentNullException(nameof(inputTransportFactory));
+        this.transportFactory = transportFactory ?? throw new ArgumentNullException(nameof(transportFactory));
     }
     public static RemoteClient Load(string? path = null) => new(JsonSerializer.Deserialize<Connection>(Vault.Read(path ?? DefaultPath), Json.Options)!);
     public void Save(string? path = null) => Vault.Save(path ?? DefaultPath, JsonSerializer.SerializeToUtf8Bytes(Connection, Json.Options));
     public async Task PairAsync(string code, CancellationToken ct = default)
     {
         await CloseInputChannelAsync().ConfigureAwait(false);
+        await CloseUpdateChannelAsync().ConfigureAwait(false);
         Connection = await PairingTransport.PairAsync(Connection, code, ct).ConfigureAwait(false);
     }
     public async Task<JsonElement> HeartbeatAsync(CancellationToken ct = default) => Require(await CallAsync("session.heartbeat", ct: ct, seconds: 5).ConfigureAwait(false));
     public async Task EndSessionAsync(CancellationToken ct = default)
     {
         await CloseInputChannelAsync().ConfigureAwait(false);
+        await CloseUpdateChannelAsync().ConfigureAwait(false);
         // A user can press End while the agent is between updater processes.
         // Keep the old session token solely to terminate the resumed listener.
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -651,7 +680,11 @@ public sealed class RemoteClient
     public async Task DisconnectAsync(CancellationToken ct = default)
     {
         try { Require(await CallAsync("session.disconnect", ct: ct, seconds: 5).ConfigureAwait(false)); }
-        finally { await CloseInputChannelAsync().ConfigureAwait(false); }
+        finally
+        {
+            await CloseInputChannelAsync().ConfigureAwait(false);
+            await CloseUpdateChannelAsync().ConfigureAwait(false);
+        }
     }
     public async Task<Reply> CallAsync(string operation, object? args = null, CancellationToken ct = default, string? id = null, int seconds = 60)
     {
@@ -669,17 +702,17 @@ public sealed class RemoteClient
         await inputGate.WaitAsync(timeout.Token).ConfigureAwait(false);
         try
         {
-            InputChannel? channel = inputChannel;
+            PersistentChannel? channel = inputChannel;
             try
             {
                 if (channel == null)
                 {
-                    Stream transport = await inputTransportFactory(Connection, timeout.Token).ConfigureAwait(false);
-                    channel = new InputChannel(transport, Connection.Token, ExecutableIdentity.Sha256);
+                    Stream transport = await transportFactory(Connection, timeout.Token).ConfigureAwait(false);
+                    channel = new PersistentChannel(transport, Connection.Token, ExecutableIdentity.Sha256, "ui.input.open");
                     await channel.OpenAsync(timeout.Token, seconds).ConfigureAwait(false);
                     inputChannel = channel;
                 }
-                return await channel.CallAsync(args, timeout.Token, seconds).ConfigureAwait(false);
+                return await channel.CallAsync("ui.input", args, timeout.Token, seconds).ConfigureAwait(false);
             }
             catch
             {
@@ -693,12 +726,46 @@ public sealed class RemoteClient
         }
         finally { inputGate.Release(); }
     }
+
+    /// <summary>Send update operations over one authenticated connection for the transfer lifetime.</summary>
+    internal async Task<Reply> SendUpdateAsync(string operation, object? args = null, CancellationToken ct = default, int seconds = 60)
+    {
+        if (string.IsNullOrWhiteSpace(operation)) throw new ArgumentException("An update operation is required.", nameof(operation));
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(seconds, 1, 300)));
+        await updateGate.WaitAsync(timeout.Token).ConfigureAwait(false);
+        try
+        {
+            PersistentChannel? channel = updateChannel;
+            try
+            {
+                if (channel == null)
+                {
+                    Stream transport = await transportFactory(Connection, timeout.Token).ConfigureAwait(false);
+                    channel = new PersistentChannel(transport, Connection.Token, ExecutableIdentity.Sha256, "update.open");
+                    await channel.OpenAsync(timeout.Token, seconds).ConfigureAwait(false);
+                    updateChannel = channel;
+                }
+                return await channel.CallAsync(operation, args, timeout.Token, seconds).ConfigureAwait(false);
+            }
+            catch
+            {
+                if (channel != null && ReferenceEquals(updateChannel, channel)) updateChannel = null;
+                if (channel != null)
+                {
+                    try { await channel.DisposeAsync().ConfigureAwait(false); } catch { }
+                }
+                throw;
+            }
+        }
+        finally { updateGate.Release(); }
+    }
     private async Task CloseInputChannelAsync()
     {
         await inputGate.WaitAsync().ConfigureAwait(false);
         try
         {
-            InputChannel? channel = inputChannel;
+            PersistentChannel? channel = inputChannel;
             inputChannel = null;
             if (channel != null)
             {
@@ -706,6 +773,21 @@ public sealed class RemoteClient
             }
         }
         finally { inputGate.Release(); }
+    }
+
+    internal async Task CloseUpdateChannelAsync()
+    {
+        await updateGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            PersistentChannel? channel = updateChannel;
+            updateChannel = null;
+            if (channel != null)
+            {
+                try { await channel.DisposeAsync().ConfigureAwait(false); } catch { }
+            }
+        }
+        finally { updateGate.Release(); }
     }
     private static async Task<Stream> OpenAuthenticatedTransportAsync(Connection connection, CancellationToken ct)
     {
@@ -729,19 +811,20 @@ public sealed class RemoteClient
             throw;
         }
     }
-    private sealed class InputChannel(Stream stream, string token, string binarySha256) : IAsyncDisposable
+    private sealed class PersistentChannel(Stream stream, string token, string binarySha256, string openOperation) : IAsyncDisposable
     {
         private readonly Stream stream = stream;
         private readonly string token = token;
         private readonly string binarySha256 = binarySha256;
+        private readonly string openOperation = openOperation;
         private int disposed;
         public async Task OpenAsync(CancellationToken ct, int seconds)
         {
-            Reply reply = await SendAsync("ui.input.open", Json.Element(new { }), ct, seconds).ConfigureAwait(false);
+            Reply reply = await SendAsync(openOperation, Json.Element(new { }), ct, seconds).ConfigureAwait(false);
             RemoteClient.Require(reply);
         }
-        public async Task<Reply> CallAsync(object? args, CancellationToken ct, int seconds)
-            => await SendAsync("ui.input", args is JsonElement e ? e : Json.Element(args ?? new { }), ct, seconds).ConfigureAwait(false);
+        public async Task<Reply> CallAsync(string operation, object? args, CancellationToken ct, int seconds)
+            => await SendAsync(operation, args is JsonElement e ? e : Json.Element(args ?? new { }), ct, seconds).ConfigureAwait(false);
         private async Task<Reply> SendAsync(string operation, object? args, CancellationToken ct, int seconds)
         {
             ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
@@ -749,7 +832,7 @@ public sealed class RemoteClient
             await Wire.WriteAsync(stream, request, ct).ConfigureAwait(false);
             Reply reply = await Wire.ReadAsync<Reply>(stream, ct).ConfigureAwait(false);
             if (!string.Equals(reply.Id, request.Id, StringComparison.Ordinal))
-                throw new InvalidDataException("Input reply did not match its request.");
+                throw new InvalidDataException("Reply did not match its request.");
             return reply;
         }
         public async ValueTask DisposeAsync()

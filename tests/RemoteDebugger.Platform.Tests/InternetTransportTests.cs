@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -149,6 +151,89 @@ public sealed class InternetTransportTests
     }
 
     [Fact]
+    public async Task PersistentUpdateReusesOneAuthenticatedStreamAndPreservesRequestOrder()
+    {
+        var stream = new ScriptedInputStream();
+        int opens = 0;
+        var client = new RemoteClient(new Connection("127.0.0.1", 45832, new string('a', 64), "token"), (_, _) =>
+        {
+            opens++;
+            return Task.FromResult<Stream>(stream);
+        });
+
+        try
+        {
+            string transactionId = new string('b', 32);
+            Assert.True((await client.SendUpdateAsync("update.begin", new { transactionId }, seconds: 30)).Ok);
+            Assert.True((await client.SendUpdateAsync("update.chunk", new { transactionId, offset = 0L, data = "AQI=" }, seconds: 60)).Ok);
+            Assert.True((await client.SendUpdateAsync("update.stage", new { transactionId }, seconds: 60)).Ok);
+
+            Assert.Equal(1, opens);
+            Assert.Collection(stream.Requests,
+                open => Assert.Equal("update.open", open.Operation),
+                begin => { Assert.Equal("update.begin", begin.Operation); Assert.Equal(transactionId, begin.Args.Str("transactionId")); },
+                chunk => { Assert.Equal("update.chunk", chunk.Operation); Assert.Equal(0, chunk.Args.Long("offset")); },
+                stage => { Assert.Equal("update.stage", stage.Operation); Assert.Equal(transactionId, stage.Args.Str("transactionId")); });
+        }
+        finally { await client.CloseUpdateChannelAsync(); }
+    }
+
+    [Fact]
+    public async Task FailedUpdateTransportIsDiscardedBeforeTheNextRequestReopensIt()
+    {
+        var failed = new ScriptedInputStream { FailAfterRequests = 2 };
+        var recovered = new ScriptedInputStream();
+        int opens = 0;
+        var client = new RemoteClient(new Connection("127.0.0.1", 45832, new string('a', 64), "token"), (_, _) =>
+        {
+            opens++;
+            return Task.FromResult<Stream>(opens == 1 ? failed : recovered);
+        });
+
+        try
+        {
+            string transactionId = new string('c', 32);
+            await client.SendUpdateAsync("update.begin", new { transactionId }, seconds: 30);
+            await Assert.ThrowsAsync<IOException>(() => client.SendUpdateAsync("update.chunk", new { transactionId, offset = 0L, data = "AQI=" }, seconds: 60));
+            Assert.True((await client.SendUpdateAsync("update.chunk", new { transactionId, offset = 0L, data = "AQI=" }, seconds: 60)).Ok);
+
+            Assert.Equal(2, opens);
+            Assert.Collection(recovered.Requests,
+                open => Assert.Equal("update.open", open.Operation),
+                chunk => Assert.Equal("update.chunk", chunk.Operation));
+        }
+        finally { await client.CloseUpdateChannelAsync(); }
+    }
+
+    [Fact]
+    public async Task AgentKeepsPersistentUpdateChannelOpenForSubsequentRequests()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "RemoteDebugger-PersistentUpdate-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        AgentServer? server = null;
+        try
+        {
+            int port = ReserveTcpPort();
+            server = new AgentServer(root, port, loopbackOnly: true, enableInternet: false);
+            server.Start();
+            string code = server.Pairing.CurrentCode ?? throw new InvalidOperationException("Agent did not expose a pairing code.");
+            var paired = await PairingTransport.PairAsync(new Connection("127.0.0.1", port, server.Fingerprint, ""), code, CancellationToken.None);
+            var client = new RemoteClient(paired);
+            try
+            {
+                Assert.True((await client.SendUpdateAsync("update.open", seconds: 30)).Ok);
+                Assert.True((await client.SendUpdateAsync("status", seconds: 30)).Ok);
+            }
+            finally { await client.CloseUpdateChannelAsync(); }
+        }
+        finally
+        {
+            server?.Dispose();
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task FailedInputTransportIsDiscardedBeforeTheNextRequestReopensIt()
     {
         var failed = new ScriptedInputStream { FailAfterRequests = 2 };
@@ -190,6 +275,13 @@ public sealed class InternetTransportTests
                 : Task.FromResult(new WebSocketReceiveResult(0, ReceivedType, true));
         public override Task SendAsync(ArraySegment<byte> buffer, WebSocketMessageType messageType, bool endOfMessage, CancellationToken cancellationToken)
         { Sent.Add(buffer.ToArray()); return Task.CompletedTask; }
+    }
+
+    private static int ReserveTcpPort()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        return ((IPEndPoint)listener.LocalEndpoint).Port;
     }
 
     private sealed class ScriptedInputStream : Stream

@@ -392,76 +392,84 @@ internal static class AgentUpdateClient
         }
 
         string transactionId = controller.Sha256[..32].ToLowerInvariant();
-        var begin = RemoteClient.Require(await client.CallAsync("update.begin", new { transactionId, candidate = controller }, ct, seconds: 30));
-        long offset = begin.Long("offset");
-        if (offset < 0 || offset > controller.Size) throw new InvalidDataException("Agent returned an invalid update resume offset.");
-        progress?.Report(new("transferring", offset, controller.Size));
-        await using (var input = File.Open(controller.Path, FileMode.Open, FileAccess.Read, FileShare.Read))
+        try
         {
-            input.Position = offset;
-            byte[] buffer = new byte[512 * 1024];
-            while (offset < input.Length)
+            var begin = RemoteClient.Require(await client.SendUpdateAsync("update.begin", new { transactionId, candidate = controller }, ct, seconds: 30));
+            long offset = begin.Long("offset");
+            if (offset < 0 || offset > controller.Size) throw new InvalidDataException("Agent returned an invalid update resume offset.");
+            progress?.Report(new("transferring", offset, controller.Size));
+            await using (var input = File.Open(controller.Path, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
-                int count = await input.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, input.Length - offset)), ct);
-                if (count == 0) throw new EndOfStreamException("Controller executable changed while transferring.");
-                var result = RemoteClient.Require(await client.CallAsync("update.chunk", new { transactionId, offset, data = Convert.ToBase64String(buffer, 0, count) }, ct, seconds: 60));
-                long acknowledged = result.Long("offset");
-                if (acknowledged != offset + count)
-                    throw new InvalidDataException("Agent returned an invalid acknowledged update offset.");
-                offset = acknowledged;
                 input.Position = offset;
-                progress?.Report(new("transferring", offset, controller.Size));
+                byte[] buffer = new byte[512 * 1024];
+                while (offset < input.Length)
+                {
+                    int count = await input.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, input.Length - offset)), ct);
+                    if (count == 0) throw new EndOfStreamException("Controller executable changed while transferring.");
+                    var result = RemoteClient.Require(await client.SendUpdateAsync("update.chunk", new { transactionId, offset, data = Convert.ToBase64String(buffer, 0, count) }, ct, seconds: 60));
+                    long acknowledged = result.Long("offset");
+                    if (acknowledged != offset + count)
+                        throw new InvalidDataException("Agent returned an invalid acknowledged update offset.");
+                    offset = acknowledged;
+                    input.Position = offset;
+                    progress?.Report(new("transferring", offset, controller.Size));
+                }
             }
-        }
-        progress?.Report(new("verifying", controller.Size, controller.Size));
-        RemoteClient.Require(await client.CallAsync("update.stage", new { transactionId }, ct, seconds: 180));
-        var commit = RemoteClient.Require(await client.CallAsync("update.commit", new { transactionId }, ct, seconds: 60));
-        progress?.Report(new("restarting", controller.Size, controller.Size));
-        string ticket = commit.Str("reconnectTicket");
-        DateTimeOffset expires = commit.GetProperty("reconnectExpiresUtc").GetDateTimeOffset();
-        DateTimeOffset planned = commit.GetProperty("plannedDisconnectDeadlineUtc").GetDateTimeOffset();
+            progress?.Report(new("verifying", controller.Size, controller.Size));
+            RemoteClient.Require(await client.SendUpdateAsync("update.stage", new { transactionId }, ct, seconds: 180));
+            var commit = RemoteClient.Require(await client.SendUpdateAsync("update.commit", new { transactionId }, ct, seconds: 60));
+            await client.CloseUpdateChannelAsync().ConfigureAwait(false);
+            progress?.Report(new("restarting", controller.Size, controller.Size));
+            string ticket = commit.Str("reconnectTicket");
+            DateTimeOffset expires = commit.GetProperty("reconnectExpiresUtc").GetDateTimeOffset();
+            DateTimeOffset planned = commit.GetProperty("plannedDisconnectDeadlineUtc").GetDateTimeOffset();
 
-        JsonElement resumed = default;
-        Exception? lastError = null;
-        while (DateTimeOffset.UtcNow < expires)
-        {
-            ct.ThrowIfCancellationRequested();
-            try
+            JsonElement resumed = default;
+            Exception? lastError = null;
+            while (DateTimeOffset.UtcNow < expires)
             {
-                resumed = RemoteClient.Require(await client.CallAsync("update.resume", new { transactionId, ticket }, ct, seconds: 10));
-                break;
+                ct.ThrowIfCancellationRequested();
+                try
+                {
+                    resumed = RemoteClient.Require(await client.CallAsync("update.resume", new { transactionId, ticket }, ct, seconds: 10));
+                    break;
+                }
+                catch (Exception ex) when (ex is IOException or System.Net.Sockets.SocketException or InvalidOperationException or OperationCanceledException && !ct.IsCancellationRequested)
+                {
+                    lastError = ex;
+                    await Task.Delay(750, ct);
+                }
             }
-            catch (Exception ex) when (ex is IOException or System.Net.Sockets.SocketException or InvalidOperationException or OperationCanceledException && !ct.IsCancellationRequested)
-            {
-                lastError = ex;
-                await Task.Delay(750, ct);
-            }
-        }
-        if (resumed.ValueKind == JsonValueKind.Undefined)
-            throw new IOException("Updated agent did not reconnect before the authenticated ticket expired.", lastError);
+            if (resumed.ValueKind == JsonValueKind.Undefined)
+                throw new IOException("Updated agent did not reconnect before the authenticated ticket expired.", lastError);
 
-        JsonElement health = default;
-        while (DateTimeOffset.UtcNow < expires)
-        {
-            ct.ThrowIfCancellationRequested();
-            var candidateHealth = RemoteClient.Require(await client.CallAsync("update.health", new { transactionId, ticket }, ct, seconds: 45));
-            if (candidateHealth.TryGetProperty("ready", out var ready) && ready.GetBoolean())
+            JsonElement health = default;
+            while (DateTimeOffset.UtcNow < expires)
             {
-                health = candidateHealth;
-                break;
+                ct.ThrowIfCancellationRequested();
+                var candidateHealth = RemoteClient.Require(await client.CallAsync("update.health", new { transactionId, ticket }, ct, seconds: 45));
+                if (candidateHealth.TryGetProperty("ready", out var ready) && ready.GetBoolean())
+                {
+                    health = candidateHealth;
+                    break;
+                }
+                await Task.Delay(500, ct);
             }
-            await Task.Delay(500, ct);
+            if (health.ValueKind == JsonValueKind.Undefined)
+                throw new IOException("Updated agent did not complete startup health before the authenticated reconnect ticket expired.");
+            if (!UpdatePolicy.FixedHexEquals(health.Str("actualRunningSha256"), controller.Sha256))
+                throw new InvalidOperationException("Agent rolled back or relaunched bytes that differ from the controller executable.");
+            var finalSnapshot = RemoteClient.Require(await client.CallAsync("update.snapshot", ct: ct, seconds: 30));
+            agent = finalSnapshot.GetProperty("agent").Deserialize<ExecutableSnapshot>(Json.Options) ?? throw new InvalidDataException("Updated agent did not return an executable snapshot.");
+            UpdatePolicy.RequireExactControllerBinary(controller, agent);
+            RemoteClient.Require(await client.CallAsync("update.confirm", new { sha256 = controller.Sha256, transactionId, ticket }, ct, seconds: 30));
+            progress?.Report(new("complete", controller.Size, controller.Size));
+            return new(false, true, controller, agent, planned, "Agent replaced, relaunched, health-checked, and confirmed on the controller's exact executable bytes.");
         }
-        if (health.ValueKind == JsonValueKind.Undefined)
-            throw new IOException("Updated agent did not complete startup health before the authenticated reconnect ticket expired.");
-        if (!UpdatePolicy.FixedHexEquals(health.Str("actualRunningSha256"), controller.Sha256))
-            throw new InvalidOperationException("Agent rolled back or relaunched bytes that differ from the controller executable.");
-        var finalSnapshot = RemoteClient.Require(await client.CallAsync("update.snapshot", ct: ct, seconds: 30));
-        agent = finalSnapshot.GetProperty("agent").Deserialize<ExecutableSnapshot>(Json.Options) ?? throw new InvalidDataException("Updated agent did not return an executable snapshot.");
-        UpdatePolicy.RequireExactControllerBinary(controller, agent);
-        RemoteClient.Require(await client.CallAsync("update.confirm", new { sha256 = controller.Sha256, transactionId, ticket }, ct, seconds: 30));
-        progress?.Report(new("complete", controller.Size, controller.Size));
-        return new(false, true, controller, agent, planned, "Agent replaced, relaunched, health-checked, and confirmed on the controller's exact executable bytes.");
+        finally
+        {
+            await client.CloseUpdateChannelAsync().ConfigureAwait(false);
+        }
     }
 
     private static bool IsExact(ExecutableSnapshot left, ExecutableSnapshot right) =>

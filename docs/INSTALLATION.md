@@ -85,7 +85,8 @@ SHA-256 of the executable actually running on the controller, not just a display
 version label. Live screen/input and normal support operations require matching
 agent and controller executable hashes.
 
-If those hashes differ, the controller transfers its signed executable, the agent
+If those hashes differ, the controller transfers its signed executable over one
+authenticated resumable channel, acknowledging each 512 KiB chunk. The agent
 stages and verifies it, and the broker performs a recoverable replacement. Both
 upgrades and downgrades are intentional: the controller determines the required
 version. A different build with the same version label also requires synchronization.
