@@ -1,4 +1,4 @@
-param([switch]$IncludeLab, [switch]$Sign, [string]$Version = '0.4.0')
+param([switch]$IncludeLab, [switch]$Sign, [string]$Version = '0.4.1')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot
 $artifactRoot = Join-Path $projectRoot 'artifacts'
