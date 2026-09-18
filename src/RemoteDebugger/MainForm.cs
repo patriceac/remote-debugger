@@ -113,6 +113,7 @@ public sealed partial class MainForm : Forms.Form
     private DateTimeOffset? streamStartedUtc;
     private int streamFrames;
     private long streamBytes;
+    private string streamCodec = "";
 
     // Processes and files.
     private readonly RememberedListView processList = new() { Name = "processList", Dock = Forms.DockStyle.Fill, View = Forms.View.Details, FullRowSelect = true, HideSelection = false, MultiSelect = false, BorderStyle = Forms.BorderStyle.None, BackColor = Surface };
@@ -1215,7 +1216,7 @@ public sealed partial class MainForm : Forms.Form
         RemoteClient target = client;
         int generation = sessionGeneration;
         var lifetime = new CancellationTokenSource();
-        liveStream = lifetime; streamStartedUtc = DateTimeOffset.UtcNow; streamFrames = 0; streamBytes = 0; pauseViewing.SetText(() => UiText.Pause); streamOverlay.Visible = true; streamOverlay.SetText(() => UiText.ConnectingStream);
+        liveStream = lifetime; streamStartedUtc = DateTimeOffset.UtcNow; streamFrames = 0; streamBytes = 0; streamCodec = ""; pauseViewing.SetText(() => UiText.Pause); streamOverlay.Visible = true; streamOverlay.SetText(() => UiText.ConnectingStream);
         try
         {
             while (!lifetime.IsCancellationRequested && generation == sessionGeneration && ReferenceEquals(target, client))
@@ -1223,11 +1224,11 @@ public sealed partial class MainForm : Forms.Form
                 if (!heartbeatHealthy) { await Task.Delay(250, lifetime.Token); continue; }
                 try
                 {
-                    await target.StreamAsync(frame =>
+                    await target.StreamAdaptiveAsync(frame =>
                     {
                         if (!lifetime.IsCancellationRequested && ReferenceEquals(liveStream, lifetime) && generation == sessionGeneration && ReferenceEquals(target, client) && supportSession) Present(frame);
                         return Task.CompletedTask;
-                    }, StreamPolicy.MaximumFps, MonitorValue(), 300, lifetime.Token);
+                    }, (codec, reason) => SetStreamCodec(codec, reason), StreamPolicy.MaximumFps, MonitorValue(), 300, lifetime.Token);
                 }
                 catch (Exception ex) when (!lifetime.IsCancellationRequested && ex is IOException or System.Net.Sockets.SocketException or OperationCanceledException)
                 {
@@ -1291,6 +1292,39 @@ public sealed partial class MainForm : Forms.Form
             streamFrames++; streamBytes += frame.Data.Length; double seconds = Math.Max(0.001, (DateTimeOffset.UtcNow - started).TotalSeconds); double fps = streamFrames / seconds; double mbps = streamBytes * 8 / seconds / 1_000_000d; streamStatus.SetText(() => UiText.Format(UiText.StreamMetrics, fps, mbps, frame.CaptureEncodeMs)); SetFooterDetail(() => streamStatus.Text); RefreshFooter();
         }
         else streamStatus.SetText(() => UiText.Format(UiText.CaptureMetrics, frame.CapturedUtc.ToLocalTime(), frame.CaptureEncodeMs));
+    }
+
+    private void SetStreamCodec(string codec, string? reason)
+    {
+        string label = codec.Equals("h264", StringComparison.OrdinalIgnoreCase) ? "H.264" : string.IsNullOrWhiteSpace(reason) ? "JPEG" : "JPEG fallback";
+        PostUi(() =>
+        {
+            if (liveStream == null) return;
+            streamCodec = label;
+            if (streamFrames == 0) streamStatus.SetText(label);
+            SetFooterDetail(() => streamStatus.Text); RefreshFooter();
+        });
+    }
+
+    private void Present(DecodedStreamFrame frame)
+    {
+        if (InvokeRequired)
+        {
+            if (IsDisposed || !IsHandleCreated) { frame.Dispose(); return; }
+            PostUi(() => Present(frame));
+            return;
+        }
+        try
+        {
+            geometry = frame.Geometry;
+            var image = frame.TakeImage(); var previous = screen.Image; screen.Image = image; previous?.Dispose(); screen.Refresh(); liveFrameFresh = true; liveBadge.Visible = true; streamOverlay.Visible = false; RefreshInputStatus();
+            if (string.IsNullOrEmpty(streamCodec)) streamCodec = frame.Codec.Equals("h264", StringComparison.OrdinalIgnoreCase) ? "H.264" : "JPEG";
+            if (liveStream != null && streamStartedUtc is { } started)
+            {
+                streamFrames++; streamBytes += frame.Bytes; double seconds = Math.Max(0.001, (DateTimeOffset.UtcNow - started).TotalSeconds); double fps = streamFrames / seconds; double mbps = streamBytes * 8 / seconds / 1_000_000d; streamStatus.SetText(() => UiText.Format(UiText.StreamMetrics, streamCodec, fps, mbps, frame.CaptureEncodeMs)); SetFooterDetail(() => streamStatus.Text); RefreshFooter();
+            }
+        }
+        finally { frame.Dispose(); }
     }
 
     private void QueueMouse(string kind, Forms.MouseEventArgs e)

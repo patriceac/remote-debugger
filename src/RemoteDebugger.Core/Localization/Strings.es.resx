@@ -616,7 +616,7 @@
     <value>Flujo interrumpido · pulse Reanudar</value>
   </data>
   <data name="StreamMetrics" xml:space="preserve">
-    <value>{0:F1} fps · {1:F1} Mbit/s · captura {2:F0} ms</value>
+    <value>{0} · {1:F1} fps · {2:F1} Mbit/s · captura {3:F0} ms</value>
   </data>
   <data name="StreamStoppedResume" xml:space="preserve">
     <value>Flujo detenido · pulse Reanudar</value>

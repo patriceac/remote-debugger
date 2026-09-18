@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Drawing;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Security;
@@ -578,6 +579,7 @@ public sealed partial class AgentServer : IDisposable
     private async Task StreamAsync(SslStream tls, Request request, CancellationToken ct)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct); cts.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(request.TimeoutSeconds, 1, 300))); running[request.Id] = cts;
+        if (request.Args.Str("codec") == "auto") { await StreamAdaptiveAsync(tls, request, cts.Token); return; }
         int fps = StreamPolicy.ClampFps(request.Args.Int("fps", StreamPolicy.MaximumFps)); long sequence = 0; string? previousFingerprint = null;
         Status?.Invoke("Live screen stream active (encrypted). Target " + fps + " fps.");
         try
@@ -606,6 +608,137 @@ public sealed partial class AgentServer : IDisposable
         catch (Exception ex) when (ex is not (IOException or OperationCanceledException)) { await Wire.WriteAsync(tls, Reply.Failure(request.Id, "stream_failed", ex.Message), ct); }
         finally { running.TryRemove(request.Id, out _); Native.ReleaseAllInput(); Status?.Invoke("Live screen stream ended."); }
     }
+    private async Task StreamAdaptiveAsync(SslStream tls, Request request, CancellationToken ct)
+    {
+        int fps = StreamPolicy.ClampFps(request.Args.Int("fps", StreamPolicy.MaximumFps));
+        int monitor = request.Args.Int("monitor"); int maxWidth = request.Args.Int("maxWidth", 1920); int quality = request.Args.Int("quality", 65);
+        bool controllerCanH264 = !request.Args.TryGetProperty("h264", out var h264Support) || h264Support.ValueKind != JsonValueKind.False;
+        long sequence = 0; string? previousFingerprint = null; var state = new AdaptiveStreamState();
+        try
+        {
+            BitmapCaptureResult firstResult;
+            try { firstResult = DesktopCapture.CaptureBitmap(monitor, previousFingerprint: null); }
+            catch (Exception ex) { await Wire.WriteAsync(tls, Reply.Failure(request.Id, "stream_failed", ex.Message), ct); return; }
+            previousFingerprint = firstResult.Fingerprint;
+            if (firstResult.Capture is not { } first)
+            {
+                await Wire.WriteAsync(tls, Reply.Failure(request.Id, "stream_failed", "Desktop capture returned no frame."), ct); return;
+            }
+
+            using (first)
+            {
+                if (controllerCanH264)
+                {
+                    try
+                    {
+                        var size = H264Dimensions(first, maxWidth);
+                        state.Encoder = new H264Encoder(first.Bitmap.Width, first.Bitmap.Height, size.Width, size.Height, fps, quality); state.Codec = "h264";
+                    }
+                    catch (Exception ex) { state.FallbackReason = "x264 unavailable: " + ex.Message; }
+                }
+                var start = Reply.Success(request.Id, new { type = "stream_started", codec = state.Codec, reason = state.FallbackReason, geometry = first.Geometry });
+                await Wire.WriteAsync(tls, start, ct);
+                Status?.Invoke($"Live screen stream active ({state.Codec}). Target {fps} fps.");
+                await SendAdaptiveFrameAsync(tls, first, state, sequence, fps, maxWidth, quality, ct);
+                sequence++;
+                double firstWait = 1000.0 / fps; if (firstWait > 0) await Task.Delay(TimeSpan.FromMilliseconds(firstWait), ct);
+            }
+
+            while (!ct.IsCancellationRequested)
+            {
+                var started = System.Diagnostics.Stopwatch.StartNew();
+                var capture = DesktopCapture.CaptureBitmap(monitor, previousFingerprint);
+                previousFingerprint = capture.Fingerprint;
+                if (capture.Capture is not { } current)
+                {
+                    double unchangedWait = 1000.0 / fps - started.Elapsed.TotalMilliseconds; if (unchangedWait > 0) await Task.Delay(TimeSpan.FromMilliseconds(unchangedWait), ct);
+                    continue;
+                }
+                using (current)
+                {
+                    await SendAdaptiveFrameAsync(tls, current, state, sequence, fps, maxWidth, quality, ct);
+                    sequence++;
+                }
+                double wait = 1000.0 / fps - started.Elapsed.TotalMilliseconds; if (wait > 0) await Task.Delay(TimeSpan.FromMilliseconds(wait), ct);
+            }
+        }
+        catch (Exception ex) when (ex is not (IOException or OperationCanceledException))
+        {
+            try
+            {
+                byte[] payload = JsonSerializer.SerializeToUtf8Bytes(new { type = "stream_error", error = "stream_failed", message = ex.Message }, Json.Options);
+                await Wire.WriteStreamPacketAsync(tls, new StreamPacket(StreamPacketKind.Control, -1, DateTimeOffset.UtcNow, 0, payload), ct);
+            }
+            catch { }
+        }
+        finally
+        {
+            state.Encoder?.Dispose(); running.TryRemove(request.Id, out _); Native.ReleaseAllInput(); Status?.Invoke("Live screen stream ended.");
+        }
+    }
+
+    private sealed class AdaptiveStreamState
+    {
+        public H264Encoder? Encoder;
+        public string Codec = "jpeg";
+        public string? FallbackReason;
+        public int SlowFrames;
+    }
+
+    private async Task SendAdaptiveFrameAsync(SslStream tls, CapturedDesktop capture, AdaptiveStreamState state, long sequence, int fps, int maxWidth, int quality, CancellationToken ct)
+    {
+        byte[]? bytes = null; StreamPacketKind kind = StreamPacketKind.Jpeg; double encodeMs = capture.CopyMs;
+        if (state.Codec == "h264" && state.Encoder != null)
+        {
+            try
+            {
+                var encoded = state.Encoder.Encode(capture.Bitmap, sequence); encodeMs = capture.CopyMs + encoded.EncodeMs;
+                if (StreamPolicy.IsH264EncodeSlow(encoded.EncodeMs, fps)) state.SlowFrames++; else state.SlowFrames = 0;
+                if (StreamPolicy.ShouldFallbackToJpeg(state.SlowFrames))
+                {
+                    state.FallbackReason = $"x264 encode exceeded {StreamPolicy.H264EncodeBudgetMs(fps):F0} ms for {StreamPolicy.H264SlowFrameCount} frames";
+                    state.Encoder.Dispose(); state.Encoder = null; state.Codec = "jpeg"; state.SlowFrames = 0;
+                    await SendCodecChangeAsync(tls, state.Codec, state.FallbackReason, ct);
+                }
+                else { kind = StreamPacketKind.H264; bytes = encoded.Data; }
+            }
+            catch (Exception ex)
+            {
+                state.FallbackReason = "x264 encode failed: " + ex.Message;
+                state.Encoder?.Dispose(); state.Encoder = null; state.Codec = "jpeg"; state.SlowFrames = 0;
+                await SendCodecChangeAsync(tls, state.Codec, state.FallbackReason, ct);
+            }
+        }
+        if (state.Codec == "jpeg")
+        {
+            var encoded = DesktopCapture.EncodeJpeg(capture, maxWidth, quality, sequence); bytes = encoded.Bytes; encodeMs = encoded.Frame.CaptureEncodeMs; kind = StreamPacketKind.Jpeg;
+        }
+        if (bytes is null) throw new InvalidOperationException("Adaptive stream produced no frame.");
+        await Wire.WriteStreamPacketAsync(tls, new StreamPacket(kind, sequence, capture.CapturedUtc, encodeMs, bytes), ct);
+        using var ackTimeout = CancellationTokenSource.CreateLinkedTokenSource(ct); ackTimeout.CancelAfter(5000);
+        var ack = await Wire.ReadAsync<JsonElement>(tls, ackTimeout.Token);
+        if (ack.Long("sequence", -1) != sequence) throw new InvalidDataException("Invalid stream acknowledgement.");
+        session.Observe();
+    }
+
+    private async Task SendCodecChangeAsync(SslStream tls, string codec, string reason, CancellationToken ct)
+    {
+        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(new { type = "codec_changed", codec, reason }, Json.Options);
+        await Wire.WriteStreamPacketAsync(tls, new StreamPacket(StreamPacketKind.Control, -1, DateTimeOffset.UtcNow, 0, payload), ct);
+        using var ackTimeout = CancellationTokenSource.CreateLinkedTokenSource(ct); ackTimeout.CancelAfter(5000);
+        var ack = await Wire.ReadAsync<JsonElement>(tls, ackTimeout.Token);
+        if (ack.Long("sequence", -1) != -1) throw new InvalidDataException("Invalid codec change acknowledgement.");
+        session.Observe();
+    }
+
+    private static (int Width, int Height) H264Dimensions(CapturedDesktop capture, int maxWidth)
+    {
+        int width = maxWidth <= 0 ? capture.Bitmap.Width : Math.Min(capture.Bitmap.Width, Math.Clamp(maxWidth, 320, 3840));
+        width = Math.Max(2, width & ~1);
+        int height = Math.Max(2, (int)Math.Round(capture.Bitmap.Height * (double)width / capture.Bitmap.Width) & ~1);
+        return (width, height);
+    }
+
     private async Task<Reply> ExecuteAsync(Request r, CancellationToken grant)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(stop.Token, grant); cts.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(r.TimeoutSeconds, 1, 300)));
@@ -876,6 +1009,68 @@ public sealed class RemoteClient
     {
         await LatestFrameStream.RunAsync<ScreenFrame>(
             (publish, receiveToken) => ReceiveFramesAsync(publish, fps, monitor, seconds, receiveToken), present, ct);
+    }
+
+    internal async Task StreamAdaptiveAsync(Func<DecodedStreamFrame, Task> present, Action<string, string?>? codecChanged, int fps = StreamPolicy.MaximumFps, int monitor = 0, int seconds = 300, CancellationToken ct = default)
+    {
+        await LatestFrameStream.RunAsync<DecodedStreamFrame>(
+            (publish, receiveToken) => ReceiveAdaptiveFramesAsync(publish, codecChanged, fps, monitor, seconds, receiveToken), present, ct);
+    }
+
+    private async Task ReceiveAdaptiveFramesAsync(Action<DecodedStreamFrame> publish, Action<string, string?>? codecChanged, int fps, int monitor, int seconds, CancellationToken ct)
+    {
+        using var connecting = CancellationTokenSource.CreateLinkedTokenSource(ct); connecting.CancelAfter(TimeSpan.FromSeconds(30));
+        await using var transport = await ConnectionTransport.OpenAsync(Connection, connecting.Token);
+        using var tls = new SslStream(transport, true, (_, cert, _, _) => cert != null && Safety.Equal(Convert.ToHexString(SHA256.HashData(cert.GetRawCertData())), Connection.Fingerprint.ToUpperInvariant().Replace(":", "")));
+        await tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions { TargetHost = "RemoteDebugger", EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13 }, ct);
+        await Wire.WriteAsync(tls, new Request(Guid.NewGuid().ToString(), Connection.Token, "screen.stream", Json.Element(new { codec = "auto", h264 = FfmpegRuntime.IsAvailable(), fps, monitor, maxWidth = 1920, quality = 65 }), seconds, ExecutableIdentity.Sha256), ct);
+        var start = await Wire.ReadAsync<Reply>(tls, ct); Require(start);
+        if (start.Data.Str("type") != "stream_started") throw new InvalidDataException("Missing stream negotiation.");
+        string codec = start.Data.Str("codec", "jpeg");
+        var geometry = start.Data.TryGetProperty("geometry", out var geometryValue) ? geometryValue.Deserialize<DesktopGeometry>(Json.Options) : null;
+        if (geometry == null) throw new InvalidDataException("Missing stream geometry.");
+        codecChanged?.Invoke(codec, start.Data.Str("reason"));
+        H264Decoder? decoder = codec == "h264" ? new H264Decoder() : null;
+        try
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                var packet = await Wire.ReadStreamPacketAsync(tls, ct);
+                if (packet.Kind == StreamPacketKind.Control)
+                {
+                    var control = JsonSerializer.Deserialize<JsonElement>(packet.Payload, Json.Options);
+                    string type = control.Str("type");
+                    if (type == "codec_changed")
+                    {
+                        codec = control.Str("codec", "jpeg");
+                        decoder?.Dispose(); decoder = codec == "h264" ? new H264Decoder() : null;
+                        codecChanged?.Invoke(codec, control.Str("reason"));
+                        await Wire.WriteAsync(tls, new { sequence = -1 }, ct);
+                        continue;
+                    }
+                    if (type == "stream_error") throw new IOException(control.Str("message", "Remote stream failed."));
+                    throw new InvalidDataException("Unknown adaptive stream control packet.");
+                }
+
+                Bitmap? image = null;
+                if (packet.Kind == StreamPacketKind.Jpeg)
+                {
+                    using var imageStream = new MemoryStream(packet.Payload, writable: false);
+                    using var source = Image.FromStream(imageStream);
+                    image = new Bitmap(source);
+                }
+                else if (packet.Kind == StreamPacketKind.H264)
+                {
+                    if (decoder == null) throw new InvalidDataException("H.264 packet received without a decoder.");
+                    image = decoder.Decode(packet.Payload);
+                }
+                else throw new InvalidDataException("Unknown adaptive stream frame packet.");
+
+                await Wire.WriteAsync(tls, new { sequence = packet.Sequence }, ct);
+                if (image != null) publish(new DecodedStreamFrame(packet.Sequence, packet.CapturedUtc, geometry, codec, image, packet.CaptureEncodeMs, packet.Payload.Length));
+            }
+        }
+        finally { decoder?.Dispose(); }
     }
 
     private async Task ReceiveFramesAsync(Action<ScreenFrame> publish, int fps, int monitor, int seconds, CancellationToken ct)

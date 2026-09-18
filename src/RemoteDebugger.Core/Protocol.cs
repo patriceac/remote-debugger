@@ -21,9 +21,17 @@ public sealed record Reply(string Id, bool Ok, JsonElement Data, string? Error =
     public static Reply Success(string id, object? data) => new(id, true, Json.Element(data));
     public static Reply Failure(string id, string error, string message) => new(id, false, Json.Element(null), error, message);
 }
+public enum StreamPacketKind : byte
+{
+    Jpeg = 1,
+    H264 = 2,
+    Control = 3
+}
+public sealed record StreamPacket(StreamPacketKind Kind, long Sequence, DateTimeOffset CapturedUtc, double CaptureEncodeMs, byte[] Payload);
 public static class Wire
 {
     public const int MaxFrame = 4 * 1024 * 1024;
+    private const int StreamPacketHeaderLength = 25;
     public static async Task WriteAsync<T>(Stream stream, T value, CancellationToken ct)
     {
         byte[] body = JsonSerializer.SerializeToUtf8Bytes(value, Json.Options);
@@ -38,6 +46,37 @@ public static class Wire
         if (size is < 1 or > MaxFrame) throw new InvalidDataException("Invalid frame length.");
         byte[] body = new byte[size]; await stream.ReadExactlyAsync(body, ct);
         return JsonSerializer.Deserialize<T>(body, Json.Options) ?? throw new InvalidDataException("Empty message.");
+    }
+
+    public static async Task WriteStreamPacketAsync(Stream stream, StreamPacket packet, CancellationToken ct)
+    {
+        if (packet.Payload.Length > MaxFrame - StreamPacketHeaderLength) throw new InvalidDataException("Stream packet exceeds 4 MiB.");
+        byte[] body = new byte[StreamPacketHeaderLength + packet.Payload.Length];
+        body[0] = (byte)packet.Kind;
+        BinaryPrimitives.WriteInt64BigEndian(body.AsSpan(1, 8), packet.Sequence);
+        BinaryPrimitives.WriteInt64BigEndian(body.AsSpan(9, 8), packet.CapturedUtc.ToUnixTimeMilliseconds());
+        BinaryPrimitives.WriteInt64BigEndian(body.AsSpan(17, 8), BitConverter.DoubleToInt64Bits(packet.CaptureEncodeMs));
+        packet.Payload.CopyTo(body, StreamPacketHeaderLength);
+        await WriteBodyAsync(stream, body, ct);
+    }
+
+    public static async Task<StreamPacket> ReadStreamPacketAsync(Stream stream, CancellationToken ct)
+    {
+        byte[] length = new byte[4]; await stream.ReadExactlyAsync(length, ct);
+        int size = BinaryPrimitives.ReadInt32BigEndian(length);
+        if (size is < StreamPacketHeaderLength or > MaxFrame) throw new InvalidDataException("Invalid stream packet length.");
+        byte[] body = new byte[size]; await stream.ReadExactlyAsync(body, ct);
+        if (!Enum.IsDefined((StreamPacketKind)body[0])) throw new InvalidDataException("Unknown stream packet kind.");
+        long sequence = BinaryPrimitives.ReadInt64BigEndian(body.AsSpan(1, 8));
+        long capturedMs = BinaryPrimitives.ReadInt64BigEndian(body.AsSpan(9, 8));
+        double captureEncodeMs = BitConverter.Int64BitsToDouble(BinaryPrimitives.ReadInt64BigEndian(body.AsSpan(17, 8)));
+        return new StreamPacket((StreamPacketKind)body[0], sequence, DateTimeOffset.FromUnixTimeMilliseconds(capturedMs), captureEncodeMs, body[StreamPacketHeaderLength..]);
+    }
+
+    private static async Task WriteBodyAsync(Stream stream, byte[] body, CancellationToken ct)
+    {
+        byte[] length = new byte[4]; BinaryPrimitives.WriteInt32BigEndian(length, body.Length);
+        await stream.WriteAsync(length, ct); await stream.WriteAsync(body, ct); await stream.FlushAsync(ct);
     }
 }
 public static class Safety

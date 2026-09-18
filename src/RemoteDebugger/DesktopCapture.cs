@@ -12,6 +12,12 @@ namespace RemoteDebugger;
 
 public sealed record ScreenFrame(long Sequence, DateTimeOffset CapturedUtc, DesktopGeometry Geometry, int EncodedWidth, int EncodedHeight, double CaptureEncodeMs, string Mime, string Data, double CopyMs = 0, double JpegMs = 0);
 internal sealed record StreamCaptureResult(ScreenFrame? Frame, string Fingerprint);
+internal sealed record CapturedDesktop(Bitmap Bitmap, DateTimeOffset CapturedUtc, DesktopGeometry Geometry, string Fingerprint, double CopyMs) : IDisposable
+{
+    public void Dispose() => Bitmap.Dispose();
+}
+internal sealed record BitmapCaptureResult(CapturedDesktop? Capture, string Fingerprint);
+internal sealed record EncodedJpeg(ScreenFrame Frame, byte[] Bytes);
 public static class DesktopCapture
 {
     [DllImport("user32.dll")] private static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
@@ -33,13 +39,21 @@ public static class DesktopCapture
     }
     public static object Monitors() => Forms.Screen.AllScreens.Select((s, i) => new { index = i, device = s.DeviceName, primary = s.Primary, x = s.Bounds.X, y = s.Bounds.Y, width = s.Bounds.Width, height = s.Bounds.Height }).ToArray();
     public static string LayoutId() => Safety.Hash(Json.Text(Monitors()));
-    public static ScreenFrame Capture(int monitor = 0, int maxWidth = 0, int quality = 75, long sequence = 0) =>
-        CaptureCore(monitor, maxWidth, quality, sequence, previousFingerprint: null).Frame!;
+    public static ScreenFrame Capture(int monitor = 0, int maxWidth = 0, int quality = 75, long sequence = 0)
+    {
+        var result = CaptureBitmap(monitor, previousFingerprint: null);
+        using var capture = result.Capture ?? throw new InvalidOperationException("Desktop capture returned no frame.");
+        return EncodeJpeg(capture, maxWidth, quality, sequence).Frame;
+    }
 
     internal static StreamCaptureResult CaptureStream(int monitor, int maxWidth, int quality, long sequence, string? previousFingerprint)
-        => CaptureCore(monitor, maxWidth, quality, sequence, previousFingerprint);
+    {
+        var result = CaptureBitmap(monitor, previousFingerprint);
+        if (result.Capture is not { } capture) return new StreamCaptureResult(null, result.Fingerprint);
+        using (capture) return new StreamCaptureResult(EncodeJpeg(capture, maxWidth, quality, sequence).Frame, result.Fingerprint);
+    }
 
-    private static StreamCaptureResult CaptureCore(int monitor, int maxWidth, int quality, long sequence, string? previousFingerprint)
+    internal static BitmapCaptureResult CaptureBitmap(int monitor, string? previousFingerprint)
     {
         IntPtr old = SetThreadDpiAwarenessContext(new IntPtr(-4));
         try
@@ -49,23 +63,34 @@ public static class DesktopCapture
             var r = monitor == -1 ? Forms.SystemInformation.VirtualScreen : screens[monitor].Bounds;
             string layoutId = LayoutId(); DateTimeOffset captured = DateTimeOffset.UtcNow;
             double copyStart = sw.Elapsed.TotalMilliseconds;
-            using var bmp = new Bitmap(r.Width, r.Height, PixelFormat.Format32bppArgb);
+            var bmp = new Bitmap(r.Width, r.Height, PixelFormat.Format32bppArgb);
             using (var g = Graphics.FromImage(bmp)) g.CopyFromScreen(r.Location, Point.Empty, r.Size);
             double copyMs = sw.Elapsed.TotalMilliseconds - copyStart;
             string fingerprint = Fingerprint(bmp, r, layoutId);
             if (previousFingerprint != null && string.Equals(previousFingerprint, fingerprint, StringComparison.Ordinal))
-                return new StreamCaptureResult(null, fingerprint);
-            int width = maxWidth <= 0 ? r.Width : Math.Min(r.Width, Math.Clamp(maxWidth, 320, 3840)); int height = (int)Math.Round(r.Height * (double)width / r.Width);
-            using var resized = width != r.Width ? new Bitmap(width, height, PixelFormat.Format24bppRgb) : null;
-            if (resized != null) using (var g = Graphics.FromImage(resized)) { g.InterpolationMode = InterpolationMode.HighQualityBilinear; g.DrawImage(bmp, new Rectangle(0, 0, width, height)); }
-            using var ms = new MemoryStream(); using var parameters = new EncoderParameters(1); parameters.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, (long)Math.Clamp(quality, 30, 95));
-            double jpegStart = sw.Elapsed.TotalMilliseconds;
-            (resized ?? bmp).Save(ms, ImageCodecInfo.GetImageEncoders().First(x => x.FormatID == ImageFormat.Jpeg.Guid), parameters);
-            double jpegMs = sw.Elapsed.TotalMilliseconds - jpegStart;
-            if (ms.Length > 2 * 1024 * 1024) throw new IOException("Encoded image exceeds 2 MiB; lower maxWidth or quality.");
-            return new StreamCaptureResult(new ScreenFrame(sequence, captured, new DesktopGeometry(r.X, r.Y, r.Width, r.Height, layoutId), width, height, sw.Elapsed.TotalMilliseconds, "image/jpeg", Convert.ToBase64String(ms.GetBuffer(), 0, (int)ms.Length), copyMs, jpegMs), fingerprint);
+            {
+                bmp.Dispose();
+                return new BitmapCaptureResult(null, fingerprint);
+            }
+            return new BitmapCaptureResult(new CapturedDesktop(bmp, captured, new DesktopGeometry(r.X, r.Y, r.Width, r.Height, layoutId), fingerprint, copyMs), fingerprint);
         }
         finally { SetThreadDpiAwarenessContext(old); }
+    }
+
+    internal static EncodedJpeg EncodeJpeg(CapturedDesktop capture, int maxWidth, int quality, long sequence)
+    {
+        var sw = Stopwatch.StartNew();
+        int width = maxWidth <= 0 ? capture.Bitmap.Width : Math.Min(capture.Bitmap.Width, Math.Clamp(maxWidth, 320, 3840));
+        int height = (int)Math.Round(capture.Bitmap.Height * (double)width / capture.Bitmap.Width);
+        using var resized = width != capture.Bitmap.Width ? new Bitmap(width, height, PixelFormat.Format24bppRgb) : null;
+        if (resized != null) using (var g = Graphics.FromImage(resized)) { g.InterpolationMode = InterpolationMode.HighQualityBilinear; g.DrawImage(capture.Bitmap, new Rectangle(0, 0, width, height)); }
+        using var ms = new MemoryStream(); using var parameters = new EncoderParameters(1); parameters.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, (long)Math.Clamp(quality, 30, 95));
+        double jpegStart = sw.Elapsed.TotalMilliseconds;
+        (resized ?? capture.Bitmap).Save(ms, ImageCodecInfo.GetImageEncoders().First(x => x.FormatID == ImageFormat.Jpeg.Guid), parameters);
+        double jpegMs = sw.Elapsed.TotalMilliseconds - jpegStart;
+        if (ms.Length > 2 * 1024 * 1024) throw new IOException("Encoded image exceeds 2 MiB; lower maxWidth or quality.");
+        byte[] bytes = ms.ToArray();
+        return new EncodedJpeg(new ScreenFrame(sequence, capture.CapturedUtc, capture.Geometry, width, height, capture.CopyMs + sw.Elapsed.TotalMilliseconds, "image/jpeg", Convert.ToBase64String(bytes), capture.CopyMs, jpegMs), bytes);
     }
 
     internal static string Fingerprint(Bitmap bitmap, Rectangle bounds, string layoutId)

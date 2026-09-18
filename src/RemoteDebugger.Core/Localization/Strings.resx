@@ -616,7 +616,7 @@
     <value>Stream interrupted · press Resume</value>
   </data>
   <data name="StreamMetrics" xml:space="preserve">
-    <value>{0:F1} fps · {1:F1} Mbit/s · capture {2:F0} ms</value>
+    <value>{0} · {1:F1} fps · {2:F1} Mbit/s · capture {3:F0} ms</value>
   </data>
   <data name="StreamStoppedResume" xml:space="preserve">
     <value>Stream stopped · press Resume</value>

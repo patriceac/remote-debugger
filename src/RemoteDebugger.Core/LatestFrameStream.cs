@@ -12,14 +12,21 @@ public static class LatestFrameStream
         var frames = Channel.CreateBounded<T>(new BoundedChannelOptions(1)
         {
             SingleReader = true, SingleWriter = true,
-            FullMode = BoundedChannelFullMode.DropOldest,
+            FullMode = BoundedChannelFullMode.Wait,
             AllowSynchronousContinuations = false
         });
+        void DisposeFrame(T frame) { if (frame is IDisposable disposable) disposable.Dispose(); }
+        void PublishLatest(T frame)
+        {
+            if (frames.Writer.TryWrite(frame)) return;
+            if (frames.Reader.TryRead(out var stale)) DisposeFrame(stale);
+            if (!frames.Writer.TryWrite(frame)) DisposeFrame(frame);
+        }
         // Network reads and acknowledgements must continue while the UI is busy.
         var receiver = Task.Run(async () =>
         {
             Exception? failure = null;
-            try { await receive(frame => frames.Writer.TryWrite(frame), lifetime.Token).ConfigureAwait(false); }
+            try { await receive(PublishLatest, lifetime.Token).ConfigureAwait(false); }
             catch (Exception ex) { failure = ex; }
             finally { frames.Writer.TryComplete(failure); }
         });
@@ -37,6 +44,7 @@ public static class LatestFrameStream
         {
             lifetime.Cancel();
             await receiver.ConfigureAwait(false);
+            while (frames.Reader.TryRead(out var stale)) DisposeFrame(stale);
         }
     }
 }
