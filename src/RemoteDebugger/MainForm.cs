@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Drawing.Drawing2D;
 using System.Text.Json;
 using RemoteDebugger.Core;
 using Forms = System.Windows.Forms;
@@ -153,6 +152,7 @@ public sealed partial class MainForm : Forms.Form
     private readonly Forms.Timer renderTimer = new() { Interval = 250 };
     private readonly Forms.Timer discoveryTimer = new() { Interval = 30000 };
     private readonly Forms.Timer inputRecoveryTimer = new() { Interval = 750 };
+    private Size statusPillRegionSize;
     private readonly Forms.NotifyIcon tray = new();
     private RemoteClient? client;
     private AgentServer? agent;
@@ -302,9 +302,10 @@ public sealed partial class MainForm : Forms.Form
         headerTitle.Font = new Font("Segoe UI", 22, FontStyle.Bold); headerSubtitle.Font = new Font("Segoe UI", 10.5F);
         titles.Controls.Add(headerTitle, 0, 0); titles.Controls.Add(headerSubtitle, 0, 1);
         var actions = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.LeftToRight, WrapContents = false, AutoSize = true, Padding = new Forms.Padding(0, 20, 0, 0) };
+        statusPill.SizeChanged += (_, _) => RefreshStatusPillRegion();
         statusPill.Width = 176; statusPill.Height = 30; statusPill.Margin = new Forms.Padding(0, 3, 12, 0);
         terminateSession.Margin = Forms.Padding.Empty;
-        statusDot.Location = new Point(12, 7); statusLabel.Location = new Point(28, 6); statusPill.Controls.Add(statusDot); statusPill.Controls.Add(statusLabel); statusPill.Region = RoundedRegion(statusPill.Size, 15);
+        statusDot.Location = new Point(12, 7); statusLabel.Location = new Point(28, 6); statusPill.Controls.Add(statusDot); statusPill.Controls.Add(statusLabel); RefreshStatusPillRegion();
         actions.Controls.Add(statusPill); actions.Controls.Add(terminateSession);
         layout.Controls.Add(titles, 0, 0); layout.Controls.Add(actions, 1, 0);
         header.Controls.Add(layout);
@@ -330,7 +331,8 @@ public sealed partial class MainForm : Forms.Form
         var hero = BuildAgentContent(); hero.Dock = Forms.DockStyle.Top; hero.Width = 760; hero.Anchor = Forms.AnchorStyles.Top | Forms.AnchorStyles.Left;
         // Docked content is excluded from WinForms' automatic scroll extent.
         // Preserve access to the final explanation on short/high-DPI displays.
-        hero.SizeChanged += (_, _) => heroHost.AutoScrollMinSize = new Size(0, hero.Height);
+        hero.SizeChanged += (_, _) => UpdateAgentScrollExtent(heroHost, hero.Height);
+        UpdateAgentScrollExtent(heroHost, hero.Height);
         heroHost.Controls.Add(hero); content.Controls.Add(heroHost, 0, 0);
         page.Controls.Add(content); rolePages.TabPages.Add(page);
     }
@@ -941,7 +943,7 @@ public sealed partial class MainForm : Forms.Form
         statusDot.ForeColor = connected ? Color.FromArgb(50, 137, 91) : reconnecting ? WarningText : SecondaryText;
         statusLabel.ForeColor = connected ? ConnectedText : reconnecting ? WarningText : Color.FromArgb(80, 103, 113);
         statusLabel.SetText(() => connected ? UiText.Connected : reconnecting ? UiText.Reconnecting : synchronizing ? UiText.SynchronizingEllipsis : pairing ? UiText.Pairing : agentIdle && onAgent ? UiText.SessionClosed : UiText.Waiting);
-        statusPill.AccessibleName = statusLabel.Text; statusPill.Region?.Dispose(); statusPill.Region = RoundedRegion(statusPill.Size, 16);
+        statusPill.AccessibleName = statusLabel.Text; RefreshStatusPillRegion();
         terminateSession.Visible = onAgent ? PrivateInternet && agent != null && !agentIdle || agent?.Session.Connected == true || agent?.Session.State == "reconnecting" : supportSession || synchronizingAgent;
         roleAgent.BackColor = onAgent ? SelectedRail : Rail; roleController.BackColor = onController ? SelectedRail : Rail; navConnection.BackColor = onController && controllerPages.SelectedIndex == 0 ? SelectedRail : Rail; navScreen.BackColor = onController && controllerPages.SelectedIndex == 1 ? SelectedRail : Rail; navProcesses.BackColor = onController && controllerPages.SelectedIndex == 2 ? SelectedRail : Rail; navFiles.BackColor = onController && controllerPages.SelectedIndex == 3 ? SelectedRail : Rail; navDiagnostics.BackColor = onController && controllerPages.SelectedIndex == 4 ? SelectedRail : Rail;
     }
@@ -1799,7 +1801,12 @@ public sealed partial class MainForm : Forms.Form
     };
     private static Forms.TextBox TextBox(string name) { var box = new Forms.TextBox { Name = name, AccessibleName = name, BorderStyle = Forms.BorderStyle.FixedSingle, BackColor = Surface, ForeColor = PrimaryText, Font = new Font("Segoe UI", 11) }; box.Enter += (_, _) => box.BackColor = Color.FromArgb(248, 253, 253); box.Leave += (_, _) => box.BackColor = Surface; return box; }
     private static Forms.Label Badge(string text, string name) => new() { Name = name, Text = "●  " + text, AutoSize = true, ForeColor = ConnectedText, BackColor = ConnectedBack, Font = new Font("Segoe UI", 8.5F, FontStyle.Bold), Padding = new Forms.Padding(8, 5, 8, 5), Visible = false };
-    private static Region RoundedRegion(Size size, int radius) { var path = new GraphicsPath(); path.AddArc(0, 0, radius * 2, radius * 2, 180, 90); path.AddArc(size.Width - radius * 2, 0, radius * 2, radius * 2, 270, 90); path.AddArc(size.Width - radius * 2, size.Height - radius * 2, radius * 2, radius * 2, 0, 90); path.AddArc(0, size.Height - radius * 2, radius * 2, radius * 2, 90, 90); path.CloseFigure(); return new Region(path); }
+    private void RefreshStatusPillRegion() => ControlRegions.ApplyRounded(statusPill, ref statusPillRegionSize, 16);
+    private static void UpdateAgentScrollExtent(Forms.Panel host, int height)
+    {
+        Size extent = new(0, Math.Max(0, height));
+        if (host.AutoScrollMinSize != extent) host.AutoScrollMinSize = extent;
+    }
     private static Icon LoadApplicationIcon() { using Stream stream = typeof(MainForm).Assembly.GetManifestResourceStream("RemoteDebugger.Assets.RemoteDebugger.ico") ?? throw new InvalidOperationException("The application icon resource is missing."); using var icon = new Icon(stream); return (Icon)icon.Clone(); }
     private void PostUi(Action callback) { if (IsDisposed || !IsHandleCreated) return; try { BeginInvoke(callback); } catch (InvalidOperationException) { } }
 

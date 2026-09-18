@@ -18,13 +18,16 @@ internal static class LiveText
     public static string SetText(this Forms.Control control, Func<string> text)
     {
         bindings.AddOrUpdate(control, new Binding(text));
-        return control.Text = text();
+        string value = text();
+        if (!string.Equals(control.Text, value, StringComparison.Ordinal)) control.Text = value;
+        return value;
     }
 
     public static string SetText(this Forms.Control control, string text)
     {
         bindings.Remove(control);
-        return control.Text = text;
+        if (!string.Equals(control.Text, text, StringComparison.Ordinal)) control.Text = text;
+        return text;
     }
 
     public static Forms.ColumnHeader WithText(this Forms.ColumnHeader column, Func<string> text)
