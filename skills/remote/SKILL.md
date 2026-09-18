@@ -1,22 +1,21 @@
 ---
 name: remote
-description: "Use Remote Debugger's authenticated CLI to support or diagnose an authorized Windows PC on a trusted local network."
+description: "Use Remote Debugger's authenticated CLI to support or diagnose the authorized Windows PC already connected to the current remote session."
 ---
 
 # Remote
 
-Use this skill for a Remote Debugger support session: inspecting, diagnosing, transferring a file to, or operating a Windows PC whose owner has authorized the work. It is not a general remote-shell, Internet relay, or unattended-administration workflow.
+Use this skill for an existing Remote Debugger support session: inspecting, diagnosing, transferring a file to, or operating the connected Windows PC whose owner has authorized the work. It is not a session-setup, general remote-shell, Internet-relay, or unattended-administration workflow.
 
-## Establish the session
+## Use the connected machine
 
+- Apply the request only to the Windows PC already connected to the current Remote Debugger session. If no machine is connected, report that and stop; do not discover, establish, or select a session.
 - Use the signed Release `RemoteDebugger.exe` on the controlling PC. Do not use a development build for an actual support session.
-- Discover peers with `RemoteDebugger.exe cli discover`, then pair only to the user-selected host. Obtain the six-digit code from the receiving PC and pipe it on standard input, for example: `Read-Host | & $exe cli pair --host 192.168.1.42`. Never put a pairing code, token, capture, or diagnostic containing personal data in a command argument, transcript, or chat response.
-- Run `cli sync` after pairing and before normal operations. A mismatched agent binary must be synchronized rather than worked around.
-- The connection profile is DPAPI-protected for the current Windows user. Use `--connection` only when the user has identified a separate intended profile.
+- Use the CLI's current authenticated connection. Do not discover, establish, synchronize, or switch sessions from this skill.
 
 ## Diagnose before changing
 
-Start with `status`, `system`, `processes`, and, when visual evidence helps, a fresh `cli screenshot`. For an application, use `process.info` to record its actual path, hash, and version before acting. Treat discovery as an untrusted hint; code-authenticated pairing is the identity check.
+Start with `status` to verify the connected machine, then use `system`, `processes`, and, when visual evidence helps, a fresh `cli screenshot`. For an application, use `process.info` to record its actual path, hash, and version before acting. If `status` cannot confirm the connected machine, stop instead of choosing or connecting to another target.
 
 Send structured operations through `cli call --request <file>` (or `--request -` for UTF-8 JSON on standard input). Give consequential requests a UUID `id` and retain the returned JSON. A remote action is successful only when both `ok` is true and any returned `data.exitCode` is zero.
 
@@ -30,6 +29,6 @@ Send structured operations through `cli call --request <file>` (or `--request -`
 
 ## Retry and finish deliberately
 
-For a dropped connection or timeout, do not repeat a consequential operation with a new UUID. Reconnect, inspect the state, then retry the same request ID while the same agent process remains alive. Preserve remote errors and messages for the operator.
+For a dropped connection or timeout, do not repeat a consequential operation with a new UUID or establish a replacement session. Let the current session reconnect, inspect the state, then retry the same request ID while the same agent process remains alive. Preserve remote errors and messages for the operator.
 
 Leave the session available when further support is expected. Send `session.disconnect` only when a temporary reconnect grace period is wanted; send `session.end` only when the user asks to end assistance, because it revokes access and stops maintenance.

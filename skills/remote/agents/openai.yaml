@@ -1,4 +1,4 @@
 interface:
   display_name: "Remote Debugger"
-  short_description: "Support trusted Windows PCs through Remote Debugger"
-  default_prompt: "Use $remote to diagnose an authorized Remote Debugger session safely."
+  short_description: "Support the PC connected through Remote Debugger"
+  default_prompt: "Use $remote to diagnose the authorized Windows PC connected to the current Remote Debugger session."
