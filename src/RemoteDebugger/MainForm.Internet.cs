@@ -45,8 +45,9 @@ public sealed partial class MainForm
         bool lanFallbackNeedsSetup = active && !agentNetworkPrepared && relayUnavailable;
         enableSupport.Visible = ((agent == null || agentIdle) && !privateSupportEnabled) || lanFallbackNeedsSetup;
         restartAgent.Visible = false; copyAgentCode.Visible = false;
-        pairingCountdownText.Visible = agentIdle;
-        if (agent?.Session.HasPaired == true) return;
+        bool updateOngoing = agent != null && !agentIdle && MainForm.IsOngoingUpdate(agent.UpdateProgress);
+        pairingCountdownText.Visible = agentIdle || updateOngoing;
+        if (agent?.Session.HasPaired == true || updateOngoing) return;
         agentHeading.SetText(() => agentIdle ? UiText.SupportEnded : active ? UiText.PrivateSupportReady : UiText.EnableOnThisPc);
         agentEyebrow.SetText(() => UiText.GiveControl);
         agentSubtitle.SetText(() => active ? UiText.InternetInstructions : UiText.PrivateEnableInstructions);

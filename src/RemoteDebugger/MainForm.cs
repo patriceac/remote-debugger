@@ -927,16 +927,26 @@ public sealed partial class MainForm : Forms.Form
             setupNotice.Visible = false; return;
         }
         var session = agent.Session;
+        var updateProgress = agent.UpdateProgress;
         if (paired && !terminating && !quitting)
             if (session.State is "connected" or "synchronizing" or "reconnecting")
                 SetFooterMessage(() => session.State switch { "connected" => UiText.SupportActive, "synchronizing" => UiText.AgentSynchronizing, _ => UiText.WaitingForController });
+        if (!agentIdle && IsOngoingUpdate(updateProgress))
+        {
+            CurrentPairingCode = null;
+            pairingCountdown.Value = updateProgress.TransferPercent * 3;
+            pairingCountdownText.SetText(() => UpdateProgressDescription(updateProgress));
+            agentPairCode.SetText(() => UiText.Synchronizing);
+            agentState.SetText(() => UiText.SessionPreparingAgent);
+            agentSessionNote.SetText(() => UiText.CommandsDisabledUntilVersions);
+            return;
+        }
         if (session.Connected && session.BinaryMatched)
         {
             CurrentPairingCode = null; pairingCountdownText.SetText(() => UiText.CodeConsumed); pairingCountdown.Value = 0; string duration = session.StartedUtc is { } started ? FormatDuration(DateTimeOffset.UtcNow - started) : UiText.JustNow; agentPairCode.SetText(() => UiText.ControllerConnected); agentState.SetText(() => UiText.Format(UiText.ConnectedDuration, duration)); agentSessionNote.SetText(() => UiText.AuthenticatedControllerNote);
         }
         else if (session.Connected)
         {
-            var updateProgress = agent.UpdateProgress;
             CurrentPairingCode = null; pairingCountdown.Value = updateProgress.TransferPercent * 3; pairingCountdownText.SetText(() => UpdateProgressDescription(updateProgress)); agentPairCode.SetText(() => UiText.Synchronizing); agentState.SetText(() => UiText.SessionPreparingAgent); agentSessionNote.SetText(() => UiText.CommandsDisabledUntilVersions);
         }
         else if (session.HasPaired && session.State == "reconnecting")
@@ -974,10 +984,11 @@ public sealed partial class MainForm : Forms.Form
                 headerSubtitle.SetText(PrivateInternet && controllerPages.SelectedIndex == 0 ? UiText.PrivateConnectInstructions : presentation.Subtitle);
         }
 
-        bool connected = onAgent ? agent?.Session is { Connected: true, BinaryMatched: true } : heartbeatHealthy && supportSession;
+        bool updateOngoing = onAgent && agent != null && IsOngoingUpdate(agent.UpdateProgress);
+        bool connected = onAgent ? agent?.Session is { Connected: true, BinaryMatched: true } && !updateOngoing : heartbeatHealthy && supportSession;
         bool reconnecting = onAgent ? agent?.Session.State == "reconnecting" : supportSession && !heartbeatHealthy;
         bool pairing = onController && pairingBusy && !synchronizingAgent;
-        bool synchronizing = onAgent && agent?.Session is { Connected: true, BinaryMatched: false } ||
+        bool synchronizing = onAgent && (agent?.Session is { Connected: true, BinaryMatched: false } || updateOngoing) ||
             onController && pairingBusy && synchronizingAgent;
         statusPill.BackColor = connected ? ConnectedBack : reconnecting ? Color.FromArgb(255, 244, 222) : Color.FromArgb(237, 241, 244);
         statusDot.ForeColor = connected ? Color.FromArgb(50, 137, 91) : reconnecting ? WarningText : SecondaryText;
@@ -1880,6 +1891,8 @@ public sealed partial class MainForm : Forms.Form
         string? agentState, bool supportSession, bool synchronizingAgent) => onAgent
             ? !agentIdle && (agentConnected || agentState == "reconnecting")
             : supportSession || synchronizingAgent;
+
+    internal static bool IsOngoingUpdate(AgentUpdateProgress progress) => progress.Stage is not ("idle" or "complete");
 
     private static ProcessSortColumn ProcessColumn(int index) => index switch { 0 => ProcessSortColumn.Pid, 1 => ProcessSortColumn.Name, 2 => ProcessSortColumn.CpuPercentTotalMachine, 3 => ProcessSortColumn.WorkingSetBytes, 4 => ProcessSortColumn.Responding, _ => ProcessSortColumn.Window };
     private static FileSortColumn FileColumn(int index) => index switch { 0 => FileSortColumn.Name, 1 => FileSortColumn.Type, 2 => FileSortColumn.SizeBytes, _ => FileSortColumn.ModifiedUtc };

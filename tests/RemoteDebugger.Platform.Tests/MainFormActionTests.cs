@@ -20,4 +20,16 @@ public sealed class MainFormActionTests
         Assert.Equal(expected, MainForm.ShouldShowTerminateSession(onAgent, agentIdle, agentConnected,
             agentState, supportSession, synchronizingAgent));
     }
+
+    [Theory]
+    [InlineData("idle", false)]
+    [InlineData("transferring", true)]
+    [InlineData("verifying", true)]
+    [InlineData("staging", true)]
+    [InlineData("restarting", true)]
+    [InlineData("complete", false)]
+    public void UpdateProgressIsShownOnlyWhileSynchronizationIsOngoing(string stage, bool expected)
+    {
+        Assert.Equal(expected, MainForm.IsOngoingUpdate(new AgentUpdateProgress(stage, 0, 100)));
+    }
 }
