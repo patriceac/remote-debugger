@@ -643,6 +643,7 @@ public sealed class RemoteClient
     private readonly SemaphoreSlim updateGate = new(1, 1);
     private PersistentChannel? inputChannel;
     private PersistentChannel? updateChannel;
+    private int legacyUpdateOperations;
     public Connection Connection { get; private set; }
     public static string DefaultPath => Path.Combine(Vault.DefaultRoot, "controller.connection");
     public RemoteClient(Connection connection) : this(connection, OpenAuthenticatedTransportAsync) { }
@@ -689,9 +690,7 @@ public sealed class RemoteClient
     public async Task<Reply> CallAsync(string operation, object? args = null, CancellationToken ct = default, string? id = null, int seconds = 60)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(seconds, 1, 300) + 15));
-        await using var transport = await ConnectionTransport.OpenAsync(Connection, timeout.Token);
-        using var tls = new SslStream(transport, true, (_, cert, _, _) => cert != null && Safety.Equal(Convert.ToHexString(SHA256.HashData(cert.GetRawCertData())), Connection.Fingerprint.ToUpperInvariant().Replace(":", "")));
-        await tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions { TargetHost = "RemoteDebugger", EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13 }, timeout.Token);
+        await using var tls = await transportFactory(Connection, timeout.Token).ConfigureAwait(false);
         var request = new Request(id ?? Guid.NewGuid().ToString(), Connection.Token, operation, args is JsonElement e ? e : Json.Element(args ?? new { }), seconds, ExecutableIdentity.Sha256);
         await Wire.WriteAsync(tls, request, timeout.Token); return await Wire.ReadAsync<Reply>(tls, timeout.Token);
     }
@@ -736,6 +735,9 @@ public sealed class RemoteClient
         await updateGate.WaitAsync(timeout.Token).ConfigureAwait(false);
         try
         {
+            if (Volatile.Read(ref legacyUpdateOperations) != 0)
+                return await CallAsync(operation, args, timeout.Token, seconds: seconds).ConfigureAwait(false);
+
             PersistentChannel? channel = updateChannel;
             try
             {
@@ -747,6 +749,20 @@ public sealed class RemoteClient
                     updateChannel = channel;
                 }
                 return await channel.CallAsync(operation, args, timeout.Token, seconds).ConfigureAwait(false);
+            }
+            catch (RemoteOperationException ex) when (IsLegacyUpdateChannelUnsupported(ex))
+            {
+                if (channel != null && ReferenceEquals(updateChannel, channel)) updateChannel = null;
+                if (channel != null)
+                {
+                    try { await channel.DisposeAsync().ConfigureAwait(false); } catch { }
+                }
+                // Agents shipped before the persistent update channel still expose
+                // the same authenticated update operations as one-shot RPCs. Keep
+                // the transfer compatible without weakening authentication or the
+                // update transaction checks.
+                Volatile.Write(ref legacyUpdateOperations, 1);
+                return await CallAsync(operation, args, timeout.Token, seconds: seconds).ConfigureAwait(false);
             }
             catch
             {
@@ -787,8 +803,16 @@ public sealed class RemoteClient
                 try { await channel.DisposeAsync().ConfigureAwait(false); } catch { }
             }
         }
-        finally { updateGate.Release(); }
+        finally
+        {
+            Volatile.Write(ref legacyUpdateOperations, 0);
+            updateGate.Release();
+        }
     }
+
+    private static bool IsLegacyUpdateChannelUnsupported(RemoteOperationException ex) =>
+        ex.Code == "binary_mismatch" ||
+        (ex.Code == "operation_failed" && ex.Message.Contains("update.open", StringComparison.OrdinalIgnoreCase));
     private static async Task<Stream> OpenAuthenticatedTransportAsync(Connection connection, CancellationToken ct)
     {
         Stream transport = await ConnectionTransport.OpenAsync(connection, ct).ConfigureAwait(false);

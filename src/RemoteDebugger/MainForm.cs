@@ -613,19 +613,22 @@ public sealed partial class MainForm : Forms.Form
 
     private void LoadSavedConnection()
     {
-        // Internet invitations are session-specific; choose an online computer
-        // instead of presenting a stale routing ID from a previous session.
-        if (PrivateInternet) return;
+        // Keep the protected connection profile available for an authenticated
+        // resume after a controller restart. Discovery still selects the online
+        // computer for a new private-internet session when this resume is absent.
         try
         {
             client = RemoteClient.Load();
-            host.SetText(client.Connection.Host);
-            // Reuse the address as a convenience. A new displayed code starts
-            // a new PAKE exchange that authenticates the current certificate;
-            // an old saved pin must not block fresh pairing after reinstall.
-            selectedFingerprint = "";
-            selectedPeerName.SetText(() => UiText.SavedConnection);
-            selectedPeerAddress.SetText(client.Connection.Host);
+            if (!PrivateInternet)
+            {
+                host.SetText(client.Connection.Host);
+                // Reuse the address as a convenience. A new displayed code starts
+                // a new PAKE exchange that authenticates the current certificate;
+                // an old saved pin must not block fresh pairing after reinstall.
+                selectedFingerprint = "";
+                selectedPeerName.SetText(() => UiText.SavedConnection);
+                selectedPeerAddress.SetText(client.Connection.Host);
+            }
         }
         catch { client = null; }
     }
@@ -648,7 +651,35 @@ public sealed partial class MainForm : Forms.Form
             PrivateInternet, HasConfiguredPrivateSupport(), privateSupportEnabled);
         SelectRole(startAgentOnLaunch ? 0 : 1);
         if (!startAgentOnLaunch) _ = DiscoverAsync(false);
+        if (!startAgentOnLaunch && client != null) _ = ResumeSavedSupportAsync();
         await Task.Yield();
+    }
+
+    private async Task ResumeSavedSupportAsync()
+    {
+        RemoteClient? target = client;
+        if (target == null || supportSession || quitting) return;
+        int generation = operationGeneration;
+        try
+        {
+            JsonElement heartbeat = await target.HeartbeatAsync();
+            bool connected = heartbeat.TryGetProperty("session", out var session) &&
+                session.TryGetProperty("connected", out var connectedValue) && connectedValue.GetBoolean();
+            bool matched = heartbeat.TryGetProperty("binaryMatched", out var matchedValue) && matchedValue.GetBoolean();
+            if (generation != operationGeneration || !ReferenceEquals(target, client) || !connected || !matched) return;
+            supportSession = true; heartbeatHealthy = true; powerHold ??= PowerHold.Acquire();
+            SelectRole(1); SelectControllerPage(1); code.SetText("");
+            connectionState.SetText(() => UiText.SessionEstablished); SetFooterMessage(() => UiText.ActiveVersionsSynchronized); SetFooterDetail(() => UiText.LoadingMeasurements); RefreshFooter();
+            StartHeartbeat(); _ = LoadInitialRemoteStateAsync(generation);
+        }
+        catch (Exception ex)
+        {
+            if (generation == operationGeneration && ReferenceEquals(target, client))
+            {
+                connectionState.SetText(() => UiText.FailurePrefix + ex.Message);
+                SetFooterMessage(() => UiText.ConnectionFailed); footerDetail = ex.Message; RefreshFooter();
+            }
+        }
     }
 
     private void OnManagedRelaunchRequested()

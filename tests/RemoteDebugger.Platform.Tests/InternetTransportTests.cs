@@ -179,6 +179,34 @@ public sealed class InternetTransportTests
     }
 
     [Fact]
+    public async Task OlderAgentsFallbackToAuthenticatedOneShotUpdateOperations()
+    {
+        var rejectedChannel = new ScriptedInputStream { RejectUpdateOpen = true };
+        var legacy = new ScriptedInputStream();
+        int opens = 0;
+        var client = new RemoteClient(new Connection("127.0.0.1", 45832, new string('a', 64), "token"), (_, _) =>
+        {
+            opens++;
+            return Task.FromResult<Stream>(opens == 1 ? rejectedChannel : legacy);
+        });
+
+        try
+        {
+            string transactionId = new string('d', 32);
+            Assert.True((await client.SendUpdateAsync("update.begin", new { transactionId }, seconds: 30)).Ok);
+            Assert.True((await client.SendUpdateAsync("update.chunk", new { transactionId, offset = 0L, data = "AQI=" }, seconds: 60)).Ok);
+
+            Assert.Equal(3, opens);
+            Assert.Collection(rejectedChannel.Requests,
+                open => Assert.Equal("update.open", open.Operation));
+            Assert.Collection(legacy.Requests,
+                begin => { Assert.Equal("update.begin", begin.Operation); Assert.Equal(transactionId, begin.Args.Str("transactionId")); },
+                chunk => { Assert.Equal("update.chunk", chunk.Operation); Assert.Equal(0, chunk.Args.Long("offset")); });
+        }
+        finally { await client.CloseUpdateChannelAsync(); }
+    }
+
+    [Fact]
     public async Task FailedUpdateTransportIsDiscardedBeforeTheNextRequestReopensIt()
     {
         var failed = new ScriptedInputStream { FailAfterRequests = 2 };
@@ -290,6 +318,7 @@ public sealed class InternetTransportTests
         private readonly List<byte> incoming = [];
         public List<Request> Requests { get; } = [];
         public int FailAfterRequests { get; init; } = int.MaxValue;
+        public bool RejectUpdateOpen { get; init; }
         public override bool CanRead => true;
         public override bool CanSeek => false;
         public override bool CanWrite => true;
@@ -320,7 +349,10 @@ public sealed class InternetTransportTests
                 byte[] body = pending.GetRange(4, size).ToArray(); pending.RemoveRange(0, size + 4);
                 Request request = JsonSerializer.Deserialize<Request>(body, Json.Options)!;
                 Requests.Add(request);
-                QueueReply(Reply.Success(request.Id, new { sent = true }));
+                if (RejectUpdateOpen && request.Operation == "update.open")
+                    QueueReply(Reply.Failure(request.Id, "binary_mismatch", "Synchronize the agent with the controller executable before starting support."));
+                else
+                    QueueReply(Reply.Success(request.Id, new { sent = true }));
             }
             return ValueTask.CompletedTask;
         }
