@@ -107,7 +107,6 @@ export class SupportSession extends DurableObject<RelayEnv> {
       this.accept(server, "agent", "", crypto.randomUUID(), scope, name);
       if (name) await this.env.DIRECTORY.getByName(scope === "legacy" ? "private-clients" : `private-clients-${scope}`).register(new URL(request.url).pathname.split("/")[3]);
       server.send(JSON.stringify({ type: "registered", publicIp: request.headers.get("CF-Connecting-IP") ?? "" }));
-      await this.scheduleCleanup();
       return new Response(null, { status: 101, webSocket: client });
     }
     if ((await this.ctx.storage.get<string>("scope") ?? "legacy") !== scope) return unavailable();
@@ -187,12 +186,13 @@ export class SupportSession extends DurableObject<RelayEnv> {
   async alarm(): Promise<void> {
     const sockets = this.ctx.getWebSockets();
     if (!sockets.length) { await this.ctx.storage.deleteAll(); return; }
+    let pendingController = false;
     for (const socket of sockets) {
       const state = socket.deserializeAttachment() as SocketState;
-      if (state.role === "controller" && Date.now() - state.created > 30000 &&
-          this.ctx.getWebSockets(`channel:${state.channel}`).length !== 2)
-        this.close(socket, "Connection timed out");
+      if (state.role !== "controller" || this.ctx.getWebSockets(`channel:${state.channel}`).length === 2) continue;
+      if (Date.now() - state.created > 30000) this.close(socket, "Connection timed out");
+      else pendingController = true;
     }
-    await this.ctx.storage.setAlarm(Date.now() + 30000);
+    if (pendingController) await this.ctx.storage.setAlarm(Date.now() + 30000);
   }
 }

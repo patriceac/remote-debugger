@@ -60,7 +60,6 @@ public sealed partial class MainForm
     {
         try { internetConfigured = InternetSettings.Load(root) != null || File.Exists(new SecurityMigrationStore(root).PendingSetupPath); }
         catch (Exception ex) { internetSetupError = ex.Message; }
-        if (PrivateInternet) discoveryTimer.Interval = 10000;
         var panel = new Forms.TableLayoutPanel { AutoSize = true, Dock = Forms.DockStyle.Top, ColumnCount = 1, RowCount = 2, Margin = Forms.Padding.Empty };
         panel.Controls.Add(agentSubtitle, 0, 0);
         internetState.Margin = new Forms.Padding(0, 10, 0, 2);

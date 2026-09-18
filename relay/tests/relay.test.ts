@@ -1,4 +1,6 @@
 import { SELF } from "cloudflare:test";
+import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import { afterEach, describe, expect, it } from "vitest";
 
 const key = "a".repeat(64), owner = "b".repeat(64);
@@ -8,6 +10,7 @@ const receive = (ws: WebSocket) => new Promise<string | ArrayBuffer>((resolve, r
   ws.addEventListener("message", e => resolve(e.data as string | ArrayBuffer), { once: true });
   ws.addEventListener("close", () => reject(new Error("closed")), { once: true });
 });
+const alarmAt = (room: string) => runInDurableObject(env.SESSIONS.getByName(room), (_, state) => state.storage.getAlarm());
 async function connect(room: string, action: string, ownerKey?: string, name?: string) {
   const headers: Record<string, string> = { Authorization: `Bearer ${key}`, Upgrade: "websocket" };
   if (ownerKey) headers["X-Session-Key"] = ownerKey;
@@ -73,6 +76,21 @@ describe("private encrypted transport relay", () => {
     expect([...new Uint8Array(await toAgent as ArrayBuffer)]).toEqual([22, 3, 3, 0, 255]);
     const toController = receive(controller); stream.send(new Uint8Array([9, 8, 7]));
     expect([...new Uint8Array(await toController as ArrayBuffer)]).toEqual([9, 8, 7]);
+  });
+
+  it("does not keep an alarm running for an idle agent", async () => {
+    const room = id(), agent = await connect(room, "agent", owner); await receive(agent);
+    expect(await alarmAt(room)).toBeNull();
+
+    const open = receive(agent), controller = await connect(room, "connect");
+    const channel = JSON.parse(await open as string).channel;
+    expect(await alarmAt(room)).not.toBeNull();
+    const ready = receive(controller), stream = await connect(room, `channels/${channel}`, owner);
+    expect(await ready).toBe("ready");
+
+    expect(await runDurableObjectAlarm(env.SESSIONS.getByName(room))).toBe(true);
+    expect(await alarmAt(room)).toBeNull();
+    stream.close(); controller.close();
   });
 
   it("prevents another agent from replacing the invitation owner", async () => {

@@ -19,6 +19,5 @@ public sealed partial class MainForm
         if (agent != null) { agent.Dispose(); agent = null; StartAgent(); _ = PrepareAgentAsync(); }
         else if (rolePages.SelectedIndex == 0 && privateSupportEnabled) { StartAgent(); _ = PrepareAgentAsync(); }
         RefreshUiState();
-        _ = DiscoverAsync(false);
     }
 }

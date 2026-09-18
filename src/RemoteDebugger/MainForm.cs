@@ -109,7 +109,6 @@ public sealed partial class MainForm : Forms.Form
     private readonly Forms.Button enterKey = Button(() => UiText.EnterKey, "enterKey", 76);
     private DesktopGeometry? geometry;
     private bool liveFrameFresh;
-    private DateTimeOffset? lastFrameUtc;
     private CancellationTokenSource? liveStream;
     private DateTimeOffset? streamStartedUtc;
     private int streamFrames;
@@ -150,7 +149,6 @@ public sealed partial class MainForm : Forms.Form
     private readonly bool startAgentOnLaunch;
     private readonly bool startInTray;
     private readonly Forms.Timer renderTimer = new() { Interval = 250 };
-    private readonly Forms.Timer discoveryTimer = new() { Interval = 30000 };
     private readonly Forms.Timer inputRecoveryTimer = new() { Interval = 750 };
     private Size statusPillRegionSize;
     private readonly Forms.NotifyIcon tray = new();
@@ -222,7 +220,6 @@ public sealed partial class MainForm : Forms.Form
         SupportPlatform.ManagedRelaunchRequested += OnManagedRelaunchRequested;
 
         renderTimer.Tick += (_, _) => RefreshUiState();
-        discoveryTimer.Tick += async (_, _) => await DiscoverAsync(false);
         Load += (_, _) =>
         {
             RestoreWindowPlacement();
@@ -579,7 +576,7 @@ public sealed partial class MainForm : Forms.Form
     private void WireEvents()
     {
         roleAgent.Click += (_, _) => SelectRole(0);
-        roleController.Click += (_, _) => { SelectRole(1); _ = DiscoverAsync(false); };
+        roleController.Click += (_, _) => SelectRole(1);
         navConnection.Click += (_, _) => SelectControllerPage(0); navScreen.Click += (_, _) => SelectControllerPage(1); navProcesses.Click += (_, _) => SelectControllerPage(2); navFiles.Click += (_, _) => SelectControllerPage(3); navDiagnostics.Click += (_, _) => SelectControllerPage(4);
         terminateSession.Click += async (_, _) => await TerminateSupportAsync();
         copyAgentCode.Click += (_, _) => { if (!string.IsNullOrWhiteSpace(CurrentPairingCode)) Forms.Clipboard.SetText(CurrentPairingCode); SetFooterMessage(() => UiText.CodeCopied); RefreshFooter(); };
@@ -643,7 +640,6 @@ public sealed partial class MainForm : Forms.Form
             Hide();
         }
         renderTimer.Start();
-        discoveryTimer.Start();
         _ = PumpInputAsync();
         if (!startInTray && File.Exists(new SecurityMigrationStore(root).PendingSetupPath)) ShowSecuritySetup();
         // A protected relay profile is already the user's authorization to keep
@@ -652,7 +648,6 @@ public sealed partial class MainForm : Forms.Form
         privateSupportEnabled = WindowLifetime.EnableSupportAtStartup(
             PrivateInternet, HasConfiguredPrivateSupport(), privateSupportEnabled);
         SelectRole(startAgentOnLaunch ? 0 : 1);
-        if (!startAgentOnLaunch) _ = DiscoverAsync(false);
         if (!startAgentOnLaunch && client != null) _ = ResumeSavedSupportAsync();
         await Task.Yield();
     }
@@ -839,16 +834,6 @@ public sealed partial class MainForm : Forms.Form
         if (IsDisposed) return;
         RefreshPowerHold();
         UpdateAgentState(); if (PrivateInternet) UpdatePrivateAgentState(); UpdateInternetState(); UpdateHeader(); RefreshControllerControls(); RefreshFooter(); RefreshInputStatus();
-        if (supportSession && liveStream != null && lastFrameUtc is { } presented && DateTimeOffset.UtcNow - presented > TimeSpan.FromSeconds(3))
-        {
-            // A frozen bitmap must never continue to look like a live view or
-            // remain eligible for remote input after its freshness window.
-            if (liveFrameFresh) ReleaseHeldInputForCurrentSession();
-            liveFrameFresh = false;
-            liveBadge.Visible = false;
-            streamOverlay.SetText(() => UiText.FrozenFrame);
-            streamOverlay.Visible = true;
-        }
         if (!agentIdle && agent?.Operations.Maintenance is { } maintenance)
         {
             var state = Json.Element(maintenance.Status); bool active = state.TryGetProperty("active", out var a) && a.GetBoolean(); bool brokerAvailable = !state.TryGetProperty("brokerAvailable", out var broker) || broker.GetBoolean(); bool requiresProvisioning = state.TryGetProperty("requiresProvisioning", out var provisioning) && provisioning.GetBoolean();
@@ -1008,7 +993,7 @@ public sealed partial class MainForm : Forms.Form
         roleController.Enabled = false;
         bool stopped = await StopAgentAsync();
         roleController.Enabled = true;
-        if (stopped && !quitting) { SelectRole(1); await DiscoverAsync(false); }
+        if (stopped && !quitting) SelectRole(1);
     }
 
     private void SelectControllerPage(int index)
@@ -1096,7 +1081,7 @@ public sealed partial class MainForm : Forms.Form
         if (supportSession) { connectionState.SetText(() => UiText.EndSupportBeforeNewCode); return; }
         if (pairingBusy || string.IsNullOrWhiteSpace(host.Text)) { connectionState.SetText(() => PrivateInternet ? UiText.SelectComputer : UiText.ChoosePcPeriod); return; }
         if (!PrivateInternet && (code.Text.Length != 6 || !code.Text.All(char.IsAsciiDigit))) { connectionState.SetText(() => UiText.CodeMustBeSixDigits); code.Focus(); return; }
-        pairingBusy = true; synchronizingAgent = false; pairButton.Enabled = false; discoverButton.Enabled = false; code.Enabled = false; host.Enabled = false; operationGeneration++; int generation = operationGeneration; sessionGeneration++; lastFrameUtc = null; liveFrameFresh = false; var pairingCts = new CancellationTokenSource(); pairingLifetime = pairingCts;
+        pairingBusy = true; synchronizingAgent = false; pairButton.Enabled = false; discoverButton.Enabled = false; code.Enabled = false; host.Enabled = false; operationGeneration++; int generation = operationGeneration; sessionGeneration++; liveFrameFresh = false; var pairingCts = new CancellationTokenSource(); pairingLifetime = pairingCts;
         RemoteClient? pairedClient = null;
         updateProgressArea.Visible = false;
         try
@@ -1300,7 +1285,7 @@ public sealed partial class MainForm : Forms.Form
             PostUi(() => Present(frame));
             return;
         }
-        geometry = frame.Geometry; using var ms = new MemoryStream(Convert.FromBase64String(frame.Data)); using var image = Image.FromStream(ms); var previous = screen.Image; screen.Image = new Bitmap(image); previous?.Dispose(); screen.Refresh(); liveFrameFresh = true; lastFrameUtc = DateTimeOffset.UtcNow; liveBadge.Visible = true; streamOverlay.Visible = false; RefreshInputStatus();
+        geometry = frame.Geometry; using var ms = new MemoryStream(Convert.FromBase64String(frame.Data)); using var image = Image.FromStream(ms); var previous = screen.Image; screen.Image = new Bitmap(image); previous?.Dispose(); screen.Refresh(); liveFrameFresh = true; liveBadge.Visible = true; streamOverlay.Visible = false; RefreshInputStatus();
         if (liveStream != null && streamStartedUtc is { } started)
         {
             streamFrames++; streamBytes += frame.Data.Length; double seconds = Math.Max(0.001, (DateTimeOffset.UtcNow - started).TotalSeconds); double fps = streamFrames / seconds; double mbps = streamBytes * 8 / seconds / 1_000_000d; streamStatus.SetText(() => UiText.Format(UiText.StreamMetrics, fps, mbps, frame.CaptureEncodeMs)); SetFooterDetail(() => streamStatus.Text); RefreshFooter();
@@ -1606,7 +1591,7 @@ public sealed partial class MainForm : Forms.Form
         }
         if (selectControllerAfter)
         {
-            SelectRole(1); SelectControllerPage(0); _ = DiscoverAsync(false);
+            SelectRole(1); SelectControllerPage(0);
         }
         SetFooterMessage(() => UiText.SupportEnded); SetFooterDetail(() => UiText.SelectPcToRestart); RefreshFooter();
     }
@@ -1615,7 +1600,7 @@ public sealed partial class MainForm : Forms.Form
     {
         client = null; selectedPeer = null; selectedFingerprint = ""; selectedFilePath = null;
         selectedPeerName.SetText(() => UiText.NewConnection); selectedPeerAddress.SetText(() => PrivateInternet ? UiText.PrivateConnectInstructions : UiText.EnterRemoteCode);
-        geometry = null; lastFrameUtc = null; inputState.Released(); inputRecoveryTimer.Stop(); code.SetText("");
+        geometry = null; inputState.Released(); inputRecoveryTimer.Stop(); code.SetText("");
         processRows.Clear(); fileRows.Clear(); processList.Items.Clear(); fileList.Items.Clear();
         screen.Image?.Dispose(); screen.Image = null; currentDirectory = ""; fileDirectory.Clear(); remotePath.SetText("");
         cpuSummary.SetText(ramSummary.SetText(processSummary.SetText(resourceMeasuredAt.SetText("—"))));
@@ -1702,7 +1687,7 @@ public sealed partial class MainForm : Forms.Form
 
     private async Task<bool> ShutdownAsync()
     {
-        renderTimer.Stop(); discoveryTimer.Stop(); inputRecoveryTimer.Stop(); discoveryLifetime?.Cancel(); heartbeatLifetime?.Cancel(); pairingLifetime?.Cancel(); liveStream?.Cancel(); action?.Cancel();
+        renderTimer.Stop(); inputRecoveryTimer.Stop(); discoveryLifetime?.Cancel(); heartbeatLifetime?.Cancel(); pairingLifetime?.Cancel(); liveStream?.Cancel(); action?.Cancel();
         // A saved connection only pre-fills the controller form. It is not an
         // active outbound session, and must never delay an agent replacement
         // while trying to contact an unrelated (possibly offline) old peer.
@@ -1741,7 +1726,7 @@ public sealed partial class MainForm : Forms.Form
     private void DisposeResources()
     {
         SupportPlatform.ManagedRelaunchRequested -= OnManagedRelaunchRequested;
-        renderTimer.Dispose(); discoveryTimer.Dispose(); inputRecoveryTimer.Dispose(); discoveryLifetime?.Dispose(); heartbeatLifetime?.Dispose(); pairingLifetime?.Dispose(); liveStream?.Dispose(); action?.Dispose(); powerHold?.Dispose(); tray.Dispose();
+        renderTimer.Dispose(); inputRecoveryTimer.Dispose(); discoveryLifetime?.Dispose(); heartbeatLifetime?.Dispose(); pairingLifetime?.Dispose(); liveStream?.Dispose(); action?.Dispose(); powerHold?.Dispose(); tray.Dispose();
     }
 
     private void RequireClient() { if (client == null || !supportSession) throw new InvalidOperationException(UiText.ConnectBeforeAction); }

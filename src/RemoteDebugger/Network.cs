@@ -578,14 +578,20 @@ public sealed partial class AgentServer : IDisposable
     private async Task StreamAsync(SslStream tls, Request request, CancellationToken ct)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct); cts.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(request.TimeoutSeconds, 1, 300))); running[request.Id] = cts;
-        int fps = StreamPolicy.ClampFps(request.Args.Int("fps", StreamPolicy.MaximumFps)); long sequence = 0;
+        int fps = StreamPolicy.ClampFps(request.Args.Int("fps", StreamPolicy.MaximumFps)); long sequence = 0; string? previousFingerprint = null;
         Status?.Invoke("Live screen stream active (encrypted). Target " + fps + " fps.");
         try
         {
             while (!cts.IsCancellationRequested)
             {
                 var started = System.Diagnostics.Stopwatch.StartNew();
-                var frame = DesktopCapture.Capture(request.Args.Int("monitor"), request.Args.Int("maxWidth", 1920), request.Args.Int("quality", 65), sequence++);
+                var capture = DesktopCapture.CaptureStream(request.Args.Int("monitor"), request.Args.Int("maxWidth", 1920), request.Args.Int("quality", 65), sequence, previousFingerprint);
+                previousFingerprint = capture.Fingerprint;
+                if (capture.Frame is not { } frame)
+                {
+                    double unchangedWait = 1000.0 / fps - started.Elapsed.TotalMilliseconds; if (unchangedWait > 0) await Task.Delay(TimeSpan.FromMilliseconds(unchangedWait), cts.Token);
+                    continue;
+                }
                 await Wire.WriteAsync(tls, Reply.Success(request.Id, frame), cts.Token);
                 // One frame in flight; the next capture starts only after receipt.
                 // The controller independently replaces any unrendered older frame.
@@ -593,6 +599,7 @@ public sealed partial class AgentServer : IDisposable
                 var ack = await Wire.ReadAsync<System.Text.Json.JsonElement>(tls, ackTimeout.Token);
                 if (ack.Long("sequence", -1) != frame.Sequence) throw new InvalidDataException("Invalid stream acknowledgement.");
                 session.Observe();
+                sequence++;
                 double wait = 1000.0 / fps - started.Elapsed.TotalMilliseconds; if (wait > 0) await Task.Delay(TimeSpan.FromMilliseconds(wait), cts.Token);
             }
         }
@@ -880,8 +887,7 @@ public sealed class RemoteClient
         await Wire.WriteAsync(tls, new Request(Guid.NewGuid().ToString(), Connection.Token, "screen.stream", Json.Element(new { fps, monitor, maxWidth = 1920, quality = 65 }), seconds, ExecutableIdentity.Sha256), ct);
         while (!ct.IsCancellationRequested)
         {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(10000);
-            var reply = await Wire.ReadAsync<Reply>(tls, timeout.Token); Require(reply);
+            var reply = await Wire.ReadAsync<Reply>(tls, ct); Require(reply);
             var frame = reply.Data.Deserialize<ScreenFrame>(Json.Options) ?? throw new IOException("Missing frame.");
             publish(frame); await Wire.WriteAsync(tls, new { sequence = frame.Sequence }, ct);
         }
