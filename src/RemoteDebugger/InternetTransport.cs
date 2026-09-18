@@ -124,12 +124,24 @@ public static class ConnectionTransport
 {
     public static async Task<Stream> OpenAsync(Connection target, CancellationToken ct)
     {
-        if (target.RelayUrl.Length == 0)
+        if (target.DirectHost.Length > 0)
         {
-            var tcp = new TcpClient { NoDelay = true };
-            try { await tcp.ConnectAsync(target.Host, target.Port, ct).ConfigureAwait(false); return tcp.GetStream(); }
-            catch { tcp.Dispose(); throw; }
+            try { return await OpenTcpAsync(target.DirectHost, target.DirectPort, ct).ConfigureAwait(false); }
+            catch when (!ct.IsCancellationRequested && target.RelayUrl.Length > 0) { }
         }
+        if (target.RelayUrl.Length == 0) return await OpenTcpAsync(target.Host, target.Port, ct).ConfigureAwait(false);
+        return await OpenRelayAsync(target, ct).ConfigureAwait(false);
+    }
+
+    private static async Task<Stream> OpenTcpAsync(string host, int port, CancellationToken ct)
+    {
+        var tcp = new TcpClient { NoDelay = true };
+        try { await tcp.ConnectAsync(host, port, ct).ConfigureAwait(false); return tcp.GetStream(); }
+        catch { tcp.Dispose(); throw; }
+    }
+
+    private static async Task<Stream> OpenRelayAsync(Connection target, CancellationToken ct)
+    {
         var settings = new InternetSettings(target.RelayUrl, target.RelayAccessKey); settings.Validate();
         var socket = settings.Socket();
         try

@@ -10,7 +10,7 @@ The app automatically uses the Windows display language: French, English or Span
 4. Enter the receiving PC's code and press Enter or **Connect**. Pairing authenticates the encrypted connection using the code, and subsequent connections pin that identity.
 5. Wait for binary synchronization. If necessary, the agent silently receives and restarts into the exact signed executable running on the controller. Both PCs show actual transfer bytes and percentage; verification and restart are separate stages after the transfer reaches 100 percent. A planned restart does not require another code. The controller then opens **Remote screen** automatically.
 
-The agent uses TCP 45832 and UDP 45833 on the local subnet. No router configuration, port forwarding, or Internet service is needed.
+The agent uses TCP 45832 and UDP 45833 on the local subnet. For private internet sessions, the relay is used for discovery and pairing, then a reachable LAN or public TCP 45832 endpoint is preferred for the rest of the session; the relay remains the fallback. No router configuration, port forwarding, or Internet service is needed when the relay is used.
 
 Launching Remote Debugger again brings the existing desktop window forward. It does not open another instance or replace the current connection. This also restores a window hidden in the system tray. Use the role buttons inside that window to give or take control.
 

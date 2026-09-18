@@ -143,7 +143,18 @@ public static class Program
                 string secret = client.Connection.RelayUrl.Length != 0
                     ? InternetSettings.Load(Option("--data-root", Vault.DefaultRoot))!.AuthenticationSecret(client.Connection.Host)
                     : (await Console.In.ReadLineAsync(ct.Token) ?? "").Trim();
-                await client.PairAsync(secret, ct.Token); client.Save(config);
+                await client.PairAsync(secret, ct.Token);
+                if (client.Connection.RelayUrl.Length > 0)
+                {
+                    try
+                    {
+                        var candidates = await client.GetDirectEndpointsAsync(ct.Token);
+                        await client.TryPreferDirectAsync(candidates, ct.Token);
+                    }
+                    catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
+                    catch (Exception) when (!ct.IsCancellationRequested) { }
+                }
+                client.Save(config);
                 Console.WriteLine(Json.Text(new { ok = true, paired = true, connection = config })); return 0;
             }
             if (verb == "help")

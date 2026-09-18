@@ -1,6 +1,6 @@
 # Internet support
 
-Internet mode connects both PCs outward over HTTPS/WebSockets (port 443). No VPN, router port forwarding, or incoming Windows firewall rule is required for the relay. When the relay is unavailable, the app automatically falls back to the local UDP/TCP path if local support has been provisioned.
+Internet mode uses HTTPS/WebSockets (port 443) for discovery, pairing and relay fallback. After the authenticated pairing handshake, the controller asks the agent for direct LAN and public-IP candidates and probes them over the endpoint's TLS port. A successful probe is saved and all later RPC, screen, input and transfer traffic uses the direct TCP path; the relay remains an automatic fallback if that path becomes unreachable. No VPN, router port forwarding, or incoming Windows firewall rule is required for the relay. When the relay is unavailable, the app automatically falls back to the local UDP/TCP path if local support has been provisioned.
 
 ## Set up your devices
 
@@ -14,7 +14,7 @@ The installer contains passphrase-encrypted relay and pairing credentials. After
 
 Use the private installer for the normal setup and for relay configuration updates. The developer CLI can still import a `.rdrelay` profile for a portable build; this is not part of the app's setup flow.
 
-Routing IDs remain internal and change between support sessions. **End support** immediately revokes access; the computer disappears on a subsequent discovery refresh. After an abrupt disconnection, presence can remain stale for up to a minute before the next refresh. A fresh launch waits for **Enable support** again. Transient relay failures reconnect with backoff while the existing support-session grace period applies. If local support is provisioned, the agent also prepares its LAN listener and firewall rule; the controller then discovers it locally and authenticates with the same private session identity.
+Routing IDs remain internal and change between support sessions. **End support** immediately revokes access; the computer disappears on a subsequent discovery refresh. After an abrupt disconnection, presence can remain stale for up to a minute before the next refresh. A fresh launch waits for **Enable support** again. Transient relay failures reconnect with backoff while the existing support-session grace period applies. If local support is provisioned, the agent also prepares its LAN listener and firewall rule; the controller then discovers it locally and authenticates with the same private session identity. Direct WAN use additionally requires the advertised public IP and TCP 45832 to be reachable through the router and any upstream firewall; otherwise the saved relay route is used.
 
 `--loopback-only` also disables internet registration. Importing a setup file does not enable Windows administrator maintenance; the existing separate Windows provisioning rules still apply.
 
@@ -26,7 +26,7 @@ RemoteDebugger.exe cli discover
 RemoteDebugger.exe cli pair --host RD-0123-4567-89AB-CDEF
 ```
 
-Private internet pairing reads the installer secret from protected settings, without prompting for a code. The developer CLI exposes internal routing IDs for scripting; the GUI uses computer names. LAN-only pairing still reads a code from standard input. `--data-root DIRECTORY` selects a settings directory for import, discovery and pairing. After pairing, the existing `sync`, `call`, `stream`, upload, and download commands use the protected saved connection automatically.
+Private internet pairing reads the installer secret from protected settings, without prompting for a code. The developer CLI exposes internal routing IDs for scripting; the GUI uses computer names. LAN-only pairing still reads a code from standard input. `--data-root DIRECTORY` selects a settings directory for import, discovery and pairing. After pairing, the controller probes the authenticated agent's direct candidates and stores the selected endpoint alongside the relay fallback. The existing `sync`, `call`, `stream`, upload, and download commands use the protected saved connection automatically.
 
 ## Relay deployment
 

@@ -164,6 +164,43 @@ public sealed class InternetTransportTests
     }
 
     [Fact]
+    public async Task RelayPairedConnectionSwitchesToAnAuthenticatedDirectEndpoint()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "RemoteDebugger-DirectRoute-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        AgentServer? server = null;
+        try
+        {
+            int port = ReserveTcpPort();
+            server = new AgentServer(root, port, loopbackOnly: true, enableInternet: false);
+            server.Start();
+            string code = server.Pairing.CurrentCode ?? throw new InvalidOperationException("Agent did not expose a pairing code.");
+            var paired = await PairingTransport.PairAsync(new Connection("127.0.0.1", port, server.Fingerprint, ""), code, CancellationToken.None);
+            var client = new RemoteClient(new Connection(
+                "RD-0123-4567-89AB-CDEF",
+                443,
+                paired.Fingerprint,
+                paired.Token,
+                "https://relay.example",
+                new string('a', 64)));
+
+            Assert.True(await client.TryPreferDirectAsync([new DirectEndpoint("127.0.0.1", port)]));
+            Assert.True(client.UsesDirectTransport);
+            Assert.Equal("127.0.0.1", client.Connection.DirectHost);
+            Assert.Equal(port, client.Connection.DirectPort);
+            Assert.Equal("https://relay.example", client.Connection.RelayUrl);
+            Assert.Equal(client.Connection, JsonSerializer.Deserialize<Connection>(
+                JsonSerializer.SerializeToUtf8Bytes(client.Connection, Json.Options), Json.Options));
+            Assert.True((await client.HeartbeatAsync()).GetProperty("session").GetProperty("connected").GetBoolean());
+        }
+        finally
+        {
+            server?.Dispose();
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task PersistentInputReusesOneAuthenticatedStreamAndPreservesRequestOrder()
     {
         var stream = new ScriptedInputStream();

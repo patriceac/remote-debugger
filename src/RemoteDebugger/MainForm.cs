@@ -1108,6 +1108,18 @@ public sealed partial class MainForm : Forms.Form
                 try { await pairedClient.PairAsync(PrivateInternet ? InternetSettings.Load(root)!.AuthenticationSecret(privateSupportId) : code.Text, handshake.Token); }
                 catch (OperationCanceledException) when (!pairingCts.IsCancellationRequested) { throw new TimeoutException(UiText.PairingTimedOut); }
             }
+            if (pairedClient.Connection.RelayUrl.Length > 0)
+            {
+                using var directUpgrade = CancellationTokenSource.CreateLinkedTokenSource(pairingCts.Token);
+                directUpgrade.CancelAfter(TimeSpan.FromSeconds(15));
+                try
+                {
+                    var candidates = await pairedClient.GetDirectEndpointsAsync(directUpgrade.Token);
+                    await pairedClient.TryPreferDirectAsync(candidates, directUpgrade.Token);
+                }
+                catch (OperationCanceledException) when (!pairingCts.IsCancellationRequested) { }
+                catch (Exception) when (!pairingCts.IsCancellationRequested) { }
+            }
             pairedClient.Save(); synchronizingAgent = true; connectionState.SetText(() => UiText.AgentSynchronizing); SetFooterMessage(() => UiText.AgentSynchronizing); SetFooterDetail(() => UiText.TransferValidateVersion); ShowUpdateProgress(new AgentUpdateProgress("idle", 0, 0)); UpdateHeader(); RefreshFooter();
             using (var synchronization = CancellationTokenSource.CreateLinkedTokenSource(pairingCts.Token))
             {

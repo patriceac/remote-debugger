@@ -26,7 +26,16 @@ public static class Vault
     public static byte[] Read(string path) => ProtectedData.Unprotect(File.ReadAllBytes(path), null, DataProtectionScope.CurrentUser);
 }
 public sealed record Peer(string Name, string Host, int Port, string Fingerprint, string SupportId = "");
-public sealed record Connection(string Host, int Port, string Fingerprint, string Token, string RelayUrl = "", string RelayAccessKey = "");
+public sealed record DirectEndpoint(string Host, int Port);
+public sealed record Connection(
+    string Host,
+    int Port,
+    string Fingerprint,
+    string Token,
+    string RelayUrl = "",
+    string RelayAccessKey = "",
+    string DirectHost = "",
+    int DirectPort = 0);
 
 public static class Discovery
 {
@@ -350,7 +359,16 @@ public sealed partial class AgentServer : IDisposable
     }
     private async Task AcceptAsync(TcpListener activeListener, long generation)
     {
-        try { while (!stop.IsCancellationRequested) { var tcp = await activeListener.AcceptTcpClientAsync(stop.Token); if (tcp.Client.RemoteEndPoint is not IPEndPoint remote || !IsLocalPeer(remote.Address) || !slots.Wait(0)) { tcp.Dispose(); continue; } tcp.NoDelay = true; _ = ServeAsync(tcp); } }
+        try
+        {
+            while (!stop.IsCancellationRequested)
+            {
+                var tcp = await activeListener.AcceptTcpClientAsync(stop.Token);
+                bool remoteAllowed = privateNetworkEnabled || tcp.Client.RemoteEndPoint is IPEndPoint remote && IsLocalPeer(remote.Address);
+                if (!remoteAllowed || !slots.Wait(0)) { tcp.Dispose(); continue; }
+                tcp.NoDelay = true; _ = ServeAsync(tcp);
+            }
+        }
         catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or SocketException) { }
         finally
         {
@@ -366,6 +384,21 @@ public sealed partial class AgentServer : IDisposable
         if (IPAddress.IsLoopback(peer)) return true;
         byte[] remote = peer.GetAddressBytes(); if (remote.Length != 4) return false;
         return NetworkInterface.GetAllNetworkInterfaces().Where(n => n.OperationalStatus == OperationalStatus.Up).SelectMany(n => n.GetIPProperties().UnicastAddresses).Where(a => a.Address.AddressFamily == AddressFamily.InterNetwork).Any(a => a.Address.GetAddressBytes().Zip(a.IPv4Mask.GetAddressBytes(), (ip, mask) => (byte)(ip & mask)).SequenceEqual(remote.Zip(a.IPv4Mask.GetAddressBytes(), (ip, mask) => (byte)(ip & mask))));
+    }
+    private IReadOnlyList<DirectEndpoint> DirectEndpoints()
+    {
+        if (!privateNetworkEnabled) return [];
+        var hosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void Add(string value)
+        {
+            if (IPAddress.TryParse(value, out var address) && address.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(address))
+                hosts.Add(address.ToString());
+        }
+        foreach (var nic in NetworkInterface.GetAllNetworkInterfaces().Where(x => x.OperationalStatus == OperationalStatus.Up))
+            foreach (var address in nic.GetIPProperties().UnicastAddresses.Where(x => x.Address.AddressFamily == AddressFamily.InterNetwork))
+                Add(address.Address.ToString());
+        if (Internet?.PublicIp is { Length: > 0 } publicIp) Add(publicIp);
+        return hosts.Select(host => new DirectEndpoint(host, Port)).ToArray();
     }
     private async Task ServeAsync(TcpClient tcp)
     {
@@ -544,6 +577,8 @@ public sealed partial class AgentServer : IDisposable
                             if (persistentUpdate) { r = await Wire.ReadAsync<Request>(tls, timeout.Token); continue; }
                             return;
                         }
+                        else if (r.Operation == "connection.candidates")
+                            reply = Reply.Success(r.Id, new { candidates = DirectEndpoints() });
                         else if (!Session.BinaryMatched && r.Operation is not ("status" or "maintenance.status" or "cancel"))
                             reply = Reply.Failure(r.Id, "binary_mismatch", "Synchronize the agent with the controller executable before starting support.");
                         else if (r.Operation == "ui.input.open" && !Guid.TryParse(r.Id, out _))
@@ -842,6 +877,58 @@ public sealed class RemoteClient
         await CloseUpdateChannelAsync().ConfigureAwait(false);
         Connection = await PairingTransport.PairAsync(Connection, code, ct).ConfigureAwait(false);
     }
+    public bool UsesDirectTransport => Connection.DirectHost.Length > 0;
+    internal async Task<IReadOnlyList<DirectEndpoint>> GetDirectEndpointsAsync(CancellationToken ct = default)
+    {
+        if (Connection.RelayUrl.Length == 0) return [];
+        var data = Require(await CallAsync("connection.candidates", ct: ct, seconds: 10).ConfigureAwait(false));
+        if (!data.TryGetProperty("candidates", out var candidates)) return [];
+        return candidates.Deserialize<List<DirectEndpoint>>(Json.Options)?
+            .Where(candidate => IPAddress.TryParse(candidate.Host, out var address) && address.AddressFamily == AddressFamily.InterNetwork && candidate.Port is > 0 and < 65536)
+            .DistinctBy(candidate => $"{candidate.Host}:{candidate.Port}", StringComparer.OrdinalIgnoreCase)
+            .Take(16)
+            .ToArray() ?? [];
+    }
+    internal async Task<bool> TryPreferDirectAsync(IEnumerable<DirectEndpoint> candidates, CancellationToken ct = default)
+    {
+        if (Connection.RelayUrl.Length == 0) return true;
+        if (Connection.DirectHost.Length > 0) return true;
+        Connection relay = Connection;
+        foreach (var candidate in candidates)
+        {
+            if (!IPAddress.TryParse(candidate.Host, out var address) || address.AddressFamily != AddressFamily.InterNetwork ||
+                candidate.Port is not (> 0 and < 65536)) continue;
+            using var attempt = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            attempt.CancelAfter(TimeSpan.FromSeconds(4));
+            var direct = relay with
+            {
+                Host = candidate.Host,
+                Port = candidate.Port,
+                RelayUrl = "",
+                RelayAccessKey = "",
+                DirectHost = "",
+                DirectPort = 0
+            };
+            try
+            {
+                await using var tls = await OpenAuthenticatedTransportOnceAsync(direct, attempt.Token).ConfigureAwait(false);
+                var id = Guid.NewGuid().ToString();
+                // Status is intentionally allowed before binary synchronization so
+                // a newly paired controller can move the synchronization itself
+                // onto the direct endpoint.
+                await Wire.WriteAsync(tls, new Request(id, relay.Token, "status", Json.Element(new { }), 5, ExecutableIdentity.Sha256), attempt.Token).ConfigureAwait(false);
+                var reply = await Wire.ReadAsync<Reply>(tls, attempt.Token).ConfigureAwait(false);
+                if (!reply.Ok) continue;
+                await CloseInputChannelAsync().ConfigureAwait(false);
+                await CloseUpdateChannelAsync().ConfigureAwait(false);
+                Connection = relay with { DirectHost = candidate.Host, DirectPort = candidate.Port };
+                return true;
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
+            catch (Exception) when (!ct.IsCancellationRequested) { }
+        }
+        return false;
+    }
     public async Task<JsonElement> HeartbeatAsync(CancellationToken ct = default) => Require(await CallAsync("session.heartbeat", ct: ct, seconds: 5).ConfigureAwait(false));
     public async Task EndSessionAsync(CancellationToken ct = default)
     {
@@ -996,6 +1083,19 @@ public sealed class RemoteClient
         ex.Code == "binary_mismatch" ||
         (ex.Code == "operation_failed" && ex.Message.Contains("update.open", StringComparison.OrdinalIgnoreCase));
     private static async Task<Stream> OpenAuthenticatedTransportAsync(Connection connection, CancellationToken ct)
+    {
+        if (connection.DirectHost.Length > 0 && connection.RelayUrl.Length > 0)
+        {
+            using var directAttempt = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            directAttempt.CancelAfter(TimeSpan.FromSeconds(6));
+            try { return await OpenAuthenticatedTransportOnceAsync(connection, directAttempt.Token).ConfigureAwait(false); }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
+            catch (Exception) when (!ct.IsCancellationRequested) { }
+            return await OpenAuthenticatedTransportOnceAsync(connection with { DirectHost = "", DirectPort = 0 }, ct).ConfigureAwait(false);
+        }
+        return await OpenAuthenticatedTransportOnceAsync(connection, ct).ConfigureAwait(false);
+    }
+    private static async Task<Stream> OpenAuthenticatedTransportOnceAsync(Connection connection, CancellationToken ct)
     {
         Stream transport = await ConnectionTransport.OpenAsync(connection, ct).ConfigureAwait(false);
         SslStream? tls = null;
