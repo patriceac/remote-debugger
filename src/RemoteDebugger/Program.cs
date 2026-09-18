@@ -11,8 +11,8 @@ public static class Program
     {
         if (args.Length == 1 && args[0] == "--platform-service") return SupportService.Run();
         if (args.Length == 2 && args[0] == "--support-provision") return SupportInstaller.ExecuteElevated(args[1]);
-        if (args.Length == 1 && args[0] == "--managed-upgrade") return SupportInstaller.UpgradeAsync().GetAwaiter().GetResult();
-        if (args.Length == 2 && args[0] == "--support-upgrade") return SupportInstaller.ExecuteUpgradeElevated(args[1]);
+        if (args.Length == 1 && args[0] == "--installer-shutdown") return SupportInstaller.StopForInstaller();
+        if (args.Length == 1 && args[0] == "--support-refresh") return SupportInstaller.RefreshService();
         if (args.Length == 2 && args[0] == "--elevated-job") return ElevatedJob.ExecuteAsync(args[1]).GetAwaiter().GetResult();
         if (args.Length == 2 && args[0] == "--ui-job") { Forms.Application.SetHighDpiMode(Forms.HighDpiMode.PerMonitorV2); return UiAutomationJob.Execute(args[1]); }
         if (args.Length > 0 && args[0] == "cli") return CliAsync(args.Skip(1).ToArray()).GetAwaiter().GetResult();

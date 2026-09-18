@@ -4,7 +4,7 @@ Internet mode uses HTTPS/WebSockets (port 443) for discovery, pairing and relay 
 
 ## Set up your devices
 
-1. Run your personal `RemoteDebugger-<version>-Private-Setup.exe` on each new PC. It embeds an encrypted `.rdrelay` setup and stages it for the current Windows user, including during silent installation. Enter your setup passphrase once in the Security window at first normal launch. Existing PCs can instead receive new credentials through [remote security migration](SECURITY_SETUP.md).
+1. Run your personal `RemoteDebugger-<version>-Private-Setup.exe` on each new PC. It installs the single Program Files application, removes any legacy per-user copy, and embeds an encrypted `.rdrelay` setup for the current Windows user, including during silent installation. Enter your setup passphrase once in the Security window at first normal launch. Existing PCs can instead receive new credentials through [remote security migration](SECURITY_SETUP.md).
 2. Open the app and click **Enable support** on the assisted PC. Approve Windows administrator setup on first use. Opening the app alone does not grant access. The client then appears by computer name on your other PCs.
 3. On the controlling PC, choose **Take control**, select the computer and click **Connect**. No support ID, IP address, authorization code, or Internet setup screen is required.
 

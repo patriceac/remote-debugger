@@ -20,7 +20,7 @@ internal sealed partial class LabForm
         Pass("installer.fresh_profile", "Internet settings are absent before installation");
         try
         {
-            var start = new ProcessStartInfo(installer) { UseShellExecute = false };
+            var start = new ProcessStartInfo(installer) { UseShellExecute = true, Verb = "runas" };
             foreach (string argument in new[] { "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/LOG=" + Path.Combine(output, "install.log") })
                 start.ArgumentList.Add(argument);
             using var setup = Process.Start(start) ?? throw new IOException("The private installer did not start.");
@@ -36,7 +36,7 @@ internal sealed partial class LabForm
                 _ = ProtectedSetup.Read(await File.ReadAllBytesAsync(pendingSetup, stop.Token));
                 if (InternetSettings.Load(Vault.DefaultRoot) != null) throw new IOException("The encrypted installer unlocked without a passphrase.");
                 Pass("installer.locked_setup", "The private installer stages a valid encrypted envelope without authorizing the Windows account");
-                application = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Remote Debugger", "RemoteDebugger.exe");
+                application = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "RemoteDebugger", "RemoteDebugger.exe");
                 loopbackAgent = LaunchInternetProduct(true, Vault.DefaultRoot); product = loopbackAgent;
                 await WaitUiAsync(); WindowState = Forms.FormWindowState.Minimized;
                 if (!SecurityControl("securityPassphrase").Current.IsPassword || !SecurityControl("securityCreate").Current.IsEnabled)
@@ -53,19 +53,23 @@ internal sealed partial class LabForm
                 throw new IOException("Installed internet settings contain a plaintext access key.");
             Pass("installer.protected_settings", "The current user can load the automatically imported DPAPI-protected settings", new { settings.RelayUrl });
 
-            string installedDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Remote Debugger");
+            string installedDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "RemoteDebugger");
             application = Path.Combine(installedDirectory, "RemoteDebugger.exe");
-            if (!File.Exists(application)) throw new IOException("The per-user Release executable is missing.");
+            if (!File.Exists(application)) throw new IOException("The Program Files Release executable is missing.");
+            string legacyDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Remote Debugger");
+            if (Directory.Exists(legacyDirectory)) throw new IOException("The legacy per-user installation was not removed.");
+            Pass("installer.program_files", "The installer uses the single protected Program Files installation", new { application });
             var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint };
             if (Directory.EnumerateFiles(installedDirectory, "*.rdrelay", options).Any() ||
                 Directory.EnumerateFiles(Path.GetTempPath(), "RemoteDebugger-Internet.rdrelay", options).Any())
                 throw new IOException("The installer left its plaintext relay profile on disk.");
             Pass("installer.profile_cleanup", "The embedded plaintext profile is removed after import and is absent from installed files");
 
-            string shortcut = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Remote Debugger", "Remote Debugger.lnk");
-            using var uninstall = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\{B12489BE-DF12-4DD2-AFD4-FB82B032BE05}_is1");
-            if (!File.Exists(shortcut) || uninstall == null) throw new IOException("Per-user Start menu or uninstall registration is missing.");
-            Pass("installer.desktop_integration", "Installation retains the per-user Start menu shortcut and uninstaller");
+            string shortcut = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "Remote Debugger", "Remote Debugger.lnk");
+            using var uninstall = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64)
+                .OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\{B12489BE-DF12-4DD2-AFD4-FB82B032BE05}_is1");
+            if (!File.Exists(shortcut) || uninstall == null) throw new IOException("Machine Start menu or uninstall registration is missing.");
+            Pass("installer.desktop_integration", "Installation retains the machine Start menu shortcut and uninstaller");
 
             string startupShortcut = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Startup), "Remote Debugger.lnk");
             if (!File.Exists(startupShortcut)) throw new IOException("The current user's Windows startup shortcut is missing.");

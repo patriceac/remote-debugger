@@ -2,14 +2,17 @@
 
 ## Desktop installer
 
-`RemoteDebugger-<version>-Setup.exe` is a per-user installer. It writes beneath
-`%LOCALAPPDATA%\Programs\Remote Debugger`, creates a Start menu shortcut, and
-registers an uninstaller without requesting administrator privileges. It also
+`RemoteDebugger-<version>-Setup.exe` is a machine-wide installer. It requests
+administrator approval and writes the single application beneath
+`%ProgramFiles%\RemoteDebugger`, creates a machine Start menu shortcut, and
+registers a machine uninstaller. It removes the legacy per-user installation
+from `%LOCALAPPDATA%\Programs\Remote Debugger` if one is present. It also
 creates a shortcut in the current user's Windows Startup folder, so the app
 starts in the system tray when that user signs in after boot. Use the tray icon
 to open its window; private support still waits for **Enable support**. The Start
-menu shortcut opens the window normally. Both launch at medium integrity. The portable
-single executable remains supported and behaves the same way.
+menu shortcut opens the window normally. The installed app launches at medium
+integrity after the administrator-owned setup completes. The portable single
+executable remains supported and behaves the same way.
 
 The personal `RemoteDebugger-<version>-Private-Setup.exe` also embeds the private
 encrypted internet setup file. Installation stages ciphertext for a one-time
@@ -18,15 +21,14 @@ installation also waits for unlock at the first normal launch. Reinstalling
 the same unlocked profile preserves remembered access. The passphrase is never
 an installer argument. See [security setup](SECURITY_SETUP.md).
 
-The desktop installer is deliberately separate from protected support setup.
-Choosing **Enable support** still requests one explicit Windows administrator
-approval so the application can provision its Program Files copy, local broker,
-and Private/LocalSubnet firewall rules. Later launches through the Start menu
-automatically redirect an agent to that protected copy without another prompt.
-If a protected copy already exists, rerunning the desktop installer first stages
-the signed per-user build, then asks once for Windows administrator approval to
-stop and replace the protected application and broker before launching normally.
-Remote signed updates through the broker remain silent after the initial setup.
+The desktop installer owns the Program Files application. Choosing **Enable
+support** still requests one explicit Windows administrator approval so the
+application can provision the local broker and Private/LocalSubnet firewall
+rules. There is no second installed application to redirect to. Re-running the
+installer closes the running agent, removes any legacy per-user package, updates
+the Program Files application, and refreshes the protected broker when one is
+already provisioned. Remote signed updates through the broker remain silent
+after the initial setup.
 
 Build the installer after producing a signed Release:
 
@@ -44,10 +46,11 @@ Run `scripts/Test-InternetInstaller.ps1` after publishing the acceptance Lab to
 verify automatic configuration and first-launch relay registration in Hyper-V.
 
 Inno Setup must be installed or its compiler path supplied with
-`-CompilerPath`. Uninstalling the per-user package removes its files and Start
-menu and Windows Startup shortcuts. Protected support provisioned by **Enable support** is managed
-separately because removing a Windows service and Program Files state requires
-administrator authorization.
+`-CompilerPath`. Uninstalling the machine package removes its application files
+and machine Start menu shortcut; the current user's Windows Startup shortcut is
+also removed. Protected support provisioned by **Enable support** is managed
+separately because removing a Windows service and protected ProgramData state
+requires administrator authorization.
 
 Remote Debugger runs the visible support agent in the signed-in user's desktop.
 Silent administrator maintenance and protected executable replacement use a

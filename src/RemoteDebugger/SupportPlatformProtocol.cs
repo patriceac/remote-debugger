@@ -15,7 +15,7 @@ internal static class SupportPlatformPaths
     public const int ProtocolVersion = 1;
     public static string ProductDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "RemoteDebugger");
     public static string ApplicationExecutable => Path.Combine(ProductDirectory, "RemoteDebugger.exe");
-    public static string UserApplicationExecutable => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Remote Debugger", "RemoteDebugger.exe");
+    public static string LegacyUserApplicationExecutable => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Remote Debugger", "RemoteDebugger.exe");
     public static string InstallDirectory => Path.Combine(ProductDirectory, "Support");
     public static string ServiceExecutable => Path.Combine(InstallDirectory, "RemoteDebugger.Support.exe");
     public static string StateDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "RemoteDebugger", "Support");
