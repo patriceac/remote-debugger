@@ -85,6 +85,19 @@ public static class Native
         if (text.Length > 8192) throw new ArgumentException("Text exceeds 8192 characters."); Focus(pid);
         foreach (char c in text) Input(new INPUT { type = 1, data = new UNION { key = new KEY { scan = c, flags = 4 } } }, new INPUT { type = 1, data = new UNION { key = new KEY { scan = c, flags = 6 } } });
     }
+    private static void TypeTextIntoFocusedControl(string text)
+    {
+        if (text.Length > 8192) throw new ArgumentException("Text exceeds 8192 characters.");
+        if (text.Length == 0) return;
+        var inputs = new INPUT[checked(text.Length * 2)];
+        int index = 0;
+        foreach (char c in text)
+        {
+            inputs[index++] = new INPUT { type = 1, data = new UNION { key = new KEY { scan = c, flags = 4 } } };
+            inputs[index++] = new INPUT { type = 1, data = new UNION { key = new KEY { scan = c, flags = 6 } } };
+        }
+        Input(inputs);
+    }
     public static void Key(int pid, string chord)
     {
         var map = new Dictionary<string, ushort> { ["CTRL"] = 17, ["ALT"] = 18, ["SHIFT"] = 16, ["ENTER"] = 13, ["TAB"] = 9, ["ESCAPE"] = 27, ["BACKSPACE"] = 8, ["DELETE"] = 46, ["LEFT"] = 37, ["RIGHT"] = 39, ["UP"] = 38, ["DOWN"] = 40, ["SPACE"] = 32 };
@@ -113,6 +126,7 @@ public static class Native
             DesktopCapture.RequireDesktop(); lastInput = DateTime.UtcNow;
             string kind = a.Str("kind");
             if (kind == "release") { ReleaseAllInput(); return; }
+            if (kind == "text") { TypeTextIntoFocusedControl(a.Str("text")); return; }
             if (kind is "move" or "down" or "up" or "wheel")
             {
                 if (a.Str("layoutId") != DesktopCapture.LayoutId()) { ReleaseAllInput(); throw new InvalidOperationException("Display geometry changed. Refresh the screen before sending input."); }

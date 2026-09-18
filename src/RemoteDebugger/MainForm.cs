@@ -597,7 +597,7 @@ public sealed partial class MainForm : Forms.Form
         Activated += (_, _) => RefreshInputStatus();
         inputRecoveryTimer.Tick += (_, _) => RetryInputRecovery();
         screen.MouseDown += (_, e) => { screen.Focus(); RefreshInputStatus(); QueueMouse("down", e); }; screen.MouseUp += (_, e) => QueueMouse("up", e); screen.MouseMove += (_, e) => { long now = Environment.TickCount64; if (now - lastMove < 33) return; lastMove = now; QueueMouse("move", e); }; screen.MouseWheel += (_, e) => QueueMouse("wheel", e); screen.PreviewKeyDown += (_, e) => e.IsInputKey = true; screen.KeyDown += (_, e) => { if (!CanSendInput()) return; e.SuppressKeyPress = true; QueueInput(new { kind = "keyDown", virtualKey = (int)e.KeyCode }); }; screen.KeyUp += (_, e) => { if (!CanSendInput()) return; e.SuppressKeyPress = true; QueueInput(new { kind = "keyUp", virtualKey = (int)e.KeyCode }); }; screen.GotFocus += (_, _) => RefreshInputStatus(); screen.LostFocus += (_, _) => { ReleaseHeldInputForCurrentSession(); RefreshInputStatus(); };
-        typeText.Click += async (_, _) => await ExecuteAsync("ui.text", new { pid = (int)pid.Value, text = remoteText.Text }); enterKey.Click += async (_, _) => await ExecuteAsync("ui.key", new { pid = (int)pid.Value, key = "ENTER" });
+        typeText.Click += (_, _) => QueueFocusedText(); enterKey.Click += async (_, _) => await ExecuteAsync("ui.key", new { pid = (int)pid.Value, key = "ENTER" });
         processList.ColumnClick += (_, e) => { processSort = processSort.Toggle(ProcessColumn(e.Column)); RenderProcesses(); }; processList.SelectedIndexChanged += (_, _) => { if (processList.SelectedItems.Count > 0 && processList.SelectedItems[0].Tag is ProcessSortRow row) { pid.Value = row.Pid; } };
         fileList.ColumnClick += (_, e) => { fileSort = fileSort.Toggle(FileColumn(e.Column)); RenderFiles(); }; fileList.SelectedIndexChanged += (_, _) => { selectedFilePath = fileList.SelectedItems.Count > 0 && fileList.SelectedItems[0].Tag is FileSortRow row && !row.IsDirectory ? row.Path : null; remotePath.SetText(selectedFilePath ?? ""); RefreshControllerControls(); }; fileList.DoubleClick += async (_, _) => { if (fileList.SelectedItems.Count == 0 || fileList.SelectedItems[0].Tag is not FileSortRow row) return; if (row.IsDirectory) { currentDirectory = row.Path; selectedFilePath = null; remotePath.SetText(""); fileDirectory.SetText(currentDirectory); await BrowseFilesAsync(); } };
         refreshResourcesButton.Click += async (_, _) => await RefreshResourcesAsync(); executeButton.Click += async (_, _) => await ExecuteSelectedAsync(); cancelButton.Click += async (_, _) => await CancelActionAsync(); uploadButton.Click += async (_, _) => await UploadFileAsync(); uploadFolderButton.Click += async (_, _) => await UploadFolderAsync(); downloadButton.Click += async (_, _) => await DownloadFileAsync();
@@ -1277,6 +1277,14 @@ public sealed partial class MainForm : Forms.Form
     {
         if (!CanSendInput() || geometry == null) return; var point = geometry.MapLetterbox(screen.Width, screen.Height, e.X, e.Y); if (point == null) { if (kind == "up") QueueInput(new { kind = "release" }); return; } QueueInput(new { kind, x = point.Value.X, y = point.Value.Y, layoutId = geometry.LayoutId, button = e.Button == Forms.MouseButtons.Right ? "right" : e.Button == Forms.MouseButtons.Middle ? "middle" : "left", delta = e.Delta });
     }
+
+    private void QueueFocusedText()
+    {
+        if (string.IsNullOrEmpty(remoteText.Text) || !CanSendFocusedInput()) return;
+        QueueInput(new { kind = "text", text = remoteText.Text });
+    }
+
+    private bool CanSendFocusedInput() => supportSession && heartbeatHealthy && !trayVisible && liveFrameFresh;
 
     private bool CanSendInput() => inputState.CanSend(supportSession && heartbeatHealthy && !trayVisible, liveFrameFresh, screen.ContainsFocus && ContainsFocus);
 

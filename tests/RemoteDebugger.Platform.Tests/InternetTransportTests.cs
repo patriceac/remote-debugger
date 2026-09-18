@@ -130,6 +130,25 @@ public sealed class InternetTransportTests
     }
 
     [Fact]
+    public async Task PersistentInputCarriesFocusedTextWithoutAProcessTarget()
+    {
+        var stream = new ScriptedInputStream();
+        var client = new RemoteClient(new Connection("127.0.0.1", 45832, new string('a', 64), "token"), (_, _) => Task.FromResult<Stream>(stream));
+
+        Assert.True((await client.SendInputAsync(new { kind = "text", text = "focused text\n€" })).Ok);
+
+        Assert.Collection(stream.Requests,
+            open => Assert.Equal("ui.input.open", open.Operation),
+            text =>
+            {
+                Assert.Equal("ui.input", text.Operation);
+                Assert.Equal("text", text.Args.Str("kind"));
+                Assert.Equal("focused text\n€", text.Args.Str("text"));
+                Assert.False(text.Args.TryGetProperty("pid", out _));
+            });
+    }
+
+    [Fact]
     public async Task FailedInputTransportIsDiscardedBeforeTheNextRequestReopensIt()
     {
         var failed = new ScriptedInputStream { FailAfterRequests = 2 };
