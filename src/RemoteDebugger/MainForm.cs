@@ -345,12 +345,12 @@ public sealed partial class MainForm : Forms.Form
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 20));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 96));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 8));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 24));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, PrivateInternet ? 0 : 8));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 38));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 90));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 66));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 30));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
 
@@ -358,7 +358,7 @@ public sealed partial class MainForm : Forms.Form
         layout.Controls.Add(agentHeading, 0, 1);
         layout.Controls.Add(BuildInternetSection(), 0, 2);
 
-        var codeRow = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, Height = 96, WrapContents = false, FlowDirection = Forms.FlowDirection.LeftToRight, Padding = new Forms.Padding(0, 10, 0, 0), Margin = Forms.Padding.Empty };
+        var codeRow = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Top, AutoSize = true, AutoSizeMode = Forms.AutoSizeMode.GrowAndShrink, WrapContents = false, FlowDirection = Forms.FlowDirection.LeftToRight, Padding = new Forms.Padding(0, 10, 0, 0), Margin = Forms.Padding.Empty };
         agentPairCode.Margin = new Forms.Padding(0, 0, 14, 0); copyAgentCode.Margin = new Forms.Padding(0, 4, 0, 0);
         if (PrivateInternet) codeRow.Controls.Add(enableSupport);
         else { codeRow.Controls.Add(agentPairCode); codeRow.Controls.Add(copyAgentCode); }
