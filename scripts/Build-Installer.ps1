@@ -24,8 +24,12 @@ if ([string]::IsNullOrWhiteSpace($CompilerPath)) {
     if ($null -ne $command) { $CompilerPath = $command.Source }
 }
 if ([string]::IsNullOrWhiteSpace($CompilerPath)) {
-    $installed = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
-    if (Test-Path -LiteralPath $installed -PathType Leaf) { $CompilerPath = $installed }
+    $compilerCandidates = @(
+        (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),
+        (Join-Path $projectRoot '..\Tools\InnoSetup\7.0.2\tools\ISCC.exe')
+    )
+    $installed = $compilerCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+    if ($null -ne $installed) { $CompilerPath = $installed }
 }
 if ([string]::IsNullOrWhiteSpace($CompilerPath) -or !(Test-Path -LiteralPath $CompilerPath -PathType Leaf)) {
     throw 'Inno Setup compiler not found. Install Inno Setup or pass -CompilerPath.'
