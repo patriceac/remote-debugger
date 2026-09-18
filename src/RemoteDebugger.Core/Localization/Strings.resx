@@ -788,6 +788,9 @@
   <data name="InternetConnecting" xml:space="preserve"><value>Connecting to the internet relay…</value></data>
   <data name="InternetRetrying" xml:space="preserve"><value>Internet unavailable · retrying…</value></data>
   <data name="InternetUnavailable" xml:space="preserve"><value>Internet unavailable</value></data>
+  <data name="LanFallbackActive" xml:space="preserve"><value>Internet unavailable · LAN fallback active · {0} PC(s) found</value></data>
+  <data name="LanFallbackReady" xml:space="preserve"><value>LAN fallback ready</value></data>
+  <data name="PrivateLanPeerNeedsUpdate" xml:space="preserve"><value>This nearby PC must be updated before private LAN pairing.</value></data>
   <data name="PublicIp" xml:space="preserve"><value>Public IP</value></data>
   <data name="SupportId" xml:space="preserve"><value>Support ID</value></data>
   <data name="InternetInstructions" xml:space="preserve"><value>On your support PC, select this computer by name and click Connect.</value></data>

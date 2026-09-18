@@ -25,7 +25,7 @@ public static class Vault
     }
     public static byte[] Read(string path) => ProtectedData.Unprotect(File.ReadAllBytes(path), null, DataProtectionScope.CurrentUser);
 }
-public sealed record Peer(string Name, string Host, int Port, string Fingerprint);
+public sealed record Peer(string Name, string Host, int Port, string Fingerprint, string SupportId = "");
 public sealed record Connection(string Host, int Port, string Fingerprint, string Token, string RelayUrl = "", string RelayAccessKey = "");
 
 public static class Discovery
@@ -52,11 +52,43 @@ public static class Discovery
             {
                 var r = await udp.ReceiveAsync(timeout.Token);
                 if (r.Buffer.Length > 2048) continue;
-                try { var p = JsonSerializer.Deserialize<Peer>(r.Buffer, Json.Options); if (p != null && p.Port is > 0 and < 65536 && p.Fingerprint.Length == 64) peers[r.RemoteEndPoint.Address.ToString()] = p with { Host = r.RemoteEndPoint.Address.ToString() }; } catch (JsonException) { }
+                try
+                {
+                    var p = JsonSerializer.Deserialize<Peer>(r.Buffer, Json.Options);
+                    if (p != null && p.Port is > 0 and < 65536 && p.Fingerprint.Length == 64)
+                    {
+                        string supportId = p.SupportId;
+                        if (supportId.Length > 0)
+                        {
+                            try { supportId = InternetSettings.DisplayId(InternetSettings.SessionId(supportId)); }
+                            catch (ArgumentException) { continue; }
+                        }
+                        peers[r.RemoteEndPoint.Address.ToString()] = p with { Host = r.RemoteEndPoint.Address.ToString(), SupportId = supportId };
+                    }
+                }
+                catch (JsonException) { }
             }
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
         return peers.Values.ToList();
+    }
+}
+
+internal sealed record PeerDiscoveryResult(IReadOnlyList<Peer> Peers, bool UsedLanFallback);
+
+internal static class PeerDiscovery
+{
+    public static async Task<PeerDiscoveryResult> FindAsync(
+        bool privateInternet,
+        Func<CancellationToken, Task<List<Peer>>> lanDiscovery,
+        Func<CancellationToken, Task<List<Peer>>> relayDiscovery,
+        CancellationToken ct = default)
+    {
+        if (!privateInternet) return new(await lanDiscovery(ct).ConfigureAwait(false), false);
+        try { return new(await relayDiscovery(ct).ConfigureAwait(false), false); }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
+        catch (Exception) when (!ct.IsCancellationRequested) { }
+        return new(await lanDiscovery(ct).ConfigureAwait(false), true);
     }
 }
 
@@ -303,7 +335,17 @@ public sealed partial class AgentServer : IDisposable
     }
     private async Task DiscoverAsync(UdpClient activeDiscovery)
     {
-        try { while (!stop.IsCancellationRequested) { var r = await activeDiscovery.ReceiveAsync(stop.Token); if (r.Buffer.Length == Discovery.Query.Length && Encoding.UTF8.GetString(r.Buffer) == Discovery.Query) await activeDiscovery.SendAsync(JsonSerializer.SerializeToUtf8Bytes(new Peer(Environment.MachineName, "", Port, Fingerprint), Json.Options), r.RemoteEndPoint, stop.Token); } }
+        try
+        {
+            while (!stop.IsCancellationRequested)
+            {
+                var r = await activeDiscovery.ReceiveAsync(stop.Token);
+                if (r.Buffer.Length == Discovery.Query.Length && Encoding.UTF8.GetString(r.Buffer) == Discovery.Query)
+                    await activeDiscovery.SendAsync(JsonSerializer.SerializeToUtf8Bytes(
+                        new Peer(Environment.MachineName, "", Port, Fingerprint, Internet?.SupportId ?? ""), Json.Options),
+                        r.RemoteEndPoint, stop.Token);
+            }
+        }
         catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or SocketException) { }
     }
     private async Task AcceptAsync(TcpListener activeListener, long generation)

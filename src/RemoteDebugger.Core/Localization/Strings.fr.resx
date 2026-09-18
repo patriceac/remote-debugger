@@ -788,6 +788,9 @@
   <data name="InternetConnecting" xml:space="preserve"><value>Connexion au relais Internet…</value></data>
   <data name="InternetRetrying" xml:space="preserve"><value>Internet indisponible · nouvelle tentative…</value></data>
   <data name="InternetUnavailable" xml:space="preserve"><value>Internet indisponible</value></data>
+  <data name="LanFallbackActive" xml:space="preserve"><value>Internet indisponible · secours réseau local actif · {0} PC trouvé(s)</value></data>
+  <data name="LanFallbackReady" xml:space="preserve"><value>Secours réseau local prêt</value></data>
+  <data name="PrivateLanPeerNeedsUpdate" xml:space="preserve"><value>Ce PC voisin doit être mis à jour avant l’association privée sur le réseau local.</value></data>
   <data name="PublicIp" xml:space="preserve"><value>IP publique</value></data>
   <data name="SupportId" xml:space="preserve"><value>Identifiant d’assistance</value></data>
   <data name="InternetInstructions" xml:space="preserve"><value>Sur le PC d’assistance, sélectionnez cet ordinateur par son nom et cliquez sur Connecter.</value></data>

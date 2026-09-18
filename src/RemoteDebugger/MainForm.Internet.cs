@@ -40,18 +40,21 @@ public sealed partial class MainForm
     private void UpdatePrivateAgentState()
     {
         CurrentPairingCode = null;
-        enableSupport.Visible = (agent == null || agentIdle) && !privateSupportEnabled;
+        bool active = agent != null && !agentIdle;
+        bool relayUnavailable = agent?.Internet?.Error.Length > 0;
+        bool lanFallbackNeedsSetup = active && !agentNetworkPrepared && relayUnavailable;
+        enableSupport.Visible = ((agent == null || agentIdle) && !privateSupportEnabled) || lanFallbackNeedsSetup;
         restartAgent.Visible = false; copyAgentCode.Visible = false;
         pairingCountdownText.Visible = agentIdle;
         if (agent?.Session.HasPaired == true) return;
-        bool active = agent != null && !agentIdle;
         agentHeading.SetText(() => agentIdle ? UiText.SupportEnded : active ? UiText.PrivateSupportReady : UiText.EnableOnThisPc);
         agentEyebrow.SetText(() => UiText.GiveControl);
         agentSubtitle.SetText(() => active ? UiText.InternetInstructions : UiText.PrivateEnableInstructions);
         agentState.SetText(() => active ? UiText.WaitingForConnection : UiText.NoActiveConnection);
         agentSessionNote.SetText(() => active ? UiText.PrivateAccessNote : UiText.PcNoLongerAccessible);
-        agentNetworkState.SetText(() => agent?.Internet?.Connected == true ? UiText.Ready : active ? UiText.Preparing : UiText.Inactive);
-        agentNetworkState.ForeColor = agent?.Internet?.Connected == true ? ConnectedText : SecondaryText;
+        bool relayConnected = agent?.Internet?.Connected == true;
+        agentNetworkState.SetText(() => relayConnected ? UiText.Ready : agentNetworkPrepared ? UiText.LanFallbackReady : active ? UiText.Preparing : UiText.Inactive);
+        agentNetworkState.ForeColor = relayConnected || agentNetworkPrepared ? ConnectedText : SecondaryText;
         SetFooterMessage(() => agentIdle ? UiText.SupportEnded : active ? UiText.WaitingForConnection : UiText.NoActiveConnection);
         setupNotice.Visible = false;
     }

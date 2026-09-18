@@ -788,6 +788,9 @@
   <data name="InternetConnecting" xml:space="preserve"><value>Conectando al relé de Internet…</value></data>
   <data name="InternetRetrying" xml:space="preserve"><value>Internet no disponible · reintentando…</value></data>
   <data name="InternetUnavailable" xml:space="preserve"><value>Internet no disponible</value></data>
+  <data name="LanFallbackActive" xml:space="preserve"><value>Internet no disponible · respaldo LAN activo · {0} PC(s) encontrado(s)</value></data>
+  <data name="LanFallbackReady" xml:space="preserve"><value>Respaldo LAN listo</value></data>
+  <data name="PrivateLanPeerNeedsUpdate" xml:space="preserve"><value>Este PC cercano debe actualizarse antes del emparejamiento privado por LAN.</value></data>
   <data name="PublicIp" xml:space="preserve"><value>IP pública</value></data>
   <data name="SupportId" xml:space="preserve"><value>ID de asistencia</value></data>
   <data name="InternetInstructions" xml:space="preserve"><value>En el PC de asistencia, seleccione este equipo por su nombre y pulse Conectar.</value></data>

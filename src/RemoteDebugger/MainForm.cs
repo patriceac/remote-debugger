@@ -181,7 +181,7 @@ public sealed partial class MainForm : Forms.Form
 
     public string? CurrentPairingCode { get; private set; }
     public AgentServer? Agent => agent;
-    public bool AgentNetworkReady => loopbackOnly || (PrivateInternet ? agent?.Internet?.Connected == true : agentNetworkPrepared);
+    public bool AgentNetworkReady => loopbackOnly || agentNetworkPrepared || (PrivateInternet && agent?.Internet?.Connected == true);
     public RemoteClient? Client => client;
 
     private readonly string? startupPreparationError;
@@ -713,7 +713,7 @@ public sealed partial class MainForm : Forms.Form
             // firewall consent dialog. LAN listening starts only after the
             // provisioned broker has verified the Private/LocalSubnet rules.
             agentIdle = false;
-            var started = new AgentServer(root, loopbackOnly: loopbackOnly || PrivateInternet || !agentNetworkPrepared, enableInternet: !loopbackOnly);
+            var started = new AgentServer(root, loopbackOnly: loopbackOnly || !agentNetworkPrepared, enableInternet: !loopbackOnly);
             agent = started;
             started.Status += text => PostUi(() => { if (ReferenceEquals(agent, started)) { agentLog.SetText(text); RefreshFooter(); } });
             started.TerminationRequested += reason =>
@@ -785,9 +785,9 @@ public sealed partial class MainForm : Forms.Form
         if (loopbackOnly) { agentNetworkState.SetText(() => UiText.LocalOnly); return; }
         try
         {
-            SupportPlatformStatus status = await SupportPlatform.PrepareAsync(requireFirewall: !PrivateInternet);
+            SupportPlatformStatus status = await SupportPlatform.PrepareAsync(requireFirewall: !loopbackOnly);
             if (!ReferenceEquals(agent, preparing) || quitting) return;
-            if (!PrivateInternet && status.Available && status.FirewallReady && !agentNetworkPrepared)
+            if (status.Available && status.FirewallReady && !agentNetworkPrepared)
             {
                 // Keep the displayed code, rate limits and any accepted local
                 // connection while widening the prepared listener to the LAN.
@@ -837,9 +837,9 @@ public sealed partial class MainForm : Forms.Form
         UpdateAgentState(); if (PrivateInternet) UpdatePrivateAgentState(); UpdateInternetState(); UpdateHeader(); RefreshControllerControls(); RefreshFooter(); RefreshInputStatus();
         if (!agentIdle && agent?.Operations.Maintenance is { } maintenance)
         {
-            var state = Json.Element(maintenance.Status); bool active = state.TryGetProperty("active", out var a) && a.GetBoolean(); bool brokerAvailable = !state.TryGetProperty("brokerAvailable", out var broker) || broker.GetBoolean(); bool requiresProvisioning = state.TryGetProperty("requiresProvisioning", out var provisioning) && provisioning.GetBoolean();
-            agentMaintenanceState.SetText(() => active ? UiText.Active : !brokerAvailable || requiresProvisioning ? UiText.Unavailable : agent?.Session.HasPaired == true ? UiText.Preparing : UiText.AfterConnection);
-            agentMaintenanceState.ForeColor = active ? ConnectedText : !brokerAvailable || requiresProvisioning ? WarningText : SecondaryText;
+            var state = Json.Element(maintenance.Status); bool active = state.TryGetProperty("active", out var a) && a.GetBoolean(); bool brokerAvailable = !state.TryGetProperty("brokerAvailable", out var broker) || broker.GetBoolean(); bool requiresProvisioning = state.TryGetProperty("requiresProvisioning", out var provisioning) && provisioning.GetBoolean(); bool paired = agent?.Session.HasPaired == true;
+            agentMaintenanceState.SetText(() => active ? UiText.Active : !paired ? UiText.AfterConnection : requiresProvisioning ? UiText.ActivationRequired : !brokerAvailable ? UiText.Unavailable : UiText.Preparing);
+            agentMaintenanceState.ForeColor = active ? ConnectedText : !paired ? SecondaryText : requiresProvisioning || !brokerAvailable ? WarningText : SecondaryText;
         }
     }
 
@@ -1013,9 +1013,12 @@ public sealed partial class MainForm : Forms.Form
         discoveryLifetime?.Cancel(); discoveryLifetime = new CancellationTokenSource();
         try
         {
-            var found = PrivateInternet
-                ? await InternetSettings.Load(root)!.FindAsync(discoveryLifetime.Token)
-                : await Discovery.FindAsync(2500, discoveryLifetime.Token);
+            var result = await PeerDiscovery.FindAsync(
+                PrivateInternet,
+                token => Discovery.FindAsync(2500, token),
+                token => InternetSettings.Load(root)!.FindAsync(token),
+                discoveryLifetime.Token);
+            var found = result.Peers;
             if (pairingBusy || supportSession || rolePages.SelectedIndex != 1) return;
             discoveredPeers.Clear();
             discoveredPeers.AddRange(found.Where(p => PrivateInternet || IsRemotePeer(p)).OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase));
@@ -1026,7 +1029,11 @@ public sealed partial class MainForm : Forms.Form
                 connectionState.SetText(() => UiText.PrivateConnectInstructions);
             }
             RenderPeers();
-            discoveryState.SetText(() => discoveredPeers.Count == 0 ? PrivateInternet ? UiText.NoInternetPcs : UiText.NoPcsFound : UiText.Format(UiText.AvailablePcCount, discoveredPeers.Count));
+            discoveryState.SetText(() => result.UsedLanFallback
+                ? UiText.Format(UiText.LanFallbackActive, discoveredPeers.Count)
+                : discoveredPeers.Count == 0
+                    ? PrivateInternet ? UiText.NoInternetPcs : UiText.NoPcsFound
+                    : UiText.Format(UiText.AvailablePcCount, discoveredPeers.Count));
             if (discoveredPeers.Count == 1 && selectedPeer == null && peers.Items.Count > 0) peers.Items[0].Selected = true;
         }
         catch (OperationCanceledException) { }
@@ -1072,7 +1079,9 @@ public sealed partial class MainForm : Forms.Form
         if (peers.SelectedItems.Count == 0 || peers.SelectedItems[0].Tag is not Peer peer) return;
         InvalidateInputSession();
         selectedPeer = peer; selectedFingerprint = peer.Fingerprint; host.SetText(peer.Host); selectedPeerName.SetText(peer.Name);
-        selectedPeerAddress.SetText(() => PrivateInternet ? UiText.InternetReady : peer.Host);
+        selectedPeerAddress.SetText(() => PrivateInternet
+            ? InternetSettings.IsSupportId(peer.Host) ? UiText.InternetReady : UiText.LanFallbackReady
+            : peer.Host);
         connectionState.SetText(() => PrivateInternet ? UiText.PrivateConnectInstructions : UiText.EnterDisplayedCode); code.SetText("");
         if (PrivateInternet) pairButton.Focus(); else code.Focus();
     }
@@ -1087,11 +1096,16 @@ public sealed partial class MainForm : Forms.Form
         updateProgressArea.Visible = false;
         try
         {
-            pairedClient = new RemoteClient(InternetSettings.Target(host.Text.Trim(), 45832, selectedFingerprint, root)); client = pairedClient; connectionState.SetText(() => UiText.Pairing); SetFooterMessage(() => UiText.Pairing); UpdateHeader(); RefreshFooter();
+            string targetAddress = host.Text.Trim();
+            int targetPort = selectedPeer?.Port is > 0 and < 65536 ? selectedPeer.Port : 45832;
+            string privateSupportId = selectedPeer?.SupportId ?? "";
+            if (PrivateInternet && privateSupportId.Length == 0 && InternetSettings.IsSupportId(targetAddress)) privateSupportId = targetAddress;
+            if (PrivateInternet && privateSupportId.Length == 0) throw new InvalidOperationException(UiText.PrivateLanPeerNeedsUpdate);
+            pairedClient = new RemoteClient(InternetSettings.Target(targetAddress, targetPort, selectedFingerprint, root)); client = pairedClient; connectionState.SetText(() => UiText.Pairing); SetFooterMessage(() => UiText.Pairing); UpdateHeader(); RefreshFooter();
             using (var handshake = CancellationTokenSource.CreateLinkedTokenSource(pairingCts.Token))
             {
                 handshake.CancelAfter(TimeSpan.FromSeconds(SupportOperationTimeouts.PairingHandshakeSeconds));
-                try { await pairedClient.PairAsync(PrivateInternet ? InternetSettings.Load(root)!.AuthenticationSecret(host.Text) : code.Text, handshake.Token); }
+                try { await pairedClient.PairAsync(PrivateInternet ? InternetSettings.Load(root)!.AuthenticationSecret(privateSupportId) : code.Text, handshake.Token); }
                 catch (OperationCanceledException) when (!pairingCts.IsCancellationRequested) { throw new TimeoutException(UiText.PairingTimedOut); }
             }
             pairedClient.Save(); synchronizingAgent = true; connectionState.SetText(() => UiText.AgentSynchronizing); SetFooterMessage(() => UiText.AgentSynchronizing); SetFooterDetail(() => UiText.TransferValidateVersion); ShowUpdateProgress(new AgentUpdateProgress("idle", 0, 0)); UpdateHeader(); RefreshFooter();

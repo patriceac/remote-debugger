@@ -13,6 +13,9 @@ public static partial class UiText
     public static string InternetConnecting => Get(nameof(InternetConnecting));
     public static string InternetRetrying => Get(nameof(InternetRetrying));
     public static string InternetUnavailable => Get(nameof(InternetUnavailable));
+    public static string LanFallbackActive => Get(nameof(LanFallbackActive));
+    public static string LanFallbackReady => Get(nameof(LanFallbackReady));
+    public static string PrivateLanPeerNeedsUpdate => Get(nameof(PrivateLanPeerNeedsUpdate));
     public static string PublicIp => Get(nameof(PublicIp));
     public static string SupportId => Get(nameof(SupportId));
     public static string InternetInstructions => Get(nameof(InternetInstructions));

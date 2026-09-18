@@ -25,7 +25,11 @@ public sealed record InternetSettings(string RelayUrl, string AccessKey, string 
             ?? throw new IOException("Invalid computer list.");
         if (clients.Count > 32 || clients.Any(c => string.IsNullOrWhiteSpace(c.Name) || c.Name.Length > 128 || c.Name.Any(char.IsControl)))
             throw new IOException("Invalid computer list.");
-        return clients.Select(c => new Peer(c.Name, DisplayId(SessionId(c.Id)), 443, "")).ToList();
+        return clients.Select(c =>
+        {
+            string supportId = DisplayId(SessionId(c.Id));
+            return new Peer(c.Name, supportId, 443, "", supportId);
+        }).ToList();
     }
 
     public static InternetSettings? Load(string root)

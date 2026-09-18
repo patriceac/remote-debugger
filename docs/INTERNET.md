@@ -1,6 +1,6 @@
 # Internet support
 
-Internet mode connects both PCs outward over HTTPS/WebSockets (port 443). No VPN, router port forwarding, or incoming Windows firewall rule is required for the relay. LAN discovery remains available separately.
+Internet mode connects both PCs outward over HTTPS/WebSockets (port 443). No VPN, router port forwarding, or incoming Windows firewall rule is required for the relay. When the relay is unavailable, the app automatically falls back to the local UDP/TCP path if local support has been provisioned.
 
 ## Set up your devices
 
@@ -14,7 +14,7 @@ The installer contains passphrase-encrypted relay and pairing credentials. After
 
 Use the private installer for the normal setup and for relay configuration updates. The developer CLI can still import a `.rdrelay` profile for a portable build; this is not part of the app's setup flow.
 
-Routing IDs remain internal and change between support sessions. **End support** immediately revokes access; the computer disappears on a subsequent discovery refresh. After an abrupt disconnection, presence can remain stale for up to a minute before the next refresh. A fresh launch waits for **Enable support** again. Transient relay failures reconnect with backoff while the existing support-session grace period applies. Private mode uses outbound internet connections and keeps local listeners on loopback.
+Routing IDs remain internal and change between support sessions. **End support** immediately revokes access; the computer disappears on a subsequent discovery refresh. After an abrupt disconnection, presence can remain stale for up to a minute before the next refresh. A fresh launch waits for **Enable support** again. Transient relay failures reconnect with backoff while the existing support-session grace period applies. If local support is provisioned, the agent also prepares its LAN listener and firewall rule; the controller then discovers it locally and authenticates with the same private session identity.
 
 `--loopback-only` also disables internet registration. Importing a setup file does not enable Windows administrator maintenance; the existing separate Windows provisioning rules still apply.
 

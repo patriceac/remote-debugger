@@ -111,6 +111,59 @@ public sealed class InternetTransportTests
     }
 
     [Fact]
+    public async Task PrivateDiscoveryFallsBackToLanWhenTheRelayFails()
+    {
+        var nearby = new Peer("Nearby", "192.168.1.20", 45832, new string('a', 64), "RD-0123-4567-89AB-CDEF");
+        int lanCalls = 0;
+        var result = await PeerDiscovery.FindAsync(
+            privateInternet: true,
+            lanDiscovery: _ => { lanCalls++; return Task.FromResult(new List<Peer> { nearby }); },
+            relayDiscovery: _ => Task.FromException<List<Peer>>(new HttpRequestException("relay unavailable")));
+
+        Assert.True(result.UsedLanFallback);
+        Assert.Equal(1, lanCalls);
+        Assert.Equal(new[] { nearby }, result.Peers);
+    }
+
+    [Fact]
+    public async Task PrivateDiscoveryDoesNotProbeLanWhenTheRelaySucceeds()
+    {
+        bool lanCalled = false;
+        var relayPeer = new Peer("Relay PC", "RD-0123-4567-89AB-CDEF", 443, "", "RD-0123-4567-89AB-CDEF");
+        var result = await PeerDiscovery.FindAsync(
+            privateInternet: true,
+            lanDiscovery: _ => { lanCalled = true; return Task.FromResult(new List<Peer>()); },
+            relayDiscovery: _ => Task.FromResult(new List<Peer> { relayPeer }));
+
+        Assert.False(result.UsedLanFallback);
+        Assert.False(lanCalled);
+        Assert.Equal(new[] { relayPeer }, result.Peers);
+    }
+
+    [Fact]
+    public async Task PrivateDiscoveryPreservesCallerCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => PeerDiscovery.FindAsync(
+            privateInternet: true,
+            lanDiscovery: _ => Task.FromResult(new List<Peer>()),
+            relayDiscovery: token => Task.FromException<List<Peer>>(new OperationCanceledException(token)),
+            cancellation.Token));
+    }
+
+    [Fact]
+    public void PeerSerializationPreservesThePrivateSupportIdentity()
+    {
+        var peer = new Peer("Nearby", "192.168.1.20", 45832, new string('a', 64), "RD-0123-4567-89AB-CDEF");
+        var roundTrip = JsonSerializer.Deserialize<Peer>(JsonSerializer.SerializeToUtf8Bytes(peer, Json.Options), Json.Options);
+
+        Assert.NotNull(roundTrip);
+        Assert.Equal(peer, roundTrip);
+    }
+
+    [Fact]
     public async Task PersistentInputReusesOneAuthenticatedStreamAndPreservesRequestOrder()
     {
         var stream = new ScriptedInputStream();
