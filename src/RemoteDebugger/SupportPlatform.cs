@@ -53,6 +53,8 @@ public static class SupportPlatform
 {
     public static event Action? ManagedRelaunchRequested;
 
+    internal static bool RequiresAdministratorProvisioning(SupportPlatformStatus status) => !status.Provisioned;
+
     /// <summary>
     /// Redirects a subsequently launched portable agent to the provisioned,
     /// protected Program Files copy. This path never elevates. Controller and
@@ -176,6 +178,11 @@ public static class SupportPlatform
 
     public static async Task<SupportPlatformStatus> ProvisionAsync(CancellationToken ct = default, bool enableSupport = false)
     {
+        // Provisioning is the only UAC boundary. Once the protected service and
+        // configuration exist, recover through the broker without launching a
+        // second runas process, even if the service is temporarily unavailable.
+        var existing = await GetStatusAsync(ct);
+        if (!RequiresAdministratorProvisioning(existing)) return existing;
         await SupportInstaller.ProvisionAsync(ct);
         if (!string.Equals(Path.GetFullPath(Environment.ProcessPath!), Path.GetFullPath(SupportPlatformPaths.ApplicationExecutable), StringComparison.OrdinalIgnoreCase))
         {
