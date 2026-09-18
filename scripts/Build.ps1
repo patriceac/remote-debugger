@@ -1,7 +1,12 @@
-param([switch]$IncludeLab, [switch]$Sign, [string]$Version = '0.4.1')
+param([switch]$IncludeLab, [switch]$Sign, [string]$Version)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot
 $artifactRoot = Join-Path $projectRoot 'artifacts'
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    [xml]$buildProperties = Get-Content -LiteralPath (Join-Path $projectRoot 'Directory.Build.props') -Raw
+    $Version = [string]$buildProperties.Project.PropertyGroup.Version
+}
+if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "Version must use MAJOR.MINOR.PATCH format: $Version" }
 & dotnet publish (Join-Path $projectRoot 'src\RemoteDebugger\RemoteDebugger.csproj') -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none ('-p:Version=' + $Version) -o (Join-Path $artifactRoot 'release')
 if ($LASTEXITCODE -ne 0) { throw 'Release publish failed.' }
 if ($Sign) { & (Join-Path $PSScriptRoot 'Sign-Release.ps1') }
