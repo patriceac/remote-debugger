@@ -332,7 +332,7 @@ public sealed partial class MainForm : Forms.Form
         // Docked content is excluded from WinForms' automatic scroll extent.
         // Preserve access to the final explanation on short/high-DPI displays.
         hero.SizeChanged += (_, _) => UpdateAgentScrollExtent(heroHost, hero.Height);
-        UpdateAgentScrollExtent(heroHost, hero.Height);
+        heroHost.SizeChanged += (_, _) => UpdateAgentScrollExtent(heroHost, hero.Height);
         heroHost.Controls.Add(hero); content.Controls.Add(heroHost, 0, 0);
         page.Controls.Add(content); rolePages.TabPages.Add(page);
     }
@@ -1810,9 +1810,14 @@ public sealed partial class MainForm : Forms.Form
     private static Forms.TextBox TextBox(string name) { var box = new Forms.TextBox { Name = name, AccessibleName = name, BorderStyle = Forms.BorderStyle.FixedSingle, BackColor = Surface, ForeColor = PrimaryText, Font = new Font("Segoe UI", 11) }; box.Enter += (_, _) => box.BackColor = Color.FromArgb(248, 253, 253); box.Leave += (_, _) => box.BackColor = Surface; return box; }
     private static Forms.Label Badge(string text, string name) => new() { Name = name, Text = "●  " + text, AutoSize = true, ForeColor = ConnectedText, BackColor = ConnectedBack, Font = new Font("Segoe UI", 8.5F, FontStyle.Bold), Padding = new Forms.Padding(8, 5, 8, 5), Visible = false };
     private void RefreshStatusPillRegion() => ControlRegions.ApplyRounded(statusPill, ref statusPillRegionSize, 16);
+    internal static Size CalculateAgentScrollExtent(int viewportHeight, int contentHeight)
+    {
+        if (viewportHeight <= 0 || contentHeight <= viewportHeight) return Size.Empty;
+        return new Size(0, contentHeight);
+    }
     private static void UpdateAgentScrollExtent(Forms.Panel host, int height)
     {
-        Size extent = new(0, Math.Max(0, height));
+        Size extent = CalculateAgentScrollExtent(host.ClientSize.Height, height);
         if (host.AutoScrollMinSize != extent) host.AutoScrollMinSize = extent;
     }
     private static Icon LoadApplicationIcon() { using Stream stream = typeof(MainForm).Assembly.GetManifestResourceStream("RemoteDebugger.Assets.RemoteDebugger.ico") ?? throw new InvalidOperationException("The application icon resource is missing."); using var icon = new Icon(stream); return (Icon)icon.Clone(); }
