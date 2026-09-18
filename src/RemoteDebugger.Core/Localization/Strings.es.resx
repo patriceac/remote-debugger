@@ -45,6 +45,21 @@
   <data name="AdminMaintenance" xml:space="preserve">
     <value>Mantenimiento de administrador</value>
   </data>
+  <data name="AdminMaintenanceChangeFailedPrefix" xml:space="preserve">
+    <value>No se pudo cambiar el mantenimiento de administrador.</value>
+  </data>
+  <data name="AdminMaintenanceDisabled" xml:space="preserve">
+    <value>Desactivado</value>
+  </data>
+  <data name="AdminMaintenanceDisabledMessage" xml:space="preserve">
+    <value>Mantenimiento de administrador desactivado para este PC.</value>
+  </data>
+  <data name="AdminMaintenanceEnabled" xml:space="preserve">
+    <value>Activado</value>
+  </data>
+  <data name="AdminMaintenanceEnabledMessage" xml:space="preserve">
+    <value>Mantenimiento de administrador activado.</value>
+  </data>
   <data name="AfterConnection" xml:space="preserve">
     <value>Tras la conexión</value>
   </data>

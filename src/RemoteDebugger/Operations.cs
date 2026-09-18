@@ -85,7 +85,9 @@ public sealed class Operations
             case "command": return await RunAsync(a.Str("file"), a.Strings("arguments"), ct);
             case "maintenance.status": return Maintenance.Status;
             case "maintenance.session": return await Maintenance.RunAsync(a.Str("file"), a.Strings("arguments"), ct);
-            case "maintenance.elevated": return await ElevatedJob.RunAsync(a.Str("file"), a.Strings("arguments"), Root, ct);
+            case "maintenance.elevated":
+                if (!Maintenance.Enabled) throw new InvalidOperationException(MaintenanceSession.DisabledMessage);
+                return await Maintenance.RunAsync(a.Str("file"), a.Strings("arguments"), ct);
             case "system": return await ResourceSampling.SystemAsync(ct);
             case "network": return await PowerShellAsync("[pscustomobject]@{Adapters=@(Get-NetIPConfiguration | Select-Object InterfaceAlias,IPv4Address,IPv4DefaultGateway,DNSServer);Statistics=@(Get-NetAdapterStatistics | Select-Object Name,ReceivedBytes,SentBytes)} | ConvertTo-Json -Depth 5 -Compress", ct);
             case "services": return await PowerShellAsync("Get-Service | Select-Object Name,DisplayName,Status,StartType | ConvertTo-Json -Compress", ct);

@@ -22,6 +22,7 @@
     "pairingCountdown": "pairingCountdownText",
     "agentState": "agentState",
     "agentHeading": "agentHeading",
+    "adminMaintenanceToggle": "adminMaintenanceToggle",
     "peers": "peers",
     "host": "host",
     "pairCode": "pairCode",

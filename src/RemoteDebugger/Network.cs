@@ -137,10 +137,11 @@ public sealed partial class AgentServer : IDisposable
     public bool Paired { get { lock (authLock) return tokenHash.Length != 0; } }
     public AgentUpdateProgress UpdateProgress => updates.Progress;
     public InternetAgent? Internet { get; private set; }
+    public bool AdminMaintenanceEnabled => Operations.Maintenance.Enabled;
     public event Action<string>? Status;
     public event Action<AgentStopReason>? TerminationRequested;
     public SupportSessionSnapshot Session => session.Snapshot;
-    public AgentServer(string root, int port = 45832, bool loopbackOnly = false, bool enableInternet = true)
+    public AgentServer(string root, int port = 45832, bool loopbackOnly = false, bool enableInternet = true, bool enableAdminMaintenance = true)
     {
         securityRoot = root;
         resumeStore = new(root);
@@ -169,6 +170,7 @@ public sealed partial class AgentServer : IDisposable
         }
         else resumeStore.Clear();
         Operations = new Operations(root);
+        Operations.Maintenance.SetEnabled(enableAdminMaintenance);
         updates = new AgentUpdateService(root, (context, ct) =>
         {
             ct.ThrowIfCancellationRequested();
@@ -208,6 +210,14 @@ public sealed partial class AgentServer : IDisposable
         Status?.Invoke("Agent ready for pairing; access is visible in this window.");
         Internet?.Start();
         if (Paired) _ = StartMaintenanceAsync();
+    }
+
+    public async Task SetAdminMaintenanceEnabledAsync(bool enabled, CancellationToken ct = default)
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
+        Operations.Maintenance.SetEnabled(enabled);
+        if (!enabled) requests.Clear();
+        if (enabled && Paired) await StartMaintenanceAsync(ct);
     }
     public void EnablePrivateNetwork()
     {
@@ -627,6 +637,8 @@ public sealed partial class AgentServer : IDisposable
                         }
                         else if (r.Operation == "screen.stream") { using var streamGrant = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, grant); await StreamAsync(tls, r, streamGrant.Token); return; }
                         else if (r.Operation == "cancel") { if (running.TryGetValue(r.Args.Str("id"), out var job)) job.Cancel(); reply = Reply.Success(r.Id, new { cancellationRequested = true }); }
+                        else if ((r.Operation is "maintenance.session" or "maintenance.elevated") && !Operations.Maintenance.Enabled)
+                            reply = Reply.Failure(r.Id, "maintenance_disabled", MaintenanceSession.DisabledMessage);
                         else if (!Guid.TryParse(r.Id, out _)) reply = Reply.Failure(r.Id, "invalid_id", "Request id must be a UUID.");
                         else if (r.Operation is "screenshot" or "monitors" or "status" or "file.info" or "file.read" or "files" or "processes" or "process.info" or "system" or "network" or "services" or "events" or "history" or "windows" or "ui.inspect" or "upload.chunk" or "upload.status" or "ui.input") reply = await ExecuteAsync(r, grant);
                         else if (requests.Count >= 2048 && !requests.ContainsKey(r.Id)) reply = Reply.Failure(r.Id, "session_limit", "Restart the agent to clear its 2048-mutation retry cache.");
@@ -829,9 +841,15 @@ public sealed partial class AgentServer : IDisposable
         finally { running.TryRemove(r.Id, out _); }
         if (!noisy) Operations.Record(r.Id, r.Operation, begin, reply.Ok, reply.Error, reply.Data); return reply;
     }
-    private async Task StartMaintenanceAsync()
+    private async Task StartMaintenanceAsync(CancellationToken requested = default)
     {
-        try { await Operations.Maintenance.StartAsync(stop.Token); Status?.Invoke("Administrator maintenance active for this session."); }
+        if (!Operations.Maintenance.Enabled) return;
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(stop.Token, requested);
+        try
+        {
+            await Operations.Maintenance.StartAsync(linked.Token);
+            if (Operations.Maintenance.Enabled) Status?.Invoke("Administrator maintenance active for this session.");
+        }
         catch (Exception ex) { if (!stop.IsCancellationRequested) Status?.Invoke("Administrator maintenance unavailable: " + ex.Message); }
     }
     public void Dispose()

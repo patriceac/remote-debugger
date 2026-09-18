@@ -1,8 +1,37 @@
 using RemoteDebugger;
+using RemoteDebugger.Core;
 using Xunit;
 
 public sealed class SupportPlatformTests
 {
+    [Fact]
+    public async Task DisabledMaintenanceRejectsPrivilegedCommands()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "RemoteDebugger-disabled-maintenance-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var maintenance = new MaintenanceSession(root);
+            maintenance.SetEnabled(false);
+
+            Assert.False(maintenance.Enabled);
+            Assert.False(maintenance.CurrentStatus.Active);
+            Assert.Contains("disabled", maintenance.CurrentStatus.Message, StringComparison.OrdinalIgnoreCase);
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                maintenance.RunAsync("whoami.exe", [], CancellationToken.None));
+
+            var operations = new Operations(root);
+            operations.Maintenance.SetEnabled(false);
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                operations.ExecuteAsync("maintenance.elevated", Json.Element(new { file = "whoami.exe", arguments = Array.Empty<string>() }), CancellationToken.None));
+            operations.Maintenance.Dispose();
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public void ProvisionedButUnavailableSupportDoesNotRequestAdministratorProvisioning()
     {

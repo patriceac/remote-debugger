@@ -22,10 +22,30 @@ public sealed class MaintenanceSession(string root) : IDisposable
     private NamedPipeClientStream? pipe;
     private readonly CancellationTokenSource lifetime = new();
     private MaintenanceSessionStatus status = new(false, false, true, "Privileged maintenance has not started.");
+    private int enabled = 1;
     private int disposed;
 
+    public const string DisabledMessage = "Administrator maintenance is disabled for this support session.";
+    public bool Enabled => Volatile.Read(ref enabled) != 0;
     public MaintenanceSessionStatus CurrentStatus => Volatile.Read(ref status);
     public object Status => CurrentStatus;
+
+    public void SetEnabled(bool value)
+    {
+        Volatile.Write(ref enabled, value ? 1 : 0);
+        if (!value)
+        {
+            DisposePipe();
+            return;
+        }
+
+        lock (stateLock)
+        {
+            if (Volatile.Read(ref disposed) == 0 && pipe is null)
+                Volatile.Write(ref status, new(false, CurrentStatus.BrokerAvailable, CurrentStatus.RequiresProvisioning,
+                    "Administrator maintenance is enabled and will start when the support session is paired."));
+        }
+    }
 
     public async Task StartAsync(CancellationToken ct)
     {
@@ -34,6 +54,11 @@ public sealed class MaintenanceSession(string root) : IDisposable
         try
         {
             ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
+            if (!Enabled)
+            {
+                SetDisabledStatus();
+                return;
+            }
             if (pipe is { IsConnected: true }) return;
             DisposePipe();
             var platform = await SupportPlatform.GetStatusAsync(ct);
@@ -55,6 +80,12 @@ public sealed class MaintenanceSession(string root) : IDisposable
                 {
                     ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
                     connect.Token.ThrowIfCancellationRequested();
+                    if (!Enabled)
+                    {
+                        candidate.Dispose();
+                        SetDisabledStatus();
+                        return;
+                    }
                     pipe = candidate;
                     Volatile.Write(ref status, new(true, true, false,
                         "Administrator maintenance is active until the paired agent session ends.", data.Str("leaseId")));
@@ -68,10 +99,12 @@ public sealed class MaintenanceSession(string root) : IDisposable
     public async Task<object> RunAsync(string file, string[] arguments, CancellationToken ct)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
+        if (!Enabled) throw new InvalidOperationException(DisabledMessage);
         await gate.WaitAsync(ct);
         try
         {
             ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
+            if (!Enabled) throw new InvalidOperationException(DisabledMessage);
             var current = pipe;
             if (current is not { IsConnected: true } || !CurrentStatus.Active)
                 throw new InvalidOperationException("Administrator maintenance is unavailable. Pair the session after provisioning local support.");
@@ -98,6 +131,15 @@ public sealed class MaintenanceSession(string root) : IDisposable
 
     public void End() => DisposePipe();
 
+    private void SetDisabledStatus()
+    {
+        lock (stateLock)
+        {
+            if (Volatile.Read(ref disposed) == 0)
+                Volatile.Write(ref status, new(false, CurrentStatus.BrokerAvailable, CurrentStatus.RequiresProvisioning, DisabledMessage));
+        }
+    }
+
     private void DisposePipe()
     {
         NamedPipeClientStream? current;
@@ -106,7 +148,8 @@ public sealed class MaintenanceSession(string root) : IDisposable
             current = pipe;
             pipe = null;
             if (Volatile.Read(ref disposed) == 0)
-                Volatile.Write(ref status, new(false, CurrentStatus.BrokerAvailable, CurrentStatus.RequiresProvisioning, "Administrator maintenance ended."));
+                Volatile.Write(ref status, new(false, CurrentStatus.BrokerAvailable, CurrentStatus.RequiresProvisioning,
+                    Enabled ? "Administrator maintenance ended." : DisabledMessage));
         }
         try { current?.Dispose(); } catch { }
     }

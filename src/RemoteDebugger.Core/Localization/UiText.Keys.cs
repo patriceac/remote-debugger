@@ -20,6 +20,11 @@ public static partial class UiText
     public static string Address => Get(nameof(Address));
     public static string AdjustArguments => Get(nameof(AdjustArguments));
     public static string AdminMaintenance => Get(nameof(AdminMaintenance));
+    public static string AdminMaintenanceChangeFailedPrefix => Get(nameof(AdminMaintenanceChangeFailedPrefix));
+    public static string AdminMaintenanceDisabled => Get(nameof(AdminMaintenanceDisabled));
+    public static string AdminMaintenanceDisabledMessage => Get(nameof(AdminMaintenanceDisabledMessage));
+    public static string AdminMaintenanceEnabled => Get(nameof(AdminMaintenanceEnabled));
+    public static string AdminMaintenanceEnabledMessage => Get(nameof(AdminMaintenanceEnabledMessage));
     public static string AfterConnection => Get(nameof(AfterConnection));
     public static string AgentAwaitingPreparation => Get(nameof(AgentAwaitingPreparation));
     public static string AgentStopDelayed => Get(nameof(AgentStopDelayed));

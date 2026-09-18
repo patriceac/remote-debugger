@@ -66,6 +66,11 @@ public sealed partial class MainForm : Forms.Form
     private readonly Forms.Label agentNetworkState = new() { Name = "agentNetworkState", AutoSize = true, ForeColor = SecondaryText };
     private readonly Forms.Label agentSleepState = new() { Name = "agentSleepState", AutoSize = true, ForeColor = SecondaryText };
     private readonly Forms.Label agentMaintenanceState = new() { Name = "agentMaintenanceState", AutoSize = true, ForeColor = SecondaryText };
+    private readonly Forms.CheckBox adminMaintenanceToggle = new Forms.CheckBox
+    {
+        Name = "adminMaintenanceToggle", AutoSize = true, ForeColor = PrimaryText,
+        Margin = new Forms.Padding(8, 2, 0, 0)
+    }.WithText(() => UiText.AdminMaintenanceEnabled);
     private readonly Forms.Label agentSessionNote = new WorkspaceLabel() { Name = "agentSessionNote", AutoSize = true, ForeColor = SecondaryText, MaximumSize = new Size(620, 0) };
     private readonly Forms.Panel setupNotice = new() { Name = "agentSetupNotice", AutoSize = true, Visible = false, Padding = new Forms.Padding(12), BackColor = WarningBack };
     private readonly Forms.Label setupNoticeText = new() { AutoSize = true, ForeColor = WarningText, MaximumSize = new Size(440, 0) };
@@ -149,6 +154,8 @@ public sealed partial class MainForm : Forms.Form
     private readonly bool loopbackOnly;
     private readonly bool startAgentOnLaunch;
     private readonly bool startInTray;
+    private bool adminMaintenanceEnabled;
+    private bool changingAdminMaintenance;
     private readonly Forms.Timer renderTimer = new() { Interval = 250 };
     private readonly Forms.Timer inputRecoveryTimer = new() { Interval = 750 };
     private Size statusPillRegionSize;
@@ -197,6 +204,8 @@ public sealed partial class MainForm : Forms.Form
         this.startupPreparationError = startupPreparationError;
         startAgentOnLaunch = startAgent;
         this.startInTray = startInTray;
+        adminMaintenanceEnabled = AdminMaintenancePreference.Load(root);
+        adminMaintenanceToggle.Checked = adminMaintenanceEnabled;
         privateSupportEnabled = enableSupport;
 
         Text = "Remote Debugger";
@@ -366,10 +375,10 @@ public sealed partial class MainForm : Forms.Form
         pairingCountdownText.AutoSize = false; pairingCountdownText.Dock = Forms.DockStyle.Fill; pairingCountdownText.Margin = Forms.Padding.Empty; layout.Controls.Add(pairingCountdownText, 0, 5);
 
         var divider = new Forms.Panel { Dock = Forms.DockStyle.Top, Height = 1, BackColor = Divider, Margin = new Forms.Padding(0, 18, 0, 0) }; layout.Controls.Add(divider, 0, 6);
-        var states = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, Height = 90, ColumnCount = 3, RowCount = 3, Margin = Forms.Padding.Empty };
-        states.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Absolute, 22)); states.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 65)); states.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 35));
+        var states = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, Height = 90, ColumnCount = 4, RowCount = 3, Margin = Forms.Padding.Empty };
+        states.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Absolute, 22)); states.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 52)); states.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 28)); states.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
         for (int row = 0; row < 3; row++) states.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 33.333F));
-        AddAgentStateRow(states, 0, () => PrivateInternet ? UiText.InternetLabel : UiText.PrivateNetwork, agentNetworkState); AddAgentStateRow(states, 1, () => UiText.Sleep, agentSleepState); AddAgentStateRow(states, 2, () => UiText.AdminMaintenance, agentMaintenanceState); layout.Controls.Add(states, 0, 7);
+        AddAgentStateRow(states, 0, () => PrivateInternet ? UiText.InternetLabel : UiText.PrivateNetwork, agentNetworkState); AddAgentStateRow(states, 1, () => UiText.Sleep, agentSleepState); AddAgentStateRow(states, 2, () => UiText.AdminMaintenance, agentMaintenanceState); states.Controls.Add(adminMaintenanceToggle, 3, 2); layout.Controls.Add(states, 0, 7);
 
         setupNotice.AutoSize = false; setupNotice.Dock = Forms.DockStyle.Fill; setupNotice.Width = 760; setupNotice.Height = 66; setupNotice.Padding = new Forms.Padding(8); setupNotice.Controls.Clear();
         var noticeLayout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Forms.Padding.Empty, Padding = Forms.Padding.Empty };
@@ -583,6 +592,7 @@ public sealed partial class MainForm : Forms.Form
         copyAgentCode.Click += (_, _) => { if (!string.IsNullOrWhiteSpace(CurrentPairingCode)) Forms.Clipboard.SetText(CurrentPairingCode); SetFooterMessage(() => UiText.CodeCopied); RefreshFooter(); };
         preparePlatform.Click += async (_, _) => await ProvisionPlatformAsync();
         enableSupport.Click += async (_, _) => await EnablePrivateSupportAsync();
+        adminMaintenanceToggle.CheckedChanged += async (_, _) => await ApplyAdminMaintenancePreferenceAsync();
         discoverButton.Click += async (_, _) => await DiscoverAsync(true);
         peers.SelectedIndexChanged += (_, _) => SelectPeerFromList();
         host.TextChanged += (_, _) => { if (selectedPeer?.Host != host.Text.Trim()) { selectedPeer = null; selectedFingerprint = ""; selectedPeerName.SetText(() => UiText.EnterPc); selectedPeerAddress.SetText(() => UiText.IdentityBoundToCode); } };
@@ -713,7 +723,8 @@ public sealed partial class MainForm : Forms.Form
             // firewall consent dialog. LAN listening starts only after the
             // provisioned broker has verified the Private/LocalSubnet rules.
             agentIdle = false;
-            var started = new AgentServer(root, loopbackOnly: loopbackOnly || !agentNetworkPrepared, enableInternet: !loopbackOnly);
+            var started = new AgentServer(root, loopbackOnly: loopbackOnly || !agentNetworkPrepared, enableInternet: !loopbackOnly,
+                enableAdminMaintenance: adminMaintenanceEnabled);
             agent = started;
             started.Status += text => PostUi(() => { if (ReferenceEquals(agent, started)) { agentLog.SetText(text); RefreshFooter(); } });
             started.TerminationRequested += reason =>
@@ -822,6 +833,41 @@ public sealed partial class MainForm : Forms.Form
         SetFooterMessage(() => status.FirewallReady ? UiText.ReadyForConnection : UiText.EnablePrivateNetwork); RefreshFooter();
     }
 
+    private async Task ApplyAdminMaintenancePreferenceAsync()
+    {
+        if (changingAdminMaintenance) return;
+        bool requested = adminMaintenanceToggle.Checked;
+        bool previous = adminMaintenanceEnabled;
+        if (requested == previous) return;
+
+        changingAdminMaintenance = true;
+        adminMaintenanceToggle.Enabled = false;
+        try
+        {
+            AdminMaintenancePreference.Save(root, requested);
+            adminMaintenanceEnabled = requested;
+            if (agent is { } current && !agentIdle)
+                await current.SetAdminMaintenanceEnabledAsync(requested);
+            SetFooterMessage(() => requested ? UiText.AdminMaintenanceEnabledMessage : UiText.AdminMaintenanceDisabledMessage);
+            SetFooterDetail(() => UiText.CloseToTrayShort);
+        }
+        catch (Exception ex)
+        {
+            try { AdminMaintenancePreference.Save(root, previous); } catch { }
+            adminMaintenanceEnabled = previous;
+            adminMaintenanceToggle.Checked = previous;
+            SetFooterMessage(() => UiText.AdminMaintenanceChangeFailedPrefix);
+            footerDetail = ex.Message;
+        }
+        finally
+        {
+            changingAdminMaintenance = false;
+            adminMaintenanceToggle.Enabled = true;
+            RefreshUiState();
+            RefreshFooter();
+        }
+    }
+
     private void ShowSetupNotice(Func<string> message)
     {
         setupNoticeText.SetText(() => string.IsNullOrWhiteSpace(message()) ? UiText.WindowsPermissionOnce : message());
@@ -838,8 +884,16 @@ public sealed partial class MainForm : Forms.Form
         if (!agentIdle && agent?.Operations.Maintenance is { } maintenance)
         {
             var state = Json.Element(maintenance.Status); bool active = state.TryGetProperty("active", out var a) && a.GetBoolean(); bool brokerAvailable = !state.TryGetProperty("brokerAvailable", out var broker) || broker.GetBoolean(); bool requiresProvisioning = state.TryGetProperty("requiresProvisioning", out var provisioning) && provisioning.GetBoolean(); bool paired = agent?.Session.HasPaired == true;
-            agentMaintenanceState.SetText(() => active ? UiText.Active : !paired ? UiText.AfterConnection : requiresProvisioning ? UiText.ActivationRequired : !brokerAvailable ? UiText.Unavailable : UiText.Preparing);
-            agentMaintenanceState.ForeColor = active ? ConnectedText : !paired ? SecondaryText : requiresProvisioning || !brokerAvailable ? WarningText : SecondaryText;
+            if (!adminMaintenanceEnabled || !maintenance.Enabled)
+            {
+                agentMaintenanceState.SetText(() => UiText.AdminMaintenanceDisabled);
+                agentMaintenanceState.ForeColor = SecondaryText;
+            }
+            else
+            {
+                agentMaintenanceState.SetText(() => active ? UiText.Active : !paired ? UiText.AfterConnection : requiresProvisioning ? UiText.ActivationRequired : !brokerAvailable ? UiText.Unavailable : UiText.Preparing);
+                agentMaintenanceState.ForeColor = active ? ConnectedText : !paired ? SecondaryText : requiresProvisioning || !brokerAvailable ? WarningText : SecondaryText;
+            }
         }
     }
 
@@ -869,7 +923,7 @@ public sealed partial class MainForm : Forms.Form
             agentState.SetText(() => agentIdle ? UiText.NoActiveConnection : UiText.AgentAwaitingPreparation);
             agentSessionNote.SetText(() => agentIdle ? UiText.RevokedAccessNote : UiText.PreparingSupport);
             pairingCountdown.Value = 0; pairingCountdownText.SetText("");
-            agentNetworkState.SetText(() => agentIdle ? UiText.Waiting : UiText.Preparing); agentMaintenanceState.SetText(() => UiText.Inactive);
+            agentNetworkState.SetText(() => agentIdle ? UiText.Waiting : UiText.Preparing); agentMaintenanceState.SetText(() => adminMaintenanceEnabled ? UiText.Inactive : UiText.AdminMaintenanceDisabled);
             setupNotice.Visible = false; return;
         }
         var session = agent.Session;
