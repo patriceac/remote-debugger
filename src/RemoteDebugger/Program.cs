@@ -133,8 +133,10 @@ public static class Program
             if (verb == "discover")
             {
                 var settings = InternetSettings.Load(Option("--data-root", Vault.DefaultRoot));
-                var found = settings == null ? await Discovery.FindAsync(2500, ct.Token) : await settings.FindAsync(ct.Token);
-                Console.WriteLine(Json.Text(new { ok = true, peers = found })); return 0;
+                var found = await DiscoverPeersAsync(settings,
+                    token => Discovery.FindAsync(2500, token),
+                    (current, token) => current.FindAsync(token), ct.Token);
+                Console.WriteLine(Json.Text(new { ok = true, peers = found.Peers, usedLanFallback = found.UsedLanFallback })); return 0;
             }
             if (verb == "pair")
             {
@@ -210,4 +212,15 @@ public static class Program
         }
         catch (Exception ex) { Console.WriteLine(Json.Text(new { ok = false, error = ex is OperationCanceledException ? "cancelled" : "transport_or_input", message = ex.Message })); return 2; }
     }
+
+    internal static Task<PeerDiscoveryResult> DiscoverPeersAsync(
+        InternetSettings? settings,
+        Func<CancellationToken, Task<List<Peer>>> lanDiscovery,
+        Func<InternetSettings, CancellationToken, Task<List<Peer>>> relayDiscovery,
+        CancellationToken ct = default) =>
+        PeerDiscovery.FindAsync(
+            privateInternet: settings != null,
+            lanDiscovery,
+            token => relayDiscovery(settings!, token),
+            ct);
 }

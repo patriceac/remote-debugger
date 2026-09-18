@@ -126,6 +126,22 @@ public sealed class InternetTransportTests
     }
 
     [Fact]
+    public async Task CliDiscoveryUsesLanWhenThePrivateRelayFails()
+    {
+        var nearby = new Peer("Nearby", "192.168.1.20", 45832, new string('a', 64), "RD-0123-4567-89AB-CDEF");
+        int lanCalls = 0;
+        var settings = new InternetSettings("https://relay.example", new string('a', 64), new string('b', 64));
+        var result = await Program.DiscoverPeersAsync(
+            settings,
+            _ => { lanCalls++; return Task.FromResult(new List<Peer> { nearby }); },
+            (_, _) => Task.FromException<List<Peer>>(new HttpRequestException("relay unavailable")));
+
+        Assert.True(result.UsedLanFallback);
+        Assert.Equal(1, lanCalls);
+        Assert.Equal(new[] { nearby }, result.Peers);
+    }
+
+    [Fact]
     public async Task PrivateDiscoveryDoesNotProbeLanWhenTheRelaySucceeds()
     {
         bool lanCalled = false;
