@@ -61,11 +61,15 @@ Name: "{userstartup}\Remote Debugger"; Filename: "{app}\{#AppExeName}"; Paramete
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,Remote Debugger}"; Flags: nowait postinstall skipifsilent
 
-#ifdef RelayProfilePath
 [CustomMessages]
+english.ManagedUpgradeFailed=The protected Remote Debugger installation could not be updated. Run the installer again and approve the Windows administrator prompt.
+french.ManagedUpgradeFailed=L’installation protégée de Remote Debugger n’a pas pu être mise à jour. Relancez l’installateur et acceptez la demande d’administrateur Windows.
+spanish.ManagedUpgradeFailed=No se pudo actualizar la instalación protegida de Remote Debugger. Ejecute de nuevo el instalador y acepte la solicitud de administrador de Windows.
+#ifdef RelayProfilePath
 english.InternetSetupFailed=Internet setup could not be saved. Run this installer again before using internet support.
 french.InternetSetupFailed=La configuration Internet n'a pas pu être enregistrée. Relancez l'installation avant d'utiliser l'assistance Internet.
 spanish.InternetSetupFailed=No se pudo guardar la configuración de Internet. Ejecute de nuevo el instalador antes de usar la asistencia por Internet.
+#endif
 
 [Code]
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -75,6 +79,7 @@ var
 begin
   if CurStep = ssPostInstall then
   begin
+#ifdef RelayProfilePath
     ExtractTemporaryFile('RemoteDebugger-Internet.rdrelay');
     ProfilePath := ExpandConstant('{tmp}\RemoteDebugger-Internet.rdrelay');
     try
@@ -88,6 +93,12 @@ begin
     finally
       DeleteFile(ProfilePath);
     end;
+#endif
+    if not Exec(ExpandConstant('{app}\{#AppExeName}'),
+      '--managed-upgrade', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+      RaiseException(CustomMessage('ManagedUpgradeFailed'));
+    if ResultCode <> 0 then
+      RaiseException(CustomMessage('ManagedUpgradeFailed'));
+    Log('Protected managed application upgrade completed or was not required.');
   end;
 end;
-#endif

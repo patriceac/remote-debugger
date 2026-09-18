@@ -41,6 +41,16 @@ public sealed class InstallerDefinitionTests
         Assert.Contains("Flags: nowait postinstall skipifsilent", definition, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void InstallerHandsOffToTheProtectedInstallationBeforeLaunchingNormally()
+    {
+        string definition = File.ReadAllText(ProjectFile("installer", "RemoteDebugger.iss"));
+
+        Assert.Contains("--managed-upgrade", definition, StringComparison.Ordinal);
+        Assert.Contains("ewWaitUntilTerminated, ResultCode", definition, StringComparison.Ordinal);
+        Assert.Contains("CustomMessage('ManagedUpgradeFailed')", definition, StringComparison.Ordinal);
+    }
+
     private static string ProjectFile(params string[] segments)
     {
         DirectoryInfo? directory = new(AppContext.BaseDirectory);

@@ -23,6 +23,10 @@ Choosing **Enable support** still requests one explicit Windows administrator
 approval so the application can provision its Program Files copy, local broker,
 and Private/LocalSubnet firewall rules. Later launches through the Start menu
 automatically redirect an agent to that protected copy without another prompt.
+If a protected copy already exists, rerunning the desktop installer first stages
+the signed per-user build, then asks once for Windows administrator approval to
+stop and replace the protected application and broker before launching normally.
+Remote signed updates through the broker remain silent after the initial setup.
 
 Build the installer after producing a signed Release:
 

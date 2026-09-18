@@ -14,8 +14,51 @@ internal sealed record SupportProvisionRequest(
     int RequestingProcessId,
     long RequestingProcessStartTicks);
 
+internal sealed record SupportUpgradeRequest(
+    string ExpectedExecutableSha256,
+    string RegisteredUserSid,
+    int RequestingProcessId,
+    long RequestingProcessStartTicks);
+
 internal static class SupportInstaller
 {
+    public static async Task<int> UpgradeAsync(CancellationToken ct = default)
+    {
+        string source = Path.GetFullPath(Environment.ProcessPath ?? throw new InvalidOperationException("Current executable path is unavailable."));
+        var status = await SupportPlatform.GetStatusAsync(ct);
+        if (!status.Provisioned || string.IsNullOrWhiteSpace(status.RegisteredApplicationPath)) return 0;
+        if (PathsEqual(source, status.RegisteredApplicationPath)) return 0;
+        if (status.PublisherThumbprint is not { Length: > 0 } publisher)
+            throw new InvalidOperationException("The protected support publisher identity is unavailable.");
+        _ = AuthenticodeVerifier.VerifyPinnedTrusted(source, publisher);
+        string hash;
+        await using (var stream = File.Open(source, FileMode.Open, FileAccess.Read, FileShare.Read))
+            hash = Convert.ToHexString(await SHA256.HashDataAsync(stream, ct));
+        if (File.Exists(status.RegisteredApplicationPath))
+        {
+            await using var current = File.Open(status.RegisteredApplicationPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            string currentHash = Convert.ToHexString(await SHA256.HashDataAsync(current, ct));
+            if (UpdatePolicy.FixedHexEquals(hash, currentHash)) return 0;
+        }
+        string sid = WindowsIdentity.GetCurrent().User?.Value ?? throw new InvalidOperationException("Current Windows user SID is unavailable.");
+        using var requester = Process.GetCurrentProcess();
+        string encoded = Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(
+            new SupportUpgradeRequest(hash, sid, requester.Id, requester.StartTime.ToUniversalTime().Ticks), Json.Options));
+        var start = new ProcessStartInfo(source)
+        {
+            UseShellExecute = true,
+            Verb = "runas",
+            WorkingDirectory = AppContext.BaseDirectory
+        };
+        start.ArgumentList.Add("--support-upgrade");
+        start.ArgumentList.Add(encoded);
+        using var process = Process.Start(start) ?? throw new IOException("Windows did not start the protected application upgrader.");
+        await process.WaitForExitAsync(ct);
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException($"Protected application upgrade failed (exit code {process.ExitCode}).");
+        return 0;
+    }
+
     public static async Task ProvisionAsync(CancellationToken ct)
     {
         string source = Environment.ProcessPath ?? throw new InvalidOperationException("Current executable path is unavailable.");
@@ -114,6 +157,118 @@ internal static class SupportInstaller
             return 2;
         }
     }
+
+    public static int ExecuteUpgradeElevated(string encodedRequest)
+    {
+        try
+        {
+            if (!Native.IsElevated()) return 3;
+            var request = JsonSerializer.Deserialize<SupportUpgradeRequest>(Convert.FromBase64String(encodedRequest), Json.Options)
+                ?? throw new InvalidDataException("Missing protected application upgrade request.");
+            UpdatePolicy.ValidateSha256(request.ExpectedExecutableSha256, "upgrade executable SHA-256");
+            _ = new SecurityIdentifier(request.RegisteredUserSid);
+
+            string source = Path.GetFullPath(Environment.ProcessPath ?? throw new InvalidOperationException("Upgrader executable path is unavailable."));
+            if (!PathsEqual(source, SupportPlatformPaths.UserApplicationExecutable))
+                throw new UnauthorizedAccessException("Protected application upgrades must originate from the per-user installation.");
+            var configuration = JsonSerializer.Deserialize<SupportConfiguration>(
+                File.ReadAllText(SupportPlatformPaths.ConfigurationPath), Json.Options)
+                ?? throw new InvalidDataException("Support service configuration is empty.");
+            if (configuration.ProtocolVersion != SupportPlatformPaths.ProtocolVersion ||
+                !PathsEqual(configuration.RegisteredApplicationPath, SupportPlatformPaths.ApplicationExecutable) ||
+                !string.Equals(request.RegisteredUserSid, configuration.RegisteredUserSid, StringComparison.OrdinalIgnoreCase))
+                throw new UnauthorizedAccessException("Protected application upgrade does not match the provisioned support identity.");
+            var requester = ProcessIdentity.Capture(request.RequestingProcessId);
+            if (requester.StartTicks != request.RequestingProcessStartTicks ||
+                requester.SessionId <= 0 ||
+                !string.Equals(requester.UserSid, request.RegisteredUserSid, StringComparison.OrdinalIgnoreCase) ||
+                !PathsEqual(requester.ExecutablePath, source))
+                throw new UnauthorizedAccessException("Protected application upgrade request does not match the signed interactive process.");
+            _ = AuthenticodeVerifier.VerifyPinnedTrusted(source, configuration.PublisherThumbprint);
+            string actualHash;
+            using (var sourceStream = File.Open(source, FileMode.Open, FileAccess.Read, FileShare.Read))
+                actualHash = Convert.ToHexString(SHA256.HashData(sourceStream));
+            if (!UpdatePolicy.FixedHexEquals(actualHash, request.ExpectedExecutableSha256))
+                throw new UnauthorizedAccessException("Protected application upgrade bytes changed after administrator consent was requested.");
+
+            StopManagedApplication(configuration.RegisteredApplicationPath, requester.SessionId, requester.UserSid);
+            StopExistingService();
+            ReplaceProtectedPayload(source, configuration);
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                Directory.CreateDirectory(SupportPlatformPaths.StateDirectory);
+                File.WriteAllText(Path.Combine(SupportPlatformPaths.StateDirectory, "upgrade-error.txt"), ex.ToString());
+            }
+            catch { }
+            return 2;
+        }
+    }
+
+    private static void StopManagedApplication(string path, int sessionId, string userSid)
+    {
+        foreach (var process in Process.GetProcessesByName("RemoteDebugger"))
+        {
+            using (process)
+            {
+                if (process.Id == Environment.ProcessId) continue;
+                string executablePath;
+                try { executablePath = Path.GetFullPath(process.MainModule?.FileName ?? ""); }
+                catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { continue; }
+                if (!PathsEqual(executablePath, path)) continue;
+                var identity = ProcessIdentity.Capture(process.Id);
+                if (identity.SessionId != sessionId || !string.Equals(identity.UserSid, userSid, StringComparison.OrdinalIgnoreCase)) continue;
+                if (process.HasExited) continue;
+                _ = process.CloseMainWindow();
+                if (!process.WaitForExit(5000) && !process.HasExited)
+                {
+                    process.Kill(true);
+                    process.WaitForExit(10000);
+                }
+                if (!process.HasExited) throw new IOException("The protected Remote Debugger process did not exit before replacement.");
+            }
+        }
+    }
+
+    private static void ReplaceProtectedPayload(string source, SupportConfiguration configuration)
+    {
+        string applicationTemp = SupportPlatformPaths.ApplicationExecutable + ".upgrade.new";
+        string serviceTemp = SupportPlatformPaths.ServiceExecutable + ".upgrade.new";
+        try
+        {
+            Directory.CreateDirectory(SupportPlatformPaths.ProductDirectory);
+            Directory.CreateDirectory(SupportPlatformPaths.InstallDirectory);
+            File.Copy(source, applicationTemp, true);
+            _ = AuthenticodeVerifier.VerifyPinnedTrusted(applicationTemp, configuration.PublisherThumbprint);
+            File.Copy(source, serviceTemp, true);
+            _ = AuthenticodeVerifier.VerifyPinnedTrusted(serviceTemp, configuration.PublisherThumbprint);
+            File.Move(applicationTemp, SupportPlatformPaths.ApplicationExecutable, true);
+            File.Move(serviceTemp, SupportPlatformPaths.ServiceExecutable, true);
+            var updated = configuration with { ServiceVersion = typeof(Program).Assembly.GetName().Version?.ToString() ?? configuration.ServiceVersion };
+            WriteConfiguration(updated);
+            ConfigureService();
+            RunSc(true, "start", SupportPlatformPaths.ServiceName);
+            WaitForServiceReady();
+            WriteReceipt(new(true, SupportPlatformPaths.ApplicationExecutable, SupportPlatformPaths.ServiceExecutable,
+                updated.PublisherThumbprint, updated.RegisteredUserSid, "demand", updated.ProvisionedUtc));
+        }
+        finally
+        {
+            DeleteIfExists(applicationTemp);
+            DeleteIfExists(serviceTemp);
+        }
+    }
+
+    private static void DeleteIfExists(string path)
+    {
+        if (File.Exists(path)) File.Delete(path);
+    }
+
+    private static bool PathsEqual(string left, string right) =>
+        string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);
 
     private static void StopExistingService()
     {
