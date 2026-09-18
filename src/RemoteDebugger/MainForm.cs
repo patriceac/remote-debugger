@@ -1316,7 +1316,7 @@ public sealed partial class MainForm : Forms.Form
     {
         try
         {
-            RemoteClient.Require(await target.CallAsync("ui.input", new { kind = "release" }, seconds: 5));
+            RemoteClient.Require(await target.SendInputAsync(new { kind = "release" }, seconds: 5));
         }
         catch
         {
@@ -1380,7 +1380,7 @@ public sealed partial class MainForm : Forms.Form
             try
             {
                 using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-                RemoteClient.Require(await target.CallAsync("ui.input", item.Payload, deadline.Token, seconds: 3));
+                RemoteClient.Require(await target.SendInputAsync(item.Payload, deadline.Token, seconds: 3));
                 if (release && item.Generation == sessionGeneration && ReferenceEquals(target, client))
                 {
                     inputState.Released();

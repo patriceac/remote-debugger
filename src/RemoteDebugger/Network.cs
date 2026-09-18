@@ -335,6 +335,8 @@ public sealed partial class AgentServer : IDisposable
     }
     private async Task ServeAsync(Stream transport, SecurityCandidate? candidate = null)
     {
+        bool persistentInput = false;
+        CancellationTokenRegistration persistentInputGrant = default;
         using (var tls = new SslStream(transport, true))
         using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(stop.Token))
         {
@@ -480,6 +482,22 @@ public sealed partial class AgentServer : IDisposable
                     }
                     else if (!Session.BinaryMatched && r.Operation is not ("status" or "maintenance.status" or "cancel"))
                         reply = Reply.Failure(r.Id, "binary_mismatch", "Synchronize the agent with the controller executable before starting support.");
+                    else if (r.Operation == "ui.input.open" && !Guid.TryParse(r.Id, out _))
+                        reply = Reply.Failure(r.Id, "invalid_id", "Request id must be a UUID.");
+                    else if (r.Operation == "ui.input.open")
+                    {
+                        // The controller keeps this authenticated stream open for
+                        // ordered mouse/keyboard requests. Tie its lifetime to the
+                        // support grant so revocation closes the stream and releases
+                        // any native input that may still be held.
+                        if (!persistentInput)
+                        {
+                            persistentInput = true;
+                            persistentInputGrant = grant.Register(timeout.Cancel);
+                        }
+                        timeout.CancelAfter(TimeSpan.FromHours(12));
+                        reply = Reply.Success(r.Id, new { ready = true });
+                    }
                     else if (r.Operation == "security.stage")
                     {
                         await updateGate.WaitAsync(timeout.Token);
@@ -524,7 +542,12 @@ public sealed partial class AgentServer : IDisposable
             }
             catch (OperationCanceledException) { }
             catch (Exception ex) { Status?.Invoke("TLS/session error: " + ex.GetType().Name + ": " + ex.Message); }
-            finally { slots.Release(); }
+            finally
+            {
+                persistentInputGrant.Dispose();
+                if (persistentInput) Native.ReleaseAllInput();
+                slots.Release();
+            }
         }
     }
     private async Task StreamAsync(SslStream tls, Request request, CancellationToken ct)
@@ -588,19 +611,30 @@ public sealed partial class AgentServer : IDisposable
     }
 }
 
-public sealed class RemoteClient(Connection connection)
+public sealed class RemoteClient
 {
-    public Connection Connection { get; private set; } = connection;
+    private readonly Func<Connection, CancellationToken, Task<Stream>> inputTransportFactory;
+    private readonly SemaphoreSlim inputGate = new(1, 1);
+    private InputChannel? inputChannel;
+    public Connection Connection { get; private set; }
     public static string DefaultPath => Path.Combine(Vault.DefaultRoot, "controller.connection");
+    public RemoteClient(Connection connection) : this(connection, OpenAuthenticatedTransportAsync) { }
+    internal RemoteClient(Connection connection, Func<Connection, CancellationToken, Task<Stream>> inputTransportFactory)
+    {
+        Connection = connection ?? throw new ArgumentNullException(nameof(connection));
+        this.inputTransportFactory = inputTransportFactory ?? throw new ArgumentNullException(nameof(inputTransportFactory));
+    }
     public static RemoteClient Load(string? path = null) => new(JsonSerializer.Deserialize<Connection>(Vault.Read(path ?? DefaultPath), Json.Options)!);
     public void Save(string? path = null) => Vault.Save(path ?? DefaultPath, JsonSerializer.SerializeToUtf8Bytes(Connection, Json.Options));
     public async Task PairAsync(string code, CancellationToken ct = default)
     {
+        await CloseInputChannelAsync().ConfigureAwait(false);
         Connection = await PairingTransport.PairAsync(Connection, code, ct).ConfigureAwait(false);
     }
     public async Task<JsonElement> HeartbeatAsync(CancellationToken ct = default) => Require(await CallAsync("session.heartbeat", ct: ct, seconds: 5).ConfigureAwait(false));
     public async Task EndSessionAsync(CancellationToken ct = default)
     {
+        await CloseInputChannelAsync().ConfigureAwait(false);
         // A user can press End while the agent is between updater processes.
         // Keep the old session token solely to terminate the resumed listener.
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -614,7 +648,11 @@ public sealed class RemoteClient(Connection connection)
             }
         }
     }
-    public async Task DisconnectAsync(CancellationToken ct = default) { Require(await CallAsync("session.disconnect", ct: ct, seconds: 5).ConfigureAwait(false)); }
+    public async Task DisconnectAsync(CancellationToken ct = default)
+    {
+        try { Require(await CallAsync("session.disconnect", ct: ct, seconds: 5).ConfigureAwait(false)); }
+        finally { await CloseInputChannelAsync().ConfigureAwait(false); }
+    }
     public async Task<Reply> CallAsync(string operation, object? args = null, CancellationToken ct = default, string? id = null, int seconds = 60)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(seconds, 1, 300) + 15));
@@ -623,6 +661,102 @@ public sealed class RemoteClient(Connection connection)
         await tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions { TargetHost = "RemoteDebugger", EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13 }, timeout.Token);
         var request = new Request(id ?? Guid.NewGuid().ToString(), Connection.Token, operation, args is JsonElement e ? e : Json.Element(args ?? new { }), seconds, ExecutableIdentity.Sha256);
         await Wire.WriteAsync(tls, request, timeout.Token); return await Wire.ReadAsync<Reply>(tls, timeout.Token);
+    }
+    public async Task<Reply> SendInputAsync(object? args = null, CancellationToken ct = default, int seconds = 3)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(seconds, 1, 300)));
+        await inputGate.WaitAsync(timeout.Token).ConfigureAwait(false);
+        try
+        {
+            InputChannel? channel = inputChannel;
+            try
+            {
+                if (channel == null)
+                {
+                    Stream transport = await inputTransportFactory(Connection, timeout.Token).ConfigureAwait(false);
+                    channel = new InputChannel(transport, Connection.Token, ExecutableIdentity.Sha256);
+                    await channel.OpenAsync(timeout.Token, seconds).ConfigureAwait(false);
+                    inputChannel = channel;
+                }
+                return await channel.CallAsync(args, timeout.Token, seconds).ConfigureAwait(false);
+            }
+            catch
+            {
+                if (channel != null && ReferenceEquals(inputChannel, channel)) inputChannel = null;
+                if (channel != null)
+                {
+                    try { await channel.DisposeAsync().ConfigureAwait(false); } catch { }
+                }
+                throw;
+            }
+        }
+        finally { inputGate.Release(); }
+    }
+    private async Task CloseInputChannelAsync()
+    {
+        await inputGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            InputChannel? channel = inputChannel;
+            inputChannel = null;
+            if (channel != null)
+            {
+                try { await channel.DisposeAsync().ConfigureAwait(false); } catch { }
+            }
+        }
+        finally { inputGate.Release(); }
+    }
+    private static async Task<Stream> OpenAuthenticatedTransportAsync(Connection connection, CancellationToken ct)
+    {
+        Stream transport = await ConnectionTransport.OpenAsync(connection, ct).ConfigureAwait(false);
+        SslStream? tls = null;
+        try
+        {
+            tls = new SslStream(transport, false, (_, cert, _, _) => cert != null &&
+                Safety.Equal(Convert.ToHexString(SHA256.HashData(cert.GetRawCertData())), connection.Fingerprint.ToUpperInvariant().Replace(":", "")));
+            await tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
+            {
+                TargetHost = "RemoteDebugger",
+                EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13
+            }, ct).ConfigureAwait(false);
+            return tls;
+        }
+        catch
+        {
+            if (tls != null) await tls.DisposeAsync().ConfigureAwait(false);
+            else await transport.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+    private sealed class InputChannel(Stream stream, string token, string binarySha256) : IAsyncDisposable
+    {
+        private readonly Stream stream = stream;
+        private readonly string token = token;
+        private readonly string binarySha256 = binarySha256;
+        private int disposed;
+        public async Task OpenAsync(CancellationToken ct, int seconds)
+        {
+            Reply reply = await SendAsync("ui.input.open", Json.Element(new { }), ct, seconds).ConfigureAwait(false);
+            RemoteClient.Require(reply);
+        }
+        public async Task<Reply> CallAsync(object? args, CancellationToken ct, int seconds)
+            => await SendAsync("ui.input", args is JsonElement e ? e : Json.Element(args ?? new { }), ct, seconds).ConfigureAwait(false);
+        private async Task<Reply> SendAsync(string operation, object? args, CancellationToken ct, int seconds)
+        {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
+            var request = new Request(Guid.NewGuid().ToString(), token, operation, args is JsonElement e ? e : Json.Element(args ?? new { }), seconds, binarySha256);
+            await Wire.WriteAsync(stream, request, ct).ConfigureAwait(false);
+            Reply reply = await Wire.ReadAsync<Reply>(stream, ct).ConfigureAwait(false);
+            if (!string.Equals(reply.Id, request.Id, StringComparison.Ordinal))
+                throw new InvalidDataException("Input reply did not match its request.");
+            return reply;
+        }
+        public async ValueTask DisposeAsync()
+        {
+            if (Interlocked.Exchange(ref disposed, 1) != 0) return;
+            await stream.DisposeAsync().ConfigureAwait(false);
+        }
     }
     public async Task StreamAsync(Func<ScreenFrame, Task> present, int fps = StreamPolicy.MaximumFps, int monitor = 0, int seconds = 300, CancellationToken ct = default)
     {

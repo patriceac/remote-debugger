@@ -1,7 +1,9 @@
 using System.Net.WebSockets;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using RemoteDebugger;
+using RemoteDebugger.Core;
 using Xunit;
 
 public sealed class InternetTransportTests
@@ -106,6 +108,49 @@ public sealed class InternetTransportTests
         Assert.Equal("", target.RelayUrl); Assert.Equal("", target.RelayAccessKey);
     }
 
+    [Fact]
+    public async Task PersistentInputReusesOneAuthenticatedStreamAndPreservesRequestOrder()
+    {
+        var stream = new ScriptedInputStream();
+        int opens = 0;
+        var client = new RemoteClient(new Connection("127.0.0.1", 45832, new string('a', 64), "token"), (_, _) =>
+        {
+            opens++;
+            return Task.FromResult<Stream>(stream);
+        });
+
+        Assert.True((await client.SendInputAsync(new { kind = "move", x = 10, y = 20 })).Ok);
+        Assert.True((await client.SendInputAsync(new { kind = "button", button = "left", down = true })).Ok);
+
+        Assert.Equal(1, opens);
+        Assert.Collection(stream.Requests,
+            open => Assert.Equal("ui.input.open", open.Operation),
+            move => { Assert.Equal("ui.input", move.Operation); Assert.Equal("move", move.Args.Str("kind")); },
+            button => { Assert.Equal("ui.input", button.Operation); Assert.Equal("button", button.Args.Str("kind")); });
+    }
+
+    [Fact]
+    public async Task FailedInputTransportIsDiscardedBeforeTheNextRequestReopensIt()
+    {
+        var failed = new ScriptedInputStream { FailAfterRequests = 2 };
+        var recovered = new ScriptedInputStream();
+        int opens = 0;
+        var client = new RemoteClient(new Connection("127.0.0.1", 45832, new string('a', 64), "token"), (_, _) =>
+        {
+            opens++;
+            return Task.FromResult<Stream>(opens == 1 ? failed : recovered);
+        });
+
+        await client.SendInputAsync(new { kind = "move", x = 10, y = 20 });
+        await Assert.ThrowsAsync<IOException>(() => client.SendInputAsync(new { kind = "button", button = "left", down = true }));
+        Assert.True((await client.SendInputAsync(new { kind = "release" })).Ok);
+
+        Assert.Equal(2, opens);
+        Assert.Collection(recovered.Requests,
+            open => Assert.Equal("ui.input.open", open.Operation),
+            release => { Assert.Equal("ui.input", release.Operation); Assert.Equal("release", release.Args.Str("kind")); });
+    }
+
     private sealed class RecordingSocket : WebSocket
     {
         public List<byte[]> Sent { get; } = [];
@@ -126,5 +171,53 @@ public sealed class InternetTransportTests
                 : Task.FromResult(new WebSocketReceiveResult(0, ReceivedType, true));
         public override Task SendAsync(ArraySegment<byte> buffer, WebSocketMessageType messageType, bool endOfMessage, CancellationToken cancellationToken)
         { Sent.Add(buffer.ToArray()); return Task.CompletedTask; }
+    }
+
+    private sealed class ScriptedInputStream : Stream
+    {
+        private readonly List<byte> pending = [];
+        private readonly List<byte> incoming = [];
+        public List<Request> Requests { get; } = [];
+        public int FailAfterRequests { get; init; } = int.MaxValue;
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override Task FlushAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public override int Read(byte[] buffer, int offset, int count) => ReadAsync(buffer.AsMemory(offset, count)).AsTask().GetAwaiter().GetResult();
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            int count = Math.Min(buffer.Length, incoming.Count);
+            if (count == 0) return ValueTask.FromResult(0);
+            CollectionsMarshal.AsSpan(incoming)[..count].CopyTo(buffer.Span);
+            incoming.RemoveRange(0, count);
+            return ValueTask.FromResult(count);
+        }
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => WriteAsync(buffer.AsMemory(offset, count)).AsTask().GetAwaiter().GetResult();
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (Requests.Count >= FailAfterRequests) throw new IOException("scripted input transport failure");
+            pending.AddRange(buffer.ToArray());
+            while (pending.Count >= 4)
+            {
+                int size = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(CollectionsMarshal.AsSpan(pending)[..4]);
+                if (size < 1 || pending.Count < size + 4) break;
+                byte[] body = pending.GetRange(4, size).ToArray(); pending.RemoveRange(0, size + 4);
+                Request request = JsonSerializer.Deserialize<Request>(body, Json.Options)!;
+                Requests.Add(request);
+                QueueReply(Reply.Success(request.Id, new { sent = true }));
+            }
+            return ValueTask.CompletedTask;
+        }
+        private void QueueReply(Reply reply)
+        {
+            byte[] body = JsonSerializer.SerializeToUtf8Bytes(reply, Json.Options);
+            byte[] length = new byte[4]; System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(length, body.Length);
+            incoming.AddRange(length); incoming.AddRange(body);
+        }
     }
 }
