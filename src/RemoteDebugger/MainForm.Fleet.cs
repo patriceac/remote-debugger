@@ -68,14 +68,14 @@ public sealed partial class MainForm
     private void RecordDevice(FleetDevice device)
     {
         fleet[DeviceKey(device.Peer)] = device;
-        RenderPeers();
+        if (!IsDisposed) RenderPeers();
     }
 
     private void SaveFleet() => Vault.Save(Path.Combine(root, "devices.dpapi"), JsonSerializer.SerializeToUtf8Bytes(fleet.Values, Json.Options));
 
     private string FleetState(FleetDevice device) => device.State switch
     {
-        "current" => UiText.ClientUpToDate, "newer" => UiText.UpdateControllerFirst,
+        "current" => UiText.ClientUpToDate, "newer" or "conflict" => UiText.UpdateControllerFirst,
         "available" => UiText.UpdateAvailable, "offline" => UiText.DeviceOffline,
         "legacy" => UiText.InitialUpdateRequired, "busy" => UiText.DeviceInUse,
         "failed" => UiText.UpdateIncomplete, "queued" => UiText.UpdateQueued,
@@ -110,7 +110,7 @@ public sealed partial class MainForm
                     var remote = snapshot.GetProperty("agent").Deserialize<ExecutableSnapshot>(Json.Options)!;
                     remote.Validate();
                     int comparison = UpdatePolicy.ReleaseVersion(remote.FileVersion).CompareTo(UpdatePolicy.ReleaseVersion(controller.FileVersion));
-                    string state = comparison > 0 ? "newer" : busy ? "busy" : Safety.Equal(remote.Sha256, controller.Sha256) ? "current" : comparison < 0 ? "available" : "failed";
+                    string state = comparison > 0 ? "newer" : busy ? "busy" : Safety.Equal(remote.Sha256, controller.Sha256) ? "current" : comparison < 0 ? "available" : "conflict";
                     RecordDevice(device with { Version = remote.FileVersion ?? "", Sha256 = remote.Sha256, State = state });
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
@@ -190,8 +190,8 @@ public sealed partial class MainForm
         }
         finally
         {
-            fleetLifetime = null; RefreshControllerControls();
-            discoveryState.SetText(() => UiText.UpdateBatchFinished);
+            fleetLifetime = null;
+            if (!IsDisposed) { RefreshControllerControls(); discoveryState.SetText(() => UiText.UpdateBatchFinished); }
         }
     }
 }

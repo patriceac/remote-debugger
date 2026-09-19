@@ -25,8 +25,9 @@ public static class Program
         int rootIndex = Array.IndexOf(args, "--data-root");
         string? dataRoot = rootIndex >= 0 && rootIndex + 1 < args.Length ? args[rootIndex + 1] : null;
         UiCulture.Initialize(languageOverride ?? LanguagePreference.Load(dataRoot ?? Vault.DefaultRoot));
-        ApplicationConfiguration.Initialize();
-        if (args.Contains("--admin-setup"))
+        Native.FreeConsole(); ApplicationConfiguration.Initialize();
+        if (args.Contains("--admin-setup") || !args.Contains("--startup") && !args.Contains("--resume-update") &&
+            File.Exists(new UpdateAdminStore(dataRoot ?? Vault.DefaultRoot).PendingPath))
         {
             var admin = new UpdateAdminStore(dataRoot ?? Vault.DefaultRoot);
             if (!admin.IsAdmin)
@@ -59,7 +60,6 @@ public static class Program
             // Recover if the owner exited or crashed while activation was attempted.
             if (!instance.TryAcquire()) return 1;
         }
-        Native.FreeConsole();
         bool controllerOnly = args.Contains("--controller");
         var form = new MainForm(!controllerOnly, dataRoot, loopbackOnly, startupPreparationError, languageOverride,
             enableSupport: args.Contains("--enable-support") || args.Contains("--resume-update"), startInTray: startInTray);
