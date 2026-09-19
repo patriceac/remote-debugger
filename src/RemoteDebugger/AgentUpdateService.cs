@@ -23,7 +23,7 @@ public sealed class AgentUpdateService : IDisposable
 {
     private static readonly HashSet<string> Operations = new(StringComparer.Ordinal)
     {
-        "update.snapshot", "update.begin", "update.status", "update.chunk", "update.stage",
+        "update.snapshot", "update.challenge", "update.begin", "update.status", "update.chunk", "update.stage",
         "update.commit", "update.health", "update.cancel", "update.confirm"
     };
 
@@ -35,11 +35,15 @@ public sealed class AgentUpdateService : IDisposable
     private string? activeTransactionId;
     private UpdateExitPlan? pendingExitPlan;
     private AgentUpdateProgress progress = new("idle", 0, 0);
+    private readonly Func<string> targetFingerprint;
+    private string updateChallenge = "";
+    private DateTimeOffset challengeExpires;
 
     public event Action? UpdateRestartRequested;
 
-    public AgentUpdateService(string root, UpdateReconnectGrantFactory reconnectGrantFactory)
+    public AgentUpdateService(string root, UpdateReconnectGrantFactory reconnectGrantFactory, Func<string>? targetFingerprint = null)
     {
+        this.targetFingerprint = targetFingerprint ?? (() => "");
         transferRoot = Path.Combine(Path.GetFullPath(root), "updates");
         this.reconnectGrantFactory = reconnectGrantFactory ?? throw new ArgumentNullException(nameof(reconnectGrantFactory));
         Directory.CreateDirectory(transferRoot);
@@ -79,6 +83,7 @@ public sealed class AgentUpdateService : IDisposable
             object result = request.Operation switch
             {
                 "update.snapshot" => await SnapshotAsync(ct),
+                "update.challenge" => await WithTransferGateAsync(() => Task.FromResult(NewChallenge()), ct),
                 "update.begin" => await WithTransferGateAsync(() => BeginAsync(request.Args, ct), ct),
                 "update.status" => await WithTransferGateAsync(() => TransferStatusAsync(request.Args, ct), ct),
                 "update.chunk" => await WithTransferGateAsync(() => ChunkAsync(request.Args, ct), ct),
@@ -109,7 +114,7 @@ public sealed class AgentUpdateService : IDisposable
         UpdateRestartRequested?.Invoke();
     }
 
-    private async Task<object> SnapshotAsync(CancellationToken ct)
+    internal async Task<object> SnapshotAsync(CancellationToken ct)
     {
         var agent = await SupportPlatform.CaptureCurrentExecutableAsync(ct);
         var platform = await SupportPlatform.GetStatusAsync(ct);
@@ -119,7 +124,14 @@ public sealed class AgentUpdateService : IDisposable
             try { transaction = await SupportPlatform.BrokerCallAsync("update.status", new { }, ct); }
             catch (InvalidOperationException) { }
         }
-        return new { agent, platform, transaction, controllerSynchronized = ControllerSynchronized, actualRunningSha256 = agent.Sha256 };
+        return new { agent, platform, transaction, requiresUpdateAdmin = true, controllerSynchronized = ControllerSynchronized, actualRunningSha256 = agent.Sha256 };
+    }
+
+    private object NewChallenge()
+    {
+        updateChallenge = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+        challengeExpires = DateTimeOffset.UtcNow.AddMinutes(1);
+        return new { nonce = updateChallenge };
     }
 
     private async Task<object> BeginAsync(JsonElement args, CancellationToken ct)
@@ -127,6 +139,11 @@ public sealed class AgentUpdateService : IDisposable
         string transactionId = ValidateTransactionId(args.Str("transactionId"));
         var candidate = args.GetProperty("candidate").Deserialize<ExecutableSnapshot>(Json.Options) ?? throw new InvalidDataException("Missing controller executable snapshot.");
         candidate.Validate();
+        if (updateChallenge.Length == 0 || challengeExpires <= DateTimeOffset.UtcNow)
+            throw new UnauthorizedAccessException("Request a fresh administrator challenge before updating.");
+        string nonce = updateChallenge; updateChallenge = "";
+        UpdateAdminProof.Verify(args.Str("authorization"), nonce, targetFingerprint(), "update.begin", candidate.Sha256);
+        UpdatePolicy.RequireNewerRelease(candidate, await SupportPlatform.CaptureCurrentExecutableAsync(ct));
         string meta = MetaPath(transactionId), partial = PartialPath(transactionId);
         if (File.Exists(meta))
         {
@@ -194,6 +211,7 @@ public sealed class AgentUpdateService : IDisposable
         SetProgress("verifying", new FileInfo(partial).Length, transfer.Candidate.Size);
         var actual = await SnapshotTransferredFileAsync(partial, ct);
         RequireTransferMatch(actual, transfer.Candidate);
+        UpdatePolicy.RequireNewerRelease(actual, await SupportPlatform.CaptureCurrentExecutableAsync(ct));
         var result = await SupportPlatform.BrokerCallAsync("update.stage", new { transactionId, sourcePath = partial, candidate = transfer.Candidate }, ct, 120);
         string metaTemp = MetaPath(transactionId) + ".new";
         await File.WriteAllTextAsync(metaTemp, JsonSerializer.Serialize(transfer with { BrokerStaged = true }, Json.Options), ct);
@@ -391,10 +409,20 @@ internal static class AgentUpdateClient
             return new(true, false, controller, agent, null, "Agent already runs the controller's exact executable bytes.");
         }
 
+        UpdatePolicy.RequireNewerRelease(controller, agent);
+        if (!new UpdateAdminStore(client.AdminRoot).IsAdmin)
+            throw new UnauthorizedAccessException("Set up this computer as an admin in the installer before updating clients.");
+
         string transactionId = controller.Sha256[..32].ToLowerInvariant();
         try
         {
-            var begin = RemoteClient.Require(await client.SendUpdateAsync("update.begin", new { transactionId, candidate = controller }, ct, seconds: 30));
+            string authorization = "";
+            if (snapshot.TryGetProperty("requiresUpdateAdmin", out var required) && required.GetBoolean())
+            {
+                var challenge = RemoteClient.Require(await client.CallAsync("update.challenge", ct: ct, seconds: 10));
+                authorization = new UpdateAdminStore(client.AdminRoot).Sign(challenge.Str("nonce"), client.Connection.Fingerprint, "update.begin", controller.Sha256);
+            }
+            var begin = RemoteClient.Require(await client.SendUpdateAsync("update.begin", new { transactionId, candidate = controller, authorization }, ct, seconds: 30));
             long offset = begin.Long("offset");
             if (offset < 0 || offset > controller.Size) throw new InvalidDataException("Agent returned an invalid update resume offset.");
             progress?.Report(new("transferring", offset, controller.Size));

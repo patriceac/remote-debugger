@@ -39,6 +39,7 @@ VersionInfoCompany={#AppPublisher}
 LanguageDetectionMethod=uilanguage
 ShowLanguageDialog=no
 UsePreviousLanguage=no
+UsePreviousTasks=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -46,6 +47,9 @@ Name: "french"; MessagesFile: "compiler:Languages\French.isl"
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 
 [Files]
+#ifdef AdminCredentialPath
+Source: "{#AdminCredentialPath}"; DestDir: "{app}"; DestName: "RemoteDebugger-Admin.rdadmin"; Flags: ignoreversion deleteafterinstall
+#endif
 #ifdef RelayProfilePath
 ; Only passphrase-encrypted credentials may be embedded. Import stages ciphertext
 ; for the first-launch unlock; no passphrase is passed to the installer or CLI.
@@ -62,9 +66,20 @@ Source: "..\docs\*.md"; DestDir: "{app}\docs"; Excludes: "VALIDATION*.md"; Flags
 Name: "{commonprograms}\Remote Debugger"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"
 
 [Run]
-Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,Remote Debugger}"; Flags: nowait postinstall skipifsilent runasoriginaluser
+Filename: "{app}\{#AppExeName}"; Parameters: "{code:LaunchArguments}"; Description: "{cm:LaunchProgram,Remote Debugger}"; Flags: nowait postinstall skipifsilent runasoriginaluser
+
+[Tasks]
+#ifdef AdminCredentialPath
+Name: "adminpc"; Description: "{cm:AdminPcOption}"; Flags: unchecked
+#endif
 
 [CustomMessages]
+english.AdminPcOption=Set up this PC as an admin (requires admin password)
+french.AdminPcOption=Configurer ce PC comme administrateur (mot de passe administrateur requis)
+spanish.AdminPcOption=Configurar este PC como administrador (requiere contraseña de administrador)
+english.AdminSetupFailed=The protected admin credential could not be staged.
+french.AdminSetupFailed=Les identifiants administrateur protégés n’ont pas pu être préparés.
+spanish.AdminSetupFailed=No se pudo preparar la credencial de administrador protegida.
 english.InstallerShutdownFailed=The running Remote Debugger application could not be closed before installation.
 french.InstallerShutdownFailed=Remote Debugger n’a pas pu être fermé avant l’installation.
 spanish.InstallerShutdownFailed=No se pudo cerrar Remote Debugger antes de la instalación.
@@ -81,6 +96,14 @@ spanish.InternetSetupFailed=No se pudo guardar la configuración de Internet. Ej
 #endif
 
 [Code]
+function LaunchArguments(Param: String): String;
+begin
+  Result := '';
+#ifdef AdminCredentialPath
+  if WizardIsTaskSelected('adminpc') then Result := '--admin-setup';
+#endif
+end;
+
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   HelperPath: String;
@@ -128,6 +151,20 @@ var
 begin
   if CurStep = ssPostInstall then
   begin
+#ifdef AdminCredentialPath
+    ProfilePath := ExpandConstant('{app}\RemoteDebugger-Admin.rdadmin');
+    try
+      if WizardIsTaskSelected('adminpc') then
+      begin
+        if not ExecAsOriginalUser(ExpandConstant('{app}\{#AppExeName}'),
+          'cli admin-import --file "' + ProfilePath + '"', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+          RaiseException(CustomMessage('AdminSetupFailed'));
+        if ResultCode <> 0 then RaiseException(CustomMessage('AdminSetupFailed'));
+      end;
+    finally
+      DeleteFile(ProfilePath);
+    end;
+#endif
 #ifdef RelayProfilePath
     ProfilePath := ExpandConstant('{app}\RemoteDebugger-Internet.rdrelay');
     try

@@ -870,4 +870,24 @@
   <data name="FileReceived" xml:space="preserve"><value>100 % · Archivo recibido y verificado</value></data>
   <data name="FileSent" xml:space="preserve"><value>100 % · Archivo enviado</value></data>
   <data name="ClientUpToDate" xml:space="preserve"><value>✓ Cliente actualizado</value></data>
+  <data name="UpdateAllDevices" xml:space="preserve"><value>Actualizar todos los dispositivos</value></data>
+  <data name="StopUpdates" xml:space="preserve"><value>Detener actualizaciones</value></data>
+  <data name="DeviceVersion" xml:space="preserve"><value>Versión</value></data>
+  <data name="DeviceProgress" xml:space="preserve"><value>Progreso / tiempo</value></data>
+  <data name="UpdateControllerFirst" xml:space="preserve"><value>Actualice primero este controlador</value></data>
+  <data name="UpdateAvailable" xml:space="preserve"><value>Actualización disponible</value></data>
+  <data name="DeviceOffline" xml:space="preserve"><value>Sin conexión · última versión conocida</value></data>
+  <data name="InitialUpdateRequired" xml:space="preserve"><value>Requiere actualización inicial</value></data>
+  <data name="DeviceInUse" xml:space="preserve"><value>En uso · reintentar después</value></data>
+  <data name="UpdateIncomplete" xml:space="preserve"><value>Actualización incompleta</value></data>
+  <data name="UpdateQueued" xml:space="preserve"><value>En cola</value></data>
+  <data name="UpdatingDevice" xml:space="preserve"><value>Actualizando…</value></data>
+  <data name="CheckingVersion" xml:space="preserve"><value>Comprobando versión…</value></data>
+  <data name="AdminPcRequired" xml:space="preserve"><value>Requiere PC administrador</value></data>
+  <data name="RetryUpdate" xml:space="preserve"><value>Reintentar cuando esté disponible</value></data>
+  <data name="UpdateBatchFinished" xml:space="preserve"><value>Actualizaciones terminadas. Puede reintentar los dispositivos sin conexión o incompletos.</value></data>
+  <data name="AdminSetupTitle" xml:space="preserve"><value>Configurar acceso de administrador</value></data>
+  <data name="AdminSetupHelp" xml:space="preserve"><value>Introduzca la contraseña de administrador para autorizar a este PC a actualizar sus dispositivos. Windows recordará este acceso.</value></data>
+  <data name="ActivateAdmin" xml:space="preserve"><value>Autorizar este PC</value></data>
+  <data name="AdminCredentialRejected" xml:space="preserve"><value>No se pudo verificar la contraseña o la credencial de administrador. Inténtelo de nuevo.</value></data>
 </root>

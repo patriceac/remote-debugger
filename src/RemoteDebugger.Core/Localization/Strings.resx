@@ -870,4 +870,24 @@
   <data name="FileReceived" xml:space="preserve"><value>100% · File received and verified</value></data>
   <data name="FileSent" xml:space="preserve"><value>100% · File sent</value></data>
   <data name="ClientUpToDate" xml:space="preserve"><value>✓ Client up to date</value></data>
+  <data name="UpdateAllDevices" xml:space="preserve"><value>Update all devices</value></data>
+  <data name="StopUpdates" xml:space="preserve"><value>Stop updates</value></data>
+  <data name="DeviceVersion" xml:space="preserve"><value>Version</value></data>
+  <data name="DeviceProgress" xml:space="preserve"><value>Progress / ETA</value></data>
+  <data name="UpdateControllerFirst" xml:space="preserve"><value>Update this controller first</value></data>
+  <data name="UpdateAvailable" xml:space="preserve"><value>Update available</value></data>
+  <data name="DeviceOffline" xml:space="preserve"><value>Offline · last known version</value></data>
+  <data name="InitialUpdateRequired" xml:space="preserve"><value>Initial update required</value></data>
+  <data name="DeviceInUse" xml:space="preserve"><value>In use · retry later</value></data>
+  <data name="UpdateIncomplete" xml:space="preserve"><value>Update incomplete</value></data>
+  <data name="UpdateQueued" xml:space="preserve"><value>Queued</value></data>
+  <data name="UpdatingDevice" xml:space="preserve"><value>Updating…</value></data>
+  <data name="CheckingVersion" xml:space="preserve"><value>Checking version…</value></data>
+  <data name="AdminPcRequired" xml:space="preserve"><value>Admin PC required</value></data>
+  <data name="RetryUpdate" xml:space="preserve"><value>Retry when available</value></data>
+  <data name="UpdateBatchFinished" xml:space="preserve"><value>Updates finished. Offline or incomplete devices can be retried.</value></data>
+  <data name="AdminSetupTitle" xml:space="preserve"><value>Set up admin access</value></data>
+  <data name="AdminSetupHelp" xml:space="preserve"><value>Enter the admin password to authorize this PC to update your devices. Windows will remember this access.</value></data>
+  <data name="ActivateAdmin" xml:space="preserve"><value>Authorize this PC</value></data>
+  <data name="AdminCredentialRejected" xml:space="preserve"><value>The password or admin credential could not be verified. Try again.</value></data>
 </root>

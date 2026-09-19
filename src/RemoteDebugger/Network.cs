@@ -160,6 +160,7 @@ public sealed partial class AgentServer : IDisposable
     private readonly string authPath;
     private string tokenHash = "";
     private string controllerBinaryHash = "";
+    private bool updateOnly;
     private readonly SupportSession session = new();
     private readonly SessionResumeStore resumeStore;
     private readonly AgentUpdateService updates;
@@ -215,6 +216,7 @@ public sealed partial class AgentServer : IDisposable
         if (resumed != null)
         {
             tokenHash = resumed.GrantHash; controllerBinaryHash = resumed.ControllerHash;
+            updateOnly = resumed.UpdateOnly;
             session.Pair(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
         }
         else resumeStore.Clear();
@@ -225,7 +227,7 @@ public sealed partial class AgentServer : IDisposable
             ct.ThrowIfCancellationRequested();
             var reconnect = PrepareUpdateReconnect(context.Controller.Sha256, DateTimeOffset.UtcNow.AddMinutes(10));
             return Task.FromResult(new UpdateReconnectGrant(reconnect.Ticket, reconnect.ExpiresUtc));
-        });
+        }, () => Fingerprint);
         updates.UpdateRestartRequested += () =>
         {
             // Planned replacement preserves the bounded reconnect grant. Explicit
@@ -347,7 +349,7 @@ public sealed partial class AgentServer : IDisposable
         {
             if (tokenHash.Length == 0 || !Safety.Equal(controllerBinaryHash, replacementHash))
                 throw new UnauthorizedAccessException("Only the authenticated controller binary can replace the agent.");
-            return resumeStore.Create(tokenHash, controllerBinaryHash, ExecutableIdentity.Sha256, replacementHash, deadline);
+            return resumeStore.Create(tokenHash, controllerBinaryHash, ExecutableIdentity.Sha256, replacementHash, deadline, updateOnly);
         }
     }
     private async Task WatchSessionAsync()
@@ -360,6 +362,7 @@ public sealed partial class AgentServer : IDisposable
                 if (securityCandidate is { Promoted: false } candidate && candidate.Expires <= DateTimeOffset.UtcNow) candidate.Agent.Dispose();
                 if (session.ShouldExit)
                 {
+                    if (updateOnly && updates.PendingExitPlan == null) { ReleaseUpdateSession(); continue; }
                     try { await TerminateAsync(); return; }
                     catch (Exception ex) when (!stop.IsCancellationRequested)
                     {
@@ -491,6 +494,12 @@ public sealed partial class AgentServer : IDisposable
                         return;
                     }
                     Reply reply;
+                    if (r.Operation is "admin.inspect" or "admin.connect")
+                    {
+                        handshake.CancelAfter(TimeSpan.FromSeconds(30));
+                        await ServeAdminAsync(tls, r, handshake.Token);
+                        return;
+                    }
                     if (r.Operation == "pair.v2")
                     {
                         if (Volatile.Read(ref terminating) != 0 || Volatile.Read(ref disposed) != 0)
@@ -504,6 +513,7 @@ public sealed partial class AgentServer : IDisposable
                                 lock (authLock)
                                 {
                                     tokenHash = Safety.Hash(token); controllerBinaryHash = controllerHash; grantLifetime.Cancel(); grantLifetime = new();
+                                    updateOnly = false;
                                     updates.ResetControllerSynchronization();
                                     foreach (var job in running.Values) job.Cancel(); requests.Clear();
                                     session.Pair(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
@@ -521,6 +531,7 @@ public sealed partial class AgentServer : IDisposable
                         if (authorized && Volatile.Read(ref terminating) != 0) authorized = false;
                         if (authorized && !Safety.Equal(controllerBinaryHash, r.BinarySha256!.ToUpperInvariant()))
                         {
+                            if (updateOnly) { await Wire.WriteAsync(tls, Reply.Failure(r.Id, "access_denied", "Update authorization is bound to one executable."), timeout.Token); return; }
                             await updateGate.WaitAsync(timeout.Token);
                             try
                             {
@@ -543,6 +554,19 @@ public sealed partial class AgentServer : IDisposable
                         if (resumePending && resumed!.ExpiresUtc <= DateTimeOffset.UtcNow) { session.End(); authorized = false; }
                         if (authorized && !resumePending && r.Operation != "session.disconnect") session.Observe();
                         if (!authorized || session.ShouldExit) reply = Reply.Failure(r.Id, "access_denied", "This support session is not authorized or has ended.");
+                        else if (updateOnly && !IsUpdateSessionOperation(r.Operation))
+                            reply = Reply.Failure(r.Id, "update_only", "This grant permits software updates only.");
+                        else if (r.Operation == "update.release")
+                        {
+                            await updateGate.WaitAsync(timeout.Token);
+                            try
+                            {
+                                await updates.CancelActiveAsync(timeout.Token);
+                                await Wire.WriteAsync(tls, Reply.Success(r.Id, new { released = true }), timeout.Token);
+                                ReleaseUpdateSession(); return;
+                            }
+                            finally { updateGate.Release(); }
+                        }
                         else if (resumePending && r.Operation is not ("update.open" or "update.resume" or "update.cancel" or "update.status" or "session.end" or "revoke"))
                             reply = Reply.Failure(r.Id, "resume_required", "Present the bounded update reconnect ticket before resuming support.");
                         else if (r.Operation == "screen.refresh")
@@ -956,6 +980,7 @@ public sealed partial class RemoteClient
     private PersistentChannel? updateChannel;
     private int legacyUpdateOperations;
     public Connection Connection { get; private set; }
+    internal string AdminRoot { get; set; } = Vault.DefaultRoot;
     public static string DefaultPath => Path.Combine(Vault.DefaultRoot, "controller.connection");
     public RemoteClient(Connection connection) : this(connection, OpenAuthenticatedTransportOnceAsync) { discoverRoutes = true; }
     internal RemoteClient(Connection connection, string controllerBinarySha256) : this(connection)

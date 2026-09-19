@@ -85,13 +85,17 @@ public sealed partial class MainForm
     private void RefreshControllerControls()
     {
         if (executeButton == null) return;
-        var state = WorkspaceAvailability.For(supportSession, heartbeatHealthy, pairingBusy || clientUpdateBusy, terminating, action != null, selectedFilePath != null);
+        var state = WorkspaceAvailability.For(supportSession, heartbeatHealthy, pairingBusy || clientUpdateBusy || FleetBusy, terminating, action != null, selectedFilePath != null);
         pairButton.Enabled = host.Enabled = code.Enabled = state.CanPair;
         peers.Enabled = !pairingBusy && !clientUpdateBusy && !terminating;
         pairButton.SetText(() => pairingBusy ? UiText.Connecting : supportSession ? UiText.Connected : UiText.Connect);
         updateClientButton.Visible = supportSession || clientUpdateBusy;
-        updateClientButton.Enabled = CanUpdateClient(supportSession, client != null, pairingBusy, clientUpdateBusy, terminating, clientUpToDate) && action == null;
+        updateClientButton.Enabled = isUpdateAdmin && !NewerDeviceKnown && CanUpdateClient(supportSession, client != null, pairingBusy, clientUpdateBusy, terminating, clientUpToDate) && action == null;
         updateClientButton.SetText(() => clientUpdateBusy ? UiText.Synchronizing : clientUpToDate ? UiText.ClientUpToDate : UiText.UpdateClient);
+        updateAllDevices.Enabled = FleetBusy || isUpdateAdmin && !NewerDeviceKnown && !fleetRefreshing && !pairingBusy && !clientUpdateBusy && !terminating && action == null && fleet.Values.Any(d => d.Online && d.State != "current");
+        updateAllDevices.SetText(() => FleetBusy ? UiText.StopUpdates : UiText.UpdateAllDevices);
+        if (NewerDeviceKnown) discoveryState.SetText(() => UiText.UpdateControllerFirst);
+        if (FleetBusy || fleetRefreshing) { pairButton.Enabled = false; discoverButton.Enabled = false; updateClientButton.Enabled = false; }
         refreshResourcesButton.Enabled = state.CanOperate && !resourcesLoading;
         bool filesAvailable = state.CanOperate && !filesLoading && fileTransferLifetime == null;
         browseFilesButton.Enabled = fileDirectory.Enabled = openFolderButton.Enabled = filesAvailable;

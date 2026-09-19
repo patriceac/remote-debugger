@@ -109,11 +109,12 @@ internal sealed class PrivilegedUpdateManager : IDisposable
         }
         var protectedStage = await SnapshotAsync(stageTemp, ct);
         RequireCandidate(protectedStage, candidate);
+        var previous = await SnapshotAsync(configuration.RegisteredApplicationPath, ct);
+        UpdatePolicy.RequireNewerRelease(protectedStage, previous);
         File.Move(stageTemp, stagePath, true);
 
-        var previous = await SnapshotAsync(configuration.RegisteredApplicationPath, ct);
         var transaction = new PrivilegedUpdateTransaction(transactionId, UpdateTransactionState.Staged,
-            candidate with { Path = configuration.RegisteredApplicationPath }, previous, stagePath,
+            protectedStage with { Path = configuration.RegisteredApplicationPath }, previous, stagePath,
             Path.Combine(SupportPlatformPaths.TransactionsDirectory, transactionId + ".backup.exe"),
             caller.ProcessId, caller.StartTicks, caller.SessionId, caller.UserSid, [], AppContext.BaseDirectory,
             "", DateTimeOffset.MinValue, DateTimeOffset.MinValue, null, null, DateTimeOffset.UtcNow);
@@ -143,6 +144,7 @@ internal sealed class PrivilegedUpdateManager : IDisposable
 
         var current = await SnapshotAsync(configuration.RegisteredApplicationPath, ct);
         UpdatePolicy.RequireExactControllerBinary(transaction.Previous, current);
+        UpdatePolicy.RequireNewerRelease(transaction.Candidate, current);
         UpdatePolicy.RequireTransition(transaction.State, UpdateTransactionState.Armed);
         DateTimeOffset deadline = DateTimeOffset.UtcNow.AddSeconds(15);
         transaction = transaction with

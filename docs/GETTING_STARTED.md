@@ -18,7 +18,7 @@ Launching Remote Debugger again brings the existing desktop window forward. It d
 
 The header shows connection state. **LIVE** appears only while fresh frames arrive. The viewer enables mouse and keyboard by default; click inside it to direct input to the remote desktop. Moving focus away returns keyboard input to the local PC. Pause, lost connection, target changes, and termination release held input. The monitor selector changes the viewed desktop. Secure-desktop prompts and Ctrl+Alt+Delete remain Windows-controlled.
 
-When the authenticated client runs the same build as the controller, the update button is disabled and reads **✓ Client up to date**. A detected build mismatch makes **Update client** available again.
+When the authenticated client runs the same build as the controller, the update button is disabled and reads **✓ Client up to date**. An enrolled admin PC can install strictly newer releases. In private support, **Update all devices** updates online older clients and shows each device's version, status, bar and ETA. Busy or offline devices can be retried later. A newer device version blocks an older controller from starting the batch.
 
 **Processes** loads CPU, memory and process measurements after connection. Click a column header to sort; click again to reverse direction. Unavailable values remain unavailable instead of appearing as zero. CPU values represent total logical-processor capacity. **Files** loads the remote workspace and storage information automatically, supports typed sorting, and keeps the current directory separate from the selected file.
 

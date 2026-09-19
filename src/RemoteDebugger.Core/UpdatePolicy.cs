@@ -92,6 +92,20 @@ public static class UpdatePolicy
             throw new InvalidOperationException("The update is signed by a different publisher certificate.");
     }
 
+    public static Version ReleaseVersion(string? value)
+    {
+        if (!Version.TryParse(value, out var version) || version.Major < 0 || version.Minor < 0 || version.Build < 0)
+            throw new InvalidOperationException("The software version could not be verified. Install a numbered release before updating.");
+        return new Version(version.Major, version.Minor, version.Build, Math.Max(0, version.Revision));
+    }
+
+    public static void RequireNewerRelease(ExecutableSnapshot candidate, ExecutableSnapshot installed)
+    {
+        candidate.Validate(); installed.Validate();
+        if (ReleaseVersion(candidate.FileVersion) <= ReleaseVersion(installed.FileVersion))
+            throw new InvalidOperationException("Only a newer software version can be installed. Update the controller first; downgrades and replacement builds with the same version are not allowed.");
+    }
+
     public static void ValidateSha256(string value, string name)
     {
         if (value.Length != 64 || !value.All(Uri.IsHexDigit))

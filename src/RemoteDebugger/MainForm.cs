@@ -211,6 +211,7 @@ public sealed partial class MainForm : Forms.Form
         // panels still contain their unscaled design-time dimensions.
         SuspendLayout();
         root = dataRoot ?? Vault.DefaultRoot;
+        isUpdateAdmin = new UpdateAdminStore(root).IsAdmin;
         this.loopbackOnly = loopbackOnly;
         this.startupPreparationError = startupPreparationError;
         startAgentOnLaunch = startAgent;
@@ -425,7 +426,7 @@ public sealed partial class MainForm : Forms.Form
     {
         var page = new PagePanel(() => UiText.Connection) { BackColor = Canvas, Padding = new Forms.Padding(28) };
         var columns = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
-        columns.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 45)); columns.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Absolute, 1)); columns.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 55));
+        columns.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, PrivateInternet ? 62 : 45)); columns.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Absolute, 1)); columns.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, PrivateInternet ? 38 : 55));
         columns.Controls.Add(BuildPeerList(), 0, 0); columns.Controls.Add(new Forms.Panel { Dock = Forms.DockStyle.Fill, BackColor = Divider }, 1, 0); columns.Controls.Add(BuildConnectionForm(), 2, 0);
         page.Controls.Add(columns); return page;
     }
@@ -435,11 +436,14 @@ public sealed partial class MainForm : Forms.Form
         var panel = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Forms.Padding(0, 0, 24, 0) };
         panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 32)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 42)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 28)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
         panel.Controls.Add(new WorkspaceLabel { AutoSize = true, Font = new Font("Segoe UI", 15, FontStyle.Bold), ForeColor = PrimaryText, Anchor = Forms.AnchorStyles.Left }.WithText(() => UiText.AvailablePcs), 0, 0);
-        discoverButton.Anchor = Forms.AnchorStyles.Left; panel.Controls.Add(discoverButton, 0, 1); panel.Controls.Add(discoveryState, 0, 2);
-        peers.Columns.Add("", PrivateInternet ? 210 : 110).WithText(() => UiText.Name);
+        discoverButton.Anchor = Forms.AnchorStyles.Left;
+        panel.Controls.Add(PrivateInternet ? ControlRow(discoverButton, updateAllDevices) : discoverButton, 0, 1); panel.Controls.Add(discoveryState, 0, 2);
+        peers.Columns.Add("", PrivateInternet ? 125 : 110).WithText(() => UiText.Name);
         if (!PrivateInternet) peers.Columns.Add("", 125).WithText(() => UiText.Address);
-        peers.Columns.Add("", 90).WithText(() => UiText.State);
-        peers.RememberLayout(root, PrivateInternet ? ["name", "state"] : ["name", "address", "state"]); panel.Controls.Add(peers, 0, 3);
+        if (PrivateInternet) peers.Columns.Add("", 78).WithText(() => UiText.DeviceVersion);
+        peers.Columns.Add("", PrivateInternet ? 150 : 90).WithText(() => UiText.State);
+        if (PrivateInternet) { peers.Columns.Add("", 130).WithText(() => UiText.DeviceProgress); InitializeFleet(); }
+        peers.RememberLayout(root, PrivateInternet ? ["name", "version", "state", "progress"] : ["name", "address", "state"]); panel.Controls.Add(peers, 0, 3);
         return panel;
     }
 
@@ -1138,7 +1142,7 @@ public sealed partial class MainForm : Forms.Form
 
     private async Task DiscoverAsync(bool explicitRefresh)
     {
-        if (pairingBusy || supportSession || rolePages.SelectedIndex != 1 || quitting) return;
+        if (pairingBusy || supportSession || FleetBusy || fleetRefreshing || rolePages.SelectedIndex != 1 || quitting) return;
         discoveryState.SetText(() => explicitRefresh ? UiText.SearchingPcs : UiText.SearchingAtStartup); discoverButton.Enabled = false;
         discoveryLifetime?.Cancel(); discoveryLifetime = new CancellationTokenSource();
         try
@@ -1153,6 +1157,7 @@ public sealed partial class MainForm : Forms.Form
             discoveredPeers.Clear();
             string? localSupportId = PrivateInternet ? agent?.Internet?.SupportId : null;
             discoveredPeers.AddRange(PeerDiscovery.DistinctPeers(found.Where(p => !PeerDiscovery.IsLocalPeer(p, localSupportId) && (InternetSettings.IsSupportId(p.Host) || IsRemotePeer(p)))).OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase));
+            if (PrivateInternet) ObserveFleet();
             if (selectedPeer != null) selectedPeer = PeerDiscovery.Rebind(selectedPeer, discoveredPeers);
             if (selectedPeer != null)
             {
@@ -1171,6 +1176,7 @@ public sealed partial class MainForm : Forms.Form
                     ? PrivateInternet ? UiText.NoInternetPcs : UiText.NoPcsFound
                     : UiText.Format(UiText.AvailablePcCount, discoveredPeers.Count));
             if (discoveredPeers.Count == 1 && selectedPeer == null && peers.Items.Count > 0) peers.Items[0].Selected = true;
+            await RefreshFleetVersionsAsync(discoveryLifetime.Token);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { discoveryState.SetText(() => UiText.SearchUnavailablePrefix + ex.Message); }
@@ -1193,11 +1199,17 @@ public sealed partial class MainForm : Forms.Form
         try
         {
             peers.Items.Clear();
-            foreach (var peer in discoveredPeers)
+            foreach (var peer in PrivateInternet ? fleet.Values.OrderBy(d => d.Peer.Name, StringComparer.CurrentCultureIgnoreCase).Select(d => d.Peer) : discoveredPeers)
             {
                 var item = new Forms.ListViewItem(peer.Name);
                 if (!PrivateInternet) item.SubItems.Add(peer.Host);
-                item.SubItems.Add(UiText.Available); item.Tag = peer; peers.Items.Add(item); if (peer.Host == keep) item.Selected = true;
+                if (PrivateInternet && fleet.TryGetValue(DeviceKey(peer), out var device))
+                {
+                    item.SubItems.Add(device.Version.Length == 0 ? "—" : device.Version);
+                    item.SubItems.Add(FleetState(device)); item.SubItems.Add(device.Detail);
+                }
+                else item.SubItems.Add(UiText.Available);
+                item.Tag = peer; peers.Items.Add(item); if (peer.Host == keep) item.Selected = true;
             }
         }
         finally
@@ -1211,7 +1223,7 @@ public sealed partial class MainForm : Forms.Form
     {
         // Headers remain interactive during support so their layout can be
         // adjusted; selecting a row must never replace an active target.
-        if (renderingPeers || supportSession || pairingBusy || terminating) return;
+        if (renderingPeers || supportSession || pairingBusy || FleetBusy || terminating) return;
         if (peers.SelectedItems.Count == 0 || peers.SelectedItems[0].Tag is not Peer peer) return;
         InvalidateInputSession();
         selectedPeer = peer; selectedFingerprint = peer.Fingerprint; host.SetText(peer.Host); selectedPeerName.SetText(peer.Name);
@@ -1225,7 +1237,7 @@ public sealed partial class MainForm : Forms.Form
     private async Task PairSelectedAsync()
     {
         if (supportSession) { connectionState.SetText(() => UiText.EndSupportBeforeNewCode); return; }
-        if (pairingBusy || string.IsNullOrWhiteSpace(host.Text)) { connectionState.SetText(() => PrivateInternet ? UiText.SelectComputer : UiText.ChoosePcPeriod); return; }
+        if (pairingBusy || FleetBusy || fleetRefreshing || string.IsNullOrWhiteSpace(host.Text)) { connectionState.SetText(() => PrivateInternet ? UiText.SelectComputer : UiText.ChoosePcPeriod); return; }
         if (!PrivateInternet && (code.Text.Length != 6 || !code.Text.All(char.IsAsciiDigit))) { connectionState.SetText(() => UiText.CodeMustBeSixDigits); code.Focus(); return; }
         pairingBusy = true; synchronizingAgent = false; pairButton.Enabled = false; discoverButton.Enabled = false; code.Enabled = false; host.Enabled = false; operationGeneration++; int generation = operationGeneration; sessionGeneration++; liveFrameFresh = false; var pairingCts = new CancellationTokenSource(); pairingLifetime = pairingCts;
         RemoteClient? pairedClient = null;
@@ -1302,6 +1314,7 @@ public sealed partial class MainForm : Forms.Form
             if (!IsDisposed && generation == operationGeneration && ReferenceEquals(target, client) && (pairingBusy || clientUpdateBusy))
                 ShowUpdateProgress(value);
         });
+        target.AdminRoot = root;
         var result = await SupportPlatform.SynchronizeAgentAsync(target, ct, progress);
         if (generation == operationGeneration && ReferenceEquals(target, client)) clientUpToDate = true;
         return result;
@@ -2144,7 +2157,7 @@ public sealed partial class MainForm : Forms.Form
 
     private async Task<bool> ShutdownAsync()
     {
-        renderTimer.Stop(); inputRecoveryTimer.Stop(); discoveryLifetime?.Cancel(); heartbeatLifetime?.Cancel(); pairingLifetime?.Cancel(); clientUpdateLifetime?.Cancel(); liveStream?.Cancel(); action?.Cancel(); fileTransferLifetime?.Cancel();
+        renderTimer.Stop(); inputRecoveryTimer.Stop(); discoveryLifetime?.Cancel(); heartbeatLifetime?.Cancel(); pairingLifetime?.Cancel(); clientUpdateLifetime?.Cancel(); fleetLifetime?.Cancel(); liveStream?.Cancel(); action?.Cancel(); fileTransferLifetime?.Cancel();
         // A saved connection only pre-fills the controller form. It is not an
         // active outbound session, and must never delay an agent replacement
         // while trying to contact an unrelated (possibly offline) old peer.

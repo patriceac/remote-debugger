@@ -16,13 +16,20 @@ public sealed class UpdatePolicyTests
         Assert.Throws<InvalidOperationException>(() => UpdatePolicy.RequireExactControllerBinary(controller, differentBytes));
     }
 
-    [Fact]
-    public void ExactBytesPermitAControllerDowngrade()
+    [Theory]
+    [InlineData("1.0.0", "9.0.0")]
+    [InlineData("1.0.0", "1.0.0.0")]
+    [InlineData("1.0.0", null)]
+    [InlineData(null, "1.0.0")]
+    public void UpdatesRejectDowngradesSameVersionAndUnknownVersions(string? candidate, string? installed)
     {
-        var controller = Snapshot() with { FileVersion = "1.0.0" };
-        var agent = Snapshot() with { FileVersion = "9.0.0" };
-        UpdatePolicy.RequireExactControllerBinary(controller, agent);
+        Assert.Throws<InvalidOperationException>(() => UpdatePolicy.RequireNewerRelease(
+            Snapshot() with { FileVersion = candidate }, Snapshot() with { FileVersion = installed }));
     }
+
+    [Fact]
+    public void NewerReleaseIsAccepted() => UpdatePolicy.RequireNewerRelease(
+        Snapshot() with { FileVersion = "0.4.14" }, Snapshot() with { FileVersion = "0.4.13.0" });
 
     [Fact]
     public void PublisherPinCannotBeReplacedByMatchingVersionMetadata() =>

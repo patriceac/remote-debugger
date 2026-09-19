@@ -870,4 +870,24 @@
   <data name="FileReceived" xml:space="preserve"><value>100 % · Fichier reçu et vérifié</value></data>
   <data name="FileSent" xml:space="preserve"><value>100 % · Fichier envoyé</value></data>
   <data name="ClientUpToDate" xml:space="preserve"><value>✓ Client à jour</value></data>
+  <data name="UpdateAllDevices" xml:space="preserve"><value>Mettre à jour tous les appareils</value></data>
+  <data name="StopUpdates" xml:space="preserve"><value>Arrêter les mises à jour</value></data>
+  <data name="DeviceVersion" xml:space="preserve"><value>Version</value></data>
+  <data name="DeviceProgress" xml:space="preserve"><value>Progression / durée</value></data>
+  <data name="UpdateControllerFirst" xml:space="preserve"><value>Mettre à jour ce contrôleur d’abord</value></data>
+  <data name="UpdateAvailable" xml:space="preserve"><value>Mise à jour disponible</value></data>
+  <data name="DeviceOffline" xml:space="preserve"><value>Hors ligne · dernière version connue</value></data>
+  <data name="InitialUpdateRequired" xml:space="preserve"><value>Première mise à jour requise</value></data>
+  <data name="DeviceInUse" xml:space="preserve"><value>Occupé · réessayer plus tard</value></data>
+  <data name="UpdateIncomplete" xml:space="preserve"><value>Mise à jour incomplète</value></data>
+  <data name="UpdateQueued" xml:space="preserve"><value>En attente</value></data>
+  <data name="UpdatingDevice" xml:space="preserve"><value>Mise à jour…</value></data>
+  <data name="CheckingVersion" xml:space="preserve"><value>Vérification de la version…</value></data>
+  <data name="AdminPcRequired" xml:space="preserve"><value>PC administrateur requis</value></data>
+  <data name="RetryUpdate" xml:space="preserve"><value>Réessayer lorsque disponible</value></data>
+  <data name="UpdateBatchFinished" xml:space="preserve"><value>Mises à jour terminées. Réessayez pour les appareils hors ligne ou incomplets.</value></data>
+  <data name="AdminSetupTitle" xml:space="preserve"><value>Configurer l’accès administrateur</value></data>
+  <data name="AdminSetupHelp" xml:space="preserve"><value>Saisissez le mot de passe administrateur pour autoriser ce PC à mettre à jour vos appareils. Windows mémorisera cet accès.</value></data>
+  <data name="ActivateAdmin" xml:space="preserve"><value>Autoriser ce PC</value></data>
+  <data name="AdminCredentialRejected" xml:space="preserve"><value>Le mot de passe ou les identifiants administrateur n’ont pas pu être vérifiés. Réessayez.</value></data>
 </root>

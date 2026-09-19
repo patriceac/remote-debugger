@@ -1,0 +1,197 @@
+using System.Text.Json;
+using RemoteDebugger.Core;
+using Forms = System.Windows.Forms;
+
+namespace RemoteDebugger;
+
+public sealed partial class MainForm
+{
+    private sealed record FleetDevice(Peer Peer, string Version = "", string Sha256 = "", bool Online = false,
+        string State = "unknown", int Percent = 0, string Detail = "");
+    private readonly Dictionary<string, FleetDevice> fleet = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Forms.Button updateAllDevices = Button(() => UiText.UpdateAllDevices, "updateAllDevices", 178, primary: true);
+    private CancellationTokenSource? fleetLifetime;
+    private bool fleetRefreshing;
+    private bool isUpdateAdmin;
+    private Task<ExecutableSnapshot>? controllerSnapshot;
+    private bool FleetBusy => fleetLifetime != null;
+    private static string DeviceKey(Peer peer) => peer.Fingerprint.Length > 0 ? peer.Fingerprint : peer.Host;
+    private bool NewerDeviceKnown => controllerSnapshot is { IsCompletedSuccessfully: true } &&
+        fleet.Values.Any(d => d.Version.Length > 0 && Version.TryParse(d.Version, out var version) &&
+            version > UpdatePolicy.ReleaseVersion(controllerSnapshot.Result.FileVersion));
+
+    private void InitializeFleet()
+    {
+        try
+        {
+            string path = Path.Combine(root, "devices.dpapi");
+            if (File.Exists(path))
+                foreach (var device in JsonSerializer.Deserialize<List<FleetDevice>>(Vault.Read(path), Json.Options) ?? [])
+                    fleet[DeviceKey(device.Peer)] = device with { Online = false, State = "offline", Percent = 0, Detail = "" };
+        }
+        catch (Exception ex) when (ex is IOException or System.Security.Cryptography.CryptographicException or JsonException) { }
+        updateAllDevices.Click += async (_, _) =>
+        {
+            try { if (FleetBusy) fleetLifetime?.Cancel(); else await UpdateAllDevicesAsync(); }
+            catch (Exception) { discoveryState.SetText(() => UiText.UpdateIncomplete); RefreshControllerControls(); }
+        };
+        peers.OwnerDraw = true;
+        peers.DrawColumnHeader += (_, e) => e.DrawDefault = true;
+        peers.DrawSubItem += (_, e) =>
+        {
+            if (e.ColumnIndex != 3 || e.Item?.Tag is not Peer peer || !fleet.TryGetValue(DeviceKey(peer), out var device) || device.State != "transferring")
+            { e.DrawDefault = true; return; }
+            e.DrawBackground();
+            var track = new Rectangle(e.Bounds.X + 5, e.Bounds.Bottom - 5, Math.Max(0, e.Bounds.Width - 10), 3);
+            using var back = new SolidBrush(Divider); using var fill = new SolidBrush(Teal);
+            e.Graphics.FillRectangle(back, track);
+            e.Graphics.FillRectangle(fill, track with { Width = track.Width * device.Percent / 100 });
+            Forms.TextRenderer.DrawText(e.Graphics, e.SubItem?.Text, peers.Font,
+                new Rectangle(e.Bounds.X + 5, e.Bounds.Y, e.Bounds.Width - 10, e.Bounds.Height - 5),
+                e.Item.Selected ? SystemColors.HighlightText : PrimaryText, Forms.TextFormatFlags.EndEllipsis | Forms.TextFormatFlags.VerticalCenter);
+        };
+    }
+
+    private void ObserveFleet()
+    {
+        foreach (var key in fleet.Keys.ToArray()) fleet[key] = fleet[key] with { Online = false, State = "offline", Detail = "" };
+        foreach (var peer in discoveredPeers)
+        {
+            string key = DeviceKey(peer);
+            string state = isUpdateAdmin ? "checking" : "unknown";
+            fleet[key] = fleet.TryGetValue(key, out var previous)
+                ? previous with { Peer = peer, Online = true, State = state, Detail = "" }
+                : new(peer, Online: true, State: state);
+        }
+    }
+
+    private void RecordDevice(FleetDevice device)
+    {
+        fleet[DeviceKey(device.Peer)] = device;
+        RenderPeers();
+    }
+
+    private void SaveFleet() => Vault.Save(Path.Combine(root, "devices.dpapi"), JsonSerializer.SerializeToUtf8Bytes(fleet.Values, Json.Options));
+
+    private string FleetState(FleetDevice device) => device.State switch
+    {
+        "current" => UiText.ClientUpToDate, "newer" => UiText.UpdateControllerFirst,
+        "available" => UiText.UpdateAvailable, "offline" => UiText.DeviceOffline,
+        "legacy" => UiText.InitialUpdateRequired, "busy" => UiText.DeviceInUse,
+        "failed" => UiText.UpdateIncomplete, "queued" => UiText.UpdateQueued,
+        "transferring" => UiText.UpdatingDevice, "verifying" => UiText.TransferVerifying,
+        "restarting" => UiText.TransferRestarting, "checking" => UiText.CheckingVersion,
+        _ => UiText.AdminPcRequired
+    };
+
+    private RemoteClient FleetClient(Peer peer) => new(InternetSettings.Target(peer, root)) { AdminRoot = root };
+    private bool IsActiveDevice(Peer peer) => supportSession && client != null && Safety.Equal(client.Connection.Fingerprint, peer.Fingerprint);
+
+    private async Task RefreshFleetVersionsAsync(CancellationToken ct)
+    {
+        if (!PrivateInternet || !isUpdateAdmin || FleetBusy) return;
+        fleetRefreshing = true; RefreshControllerControls();
+        try
+        {
+            var controller = await (controllerSnapshot ??= SupportPlatform.CaptureCurrentExecutableAsync(CancellationToken.None));
+            foreach (var device in fleet.Values.Where(d => d.Online).ToArray())
+            {
+                ct.ThrowIfCancellationRequested();
+                try
+                {
+                    JsonElement snapshot;
+                    bool busy = false;
+                    if (IsActiveDevice(device.Peer)) snapshot = RemoteClient.Require(await client!.CallAsync("update.snapshot", ct: ct, seconds: 15));
+                    else
+                    {
+                        var inspected = await FleetClient(device.Peer).AdminRequestAsync("admin.inspect", ct);
+                        snapshot = inspected.GetProperty("snapshot"); busy = inspected.GetProperty("busy").GetBoolean();
+                    }
+                    var remote = snapshot.GetProperty("agent").Deserialize<ExecutableSnapshot>(Json.Options)!;
+                    remote.Validate();
+                    int comparison = UpdatePolicy.ReleaseVersion(remote.FileVersion).CompareTo(UpdatePolicy.ReleaseVersion(controller.FileVersion));
+                    string state = comparison > 0 ? "newer" : busy ? "busy" : Safety.Equal(remote.Sha256, controller.Sha256) ? "current" : comparison < 0 ? "available" : "failed";
+                    RecordDevice(device with { Version = remote.FileVersion ?? "", Sha256 = remote.Sha256, State = state });
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                catch (RemoteOperationException ex) when (ex.Code is "access_denied" or "unknown_operation")
+                { RecordDevice(device with { State = "legacy" }); }
+                catch (Exception) { RecordDevice(device with { State = "failed" }); }
+            }
+            SaveFleet();
+        }
+        finally { fleetRefreshing = false; RefreshControllerControls(); }
+    }
+
+    private async Task UpdateAllDevicesAsync()
+    {
+        if (!PrivateInternet || !isUpdateAdmin || FleetBusy || fleetRefreshing || pairingBusy || clientUpdateBusy || terminating || action != null) return;
+        // Inspect all reachable modern clients before sending any update bytes.
+        using var preparation = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+        await RefreshFleetVersionsAsync(preparation.Token);
+        var controller = await (controllerSnapshot ??= SupportPlatform.CaptureCurrentExecutableAsync(CancellationToken.None));
+        if (NewerDeviceKnown)
+        { discoveryState.SetText(() => UiText.UpdateControllerFirst); return; }
+        using var lifetime = new CancellationTokenSource(); fleetLifetime = lifetime;
+        RefreshControllerControls();
+        try
+        {
+            foreach (var initial in fleet.Values.Where(d => d.Online && d.State is "available" or "legacy" or "failed").ToArray())
+            {
+                if (lifetime.IsCancellationRequested) break;
+                var device = initial with { State = "queued", Detail = "" }; RecordDevice(device);
+                var target = FleetClient(device.Peer);
+                bool acquired = false;
+                try
+                {
+                    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+                    timeout.CancelAfter(TimeSpan.FromSeconds(SupportOperationTimeouts.ControllerSynchronizationSeconds));
+                    if (initial.State == "legacy")
+                    {
+                        var settings = InternetSettings.Load(root)!;
+                        string id = device.Peer.SupportId.Length > 0 ? device.Peer.SupportId : device.Peer.Host;
+                        await target.PairAsync(settings.AuthenticationSecret(id), timeout.Token);
+                    }
+                    else await target.AdminRequestAsync("admin.connect", timeout.Token);
+                    acquired = true;
+                    var snapshot = RemoteClient.Require(await target.CallAsync("update.snapshot", ct: timeout.Token, seconds: 30));
+                    var installed = snapshot.GetProperty("agent").Deserialize<ExecutableSnapshot>(Json.Options)!;
+                    device = device with { Version = installed.FileVersion ?? "", Sha256 = installed.Sha256 }; RecordDevice(device);
+                    if (UpdatePolicy.ReleaseVersion(installed.FileVersion) > UpdatePolicy.ReleaseVersion(controller.FileVersion))
+                    { RecordDevice(device with { State = "newer" }); break; }
+                    var watch = System.Diagnostics.Stopwatch.StartNew();
+                    long baseline = -1;
+                    bool receiving = true;
+                    var progress = new Progress<AgentUpdateProgress>(value =>
+                    {
+                        if (!receiving || IsDisposed) return;
+                        if (baseline < 0) baseline = value.TransferredBytes;
+                        var metrics = FileTransferMetrics.Calculate(value.TransferredBytes, value.TotalBytes, value.TransferredBytes - baseline, watch.Elapsed);
+                        device = device with { State = value.Stage, Percent = value.TransferPercent,
+                            Detail = $"{value.TransferPercent}%" + (metrics.Remaining is { } eta ? " · " + FormatTransferEta(eta) : "") };
+                        RecordDevice(device);
+                    });
+                    try { await SupportPlatform.SynchronizeAgentAsync(target, timeout.Token, progress); }
+                    finally { receiving = false; }
+                    RecordDevice(device with { Version = controller.FileVersion ?? "", Sha256 = controller.Sha256, State = "current", Percent = 100, Detail = "" });
+                }
+                catch (Exception) { RecordDevice(device with { State = "failed", Detail = lifetime.IsCancellationRequested ? UiText.TransferPaused : UiText.RetryUpdate }); }
+                finally
+                {
+                    if (acquired)
+                    {
+                        using var release = new CancellationTokenSource(TimeSpan.FromSeconds(40));
+                        try { await target.ReleaseUpdateAsync(release.Token); }
+                        catch { try { await target.DisconnectAsync(release.Token); } catch { } }
+                    }
+                    SaveFleet();
+                }
+            }
+        }
+        finally
+        {
+            fleetLifetime = null; RefreshControllerControls();
+            discoveryState.SetText(() => UiText.UpdateBatchFinished);
+        }
+    }
+}

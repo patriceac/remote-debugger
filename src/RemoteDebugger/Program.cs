@@ -25,6 +25,17 @@ public static class Program
         int rootIndex = Array.IndexOf(args, "--data-root");
         string? dataRoot = rootIndex >= 0 && rootIndex + 1 < args.Length ? args[rootIndex + 1] : null;
         UiCulture.Initialize(languageOverride ?? LanguagePreference.Load(dataRoot ?? Vault.DefaultRoot));
+        ApplicationConfiguration.Initialize();
+        if (args.Contains("--admin-setup"))
+        {
+            var admin = new UpdateAdminStore(dataRoot ?? Vault.DefaultRoot);
+            if (!admin.IsAdmin)
+            {
+                if (!File.Exists(admin.PendingPath)) return 1;
+                using var setup = new AdminSetupForm(dataRoot ?? Vault.DefaultRoot);
+                if (setup.ShowDialog() != Forms.DialogResult.OK) return 1;
+            }
+        }
         WaitForProvisioningParent(args);
         string? startupPreparationError = null;
         if (!args.Contains("--loopback-only"))
@@ -38,7 +49,7 @@ public static class Program
             catch (Exception ex) { startupPreparationError = ex.Message; }
         }
         bool loopbackOnly = args.Contains("--loopback-only");
-        bool startInTray = args.Contains("--startup");
+        bool startInTray = args.Contains("--startup") || args.Contains("--resume-update");
         using var instance = SingleInstance.ForCurrentSession(loopbackOnly, dataRoot);
         if (!instance.TryAcquire())
         {
@@ -48,7 +59,7 @@ public static class Program
             // Recover if the owner exited or crashed while activation was attempted.
             if (!instance.TryAcquire()) return 1;
         }
-        Native.FreeConsole(); ApplicationConfiguration.Initialize();
+        Native.FreeConsole();
         bool controllerOnly = args.Contains("--controller");
         var form = new MainForm(!controllerOnly, dataRoot, loopbackOnly, startupPreparationError, languageOverride,
             enableSupport: args.Contains("--enable-support") || args.Contains("--resume-update"), startInTray: startInTray);
@@ -107,6 +118,11 @@ public static class Program
         try
         {
             string verb = args.FirstOrDefault() ?? "help", config = Option("--connection", RemoteClient.DefaultPath);
+            if (verb == "admin-import")
+            {
+                new UpdateAdminStore(Option("--data-root", Vault.DefaultRoot)).Import(Option("--file"));
+                Console.WriteLine(Json.Text(new { ok = true, staged = true })); return 0;
+            }
             if (verb is "security-migrate" or "security-status")
             {
                 string root = Option("--data-root", Vault.DefaultRoot);

@@ -38,6 +38,12 @@ Agent after pairing: same footprint, replace code with connected controller name
 
 ## Controller: connection view
 
+Private support uses a wider device list with Name, Version, Status and Progress / ETA
+columns. **Update all devices** sits next to Refresh and is available to an enrolled
+admin PC. Each transferring row includes a bar and acknowledged percentage; verification,
+restart, current, busy, offline and retry states remain distinct. Offline rows retain
+their last known version. Inspection must not take over an existing support session.
+
 Header Prendre le controle; subline Choisissez un PC puis saisissez son code. Main area two columns: available PC list 360 px on left, selected-machine connection form flexible right, separated by a vertical divider. List rows show machine name primary, IP secondary, availability trailing; scan progress appears above list, Actualiser compact right. Empty state offers manual IP entry. Never list self.
 
 Selected machine name, IP, one 6-digit field (160 px, Consolas 20), teal Connecter button. Enter in the field triggers connection once. Focus code when a peer is selected. No fingerprint field or verification checkbox. Advanced technical identity may be inspectable under Diagnostics without being a required step.

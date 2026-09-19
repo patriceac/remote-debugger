@@ -5,14 +5,14 @@ using RemoteDebugger.Core;
 namespace RemoteDebugger;
 
 internal sealed record ResumableSession(string TicketHash, string GrantHash, string ControllerHash,
-    string[] AllowedBinaryHashes, DateTimeOffset ExpiresUtc);
+    string[] AllowedBinaryHashes, DateTimeOffset ExpiresUtc, bool UpdateOnly = false);
 
 /// <summary>A bounded exception to fresh-launch pairing, explicitly armed for one update.</summary>
 internal sealed class SessionResumeStore(string root)
 {
     private readonly string path = Path.Combine(root, "update-session.resume");
     public (string Ticket, DateTimeOffset ExpiresUtc) Create(string grantHash, string controllerHash,
-        string currentBinaryHash, string replacementBinaryHash, DateTimeOffset deadline)
+        string currentBinaryHash, string replacementBinaryHash, DateTimeOffset deadline, bool updateOnly = false)
     {
         if (!PairingExchange.ValidHash(grantHash) || !PairingExchange.ValidHash(controllerHash) ||
             !PairingExchange.ValidHash(currentBinaryHash) || !PairingExchange.ValidHash(replacementBinaryHash))
@@ -21,7 +21,7 @@ internal sealed class SessionResumeStore(string root)
         if (expires <= DateTimeOffset.UtcNow) throw new ArgumentException("Update reconnect deadline expired.");
         string ticket = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
         Vault.Save(path, JsonSerializer.SerializeToUtf8Bytes(new ResumableSession(Safety.Hash(ticket), grantHash, controllerHash,
-            [currentBinaryHash, replacementBinaryHash], expires), Json.Options));
+            [currentBinaryHash, replacementBinaryHash], expires, updateOnly), Json.Options));
         return (ticket, expires);
     }
     public ResumableSession? Restore(string? ticket)

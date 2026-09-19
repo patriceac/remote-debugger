@@ -27,6 +27,12 @@ installation also waits for unlock at the first normal launch. Reinstalling
 the same unlocked profile preserves remembered access. The passphrase is never
 an installer argument. See [security setup](SECURITY_SETUP.md).
 
+When an encrypted `RemoteDebugger-Admin.rdadmin` credential is supplied to the
+builder, the installer also offers **Set up this PC as an admin**, unchecked by
+default. Checking it requires the admin password at launch. Leaving it unchecked
+does not remove existing admin access. Client installations never unlock the
+admin key. Preserve this personal installer for recovery after reinstalling Windows.
+
 The desktop installer owns the Program Files application. Choosing **Enable
 support** still requests one explicit Windows administrator approval so the
 application can provision the local broker and Private/LocalSubnet firewall
@@ -107,9 +113,9 @@ agent and controller executable hashes.
 
 If those hashes differ, the controller transfers its signed executable over one
 authenticated resumable channel, acknowledging each 512 KiB chunk. The agent
-stages and verifies it, and the broker performs a recoverable replacement. Both
-upgrades and downgrades are intentional: the controller determines the required
-version. A different build with the same version label also requires synchronization.
+stages and verifies it, and the broker performs a recoverable replacement. Only an
+enrolled update administrator can install a strictly newer release. Downgrades and
+different builds with the same version are rejected; update the controller first.
 
 A planned update creates a short-lived, protected reconnect grant tied to the
 paired session and the permitted executable identities. That grant allows the

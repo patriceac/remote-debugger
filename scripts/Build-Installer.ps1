@@ -3,6 +3,7 @@ param(
     [string]$CompilerPath,
     [switch]$Sign,
     [string]$InternetProfilePath = (Join-Path $env:LOCALAPPDATA 'RemoteDebugger\RemoteDebugger-Protected.rdrelay'),
+    [string]$AdminCredentialPath = (Join-Path $env:LOCALAPPDATA 'RemoteDebugger\RemoteDebugger-Admin.rdadmin'),
     [switch]$WithoutInternetProfile
 )
 $ErrorActionPreference = 'Stop'
@@ -40,6 +41,15 @@ $version = [string]$buildProperties.Project.PropertyGroup.Version
 if ([string]::IsNullOrWhiteSpace($version)) { throw 'Directory.Build.props does not define Version.' }
 
 $compilerArguments = @('/DAppVersion=' + $version)
+if (Test-Path -LiteralPath $AdminCredentialPath -PathType Leaf) {
+    $adminFile = Get-Item -LiteralPath $AdminCredentialPath
+    if ($adminFile.Length -gt 16384) { throw 'Invalid admin credential.' }
+    $adminEnvelope = Get-Content -LiteralPath $adminFile.FullName -Raw | ConvertFrom-Json
+    if ($adminEnvelope.format -cne 'RemoteDebugger.ProtectedSetup.v1' -or $null -ne $adminEnvelope.privateKey) {
+        throw 'Only a password-encrypted admin credential may be included in the installer.'
+    }
+    $compilerArguments += '/DAdminCredentialPath=' + $adminFile.FullName
+}
 if (-not $WithoutInternetProfile) {
     $profileFile = Get-Item -LiteralPath $InternetProfilePath -ErrorAction Stop
     if ($profileFile.PSIsContainer -or $profileFile.Length -gt 16384) { throw 'Invalid internet setup file.' }

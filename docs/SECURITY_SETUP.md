@@ -1,5 +1,26 @@
 # Passphrase setup and remote migration
 
+## Update administrator installation
+
+The installer offers **Set up this PC as an admin**, unchecked on every installation.
+Checking it stages an encrypted admin credential and asks for its password at launch.
+Successful setup remembers the private update key with DPAPI CurrentUser. Ordinary
+clients receive no private admin key. Reinstalling preserves existing authority even
+when the option is left unchecked. After reinstalling Windows, use the same personal
+installer, select the option, and enter the admin password to restore the same identity.
+Keep the personal installer or encrypted `RemoteDebugger-Admin.rdadmin` file available
+for recovery; losing both requires local enrollment or a newly signed authority release.
+The password is never embedded in the installer, logged, or passed on the command line.
+
+**Update all devices** inspects reachable devices, shows their current versions and
+individual progress, and updates older clients without client prompts. Offline devices
+retain a clearly marked last known version and are retried on a later click. The batch
+is blocked if any known device has a newer version than the controller. Each receiving
+client separately rejects older or same-version replacements. This uses known device
+versions, not a global latest-release service. Existing support sessions are skipped.
+Remote update restarts return to the tray; progress remains visible when the client
+window is open. Initial Windows service provisioning still requires local setup.
+
 Quit any running Remote Debugger instance, including its tray instance, then
 launch `RemoteDebugger.exe --security` on the controlling PC. Choose a strong,
 unique passphrase (several random words, at least 16 characters), confirm it,
