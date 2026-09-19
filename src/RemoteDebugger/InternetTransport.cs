@@ -11,7 +11,7 @@ namespace RemoteDebugger;
 
 public sealed record InternetSettings(string RelayUrl, string AccessKey, string PairingKey = "", string SecurityId = "")
 {
-    private sealed record OnlineClient(string Id, string Name);
+    private sealed record OnlineClient(string Id, string Name, string Fingerprint = "");
 
     public async Task<List<Peer>> FindAsync(CancellationToken ct = default)
     {
@@ -28,7 +28,7 @@ public sealed record InternetSettings(string RelayUrl, string AccessKey, string 
         return clients.Select(c =>
         {
             string supportId = DisplayId(SessionId(c.Id));
-            return new Peer(c.Name, supportId, 443, "", supportId);
+            return new Peer(c.Name, supportId, 443, PairingExchange.ValidHash(c.Fingerprint) ? c.Fingerprint.ToUpperInvariant() : "", supportId);
         }).ToList();
     }
 
@@ -108,6 +108,14 @@ public sealed record InternetSettings(string RelayUrl, string AccessKey, string 
         return new(DisplayId(SessionId(address)), 443, fingerprint, "", settings.RelayUrl, settings.AccessKey);
     }
 
+    internal static Connection Target(Peer peer, string root)
+    {
+        if (peer.SupportId.Length == 0 || IsSupportId(peer.Host)) return Target(peer.Host, peer.Port, peer.Fingerprint, root);
+        var settings = Load(root);
+        return settings == null ? new(peer.Host, peer.Port, peer.Fingerprint, "")
+            : new(peer.SupportId, 443, peer.Fingerprint, "", settings.RelayUrl, settings.AccessKey, peer.Host, peer.Port);
+    }
+
     internal ClientWebSocket Socket(string? sessionKey = null)
     {
         var socket = new ClientWebSocket();
@@ -126,8 +134,7 @@ public static class ConnectionTransport
     {
         if (target.DirectHost.Length > 0)
         {
-            try { return await OpenTcpAsync(target.DirectHost, target.DirectPort, ct).ConfigureAwait(false); }
-            catch when (!ct.IsCancellationRequested && target.RelayUrl.Length > 0) { }
+            return await OpenTcpAsync(target.DirectHost, target.DirectPort, ct).ConfigureAwait(false);
         }
         if (target.RelayUrl.Length == 0) return await OpenTcpAsync(target.Host, target.Port, ct).ConfigureAwait(false);
         return await OpenRelayAsync(target, ct).ConfigureAwait(false);
@@ -161,6 +168,8 @@ public static class ConnectionTransport
 public sealed class WebSocketStream(WebSocket socket) : Stream
 {
     private int disposed;
+    private long writeWindow = System.Diagnostics.Stopwatch.GetTimestamp();
+    private int writeBytes;
     public override bool CanRead => true;
     public override bool CanWrite => true;
     public override bool CanSeek => false;
@@ -196,7 +205,15 @@ public sealed class WebSocketStream(WebSocket socket) : Stream
             while (buffer.Length != 0)
             {
                 int size = Math.Min(buffer.Length, 65536);
+                // Leave headroom below the relay's 16 MiB/s disconnect limit.
+                if (writeBytes + size > 1024 * 1024)
+                {
+                    var delay = TimeSpan.FromMilliseconds(100) - System.Diagnostics.Stopwatch.GetElapsedTime(writeWindow);
+                    if (delay > TimeSpan.Zero) await Task.Delay(delay, ct).ConfigureAwait(false);
+                    writeWindow = System.Diagnostics.Stopwatch.GetTimestamp(); writeBytes = 0;
+                }
                 await socket.SendAsync(buffer[..size], WebSocketMessageType.Binary, true, ct).ConfigureAwait(false);
+                writeBytes += size;
                 buffer = buffer[size..];
             }
         }
@@ -243,6 +260,7 @@ public sealed class InternetAgent : IDisposable
     private readonly InternetSettings settings;
     private readonly Invitation invitation;
     private readonly Func<Stream, Task> accept;
+    private readonly string fingerprint;
     private readonly CancellationTokenSource stop = new();
     private readonly SemaphoreSlim channels = new(12);
     private ClientWebSocket? control;
@@ -251,9 +269,9 @@ public sealed class InternetAgent : IDisposable
     public bool Connected { get; private set; }
     public string PublicIp { get; private set; } = "";
     public string Error { get; private set; } = "";
-    public InternetAgent(string root, InternetSettings settings, bool resume, Func<Stream, Task> accept)
+    public InternetAgent(string root, InternetSettings settings, bool resume, Func<Stream, Task> accept, string fingerprint = "")
     {
-        this.settings = settings; this.accept = accept;
+        this.settings = settings; this.accept = accept; this.fingerprint = fingerprint;
         string path = Path.Combine(root, "internet-invitation.dpapi");
         invitation = resume && File.Exists(path)
             ? JsonSerializer.Deserialize<Invitation>(Vault.Read(path), Json.Options) ?? throw new IOException("Invalid saved internet invitation.")
@@ -270,6 +288,7 @@ public sealed class InternetAgent : IDisposable
             {
                 using var socket = settings.Socket(invitation.Key); control = socket;
                 socket.Options.SetRequestHeader("X-Computer-Name", Uri.EscapeDataString(Environment.MachineName));
+                if (fingerprint.Length > 0) socket.Options.SetRequestHeader("X-Computer-Fingerprint", fingerprint);
                 using var connect = CancellationTokenSource.CreateLinkedTokenSource(stop.Token); connect.CancelAfter(TimeSpan.FromSeconds(20));
                 await socket.ConnectAsync(settings.Address(invitation.Id, "agent"), connect.Token).ConfigureAwait(false);
                 using var heartbeat = CancellationTokenSource.CreateLinkedTokenSource(stop.Token);

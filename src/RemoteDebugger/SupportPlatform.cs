@@ -29,7 +29,8 @@ public sealed record SupportPlatformStatus(
     string Message,
     string? RegisteredApplicationPath,
     string? PublisherThumbprint,
-    string? ServiceVersion);
+    string? ServiceVersion,
+    bool InteractiveInputAvailable = false);
 
 public sealed record AgentSynchronizationResult(
     bool AlreadyMatched,
@@ -144,12 +145,13 @@ public static class SupportPlatform
             JsonElement data = await BrokerCallAsync("platform.status", new { }, ct, SupportOperationTimeouts.PlatformStatusRoundTripSeconds);
             int protocol = data.Int("protocolVersion");
             if (protocol != SupportPlatformPaths.ProtocolVersion)
-                return new(SupportPlatformAvailability.Incompatible, true, true, true, false, true,
+                return new(SupportPlatformAvailability.Incompatible, true, false, true, false, true,
                     $"Support service protocol {protocol} is incompatible with this application (expected {SupportPlatformPaths.ProtocolVersion}). Reprovision once as administrator.",
                     data.Str("registeredApplicationPath"), data.Str("publisherThumbprint"), data.Str("serviceVersion"));
             return new(SupportPlatformAvailability.Ready, true, true, true,
                 data.TryGetProperty("firewallReady", out var firewall) && firewall.GetBoolean(), false,
-                data.Str("message", "Privileged local support is ready."), data.Str("registeredApplicationPath"), data.Str("publisherThumbprint"), data.Str("serviceVersion"));
+                data.Str("message", "Privileged local support is ready."), data.Str("registeredApplicationPath"), data.Str("publisherThumbprint"), data.Str("serviceVersion"),
+                data.TryGetProperty("interactiveInput", out var input) && input.ValueKind == JsonValueKind.True);
         }
         catch (UnauthorizedAccessException ex)
         {

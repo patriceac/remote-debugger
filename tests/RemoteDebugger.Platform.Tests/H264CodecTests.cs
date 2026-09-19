@@ -11,7 +11,7 @@ public sealed class H264CodecTests
     [Fact]
     public void BundledX264CanEncodeAndDecodeAFrameWhenRuntimeIsPresent()
     {
-        if (!FfmpegRuntime.IsAvailable()) return;
+        Assert.True(FfmpegRuntime.IsAvailable(), "The bundled H.264 runtime must be present for this test.");
         using var bitmap = new Bitmap(320, 240, PixelFormat.Format32bppArgb);
         using (var graphics = Graphics.FromImage(bitmap))
         {

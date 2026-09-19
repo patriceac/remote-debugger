@@ -214,7 +214,7 @@ public sealed class InternetTransportTests
     }
 
     [Fact]
-    public async Task PrivateDiscoveryDoesNotProbeLanWhenTheRelaySucceeds()
+    public async Task PrivateDiscoveryAlsoProbesLanWhenTheRelaySucceeds()
     {
         bool lanCalled = false;
         var relayPeer = new Peer("Relay PC", "RD-0123-4567-89AB-CDEF", 443, "", "RD-0123-4567-89AB-CDEF");
@@ -224,7 +224,7 @@ public sealed class InternetTransportTests
             relayDiscovery: _ => Task.FromResult(new List<Peer> { relayPeer }));
 
         Assert.False(result.UsedLanFallback);
-        Assert.False(lanCalled);
+        Assert.True(lanCalled);
         Assert.Equal(new[] { relayPeer }, result.Peers);
     }
 
@@ -240,6 +240,46 @@ public sealed class InternetTransportTests
             relayDiscovery: token => Task.FromException<List<Peer>>(new OperationCanceledException(token)),
             cancellation.Token));
     }
+
+    [Fact]
+    public async Task LanPeerWinsOverRelayAndRebindsAfterAddressAndInvitationChange()
+    {
+        var lan = new Peer("PC", "192.168.1.20", 45832, new string('a', 64), "RD-0123-4567-89AB-CDEF");
+        var relay = lan with { Host = lan.SupportId, Port = 443, Fingerprint = "" };
+        var result = await PeerDiscovery.FindAsync(true, _ => Task.FromResult(new List<Peer> { lan }), _ => Task.FromResult(new List<Peer> { relay }));
+        Assert.Equal(lan, Assert.Single(result.Peers));
+        var changed = lan with { Host = "192.168.1.21", SupportId = "RD-9876-5432-10FE-DCBA" };
+        Assert.Equal(changed, PeerDiscovery.Rebind(lan, [changed]));
+        Assert.Null(PeerDiscovery.Rebind(lan, [lan with { Fingerprint = new string('b', 64) }]));
+    }
+
+    [Fact]
+    public async Task FailedDirectRouteFallsBackOnceAndIsNotRetriedByFollowingCalls()
+    {
+        var attempts = new List<string>();
+        var target = new Connection("RD-0123-4567-89AB-CDEF", 443, new string('a', 64), "token", "https://relay.example", new string('b', 64), "127.0.0.1", 45832);
+        var client = new RemoteClient(target, (route, _) =>
+        {
+            attempts.Add(route.DirectHost.Length > 0 ? "direct" : "relay");
+            if (route.DirectHost.Length > 0) throw new IOException("Stale direct endpoint");
+            return Task.FromResult<Stream>(new ScriptedInputStream());
+        });
+        Assert.True((await client.CallAsync("status")).Ok);
+        Assert.True((await client.CallAsync("status")).Ok);
+        Assert.Equal(new[] { "direct", "relay", "relay" }, attempts);
+        Assert.Equal("Relay", client.ActiveRoute);
+        Assert.Empty(client.Connection.DirectHost);
+    }
+
+    [Theory]
+    [InlineData("session.end", false)]
+    [InlineData("revoke", false)]
+    [InlineData("update.cancel", false)]
+    [InlineData("update.resume", false)]
+    [InlineData("file.info", true)]
+    [InlineData("ui.input", true)]
+    public void CleanupAndRecoveryBypassSynchronization(string operation, bool expected) =>
+        Assert.Equal(expected, Program.RequiresSynchronization(operation));
 
     [Fact]
     public void PeerSerializationPreservesThePrivateSupportIdentity()

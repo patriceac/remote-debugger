@@ -21,6 +21,8 @@ public sealed class MaintenanceSession(string root) : IDisposable
     private readonly object stateLock = new();
     private NamedPipeClientStream? pipe;
     private readonly CancellationTokenSource lifetime = new();
+    private readonly PrivilegedInputSession input = new();
+    private bool privilegedInputAvailable;
     private MaintenanceSessionStatus status = new(false, false, true, "Privileged maintenance has not started.");
     private int enabled = 1;
     private int disposed;
@@ -62,6 +64,7 @@ public sealed class MaintenanceSession(string root) : IDisposable
             if (pipe is { IsConnected: true }) return;
             DisposePipe();
             var platform = await SupportPlatform.GetStatusAsync(ct);
+            privilegedInputAvailable = platform.InteractiveInputAvailable;
             if (!platform.Available)
             {
                 Volatile.Write(ref status, new(false, false, platform.RequiresAdministratorConsent, platform.Message));
@@ -88,7 +91,9 @@ public sealed class MaintenanceSession(string root) : IDisposable
                     }
                     pipe = candidate;
                     Volatile.Write(ref status, new(true, true, false,
-                        "Administrator maintenance is active until the paired agent session ends.", data.Str("leaseId")));
+                        privilegedInputAvailable
+                            ? "Administrator maintenance is active until the paired agent session ends."
+                            : "Administrator maintenance is active. Install the current setup to enable control of elevated windows.", data.Str("leaseId")));
                 }
             }
             catch { candidate.Dispose(); throw; }
@@ -130,6 +135,20 @@ public sealed class MaintenanceSession(string root) : IDisposable
     }
 
     public void End() => DisposePipe();
+    internal void EndInput() => input.End();
+
+    internal async Task SendInputAsync(object args, CancellationToken ct)
+    {
+        if (!Enabled || !CurrentStatus.Active) throw new InputBlockedException(DisabledMessage);
+        if (!privilegedInputAvailable)
+        {
+            try { Native.HandleInput(args is System.Text.Json.JsonElement element ? element : Json.Element(args)); }
+            catch (InputBlockedException) { throw new InputBlockedException("Windows blocked input. Install the current Remote Debugger setup on this agent to enable control of elevated windows."); }
+            return;
+        }
+        try { await input.SendAsync(args, () => Enabled && CurrentStatus.Active, ct); }
+        catch (RemoteOperationException ex) { throw new InputBlockedException(ex.Message); }
+    }
 
     private void SetDisabledStatus()
     {
@@ -142,6 +161,7 @@ public sealed class MaintenanceSession(string root) : IDisposable
 
     private void DisposePipe()
     {
+        input.End();
         NamedPipeClientStream? current;
         lock (stateLock)
         {
@@ -156,6 +176,7 @@ public sealed class MaintenanceSession(string root) : IDisposable
 
     public void Dispose()
     {
+        input.End();
         NamedPipeClientStream? current;
         lock (stateLock)
         {

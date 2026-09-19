@@ -9,6 +9,12 @@ internal static class FirewallManager
     private const string TcpName = "RemoteDebugger-Private-TCP";
     private const string UdpName = "RemoteDebugger-Private-UDP";
 
+    internal static async Task RemoveAsync(CancellationToken ct)
+    {
+        var result = Json.Element(await RunPowerShellAsync("$ErrorActionPreference='Stop'; Get-NetFirewallRule -Name 'RemoteDebugger-Private-TCP','RemoteDebugger-Private-UDP' -ErrorAction SilentlyContinue | Remove-NetFirewallRule", ct));
+        if (result.Int("exitCode") != 0) throw new IOException("Could not remove the support firewall rules.");
+    }
+
     public static async Task<bool> IsReadyAsync(string applicationPath, CancellationToken ct)
     {
         string script = BuildScript(applicationPath, ensure: false);

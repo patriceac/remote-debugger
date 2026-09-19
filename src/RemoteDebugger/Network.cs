@@ -103,7 +103,13 @@ internal static class PeerDiscovery
             string identity = peer.Fingerprint.Length == 64
                 ? $"fingerprint:{peer.Fingerprint}"
                 : $"endpoint:{peer.Host}:{peer.Port}";
-            if (seen.Add(identity)) result.Add(peer);
+            string invitation = "invitation:" + peer.SupportId;
+            if (!seen.Contains(identity) && (peer.SupportId.Length == 0 || !seen.Contains(invitation)))
+            {
+                seen.Add(identity);
+                if (peer.SupportId.Length > 0) seen.Add(invitation);
+                result.Add(peer);
+            }
         }
         return result;
     }
@@ -115,11 +121,26 @@ internal static class PeerDiscovery
         CancellationToken ct = default)
     {
         if (!privateInternet) return new(DistinctPeers(await lanDiscovery(ct).ConfigureAwait(false)), false);
-        try { return new(await relayDiscovery(ct).ConfigureAwait(false), false); }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
-        catch (Exception) when (!ct.IsCancellationRequested) { }
-        return new(DistinctPeers(await lanDiscovery(ct).ConfigureAwait(false)), true);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(TimeSpan.FromSeconds(3));
+        async Task<List<Peer>> Find(Func<CancellationToken, Task<List<Peer>>> discover)
+        {
+            try { return await discover(deadline.Token).ConfigureAwait(false); }
+            catch (Exception) when (!ct.IsCancellationRequested) { return []; }
+        }
+        var lan = Find(lanDiscovery);
+        var relay = Find(relayDiscovery);
+        await Task.WhenAll(lan, relay).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        return new(DistinctPeers(lan.Result.Concat(relay.Result)), relay.Result.Count == 0);
     }
+
+    internal static Peer? Rebind(Peer previous, IEnumerable<Peer> peers) => peers.FirstOrDefault(peer =>
+        previous.Fingerprint.Length == 64
+            ? string.Equals(previous.Fingerprint, peer.Fingerprint, StringComparison.OrdinalIgnoreCase)
+            : previous.SupportId.Length > 0
+                ? string.Equals(previous.SupportId, peer.SupportId, StringComparison.OrdinalIgnoreCase)
+                : PeerDiscoveryPolicy.IsSameEndpoint(previous.Host, previous.Port, peer.Host, peer.Port));
 }
 
 public sealed partial class AgentServer : IDisposable
@@ -150,6 +171,13 @@ public sealed partial class AgentServer : IDisposable
     private int terminating;
     private int started;
     private int listening;
+    private long captureEpoch;
+    private readonly SemaphoreSlim captureWake = new(0, 1);
+    private void WakeCapture(bool force = true)
+    {
+        if (force) Interlocked.Increment(ref captureEpoch);
+        if (captureWake.CurrentCount == 0) try { captureWake.Release(); } catch (SemaphoreFullException) { }
+    }
     public PairingGate Pairing { get; } = new();
     public Operations Operations { get; }
     public string Fingerprint => certificate.GetCertHashString(HashAlgorithmName.SHA256);
@@ -209,7 +237,7 @@ public sealed partial class AgentServer : IDisposable
         listener = new TcpListener(loopbackOnly ? IPAddress.Loopback : IPAddress.Any, port);
         discovery = new UdpClient(new IPEndPoint(loopbackOnly ? IPAddress.Loopback : IPAddress.Any, Discovery.Port));
         if (enableInternet && InternetSettings.Load(root) is { } internetSettings)
-            Internet = new InternetAgent(root, internetSettings, resumed != null, AcceptInternetAsync);
+            Internet = new InternetAgent(root, internetSettings, resumed != null, AcceptInternetAsync, Fingerprint);
     }
     public void Start()
     {
@@ -515,8 +543,12 @@ public sealed partial class AgentServer : IDisposable
                         if (resumePending && resumed!.ExpiresUtc <= DateTimeOffset.UtcNow) { session.End(); authorized = false; }
                         if (authorized && !resumePending && r.Operation != "session.disconnect") session.Observe();
                         if (!authorized || session.ShouldExit) reply = Reply.Failure(r.Id, "access_denied", "This support session is not authorized or has ended.");
-                        else if (resumePending && r.Operation is not ("update.open" or "update.resume" or "session.end" or "revoke"))
+                        else if (resumePending && r.Operation is not ("update.open" or "update.resume" or "update.cancel" or "update.status" or "session.end" or "revoke"))
                             reply = Reply.Failure(r.Id, "resume_required", "Present the bounded update reconnect ticket before resuming support.");
+                        else if (r.Operation == "screen.refresh")
+                        {
+                            WakeCapture(); reply = Reply.Success(r.Id, new { requested = true });
+                        }
                         else if (r.Operation == "session.heartbeat")
                         {
                             session.Observe();
@@ -656,6 +688,13 @@ public sealed partial class AgentServer : IDisposable
                                 return;
                             }
                         }
+                        else if (r.Operation is "file.upload" or "file.download")
+                        {
+                            timeout.CancelAfter(TimeSpan.FromHours(12));
+                            using var transferGrant = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, grant);
+                            await Operations.TransferAsync(tls, r, session.Observe, transferGrant.Token);
+                            return;
+                        }
                         else if (r.Operation == "screen.stream") { using var streamGrant = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, grant); await StreamAsync(tls, r, streamGrant.Token); return; }
                         else if (r.Operation == "cancel") { if (running.TryGetValue(r.Args.Str("id"), out var job)) job.Cancel(); reply = Reply.Success(r.Id, new { cancellationRequested = true }); }
                         else if ((r.Operation is "maintenance.session" or "maintenance.elevated") && !Operations.Maintenance.Enabled)
@@ -681,7 +720,7 @@ public sealed partial class AgentServer : IDisposable
             {
                 persistentInputGrant.Dispose();
                 persistentUpdateGrant.Dispose();
-                if (persistentInput) Native.ReleaseAllInput();
+                if (persistentInput) { Operations.Maintenance.EndInput(); Native.ReleaseAllInput(); }
                 slots.Release();
             }
         }
@@ -691,19 +730,24 @@ public sealed partial class AgentServer : IDisposable
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct); cts.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(request.TimeoutSeconds, 1, 300))); running[request.Id] = cts;
         if (request.Args.Str("codec") == "auto") { await StreamAdaptiveAsync(tls, request, cts.Token); return; }
         int fps = StreamPolicy.ClampFps(request.Args.Int("fps", StreamPolicy.MaximumFps)); long sequence = 0; string? previousFingerprint = null;
+        using var captureBuffer = new CaptureBuffer();
+        long epoch = Volatile.Read(ref captureEpoch); int unchanged = 0;
         Status?.Invoke("Live screen stream active (encrypted). Target " + fps + " fps.");
         try
         {
             while (!cts.IsCancellationRequested)
             {
                 var started = System.Diagnostics.Stopwatch.StartNew();
-                var capture = DesktopCapture.CaptureStream(request.Args.Int("monitor"), request.Args.Int("maxWidth", 1920), request.Args.Int("quality", 65), sequence, previousFingerprint);
+                long currentEpoch = Volatile.Read(ref captureEpoch);
+                if (currentEpoch != epoch) { previousFingerprint = null; epoch = currentEpoch; unchanged = 0; }
+                var capture = DesktopCapture.CaptureStream(request.Args.Int("monitor"), request.Args.Int("maxWidth", 1920), request.Args.Int("quality", 65), sequence, previousFingerprint, captureBuffer);
                 previousFingerprint = capture.Fingerprint;
                 if (capture.Frame is not { } frame)
                 {
-                    double unchangedWait = 1000.0 / fps - started.Elapsed.TotalMilliseconds; if (unchangedWait > 0) await Task.Delay(TimeSpan.FromMilliseconds(unchangedWait), cts.Token);
+                    await captureWake.WaitAsync(Math.Min(1000, 1000 / fps * (1 + ++unchanged / 5)), cts.Token);
                     continue;
                 }
+                unchanged = 0;
                 await Wire.WriteAsync(tls, Reply.Success(request.Id, frame), cts.Token);
                 // One frame in flight; the next capture starts only after receipt.
                 // The controller independently replaces any unrendered older frame.
@@ -724,10 +768,12 @@ public sealed partial class AgentServer : IDisposable
         int monitor = request.Args.Int("monitor"); int maxWidth = request.Args.Int("maxWidth", 1920); int quality = request.Args.Int("quality", 65);
         bool controllerCanH264 = !request.Args.TryGetProperty("h264", out var h264Support) || h264Support.ValueKind != JsonValueKind.False;
         long sequence = 0; string? previousFingerprint = null; var state = new AdaptiveStreamState();
+        using var captureBuffer = new CaptureBuffer();
+        long epoch = Volatile.Read(ref captureEpoch); int unchanged = 0;
         try
         {
             BitmapCaptureResult firstResult;
-            try { firstResult = DesktopCapture.CaptureBitmap(monitor, previousFingerprint: null); }
+            try { firstResult = DesktopCapture.CaptureBitmap(monitor, previousFingerprint: null, captureBuffer); }
             catch (Exception ex) { await Wire.WriteAsync(tls, Reply.Failure(request.Id, "stream_failed", ex.Message), ct); return; }
             previousFingerprint = firstResult.Fingerprint;
             if (firstResult.Capture is not { } first)
@@ -757,13 +803,16 @@ public sealed partial class AgentServer : IDisposable
             while (!ct.IsCancellationRequested)
             {
                 var started = System.Diagnostics.Stopwatch.StartNew();
-                var capture = DesktopCapture.CaptureBitmap(monitor, previousFingerprint);
+                long currentEpoch = Volatile.Read(ref captureEpoch);
+                if (currentEpoch != epoch) { previousFingerprint = null; epoch = currentEpoch; unchanged = 0; }
+                var capture = DesktopCapture.CaptureBitmap(monitor, previousFingerprint, captureBuffer);
                 previousFingerprint = capture.Fingerprint;
                 if (capture.Capture is not { } current)
                 {
-                    double unchangedWait = 1000.0 / fps - started.Elapsed.TotalMilliseconds; if (unchangedWait > 0) await Task.Delay(TimeSpan.FromMilliseconds(unchangedWait), ct);
+                    await captureWake.WaitAsync(Math.Min(1000, 1000 / fps * (1 + ++unchanged / 5)), ct);
                     continue;
                 }
+                unchanged = 0;
                 using (current)
                 {
                     await SendAdaptiveFrameAsync(tls, current, state, sequence, fps, maxWidth, quality, ct);
@@ -793,10 +842,14 @@ public sealed partial class AgentServer : IDisposable
         public string Codec = "jpeg";
         public string? FallbackReason;
         public int SlowFrames;
+        public DesktopGeometry? Geometry;
     }
 
     private async Task SendAdaptiveFrameAsync(SslStream tls, CapturedDesktop capture, AdaptiveStreamState state, long sequence, int fps, int maxWidth, int quality, CancellationToken ct)
     {
+        if (state.Geometry != null && state.Geometry != capture.Geometry)
+            throw new IOException("Display layout changed; reopen the stream to negotiate its geometry.");
+        state.Geometry = capture.Geometry;
         byte[]? bytes = null; StreamPacketKind kind = StreamPacketKind.Jpeg; double encodeMs = capture.CopyMs;
         if (state.Codec == "h264" && state.Encoder != null)
         {
@@ -855,8 +908,9 @@ public sealed partial class AgentServer : IDisposable
         running[r.Id] = cts; var begin = DateTimeOffset.UtcNow; Reply reply;
         bool noisy = r.Operation is "ui.input" or "upload.chunk" or "file.read";
         if (!noisy) Status?.Invoke($"{begin:HH:mm:ss}  {r.Operation}  {r.Id[..8]}");
-        try { cts.Token.ThrowIfCancellationRequested(); reply = Reply.Success(r.Id, await Operations.ExecuteAsync(r.Operation, r.Args, cts.Token)); }
+        try { cts.Token.ThrowIfCancellationRequested(); reply = Reply.Success(r.Id, await Operations.ExecuteAsync(r.Operation, r.Args, cts.Token)); if (r.Operation.StartsWith("ui.", StringComparison.Ordinal)) WakeCapture(false); }
         catch (OperationCanceledException) { reply = Reply.Failure(r.Id, "cancelled_or_timeout", "Operation cancelled or its deadline expired. Inspect state before retrying a mutation."); }
+        catch (InputBlockedException ex) { reply = Reply.Failure(r.Id, "input_blocked", ex.Message); }
         catch (UnauthorizedAccessException) { reply = Reply.Failure(r.Id, "permission_denied", "Windows denied access. An elevated operation may be required."); }
         catch (Exception ex) { reply = Reply.Failure(r.Id, "operation_failed", ex.Message); }
         finally { running.TryRemove(r.Id, out _); }
@@ -892,8 +946,9 @@ public sealed partial class AgentServer : IDisposable
     }
 }
 
-public sealed class RemoteClient
+public sealed partial class RemoteClient
 {
+    private readonly string controllerBinarySha256 = ExecutableIdentity.Sha256;
     private readonly Func<Connection, CancellationToken, Task<Stream>> transportFactory;
     private readonly SemaphoreSlim inputGate = new(1, 1);
     private readonly SemaphoreSlim updateGate = new(1, 1);
@@ -902,7 +957,12 @@ public sealed class RemoteClient
     private int legacyUpdateOperations;
     public Connection Connection { get; private set; }
     public static string DefaultPath => Path.Combine(Vault.DefaultRoot, "controller.connection");
-    public RemoteClient(Connection connection) : this(connection, OpenAuthenticatedTransportAsync) { }
+    public RemoteClient(Connection connection) : this(connection, OpenAuthenticatedTransportOnceAsync) { discoverRoutes = true; }
+    internal RemoteClient(Connection connection, string controllerBinarySha256) : this(connection)
+    {
+        UpdatePolicy.ValidateSha256(controllerBinarySha256, "controller executable");
+        this.controllerBinarySha256 = controllerBinarySha256;
+    }
     internal RemoteClient(Connection connection, Func<Connection, CancellationToken, Task<Stream>> transportFactory)
     {
         Connection = connection ?? throw new ArgumentNullException(nameof(connection));
@@ -931,14 +991,13 @@ public sealed class RemoteClient
     internal async Task<bool> TryPreferDirectAsync(IEnumerable<DirectEndpoint> candidates, CancellationToken ct = default)
     {
         if (Connection.RelayUrl.Length == 0) return true;
-        if (Connection.DirectHost.Length > 0) return true;
         Connection relay = Connection;
-        foreach (var candidate in candidates)
+        async Task<DirectEndpoint?> Probe(DirectEndpoint candidate)
         {
             if (!IPAddress.TryParse(candidate.Host, out var address) || address.AddressFamily != AddressFamily.InterNetwork ||
-                candidate.Port is not (> 0 and < 65536)) continue;
+                candidate.Port is not (> 0 and < 65536) || CoolingDown(candidate)) return null;
             using var attempt = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            attempt.CancelAfter(TimeSpan.FromSeconds(4));
+            attempt.CancelAfter(TimeSpan.FromSeconds(2));
             var direct = relay with
             {
                 Host = candidate.Host,
@@ -955,18 +1014,20 @@ public sealed class RemoteClient
                 // Status is intentionally allowed before binary synchronization so
                 // a newly paired controller can move the synchronization itself
                 // onto the direct endpoint.
-                await Wire.WriteAsync(tls, new Request(id, relay.Token, "status", Json.Element(new { }), 5, ExecutableIdentity.Sha256), attempt.Token).ConfigureAwait(false);
+                await Wire.WriteAsync(tls, new Request(id, relay.Token, "status", Json.Element(new { }), 5, controllerBinarySha256), attempt.Token).ConfigureAwait(false);
                 var reply = await Wire.ReadAsync<Reply>(tls, attempt.Token).ConfigureAwait(false);
-                if (!reply.Ok) continue;
-                await CloseInputChannelAsync().ConfigureAwait(false);
-                await CloseUpdateChannelAsync().ConfigureAwait(false);
-                Connection = relay with { DirectHost = candidate.Host, DirectPort = candidate.Port };
-                return true;
+                if (reply.Ok) return candidate;
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
             catch (Exception) when (!ct.IsCancellationRequested) { }
+            CoolDown(candidate.Host, candidate.Port);
+            return null;
         }
-        return false;
+        var results = await Task.WhenAll(candidates.Distinct().Take(16).OrderByDescending(c => IsLanAddress(c.Host)).Select(Probe)).ConfigureAwait(false);
+        var preferred = results.FirstOrDefault(candidate => candidate != null);
+        if (preferred == null) return false;
+        Connection = Connection with { DirectHost = preferred.Host, DirectPort = preferred.Port };
+        return true;
     }
     public async Task<JsonElement> HeartbeatAsync(CancellationToken ct = default) => Require(await CallAsync("session.heartbeat", ct: ct, seconds: 5).ConfigureAwait(false));
     public async Task EndSessionAsync(CancellationToken ct = default)
@@ -998,8 +1059,8 @@ public sealed class RemoteClient
     public async Task<Reply> CallAsync(string operation, object? args = null, CancellationToken ct = default, string? id = null, int seconds = 60)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(seconds, 1, 300) + 15));
-        await using var tls = await transportFactory(Connection, timeout.Token).ConfigureAwait(false);
-        var request = new Request(id ?? Guid.NewGuid().ToString(), Connection.Token, operation, args is JsonElement e ? e : Json.Element(args ?? new { }), seconds, ExecutableIdentity.Sha256);
+        await using var tls = await OpenTransportAsync(timeout.Token).ConfigureAwait(false);
+        var request = new Request(id ?? Guid.NewGuid().ToString(), Connection.Token, operation, args is JsonElement e ? e : Json.Element(args ?? new { }), seconds, controllerBinarySha256);
         await Wire.WriteAsync(tls, request, timeout.Token); return await Wire.ReadAsync<Reply>(tls, timeout.Token);
     }
     public async Task<Reply> SendInputAsync(object? args = null, CancellationToken ct = default, int seconds = 3)
@@ -1014,8 +1075,8 @@ public sealed class RemoteClient
             {
                 if (channel == null)
                 {
-                    Stream transport = await transportFactory(Connection, timeout.Token).ConfigureAwait(false);
-                    channel = new PersistentChannel(transport, Connection.Token, ExecutableIdentity.Sha256, "ui.input.open");
+                    Stream transport = await OpenTransportAsync(timeout.Token).ConfigureAwait(false);
+                    channel = new PersistentChannel(transport, Connection.Token, controllerBinarySha256, "ui.input.open");
                     await channel.OpenAsync(timeout.Token, seconds).ConfigureAwait(false);
                     inputChannel = channel;
                 }
@@ -1051,8 +1112,8 @@ public sealed class RemoteClient
             {
                 if (channel == null)
                 {
-                    Stream transport = await transportFactory(Connection, timeout.Token).ConfigureAwait(false);
-                    channel = new PersistentChannel(transport, Connection.Token, ExecutableIdentity.Sha256, "update.open");
+                    Stream transport = await OpenTransportAsync(timeout.Token).ConfigureAwait(false);
+                    channel = new PersistentChannel(transport, Connection.Token, controllerBinarySha256, "update.open");
                     await channel.OpenAsync(timeout.Token, seconds).ConfigureAwait(false);
                     updateChannel = channel;
                 }
@@ -1121,19 +1182,6 @@ public sealed class RemoteClient
     private static bool IsLegacyUpdateChannelUnsupported(RemoteOperationException ex) =>
         ex.Code == "binary_mismatch" ||
         (ex.Code == "operation_failed" && ex.Message.Contains("update.open", StringComparison.OrdinalIgnoreCase));
-    private static async Task<Stream> OpenAuthenticatedTransportAsync(Connection connection, CancellationToken ct)
-    {
-        if (connection.DirectHost.Length > 0 && connection.RelayUrl.Length > 0)
-        {
-            using var directAttempt = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            directAttempt.CancelAfter(TimeSpan.FromSeconds(6));
-            try { return await OpenAuthenticatedTransportOnceAsync(connection, directAttempt.Token).ConfigureAwait(false); }
-            catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
-            catch (Exception) when (!ct.IsCancellationRequested) { }
-            return await OpenAuthenticatedTransportOnceAsync(connection with { DirectHost = "", DirectPort = 0 }, ct).ConfigureAwait(false);
-        }
-        return await OpenAuthenticatedTransportOnceAsync(connection, ct).ConfigureAwait(false);
-    }
     private static async Task<Stream> OpenAuthenticatedTransportOnceAsync(Connection connection, CancellationToken ct)
     {
         Stream transport = await ConnectionTransport.OpenAsync(connection, ct).ConfigureAwait(false);
@@ -1201,10 +1249,8 @@ public sealed class RemoteClient
     private async Task ReceiveAdaptiveFramesAsync(Action<DecodedStreamFrame> publish, Action<string, string?>? codecChanged, int fps, int monitor, int seconds, CancellationToken ct)
     {
         using var connecting = CancellationTokenSource.CreateLinkedTokenSource(ct); connecting.CancelAfter(TimeSpan.FromSeconds(30));
-        await using var transport = await ConnectionTransport.OpenAsync(Connection, connecting.Token);
-        using var tls = new SslStream(transport, true, (_, cert, _, _) => cert != null && Safety.Equal(Convert.ToHexString(SHA256.HashData(cert.GetRawCertData())), Connection.Fingerprint.ToUpperInvariant().Replace(":", "")));
-        await tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions { TargetHost = "RemoteDebugger", EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13 }, ct);
-        await Wire.WriteAsync(tls, new Request(Guid.NewGuid().ToString(), Connection.Token, "screen.stream", Json.Element(new { codec = "auto", h264 = FfmpegRuntime.IsAvailable(), fps, monitor, maxWidth = 1920, quality = 65 }), seconds, ExecutableIdentity.Sha256), ct);
+        await using var tls = await OpenTransportAsync(connecting.Token);
+        await Wire.WriteAsync(tls, new Request(Guid.NewGuid().ToString(), Connection.Token, "screen.stream", Json.Element(new { codec = "auto", h264 = FfmpegRuntime.IsAvailable(), fps, monitor, maxWidth = 1920, quality = 65 }), seconds, controllerBinarySha256), ct);
         var start = await Wire.ReadAsync<Reply>(tls, ct); Require(start);
         if (start.Data.Str("type") != "stream_started") throw new InvalidDataException("Missing stream negotiation.");
         string codec = start.Data.Str("codec", "jpeg");
@@ -1257,10 +1303,8 @@ public sealed class RemoteClient
     private async Task ReceiveFramesAsync(Action<ScreenFrame> publish, int fps, int monitor, int seconds, CancellationToken ct)
     {
         using var connecting = CancellationTokenSource.CreateLinkedTokenSource(ct); connecting.CancelAfter(TimeSpan.FromSeconds(30));
-        await using var transport = await ConnectionTransport.OpenAsync(Connection, connecting.Token);
-        using var tls = new SslStream(transport, true, (_, cert, _, _) => cert != null && Safety.Equal(Convert.ToHexString(SHA256.HashData(cert.GetRawCertData())), Connection.Fingerprint.ToUpperInvariant().Replace(":", "")));
-        await tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions { TargetHost = "RemoteDebugger", EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13 }, ct);
-        await Wire.WriteAsync(tls, new Request(Guid.NewGuid().ToString(), Connection.Token, "screen.stream", Json.Element(new { fps, monitor, maxWidth = 1920, quality = 65 }), seconds, ExecutableIdentity.Sha256), ct);
+        await using var tls = await OpenTransportAsync(connecting.Token);
+        await Wire.WriteAsync(tls, new Request(Guid.NewGuid().ToString(), Connection.Token, "screen.stream", Json.Element(new { fps, monitor, maxWidth = 1920, quality = 65 }), seconds, controllerBinarySha256), ct);
         while (!ct.IsCancellationRequested)
         {
             var reply = await Wire.ReadAsync<Reply>(tls, ct); Require(reply);
@@ -1270,7 +1314,7 @@ public sealed class RemoteClient
     }
     public static JsonElement Require(Reply reply) => reply.Ok ? reply.Data : throw new RemoteOperationException(reply.Error ?? "operation_failed", reply.Message ?? "Remote operation failed.");
     private sealed record UploadState(string Transfer, string Sha256, long Size, string Path);
-    public async Task<JsonElement> UploadAsync(string file, string relativePath, CancellationToken ct = default)
+    public async Task<JsonElement> UploadAsync(string file, string relativePath, CancellationToken ct = default, IProgress<FileTransferProgress>? progress = null)
     {
         await using var input = File.OpenRead(file); string hash = Convert.ToHexString(await SHA256.HashDataAsync(input, ct)); input.Position = 0;
         string resume = Path.Combine(Vault.DefaultRoot, "uploads", Safety.Hash(Connection.Fingerprint + "|" + relativePath) + ".state");
@@ -1292,27 +1336,44 @@ public sealed class RemoteClient
             state = new UploadState(Guid.NewGuid().ToString("N"), hash, input.Length, relativePath); Vault.Save(resume, JsonSerializer.SerializeToUtf8Bytes(state, Json.Options));
             Require(await CallAsync("upload.begin", new { transfer = state.Transfer, path = relativePath, size = input.Length, sha256 = hash }, ct));
         }
-        string transfer = state.Transfer; input.Position = offset; byte[] buffer = new byte[256 * 1024]; int n;
-        while ((n = await input.ReadAsync(buffer, ct)) > 0) { Require(await CallAsync("upload.chunk", new { transfer, offset, data = Convert.ToBase64String(buffer, 0, n) }, ct)); offset += n; }
-        var committed = Require(await CallAsync("upload.commit", new { transfer }, ct)); File.Delete(resume); return committed;
+        await using var channel = await OpenTransportAsync(ct);
+        var request = new Request(Guid.NewGuid().ToString(), Connection.Token, "file.upload", Json.Element(new { transfer = state.Transfer }), 300, controllerBinarySha256);
+        await Wire.WriteAsync(channel, request, ct);
+        var ready = Require(await Wire.ReadAsync<Reply>(channel, ct));
+        offset = ready.Long("offset");
+        if (ready.Long("size") != input.Length || offset < 0 || offset > input.Length) throw new IOException("Invalid upload resume offset.");
+        input.Position = offset;
+        progress?.Report(new(offset, input.Length));
+        await BulkTransfer.SendAsync(input, channel, offset, input.Length, value => progress?.Report(new(value, input.Length)), ct);
+        var committed = Require(await Wire.ReadAsync<Reply>(channel, ct));
+        if (!Safety.Equal(committed.Str("sha256"), hash) || committed.Long("size") != input.Length) throw new IOException("Upload verification failed.");
+        File.Delete(resume); return committed;
     }
-    public async Task DownloadAsync(string remote, string local, CancellationToken ct = default)
+    public async Task DownloadAsync(string remote, string local, CancellationToken ct = default, IProgress<FileTransferProgress>? progress = null)
     {
-        var info = Require(await CallAsync("file.info", new { path = remote }, ct)); long length = info.Long("size");
-        string temp = local + "." + Guid.NewGuid().ToString("N") + ".partial";
-        try
+        string temp = local + ".rd-" + Safety.Hash(Connection.Fingerprint + "|" + remote)[..16] + ".partial";
+        string metadata = temp + ".sha256";
+        string hash = File.Exists(metadata) ? await File.ReadAllTextAsync(metadata, ct) : "";
+        long offset = File.Exists(temp) && hash.Length == 64 ? new FileInfo(temp).Length : 0;
+        await using var channel = await OpenTransportAsync(ct);
+        var request = new Request(Guid.NewGuid().ToString(), Connection.Token, "file.download", Json.Element(new { path = remote, offset, sha256 = hash }), 300, controllerBinarySha256);
+        await Wire.WriteAsync(channel, request, ct);
+        var info = Require(await Wire.ReadAsync<Reply>(channel, ct));
+        long length = info.Long("size"); offset = info.Long("offset"); hash = info.Str("sha256");
+        if (!PairingExchange.ValidHash(hash) || offset < 0 || offset > length) throw new IOException("Invalid download metadata.");
+        await using (var output = new FileStream(temp, FileMode.OpenOrCreate, FileAccess.Write, FileShare.None, BulkTransfer.ChunkSize, FileOptions.Asynchronous))
         {
-            await using (var output = File.Create(temp))
-            {
-                for (long offset = 0; offset < length;)
-                {
-                    var chunk = Require(await CallAsync("file.read", new { path = remote, offset }, ct)); var bytes = Convert.FromBase64String(chunk.Str("data"));
-                    if (bytes.Length == 0) throw new IOException("Remote file changed during download."); await output.WriteAsync(bytes, ct); offset += bytes.Length;
-                }
-            }
-            await using (var verify = File.OpenRead(temp)) if (!Safety.Equal(Convert.ToHexString(await SHA256.HashDataAsync(verify, ct)), info.Str("sha256"))) throw new IOException("Download hash mismatch; source may have changed.");
-            File.Move(temp, local, true);
+            output.SetLength(offset); output.Position = offset;
+            await File.WriteAllTextAsync(metadata, hash, ct);
+            progress?.Report(new(offset, length));
+            await BulkTransfer.ReceiveAsync(channel, output, offset, length, value => progress?.Report(new(value, length)), ct);
         }
-        finally { if (File.Exists(temp)) File.Delete(temp); }
+        Require(await Wire.ReadAsync<Reply>(channel, ct));
+        await using (var verify = File.OpenRead(temp))
+            if (!Safety.Equal(Convert.ToHexString(await SHA256.HashDataAsync(verify, ct)), hash))
+            { File.Delete(metadata); throw new IOException("Download hash mismatch; retry to restart the transfer."); }
+        File.Move(temp, local, true); File.Delete(metadata);
     }
 }
+
+public sealed record FileTransferProgress(long TransferredBytes, long TotalBytes);

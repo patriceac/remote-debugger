@@ -22,13 +22,12 @@ public sealed class InstallerDefinitionTests
     public void InstallerStartsInTrayAtSignInForTheCurrentUser()
     {
         string definition = File.ReadAllText(ProjectFile("installer", "RemoteDebugger.iss"));
-        string startup = Assert.Single(definition.Split('\n'), line => line.StartsWith("Name: \"{userstartup}\\", StringComparison.Ordinal));
-        Assert.Contains("Filename: \"{app}\\{#AppExeName}\"", startup, StringComparison.Ordinal);
-        Assert.Contains("WorkingDir: \"{app}\"", startup, StringComparison.Ordinal);
-        Assert.Contains("Parameters: \"--startup\"", startup, StringComparison.Ordinal);
-        Assert.DoesNotContain("--enable-support", startup, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("Tasks:", startup, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("uninsneveruninstall", startup, StringComparison.OrdinalIgnoreCase);
+        string lifecycle = File.ReadAllText(ProjectFile("src", "RemoteDebugger", "SupportInstaller.Lifecycle.cs"));
+        Assert.Contains("ExecAsOriginalUser(ExpandConstant('{app}\\{#AppExeName}')", definition);
+        Assert.Contains("--installer-user-startup", definition);
+        Assert.Contains("shortcut.Arguments = \"--startup\"", lifecycle);
+        Assert.Contains("Environment.SpecialFolder.Startup", lifecycle);
+        Assert.DoesNotContain("Name: \"{userstartup}\\", definition);
         Assert.DoesNotContain("{commonstartup}", definition, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -50,9 +49,12 @@ public sealed class InstallerDefinitionTests
 
         Assert.Contains("RemoteDebugger-InstallerHelper.exe", definition, StringComparison.Ordinal);
         Assert.Contains("--installer-shutdown", definition, StringComparison.Ordinal);
-        Assert.Contains("unins000.exe", definition, StringComparison.Ordinal);
-        Assert.Contains("ExecAsOriginalUser(LegacyUninstaller", definition, StringComparison.Ordinal);
-        Assert.Contains("DelTree(LegacyPath", definition, StringComparison.Ordinal);
+        Assert.Contains("ExecAsOriginalUser(HelperPath, '--installer-user-cleanup'", definition, StringComparison.Ordinal);
+        Assert.DoesNotContain("{localappdata}", definition, StringComparison.Ordinal);
+        Assert.Contains("DisableDirPage=yes", definition, StringComparison.Ordinal);
+        Assert.Contains("UsePreviousAppDir=no", definition, StringComparison.Ordinal);
+        Assert.Contains("RemoveBackslashUnlessRoot(WizardDirValue)", definition, StringComparison.Ordinal);
+        Assert.Contains("--support-uninstall", definition, StringComparison.Ordinal);
         Assert.Contains("--support-refresh", definition, StringComparison.Ordinal);
         Assert.Contains("ewWaitUntilTerminated, ResultCode", definition, StringComparison.Ordinal);
         Assert.Contains("CustomMessage('SupportRefreshFailed')", definition, StringComparison.Ordinal);
@@ -71,7 +73,7 @@ public sealed class InstallerDefinitionTests
     public void PrivateInstallerImportsItsEmbeddedProfileBeforeTheNormalLaunchEvenWhenSilent()
     {
         string definition = File.ReadAllText(ProjectFile("installer", "RemoteDebugger.iss"));
-        Assert.Contains("Source: \"{#RelayProfilePath}\"; DestName: \"RemoteDebugger-Internet.rdrelay\"; Flags: dontcopy", definition);
+        Assert.Contains("Source: \"{#RelayProfilePath}\"; DestDir: \"{app}\"; DestName: \"RemoteDebugger-Internet.rdrelay\"; Flags: ignoreversion deleteafterinstall", definition);
         Assert.Contains("if CurStep = ssPostInstall then", definition);
         Assert.Contains("cli internet-import --file", definition);
         Assert.Contains("ExecAsOriginalUser", definition, StringComparison.Ordinal);

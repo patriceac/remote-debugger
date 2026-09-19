@@ -165,6 +165,9 @@ public sealed partial class MainForm : Forms.Form
     private AgentServer? agent;
     private bool agentNetworkPrepared;
     private CancellationTokenSource? action;
+    private CancellationTokenSource? fileTransferLifetime;
+    private Forms.Button transferCancelButton = null!;
+    private string? inputBlockMessage;
     private CancellationTokenSource? heartbeatLifetime;
     private CancellationTokenSource? discoveryLifetime;
     private CancellationTokenSource? pairingLifetime;
@@ -544,7 +547,9 @@ public sealed partial class MainForm : Forms.Form
         selectionRow.ColumnStyles[1] = new Forms.ColumnStyle(Forms.SizeType.Percent, 100); remotePath.Anchor |= Forms.AnchorStyles.Right;
         destination.SetText("deployments/");
         uploadFolderButton = Button(() => UiText.UploadFolder, "uploadFolder", 160); downloadButton = Button(() => UiText.Download, "download", 102);
-        var fileButtons = ControlRow(uploadButton, uploadFolderButton, downloadButton);
+        transferCancelButton = Button(() => UiText.Cancel, "cancelTransfer", 100); transferCancelButton.Enabled = false;
+        transferCancelButton.Click += (_, _) => fileTransferLifetime?.Cancel();
+        var fileButtons = ControlRow(uploadButton, uploadFolderButton, downloadButton, transferCancelButton);
         var destinationRow = ControlRow(RowLabel(() => UiText.UploadDestination, "destinationLabel"), destination);
         destinationRow.ColumnStyles[1] = new Forms.ColumnStyle(Forms.SizeType.Percent, 100); destination.Anchor |= Forms.AnchorStyles.Right;
         fileList.Columns.Add("", 330).WithText(() => UiText.Name); fileList.Columns.Add("", 100).WithText(() => UiText.FileType); fileList.Columns.Add("", 105, Forms.HorizontalAlignment.Right).WithText(() => UiText.Size); fileList.Columns.Add("", 220).WithText(() => UiText.Modified);
@@ -1024,6 +1029,7 @@ public sealed partial class MainForm : Forms.Form
                 headerSubtitle.SetText(selectedPeer.Name + " · " + selectedPeer.Host);
             else
                 headerSubtitle.SetText(PrivateInternet && controllerPages.SelectedIndex == 0 ? UiText.PrivateConnectInstructions : presentation.Subtitle);
+            if (supportSession && client?.ActiveRoute is { Length: > 0 } route) headerSubtitle.SetText(headerSubtitle.Text + " · " + route);
         }
 
         bool updateOngoing = onAgent && agent != null && IsOngoingUpdate(agent.UpdateProgress);
@@ -1107,9 +1113,13 @@ public sealed partial class MainForm : Forms.Form
             if (pairingBusy || supportSession || rolePages.SelectedIndex != 1) return;
             discoveredPeers.Clear();
             string? localSupportId = PrivateInternet ? agent?.Internet?.SupportId : null;
-            bool includeLocalPeers = PrivateInternet && !result.UsedLanFallback;
-            discoveredPeers.AddRange(PeerDiscovery.DistinctPeers(found.Where(p => !PeerDiscovery.IsLocalPeer(p, localSupportId) && (includeLocalPeers || IsRemotePeer(p)))).OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase));
-            if (PrivateInternet && selectedPeer != null && !discoveredPeers.Any(p => p.Host == selectedPeer.Host))
+            discoveredPeers.AddRange(PeerDiscovery.DistinctPeers(found.Where(p => !PeerDiscovery.IsLocalPeer(p, localSupportId) && (InternetSettings.IsSupportId(p.Host) || IsRemotePeer(p)))).OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase));
+            if (selectedPeer != null) selectedPeer = PeerDiscovery.Rebind(selectedPeer, discoveredPeers);
+            if (selectedPeer != null)
+            {
+                selectedFingerprint = selectedPeer.Fingerprint; host.SetText(selectedPeer.Host); selectedPeerName.SetText(selectedPeer.Name);
+            }
+            else
             {
                 selectedPeer = null; selectedFingerprint = ""; host.SetText(""); code.SetText("");
                 selectedPeerName.SetText(() => UiText.SelectComputer); selectedPeerAddress.SetText("");
@@ -1183,12 +1193,21 @@ public sealed partial class MainForm : Forms.Form
         updateProgressArea.Visible = false;
         try
         {
+            if (selectedPeer is { } previous)
+            {
+                var fresh = await PeerDiscovery.FindAsync(PrivateInternet, token => Discovery.FindAsync(1500, token),
+                    token => InternetSettings.Load(root)!.FindAsync(token), pairingCts.Token);
+                selectedPeer = PeerDiscovery.Rebind(previous, fresh.Peers)
+                    ?? throw new IOException("The selected computer is no longer available. Select its current entry after discovery refreshes.");
+                selectedFingerprint = selectedPeer.Fingerprint;
+                host.SetText(selectedPeer.Host);
+            }
             string targetAddress = host.Text.Trim();
             int targetPort = selectedPeer?.Port is > 0 and < 65536 ? selectedPeer.Port : 45832;
             string privateSupportId = selectedPeer?.SupportId ?? "";
             if (PrivateInternet && privateSupportId.Length == 0 && InternetSettings.IsSupportId(targetAddress)) privateSupportId = targetAddress;
             if (PrivateInternet && privateSupportId.Length == 0) throw new InvalidOperationException(UiText.PrivateLanPeerNeedsUpdate);
-            pairedClient = new RemoteClient(InternetSettings.Target(targetAddress, targetPort, selectedFingerprint, root)); client = pairedClient; connectionState.SetText(() => UiText.Pairing); SetFooterMessage(() => UiText.Pairing); UpdateHeader(); RefreshFooter();
+            pairedClient = new RemoteClient(InternetSettings.Target(new Peer(selectedPeer?.Name ?? targetAddress, targetAddress, targetPort, selectedFingerprint, privateSupportId), root)); client = pairedClient; connectionState.SetText(() => UiText.Pairing); SetFooterMessage(() => UiText.Pairing); UpdateHeader(); RefreshFooter();
             using (var handshake = CancellationTokenSource.CreateLinkedTokenSource(pairingCts.Token))
             {
                 handshake.CancelAfter(TimeSpan.FromSeconds(SupportOperationTimeouts.PairingHandshakeSeconds));
@@ -1233,6 +1252,7 @@ public sealed partial class MainForm : Forms.Form
                 pairingCts.Dispose();
             }
             if (ownsPairing || generation == operationGeneration) { pairingBusy = false; discoverButton.Enabled = true; UpdateHeader(); RefreshControllerControls(); RefreshFooter(); }
+            if (!supportSession && !quitting) _ = DiscoverAsync(true);
         }
     }
 
@@ -1321,7 +1341,7 @@ public sealed partial class MainForm : Forms.Form
                 clientUpdateBusy = false;
                 StartHeartbeat();
                 UpdateHeader(); RefreshControllerControls(); RefreshInputStatus(); RefreshFooter();
-                if (synchronizationSucceeded && resumeStream && controllerPages.SelectedIndex == 1)
+                if (synchronizationSucceeded && resumeStream && rolePages.SelectedIndex == 1 && controllerPages.SelectedIndex == 1)
                     _ = StartStreamAsync();
             }
         }
@@ -1420,7 +1440,11 @@ public sealed partial class MainForm : Forms.Form
                     liveFrameFresh = false;
                     ReleaseHeldInputForCurrentSession();
                 }
-                else if (inputState.Suspended) BeginInputRecovery();
+                else
+                {
+                    if (!liveFrameFresh && liveStream != null) RemoteClient.Require(await target.CallAsync("screen.refresh", ct: ct, seconds: 5));
+                    if (inputState.Suspended) BeginInputRecovery();
+                }
                 PostUi(() => { UpdateHeader(); RefreshInputStatus(); });
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
@@ -1446,7 +1470,7 @@ public sealed partial class MainForm : Forms.Form
 
     private async Task StartStreamAsync()
     {
-        if (liveStream != null || client == null || trayVisible) return;
+        if (liveStream != null || client == null || trayVisible || rolePages.SelectedIndex != 1) return;
         try { RequireClient(); } catch (Exception ex) { streamStatus.SetText(ex.Message); return; }
         RemoteClient target = client;
         int generation = sessionGeneration;
@@ -1595,13 +1619,13 @@ public sealed partial class MainForm : Forms.Form
         QueueInput(new { kind = "text", text = remoteText.Text });
     }
 
-    private bool CanSendFocusedInput() => !clientUpdateBusy && supportSession && heartbeatHealthy && !trayVisible && liveFrameFresh;
+    private bool CanSendFocusedInput() => rolePages.SelectedIndex == 1 && !clientUpdateBusy && supportSession && heartbeatHealthy && !trayVisible && liveFrameFresh;
 
-    private bool CanSendInput() => !clientUpdateBusy && inputState.CanSend(supportSession && heartbeatHealthy && !trayVisible, liveFrameFresh, screen.ContainsFocus && ContainsFocus);
+    private bool CanSendInput() => rolePages.SelectedIndex == 1 && !clientUpdateBusy && inputState.CanSend(supportSession && heartbeatHealthy && !trayVisible, liveFrameFresh, screen.ContainsFocus && ContainsFocus);
 
     private void RefreshInputStatus()
     {
-        inputStatus.SetText(() => !supportSession ? UiText.ConnectToControl : clientUpdateBusy ? UiText.Synchronizing : !inputState.Enabled ? UiText.ViewOnly : !heartbeatHealthy ? UiText.ControlAwaitingConnection : inputState.Suspended ? UiText.RestoringControl : !liveFrameFresh ? UiText.WaitingFreshFrame : screen.ContainsFocus && ContainsFocus ? UiText.MouseKeyboardActive : UiText.ClickScreenToControl);
+        inputStatus.SetText(() => !supportSession ? UiText.ConnectToControl : clientUpdateBusy ? UiText.Synchronizing : !inputState.Enabled ? UiText.ViewOnly : !heartbeatHealthy ? UiText.ControlAwaitingConnection : inputBlockMessage ?? (inputState.Suspended ? UiText.RestoringControl : !liveFrameFresh ? UiText.WaitingFreshFrame : screen.ContainsFocus && ContainsFocus ? UiText.MouseKeyboardActive : UiText.ClickScreenToControl));
     }
 
     private void QueueInput(object value)
@@ -1682,6 +1706,7 @@ public sealed partial class MainForm : Forms.Form
 
     private async Task EndSessionBestEffortAsync(RemoteClient target)
     {
+        if (target.Connection.Token.Length == 0) return;
         try { await target.EndSessionAsync(CancellationToken.None); } catch { }
         if (ReferenceEquals(client, target))
         {
@@ -1701,6 +1726,7 @@ public sealed partial class MainForm : Forms.Form
             {
                 using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
                 RemoteClient.Require(await target.SendInputAsync(item.Payload, deadline.Token, seconds: 3));
+                if (!release) inputBlockMessage = null;
                 if (release && item.Generation == sessionGeneration && ReferenceEquals(target, client))
                 {
                     inputState.Released();
@@ -1712,7 +1738,8 @@ public sealed partial class MainForm : Forms.Form
             {
                 if (item.Generation != sessionGeneration || !ReferenceEquals(target, client)) continue;
                 inputState.Suspend();
-                inputStatus.SetText(() => UiText.RestoringControl);
+                if (ex is RemoteOperationException { Code: "input_blocked" }) inputBlockMessage = ex.Message;
+                inputStatus.SetText(() => ex is RemoteOperationException { Code: "input_blocked" } ? ex.Message : UiText.RestoringControl);
                 output.SetText(() => UiText.InputInterruptedPrefix + ex.Message);
                 BeginInputRecovery();
             }
@@ -1807,17 +1834,62 @@ public sealed partial class MainForm : Forms.Form
 
     private async Task UploadFileAsync()
     {
-        using var dialog = new Forms.OpenFileDialog(); if (dialog.ShowDialog() != Forms.DialogResult.OK) return; try { RequireClient(); fileState.SetText(() => UiText.Uploading); var result = await client!.UploadAsync(dialog.FileName, destination.Text.TrimEnd('/', '\\') + "/" + Path.GetFileName(dialog.FileName)); output.SetText(Pretty(result)); fileState.SetText(() => UiText.UploadVerified); await BrowseFilesAsync(); } catch (Exception ex) { fileState.SetText(() => UiText.UploadFailedPrefix + ex.Message); }
+        if (fileTransferLifetime != null) return;
+        using var dialog = new Forms.OpenFileDialog(); if (dialog.ShowDialog() != Forms.DialogResult.OK) return;
+        string path = destination.Text.TrimEnd('/', '\\') + "/" + Path.GetFileName(dialog.FileName);
+        await TransferFileAsync(Path.GetFileName(dialog.FileName), async (target, ct, progress) =>
+        {
+            var result = await target.UploadAsync(dialog.FileName, path, ct, progress);
+            output.SetText(Pretty(result));
+        });
     }
 
     private async Task UploadFolderAsync()
     {
-        using var dialog = new Forms.FolderBrowserDialog(); if (dialog.ShowDialog() != Forms.DialogResult.OK) return; try { RequireClient(); var target = client!; int generation = sessionGeneration; string folderDestination = destination.Text.TrimEnd('/', '\\'); foreach (string file in Directory.EnumerateFiles(dialog.SelectedPath, "*", SearchOption.AllDirectories)) { if (File.GetAttributes(file).HasFlag(FileAttributes.ReparsePoint)) throw new IOException(UiText.ReparsePointsNotUploaded); if (generation != sessionGeneration) throw new OperationCanceledException(UiText.TargetChanged); await target.UploadAsync(file, folderDestination + "/" + Path.GetRelativePath(dialog.SelectedPath, file)); } fileState.SetText(() => UiText.FolderUploadVerified); await BrowseFilesAsync(); } catch (Exception ex) { fileState.SetText(() => UiText.UploadFailedPrefix + ex.Message); }
+        if (fileTransferLifetime != null) return;
+        using var dialog = new Forms.FolderBrowserDialog(); if (dialog.ShowDialog() != Forms.DialogResult.OK) return;
+        string folderDestination = destination.Text.TrimEnd('/', '\\');
+        await TransferFileAsync(Path.GetFileName(dialog.SelectedPath), async (target, ct, progress) =>
+        {
+            foreach (string file in Directory.EnumerateFiles(dialog.SelectedPath, "*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint }))
+                await target.UploadAsync(file, folderDestination + "/" + Path.GetRelativePath(dialog.SelectedPath, file), ct, progress);
+        });
     }
 
     private async Task DownloadFileAsync()
     {
-        if (string.IsNullOrWhiteSpace(selectedFilePath)) { fileState.SetText(() => UiText.SelectFile); return; } using var dialog = new Forms.SaveFileDialog { FileName = Path.GetFileName(selectedFilePath) }; if (dialog.ShowDialog() != Forms.DialogResult.OK) return; try { RequireClient(); await client!.DownloadAsync(selectedFilePath, dialog.FileName); fileState.SetText(() => UiText.DownloadVerified); output.SetText(() => UiText.FileSavedPrefix + dialog.FileName); } catch (Exception ex) { fileState.SetText(() => UiText.DownloadFailedPrefix + ex.Message); }
+        if (fileTransferLifetime != null) return;
+        if (string.IsNullOrWhiteSpace(selectedFilePath)) { fileState.SetText(() => UiText.SelectFile); return; }
+        string path = selectedFilePath;
+        using var dialog = new Forms.SaveFileDialog { FileName = Path.GetFileName(path) }; if (dialog.ShowDialog() != Forms.DialogResult.OK) return;
+        await TransferFileAsync(Path.GetFileName(path), (target, ct, progress) => target.DownloadAsync(path, dialog.FileName, ct, progress), download: true);
+    }
+
+    private async Task TransferFileAsync(string name, Func<RemoteClient, CancellationToken, IProgress<FileTransferProgress>, Task> transfer, bool download = false)
+    {
+        if (fileTransferLifetime != null) return;
+        using var lifetime = new CancellationTokenSource();
+        int generation = sessionGeneration;
+        try
+        {
+            RequireClient(); var target = client!;
+            fileTransferLifetime = lifetime; transferCancelButton.Enabled = true;
+            fileState.SetText(name + " · " + UiText.Loading);
+            var watch = Stopwatch.StartNew(); long initial = -1, previous = -1;
+            var progress = new Progress<FileTransferProgress>(value =>
+            {
+                if (generation != sessionGeneration || !ReferenceEquals(fileTransferLifetime, lifetime)) return;
+                if (initial < 0 || value.TransferredBytes < previous) { initial = value.TransferredBytes; watch.Restart(); }
+                previous = value.TransferredBytes;
+                long rate = (long)((value.TransferredBytes - initial) / Math.Max(.001, watch.Elapsed.TotalSeconds));
+                fileState.SetText($"{name} · {FormatBytes(value.TransferredBytes)} / {FormatBytes(value.TotalBytes)} · {FormatBytes(rate)}/s · {target.ActiveRoute}");
+            });
+            await transfer(target, lifetime.Token, progress);
+            if (generation == sessionGeneration) { await BrowseFilesAsync(); fileState.SetText(name + " · " + (download ? UiText.DownloadVerified : UiText.UploadVerified)); }
+        }
+        catch (OperationCanceledException) { if (generation == sessionGeneration) fileState.SetText(name + " · " + UiText.TransferPaused); }
+        catch (Exception ex) { if (generation == sessionGeneration) fileState.SetText(name + " · " + ex.Message); }
+        finally { if (ReferenceEquals(fileTransferLifetime, lifetime)) { fileTransferLifetime = null; transferCancelButton.Enabled = false; } }
     }
 
     private async Task TerminateSupportAsync()
@@ -1859,7 +1931,7 @@ public sealed partial class MainForm : Forms.Form
         if (terminating || (client == null && !pairingBusy)) return;
         terminating = true; operationGeneration++; terminateSession.Enabled = false; roleAgent.Enabled = roleController.Enabled = false;
         SetFooterMessage(() => UiText.EndingSupport); RefreshFooter();
-        pairingLifetime?.Cancel(); clientUpdateLifetime?.Cancel(); heartbeatLifetime?.Cancel(); action?.Cancel(); resumeViewingOnRestore = false;
+        pairingLifetime?.Cancel(); clientUpdateLifetime?.Cancel(); heartbeatLifetime?.Cancel(); action?.Cancel(); fileTransferLifetime?.Cancel(); resumeViewingOnRestore = false;
         StopStream(() => UiText.SupportEnded); QueueInput(new { kind = "release" });
         RemoteClient? oldClient = client;
         sessionGeneration++; supportSession = false; heartbeatHealthy = false;
@@ -1976,7 +2048,7 @@ public sealed partial class MainForm : Forms.Form
 
     private async Task<bool> ShutdownAsync()
     {
-        renderTimer.Stop(); inputRecoveryTimer.Stop(); discoveryLifetime?.Cancel(); heartbeatLifetime?.Cancel(); pairingLifetime?.Cancel(); clientUpdateLifetime?.Cancel(); liveStream?.Cancel(); action?.Cancel();
+        renderTimer.Stop(); inputRecoveryTimer.Stop(); discoveryLifetime?.Cancel(); heartbeatLifetime?.Cancel(); pairingLifetime?.Cancel(); clientUpdateLifetime?.Cancel(); liveStream?.Cancel(); action?.Cancel(); fileTransferLifetime?.Cancel();
         // A saved connection only pre-fills the controller form. It is not an
         // active outbound session, and must never delay an agent replacement
         // while trying to contact an unrelated (possibly offline) old peer.

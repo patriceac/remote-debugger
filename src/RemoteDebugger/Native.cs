@@ -10,6 +10,8 @@ using RemoteDebugger.Core;
 
 namespace RemoteDebugger;
 
+internal sealed class InputBlockedException(string message) : UnauthorizedAccessException(message);
+
 public static class Native
 {
     [DllImport("kernel32.dll")] public static extern bool FreeConsole();
@@ -63,7 +65,7 @@ public static class Native
         GetWindowThreadProcessId(GetForegroundWindow(), out uint focused);
         if (focused != pid) throw new InvalidOperationException("Windows refused foreground focus; no input was sent."); return h;
     }
-    private static void Input(params INPUT[] input) { if (SendInput((uint)input.Length, input, Marshal.SizeOf<INPUT>()) != input.Length) throw new Win32Exception(Marshal.GetLastWin32Error(), "Input blocked. Secure desktop or elevated target may require local interaction."); }
+    private static void Input(params INPUT[] input) { if (SendInput((uint)input.Length, input, Marshal.SizeOf<INPUT>()) != input.Length) throw new InputBlockedException("Windows blocked input. Enable administrator maintenance for elevated windows; unlock or handle secure desktop prompts locally."); }
     public static object Windows(int pid) => AutomationElement.RootElement.FindAll(TreeScope.Children, pid > 0 ? new PropertyCondition(AutomationElement.ProcessIdProperty, pid) : Condition.TrueCondition).Cast<AutomationElement>().Take(100).Select(x => new { pid = x.Current.ProcessId, name = x.Current.Name, handle = x.Current.NativeWindowHandle }).ToArray();
     public static object Inspect(int pid)
     {
@@ -123,9 +125,11 @@ public static class Native
     {
         lock (InputLock)
         {
-            DesktopCapture.RequireDesktop(); lastInput = DateTime.UtcNow;
+            try { DesktopCapture.RequireDesktop(); }
+            catch (InvalidOperationException ex) { throw new InputBlockedException(ex.Message); }
+            lastInput = DateTime.UtcNow;
             string kind = a.Str("kind");
-            if (kind == "release") { ReleaseAllInput(); return; }
+            if (kind == "release") { ReleaseAllInput(requireSuccess: true); return; }
             if (kind == "text") { TypeTextIntoFocusedControl(a.Str("text")); return; }
             if (kind is "move" or "down" or "up" or "wheel")
             {
@@ -147,13 +151,15 @@ public static class Native
             throw new ArgumentException("Unknown input kind.");
         }
     }
-    public static void ReleaseAllInput()
+    public static void ReleaseAllInput(bool requireSuccess = false)
     {
         lock (InputLock)
         {
-            foreach (ushort key in HeldKeys) SendInput(1, [new INPUT { type = 1, data = new UNION { key = new KEY { vk = key, flags = 2 } } }], Marshal.SizeOf<INPUT>());
-            foreach (string button in HeldButtons) SendInput(1, [new INPUT { data = new UNION { mouse = new MOUSE { flags = button == "left" ? 4u : button == "right" ? 16u : 64u } } }], Marshal.SizeOf<INPUT>());
-            HeldKeys.Clear(); HeldButtons.Clear();
+            foreach (ushort key in HeldKeys.ToArray())
+                if (SendInput(1, [new INPUT { type = 1, data = new UNION { key = new KEY { vk = key, flags = 2 } } }], Marshal.SizeOf<INPUT>()) == 1) HeldKeys.Remove(key);
+            foreach (string button in HeldButtons.ToArray())
+                if (SendInput(1, [new INPUT { data = new UNION { mouse = new MOUSE { flags = button == "left" ? 4u : button == "right" ? 16u : 64u } } }], Marshal.SizeOf<INPUT>()) == 1) HeldButtons.Remove(button);
+            if (requireSuccess && (HeldKeys.Count > 0 || HeldButtons.Count > 0)) throw new InputBlockedException("Windows has not released held input; return to the interactive desktop.");
         }
     }
     public static object Screenshot()

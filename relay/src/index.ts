@@ -9,6 +9,7 @@ type SocketState = {
   bytes: number;
   generation: string;
   name?: string;
+  fingerprint?: string;
   scope?: string;
 };
 const unavailable = () => new Response("Session unavailable", { status: 404 });
@@ -64,13 +65,13 @@ export class ClientDirectory extends DurableObject<RelayEnv> {
     this.ctx.storage.sql.exec("DELETE FROM clients WHERE id NOT IN (SELECT id FROM clients ORDER BY registered DESC LIMIT 32)");
   }
 
-  async list(scope: string): Promise<{ id: string; name: string }[]> {
+  async list(scope: string): Promise<{ id: string; name: string; fingerprint?: string }[]> {
     const rows = this.ctx.storage.sql.exec<{ id: string }>("SELECT id FROM clients").toArray();
     const clients = await Promise.all(rows.map(async ({ id }) => {
-      const name = await this.env.SESSIONS.getByName(id).presence(scope);
-      return name ? { id, name } : null;
+      const peer = await this.env.SESSIONS.getByName(id).presence(scope);
+      return peer ? { id, ...peer } : null;
     }));
-    return clients.filter((client): client is { id: string; name: string } => client !== null);
+    return clients.filter((client): client is { id: string; name: string; fingerprint?: string } => client !== null);
   }
 }
 
@@ -91,6 +92,8 @@ export class SupportSession extends DurableObject<RelayEnv> {
       try { name = decodeURIComponent(request.headers.get("X-Computer-Name") ?? "").trim(); }
       catch { return new Response("Invalid computer name", { status: 400 }); }
       if (name.length > 128 || /[\x00-\x1f\x7f]/.test(name)) return new Response("Invalid computer name", { status: 400 });
+      const fingerprint = request.headers.get("X-Computer-Fingerprint") ?? "";
+      if (fingerprint && !validKey(fingerprint)) return new Response("Invalid computer identity", { status: 400 });
       const key = request.headers.get("X-Session-Key") ?? "";
       if (!validKey(key)) return unavailable();
       const owner = await hash(key);
@@ -104,7 +107,7 @@ export class SupportSession extends DurableObject<RelayEnv> {
       if (!accepted) return unavailable();
       for (const socket of this.ctx.getWebSockets()) this.close(socket, "Agent reconnected");
       const [client, server] = Object.values(new WebSocketPair());
-      this.accept(server, "agent", "", crypto.randomUUID(), scope, name);
+      this.accept(server, "agent", "", crypto.randomUUID(), scope, name, fingerprint || undefined);
       if (name) await this.env.DIRECTORY.getByName(scope === "legacy" ? "private-clients" : `private-clients-${scope}`).register(new URL(request.url).pathname.split("/")[3]);
       server.send(JSON.stringify({ type: "registered", publicIp: request.headers.get("CF-Connecting-IP") ?? "" }));
       return new Response(null, { status: 101, webSocket: client });
@@ -136,18 +139,19 @@ export class SupportSession extends DurableObject<RelayEnv> {
     return unavailable();
   }
 
-  async presence(scope: string): Promise<string | null> {
+  async presence(scope: string): Promise<{ name: string; fingerprint?: string } | null> {
     if ((await this.ctx.storage.get<string>("scope") ?? "legacy") !== scope) return null;
     const socket = this.ctx.getWebSockets("agent").find(s => s.readyState === WebSocket.OPEN);
     if (!socket) return null;
     const state = socket.deserializeAttachment() as SocketState;
     const lastSeen = this.ctx.getWebSocketAutoResponseTimestamp(socket)?.getTime() ?? state.created;
-    return Date.now() - lastSeen < 60000 ? state.name || null : null;
+    return Date.now() - lastSeen < 60000 && state.name
+      ? { name: state.name, ...(state.fingerprint ? { fingerprint: state.fingerprint } : {}) } : null;
   }
 
-  private accept(socket: WebSocket, role: SocketState["role"], channel: string, generation: string, scope: string, name?: string): void {
+  private accept(socket: WebSocket, role: SocketState["role"], channel: string, generation: string, scope: string, name?: string, fingerprint?: string): void {
     this.ctx.acceptWebSocket(socket, [role, `channel:${channel}`]);
-    socket.serializeAttachment({ role, channel, created: Date.now(), window: Date.now(), bytes: 0, generation, scope, name } satisfies SocketState);
+    socket.serializeAttachment({ role, channel, created: Date.now(), window: Date.now(), bytes: 0, generation, scope, name, fingerprint } satisfies SocketState);
   }
 
   webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): void {
@@ -177,6 +181,7 @@ export class SupportSession extends DurableObject<RelayEnv> {
     const peers = state.role === "agent" ? this.ctx.getWebSockets() : this.ctx.getWebSockets(`channel:${state.channel}`);
     for (const peer of peers)
       if (peer.deserializeAttachment()?.generation === state.generation) this.close(peer, reason);
+    this.ctx.waitUntil(this.scheduleCleanup());
   }
 
   private async scheduleCleanup(): Promise<void> {
@@ -184,7 +189,7 @@ export class SupportSession extends DurableObject<RelayEnv> {
   }
 
   async alarm(): Promise<void> {
-    const sockets = this.ctx.getWebSockets();
+    const sockets = this.ctx.getWebSockets().filter(socket => socket.readyState === WebSocket.OPEN);
     if (!sockets.length) { await this.ctx.storage.deleteAll(); return; }
     let pendingController = false;
     for (const socket of sockets) {

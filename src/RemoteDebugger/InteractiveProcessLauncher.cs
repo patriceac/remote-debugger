@@ -14,6 +14,12 @@ internal static class InteractiveProcessLauncher
     private const int TokenPrimary = 1;
 
     public static int Start(int sessionId, string expectedUserSid, string executable, IReadOnlyList<string> arguments, string workingDirectory)
+        => StartCore(sessionId, expectedUserSid, executable, arguments, workingDirectory, false);
+
+    internal static int StartInputHelper(int sessionId, string expectedUserSid, string pipeName) =>
+        StartCore(sessionId, expectedUserSid, SupportPlatformPaths.ServiceExecutable, ["--input-helper", pipeName], SupportPlatformPaths.InstallDirectory, true);
+
+    private static int StartCore(int sessionId, string expectedUserSid, string executable, IReadOnlyList<string> arguments, string workingDirectory, bool inputHelper)
     {
         if (sessionId <= 0) throw new ArgumentException("An interactive session is required.");
         if (!WTSQueryUserToken((uint)sessionId, out var sessionToken)) throw new Win32Exception(Marshal.GetLastWin32Error(), "Cannot obtain the original interactive user token.");
@@ -22,10 +28,14 @@ internal static class InteractiveProcessLauncher
             using var identity = new WindowsIdentity(sessionToken.DangerousGetHandle());
             if (!string.Equals(identity.User?.Value, expectedUserSid, StringComparison.OrdinalIgnoreCase))
                 throw new UnauthorizedAccessException("Interactive session user changed during update.");
-            if (!DuplicateTokenEx(sessionToken, TokenAllAccess, IntPtr.Zero, SecurityImpersonation, TokenPrimary, out var primary))
+            using var serviceIdentity = WindowsIdentity.GetCurrent();
+            if (inputHelper && !serviceIdentity.IsSystem) throw new UnauthorizedAccessException("Only the provisioned service can launch interactive input.");
+            if (!DuplicateTokenEx(inputHelper ? serviceIdentity.AccessToken : sessionToken, TokenAllAccess, IntPtr.Zero, SecurityImpersonation, TokenPrimary, out var primary))
                 throw new Win32Exception(Marshal.GetLastWin32Error(), "Cannot duplicate the interactive user token.");
             using (primary)
             {
+                if (inputHelper && !SetTokenInformation(primary, 12, ref sessionId, sizeof(int)))
+                    throw new Win32Exception(Marshal.GetLastWin32Error(), "Cannot bind input to the authorized desktop session.");
                 if (!CreateEnvironmentBlock(out IntPtr environment, primary, false))
                     throw new Win32Exception(Marshal.GetLastWin32Error(), "Cannot create the interactive user environment.");
                 try
@@ -95,6 +105,9 @@ internal static class InteractiveProcessLauncher
 
     [DllImport("advapi32.dll", SetLastError = true)]
     private static extern bool DuplicateTokenEx(SafeAccessTokenHandle existing, uint desiredAccess, IntPtr attributes, int impersonationLevel, int tokenType, out SafeAccessTokenHandle token);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool SetTokenInformation(SafeAccessTokenHandle token, int informationClass, ref int information, int length);
 
     [DllImport("userenv.dll", SetLastError = true)]
     private static extern bool CreateEnvironmentBlock(out IntPtr environment, SafeAccessTokenHandle token, bool inherit);

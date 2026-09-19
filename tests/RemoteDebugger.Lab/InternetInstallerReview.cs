@@ -20,6 +20,15 @@ internal sealed partial class LabForm
         Pass("installer.fresh_profile", "Internet settings are absent before installation");
         try
         {
+            string installedDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "RemoteDebugger");
+            if (scope == "runtime")
+            {
+                string customDirectory = Path.Combine(output, "unsupported-installation");
+                int rejected = await RunSetupAsync(installer, "/DIR=" + customDirectory, "install-rejected.log");
+                if (rejected == 0 || File.Exists(Path.Combine(customDirectory, "RemoteDebugger.exe")) || File.Exists(Path.Combine(installedDirectory, "RemoteDebugger.exe")))
+                    throw new IOException("The custom installation directory was not rejected before copying application files.");
+                Pass("installer.fixed_directory", "A custom /DIR is rejected before installing any application files", new { exitCode = rejected });
+            }
             var start = new ProcessStartInfo(installer) { UseShellExecute = true, Verb = "runas" };
             foreach (string argument in new[] { "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/LOG=" + Path.Combine(output, "install.log") })
                 start.ArgumentList.Add(argument);
@@ -29,6 +38,14 @@ internal sealed partial class LabForm
             await setup.WaitForExitAsync(timeout.Token);
             if (setup.ExitCode != 0) throw new IOException("The private installer failed with exit code " + setup.ExitCode);
             Pass("installer.completed", "The signed private installer completes without interactive setup", new { sha256 = await HashFileAsync(installer) });
+
+            string installedApp = Path.Combine(installedDirectory, "RemoteDebugger.exe");
+            string startup = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Startup), "Remote Debugger.lnk");
+            string menu = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "Remote Debugger.lnk");
+            if (!File.Exists(installedApp) || !File.Exists(startup) || !File.Exists(menu) || !File.Exists(Path.Combine(installedDirectory, "build-info.json")))
+                throw new IOException("The protected application, build identity, or desktop shortcuts are missing.");
+            if (Directory.EnumerateFiles(installedDirectory, "*.rdrelay").Any()) throw new IOException("The imported encrypted profile was not removed from the installation directory.");
+            Pass("installer.original_user_integration", "The protected Release includes build identity, machine Start menu and initiating user startup shortcuts");
 
             string pendingSetup = new SecurityMigrationStore(Vault.DefaultRoot).PendingSetupPath;
             if (File.Exists(pendingSetup))
@@ -44,6 +61,15 @@ internal sealed partial class LabForm
                 CaptureDesktop("installed-passphrase-required.png", focusProduct: false);
                 if (InternetSettings.Load(Vault.DefaultRoot) != null) throw new IOException("First launch silently authorized access.");
                 Pass("installer.passphrase_required", "The installed Release automatically requests the passphrase on first normal launch");
+                if (scope == "runtime")
+                {
+                    await CleanupLoopbackProcessesAsync();
+                    int removed = await RunSetupAsync(Path.Combine(installedDirectory, "unins000.exe"), "", "uninstall.log");
+                    if (removed != 0 || File.Exists(installedApp) || File.Exists(startup) || File.Exists(menu) || Directory.Exists(SupportPlatformPaths.InstallDirectory))
+                        throw new IOException("Uninstall did not remove application, support and shortcut files.");
+                    if (!File.Exists(pendingSetup)) throw new IOException("Uninstall removed personal setup data.");
+                    Pass("installer.uninstall", "Uninstall removes application and shortcuts while preserving personal setup data", new { exitCode = removed });
+                }
                 await FinishAsync(); return;
             }
 
@@ -53,7 +79,6 @@ internal sealed partial class LabForm
                 throw new IOException("Installed internet settings contain a plaintext access key.");
             Pass("installer.protected_settings", "The current user can load the automatically imported DPAPI-protected settings", new { settings.RelayUrl });
 
-            string installedDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "RemoteDebugger");
             application = Path.Combine(installedDirectory, "RemoteDebugger.exe");
             if (!File.Exists(application)) throw new IOException("The Program Files Release executable is missing.");
             string legacyDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Remote Debugger");
@@ -65,7 +90,7 @@ internal sealed partial class LabForm
                 throw new IOException("The installer left its plaintext relay profile on disk.");
             Pass("installer.profile_cleanup", "The embedded plaintext profile is removed after import and is absent from installed files");
 
-            string shortcut = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "Remote Debugger", "Remote Debugger.lnk");
+            string shortcut = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "Remote Debugger.lnk");
             using var uninstall = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64)
                 .OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\{B12489BE-DF12-4DD2-AFD4-FB82B032BE05}_is1");
             if (!File.Exists(shortcut) || uninstall == null) throw new IOException("Machine Start menu or uninstall registration is missing.");
@@ -158,6 +183,18 @@ internal sealed partial class LabForm
             await FinishAsync();
         }
         finally { await CleanupLoopbackProcessesAsync(); }
+    }
+
+    private async Task<int> RunSetupAsync(string executable, string extraArgument, string logName)
+    {
+        var start = new ProcessStartInfo(executable) { UseShellExecute = true, Verb = "runas" };
+        foreach (string argument in new[] { "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/LOG=" + Path.Combine(output, logName) }) start.ArgumentList.Add(argument);
+        if (extraArgument.Length > 0) start.ArgumentList.Add(extraArgument);
+        using var process = Process.Start(start) ?? throw new IOException("Installer process did not start.");
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(stop.Token);
+        timeout.CancelAfter(TimeSpan.FromSeconds(180));
+        await process.WaitForExitAsync(timeout.Token);
+        return process.ExitCode;
     }
 
     private async Task WaitForHostDemonstrationAsync()

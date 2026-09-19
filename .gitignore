@@ -7,6 +7,7 @@ TestResults/
 
 # Local sessions and diagnostic captures
 evidence/
+.codex-remote-attachments/
 .tmp*
 
 # Local credentials and editor state

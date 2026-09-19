@@ -8,5 +8,5 @@ public static class PowerHoldPolicy
     /// keeps the machine awake while connected and during its reconnect grace.
     /// </summary>
     public static bool ShouldHoldForAgent(SupportSessionSnapshot session) =>
-        session.HasPaired && session.BinaryMatched && (session.State is "connected" or "reconnecting");
+        session.HasPaired && (session.State is "connected" or "synchronizing" or "reconnecting");
 }

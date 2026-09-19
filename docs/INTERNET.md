@@ -1,6 +1,6 @@
 # Internet support
 
-Internet mode uses HTTPS/WebSockets (port 443) for discovery, pairing and relay fallback. After the authenticated pairing handshake, the controller asks the agent for direct LAN and public-IP candidates and probes them over the endpoint's TLS port. A successful probe is saved and all later RPC, screen, input and transfer traffic uses the direct TCP path; the relay remains an automatic fallback if that path becomes unreachable. No VPN, router port forwarding, or incoming Windows firewall rule is required for the relay. When the relay is unavailable, the app automatically falls back to the local UDP/TCP path if local support has been provisioned.
+Discovery queries LAN and the private relay together and prefers LAN results for the same certificate identity. A private LAN pair uses the current invitation and protected pairing secret directly, without a relay handshake. Reachable authenticated LAN candidates take priority over public-IP candidates; HTTPS/WebSockets on port 443 provide rendezvous and fallback when direct TCP is unavailable. RPC, screen, input, updates and file transfers share the same pinned connection policy. Failed direct endpoints have a two-minute cooldown; relay connections are reconsidered for direct routing once a minute and after network changes. Existing streams switch at their next safe connection boundary. No VPN, port forwarding or incoming firewall rule is required for relay use.
 
 ## Set up your devices
 

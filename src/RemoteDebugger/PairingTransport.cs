@@ -21,6 +21,19 @@ internal static class PairingTransport
 {
     public static async Task<Connection> PairAsync(Connection target, string code, CancellationToken ct)
     {
+        if (target.DirectHost.Length > 0 && target.RelayUrl.Length > 0)
+        {
+            using var attempt = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            attempt.CancelAfter(TimeSpan.FromSeconds(5));
+            try { return await PairOnceAsync(target, code, attempt.Token).ConfigureAwait(false); }
+            catch (Exception ex) when (!ct.IsCancellationRequested && ex is IOException or SocketException or AuthenticationException or OperationCanceledException) { }
+            target = target with { DirectHost = "", DirectPort = 0 };
+        }
+        return await PairOnceAsync(target, code, ct).ConfigureAwait(false);
+    }
+
+    private static async Task<Connection> PairOnceAsync(Connection target, string code, CancellationToken ct)
+    {
         if (!PairingExchange.ValidSecret(code)) throw new ArgumentException("Invalid pairing secret.");
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct); deadline.CancelAfter(TimeSpan.FromSeconds(30));
         await using var transport = await ConnectionTransport.OpenAsync(target, deadline.Token).ConfigureAwait(false);

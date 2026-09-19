@@ -852,4 +852,5 @@
   <data name="SecurityRetry" xml:space="preserve"><value>Incomplete — retry</value></data>
   <data name="SecurityStopping" xml:space="preserve"><value>Stopping safely… Saved progress will be kept.</value></data>
   <data name="SecurityStopped" xml:space="preserve"><value>Stopped. You can resume the migration from this window.</value></data>
+  <data name="TransferPaused" xml:space="preserve"><value>Transfer paused. Retry to resume.</value></data>
 </root>

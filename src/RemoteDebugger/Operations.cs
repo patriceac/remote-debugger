@@ -7,14 +7,14 @@ using RemoteDebugger.Core;
 
 namespace RemoteDebugger;
 
-public sealed class Operations
+public sealed partial class Operations
 {
     private static readonly string Version = typeof(Operations).Assembly.GetName().Version?.ToString(3) ?? "unknown";
     public string Root { get; }
     public string Workspace => Path.Combine(Root, "workspace");
     private string Transfers => Path.Combine(Root, "transfers");
     private readonly object historyLock = new();
-    private readonly SemaphoreSlim transferLock = new(1);
+    private readonly SemaphoreSlim[] transferLocks = Enumerable.Range(0, 32).Select(_ => new SemaphoreSlim(1)).ToArray();
     private readonly ConcurrentDictionary<int, string> started = new();
     public MaintenanceSession Maintenance { get; }
     public Operations(string root) { Root = root; Maintenance = new(root); Directory.CreateDirectory(Workspace); Directory.CreateDirectory(Transfers); }
@@ -36,6 +36,7 @@ public sealed class Operations
             case "status": return new { machine = Environment.MachineName, user = Environment.UserName, version = Version, os = Environment.OSVersion.VersionString, workspace = Workspace, elevated = Native.IsElevated(), processId = Environment.ProcessId, agentBinarySha256 = ExecutableIdentity.Sha256 };
             case "history": lock (historyLock) return File.Exists(Path.Combine(Root, "history.jsonl")) ? File.ReadLines(Path.Combine(Root, "history.jsonl")).TakeLast(200).Select(x => JsonSerializer.Deserialize<JsonElement>(x)).ToArray() : [];
             case "upload.begin": case "upload.chunk": case "upload.commit": case "upload.status": case "upload.abort":
+                var transferLock = transferLocks[(int)((uint)StringComparer.Ordinal.GetHashCode(a.Str("transfer")) % 32)];
                 await transferLock.WaitAsync(ct); try { return await UploadAsync(op, a, ct); } finally { transferLock.Release(); }
             case "file.info": return await FileInfoAsync(Resolve(a.Str("path")), ct);
             case "file.read":
@@ -73,7 +74,10 @@ public sealed class Operations
             case "ui.text": Native.TypeText(a.Int("pid"), a.Str("text")); return new { typed = true };
             case "ui.key": Native.Key(a.Int("pid"), a.Str("key")); return new { sent = true };
             case "ui.mouse": Native.Mouse(a.Int("pid"), a.Int("x"), a.Int("y")); return new { clicked = true };
-            case "ui.input": Native.HandleInput(a); return new { sent = true };
+            case "ui.input":
+                if (Maintenance.Enabled && Maintenance.CurrentStatus.Active) await Maintenance.SendInputAsync(a, ct);
+                else Native.HandleInput(a);
+                return new { sent = true };
             case "monitors": return DesktopCapture.Monitors();
             case "screenshot": return DesktopCapture.Capture(a.Int("monitor"), a.Int("maxWidth"), a.Int("quality", 85));
             case "debug.attach": return await Task.Run(() => Native.Debug(a.Int("pid"), Math.Clamp(a.Int("seconds", 3), 1, 30), ct), ct);
@@ -128,8 +132,11 @@ public sealed class Operations
             return new { offset = f.Length };
         }
         string validated = Safety.UnderRoot(Workspace, Path.GetRelativePath(Workspace, upload.Path));
-        var actual = await FileInfoAsync(partial, ct); if (actual.Size != upload.Size || !Safety.Equal(actual.Sha256, upload.Sha256)) throw new IOException("Incomplete transfer or SHA-256 mismatch.");
-        Directory.CreateDirectory(Path.GetDirectoryName(validated)!); File.Move(partial, validated, true); File.Delete(meta); return await FileInfoAsync(validated, ct);
+        var actual = await FileInfoAsync(partial, ct);
+        if (actual.Size != upload.Size) throw new IOException("Incomplete transfer.");
+        if (!Safety.Equal(actual.Sha256, upload.Sha256))
+        { File.Delete(partial); File.Delete(meta); throw new IOException("Upload hash mismatch; retry to restart the transfer."); }
+        Directory.CreateDirectory(Path.GetDirectoryName(validated)!); File.Move(partial, validated, true); File.Delete(meta); return actual with { Path = validated };
     }
     public sealed record BinaryInfo(string Path, long Size, string Sha256, string? FileVersion);
     public static async Task<BinaryInfo> FileInfoAsync(string path, CancellationToken ct)

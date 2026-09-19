@@ -10,8 +10,12 @@ public static class Program
     public static int Main(string[] args)
     {
         if (args.Length == 1 && args[0] == "--platform-service") return SupportService.Run();
+        if (args.Length == 2 && args[0] == "--input-helper") return InteractiveInputBroker.RunHelperAsync(args[1]).GetAwaiter().GetResult();
         if (args.Length == 2 && args[0] == "--support-provision") return SupportInstaller.ExecuteElevated(args[1]);
         if (args.Length == 1 && args[0] == "--installer-shutdown") return SupportInstaller.StopForInstaller();
+        if (args.Length == 1 && args[0] == "--installer-user-cleanup") return SupportInstaller.PrepareOriginalUser();
+        if (args.Length == 1 && args[0] == "--installer-user-startup") return SupportInstaller.CreateOriginalUserStartup();
+        if (args.Length == 1 && args[0] == "--support-uninstall") return SupportInstaller.UninstallSupport();
         if (args.Length == 1 && args[0] == "--support-refresh") return SupportInstaller.RefreshService();
         if (args.Length == 2 && args[0] == "--elevated-job") return ElevatedJob.ExecuteAsync(args[1]).GetAwaiter().GetResult();
         if (args.Length == 2 && args[0] == "--ui-job") { Forms.Application.SetHighDpiMode(Forms.HighDpiMode.PerMonitorV2); return UiAutomationJob.Execute(args[1]); }
@@ -143,9 +147,17 @@ public static class Program
             if (verb == "pair")
             {
                 string fingerprint = Option("--fingerprint"); if (fingerprint.Length != 0 && fingerprint.Replace(":", "").Length != 64) throw new ArgumentException("When supplied, --fingerprint must be a SHA-256 certificate fingerprint.");
-                var client = new RemoteClient(InternetSettings.Target(Option("--host"), int.Parse(Option("--port", "45832")), fingerprint, Option("--data-root", Vault.DefaultRoot)));
-                string secret = client.Connection.RelayUrl.Length != 0
-                    ? InternetSettings.Load(Option("--data-root", Vault.DefaultRoot))!.AuthenticationSecret(client.Connection.Host)
+                string root = Option("--data-root", Vault.DefaultRoot), address = Option("--host");
+                var settings = InternetSettings.Load(root);
+                var nearby = await Discovery.FindAsync(1500, ct.Token);
+                var peer = nearby.FirstOrDefault(p => string.Equals(p.Host, address, StringComparison.OrdinalIgnoreCase) || string.Equals(p.SupportId, address, StringComparison.OrdinalIgnoreCase));
+                if (peer != null && fingerprint.Length > 0 && !Safety.Equal(peer.Fingerprint, fingerprint.ToUpperInvariant().Replace(":", "")))
+                    throw new System.Security.Authentication.AuthenticationException("The selected PC identity changed.");
+                peer ??= new Peer(address, address, int.Parse(Option("--port", "45832")), fingerprint, Option("--support-id", InternetSettings.IsSupportId(address) ? address : ""));
+                if (settings != null && peer.SupportId.Length == 0) throw new InvalidOperationException(UiText.PrivateLanPeerNeedsUpdate);
+                var client = new RemoteClient(InternetSettings.Target(peer, root));
+                string secret = settings != null
+                    ? settings.AuthenticationSecret(peer.SupportId)
                     : (await Console.In.ReadLineAsync(ct.Token) ?? "").Trim();
                 await client.PairAsync(secret, ct.Token);
                 if (client.Connection.RelayUrl.Length > 0)
@@ -209,7 +221,7 @@ public static class Program
             string requestPath = Option("--request"); var request = JsonSerializer.Deserialize<JsonElement>(requestPath == "-" ? await Console.In.ReadToEndAsync(ct.Token) : await File.ReadAllTextAsync(requestPath, ct.Token));
             string op = request.Str("operation"), id = request.Str("id", Guid.NewGuid().ToString());
             if (op is "pair" or "screen.stream") throw new ArgumentException("Use the dedicated pair or stream CLI verb.");
-            await EnsureSynchronizedAsync(remote, ct.Token);
+            if (RequiresSynchronization(op)) await EnsureSynchronizedAsync(remote, ct.Token);
             var pending = remote.CallAsync(op, request.TryGetProperty("args", out var a) ? a : Json.Element(new { }), ct.Token, id, request.Int("timeoutSeconds", 60)); Reply reply;
             try { reply = await pending; }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { try { await remote.CallAsync("cancel", new { id }, seconds: 5); } catch (Exception) { } throw; }
@@ -228,6 +240,9 @@ public static class Program
             lanDiscovery,
             token => relayDiscovery(settings!, token),
             ct);
+
+    internal static bool RequiresSynchronization(string operation) => operation is not
+        ("session.end" or "revoke" or "session.disconnect" or "cancel" or "update.cancel" or "update.resume" or "update.status");
 
     private static async Task EnsureSynchronizedAsync(RemoteClient remote, CancellationToken ct)
     {

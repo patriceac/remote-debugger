@@ -132,6 +132,7 @@ internal sealed partial class LabForm : Forms.Form
                 if (!IsLoopback)
                     await PrepareBrokerProvisioningAsync();
                 if (role == "localization") await LocalizationReviewAsync();
+                else if (role == "input") await PrivilegedInputReviewAsync();
                 else if (role == "languageselection") await LanguageSelectionReviewAsync();
                 else if (role == "singleinstance") await SingleInstanceReviewAsync();
                 else if (role is "loopback" or "loopback-smoke") await LoopbackSmokeAsync();
@@ -1662,6 +1663,7 @@ internal sealed partial class LabForm : Forms.Form
 
     private async Task RunRegressionScenarioAsync(JsonElement status)
     {
+        await ProbeAuditRegressionsAsync();
         if (workspace == null) throw new InvalidOperationException("Status did not return the remote workspace.");
         var versionHashes = new List<string>(); int target = 0;
         for (int version = 1; version <= 2; version++)

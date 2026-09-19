@@ -10,6 +10,14 @@ if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "Version must use MAJOR.MINOR.
 & dotnet publish (Join-Path $projectRoot 'src\RemoteDebugger\RemoteDebugger.csproj') -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none ('-p:Version=' + $Version) -o (Join-Path $artifactRoot 'release')
 if ($LASTEXITCODE -ne 0) { throw 'Release publish failed.' }
 if ($Sign) { & (Join-Path $PSScriptRoot 'Sign-Release.ps1') }
+$sourceCommit = & git -C $projectRoot rev-parse HEAD
+$sourceChanges = & git -C $projectRoot status --porcelain
+[ordered]@{
+    version = $Version
+    sourceCommit = $sourceCommit
+    sourceDirty = [bool]$sourceChanges
+    executableSha256 = (Get-FileHash -LiteralPath (Join-Path $artifactRoot 'release\RemoteDebugger.exe') -Algorithm SHA256).Hash
+} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $artifactRoot 'release\build-info.json') -Encoding utf8
 if ($IncludeLab) {
     $fixtureRoot = Join-Path $artifactRoot 'lab\fixtures'
     New-Item -ItemType Directory -Path (Join-Path $fixtureRoot 'v1'),(Join-Path $fixtureRoot 'v2') -Force | Out-Null

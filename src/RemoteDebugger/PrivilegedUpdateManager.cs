@@ -55,6 +55,7 @@ internal sealed class PrivilegedUpdateManager : IDisposable
 
     public async Task<object> StageAsync(VerifiedProcessIdentity caller, JsonElement args, CancellationToken ct)
     {
+        using var installationLock = SupportPlatformPaths.AcquireUpdateLock();
         string transactionId = args.Str("transactionId");
         if (!Guid.TryParseExact(transactionId, "N", out _)) throw new ArgumentException("Transaction id must be a UUID in N format.");
         string sourcePath = Path.GetFullPath(args.Str("sourcePath"));
@@ -122,6 +123,7 @@ internal sealed class PrivilegedUpdateManager : IDisposable
 
     public async Task<object> ArmAsync(VerifiedProcessIdentity caller, JsonElement args, CancellationToken ct)
     {
+        using var installationLock = SupportPlatformPaths.AcquireUpdateLock();
         string transactionId = args.Str("transactionId");
         var transaction = Load(transactionId);
         if (caller.ProcessId != transaction.ClientProcessId || caller.StartTicks != transaction.ClientStartTicks)
@@ -160,6 +162,7 @@ internal sealed class PrivilegedUpdateManager : IDisposable
 
     public async Task<object> ReportStartupHealthyAsync(VerifiedProcessIdentity caller, JsonElement args, CancellationToken ct)
     {
+        using var installationLock = SupportPlatformPaths.AcquireUpdateLock();
         string transactionId = args.Str("transactionId");
         string ticket = args.Str("ticket");
         var transaction = Load(transactionId);
@@ -181,6 +184,7 @@ internal sealed class PrivilegedUpdateManager : IDisposable
 
     public async Task<object> ReportRemoteHealthyAsync(VerifiedProcessIdentity caller, JsonElement args, CancellationToken ct)
     {
+        using var installationLock = SupportPlatformPaths.AcquireUpdateLock();
         string transactionId = args.Str("transactionId");
         var transaction = Load(transactionId);
         ValidateTicket(transaction, args.Str("ticket"));
@@ -215,6 +219,7 @@ internal sealed class PrivilegedUpdateManager : IDisposable
 
     public async Task<object> CancelAsync(JsonElement args, CancellationToken ct)
     {
+        using var installationLock = SupportPlatformPaths.AcquireUpdateLock();
         string transactionId = args.Str("transactionId");
         bool relaunchPrevious = !args.TryGetProperty("relaunchPrevious", out var relaunch) || relaunch.GetBoolean();
         cancellationRelaunch[transactionId] = relaunchPrevious;

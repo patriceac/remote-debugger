@@ -141,6 +141,11 @@ internal sealed class SupportBrokerHost : IDisposable
                 var request = await Wire.ReadAsync<Request>(pipe, requestTimeout.Token);
                 requestId = request.Id;
                 if (!Guid.TryParse(request.Id, out _)) throw new ArgumentException("Broker request id must be a UUID.");
+                if (request.Operation == "input.open")
+                {
+                    await InteractiveInputBroker.ServeAsync(pipe, caller, request, lifetime);
+                    return;
+                }
                 if (request.Operation == "maintenance.open")
                 {
                     var lease = caller.CreateLease();
@@ -203,6 +208,7 @@ internal sealed class SupportBrokerHost : IDisposable
         registeredApplicationPath = configuration.RegisteredApplicationPath,
         publisherThumbprint = configuration.PublisherThumbprint,
         serviceVersion = configuration.ServiceVersion,
+        interactiveInput = true,
         identityVerified = true,
         processId = caller.ProcessId,
         sessionId = caller.SessionId,
@@ -252,6 +258,7 @@ internal sealed class SupportBrokerHost : IDisposable
     {
         if (Interlocked.Exchange(ref disposed, 1) != 0) return;
         updates.Dispose();
-        clients.Dispose();
+        // Active pipe handlers still release their slots while service cancellation
+        // unwinds. The managed semaphore is collected after those handlers finish.
     }
 }

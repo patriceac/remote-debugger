@@ -22,6 +22,12 @@ internal static class SupportPlatformPaths
     public static string ConfigurationPath => Path.Combine(StateDirectory, "platform.json");
     public static string ProvisioningReceiptPath => Path.Combine(StateDirectory, "provisioning-receipt.json");
     public static string TransactionsDirectory => Path.Combine(StateDirectory, "transactions");
+    public static string UpdateLockPath => Path.Combine(ProductDirectory, "support-update.lock");
+    internal static FileStream AcquireUpdateLock()
+    {
+        _ = PrivilegedPathSafety.RequireUnderNonReparseRoot(UpdateLockPath, ProductDirectory, includeLeaf: File.Exists(UpdateLockPath));
+        return new FileStream(UpdateLockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+    }
 }
 
 internal static class SupportOperationTimeouts

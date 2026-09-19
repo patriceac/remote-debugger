@@ -22,6 +22,19 @@ async function connect(room: string, action: string, ownerKey?: string, name?: s
 afterEach(() => { for (const ws of sockets.splice(0)) ws.close(); });
 
 describe("private encrypted transport relay", () => {
+  it("publishes a stable fingerprint and cleans ownership after the last disconnect", async () => {
+    const room = id(), fingerprint = "e".repeat(64);
+    const headers = { Authorization: `Bearer ${key}`, Upgrade: "websocket", "X-Session-Key": owner, "X-Computer-Name": "PC", "X-Computer-Fingerprint": fingerprint };
+    expect((await SELF.fetch(`https://relay/v1/sessions/${room}/agent`, { headers: { ...headers, "X-Computer-Fingerprint": "invalid" } })).status).toBe(400);
+    const response = await SELF.fetch(`https://relay/v1/sessions/${room}/agent`, { headers });
+    const agent = response.webSocket!; agent.accept(); sockets.push(agent); await receive(agent);
+    const list = await SELF.fetch("https://relay/v1/clients", { headers: { Authorization: `Bearer ${key}` } });
+    expect(await list.json()).toContainEqual({ id: room, name: "PC", fingerprint });
+    agent.close();
+    await expect.poll(() => alarmAt(room)).not.toBeNull();
+    await runDurableObjectAlarm(env.SESSIONS.getByName(room));
+    expect(await runInDurableObject(env.SESSIONS.getByName(room), (_, state) => state.storage.get("owner"))).toBeUndefined();
+  });
   it("isolates migrated computers from every legacy directory and channel request", async () => {
     const room = id();
     const response = await SELF.fetch(`https://relay/v1/sessions/${room}/agent`, {

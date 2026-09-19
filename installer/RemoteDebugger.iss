@@ -14,6 +14,8 @@ AppPublisher={#AppPublisher}
 DefaultGroupName=Remote Debugger
 DisableProgramGroupPage=yes
 DefaultDirName={autopf}\RemoteDebugger
+DisableDirPage=yes
+UsePreviousAppDir=no
 PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -47,17 +49,17 @@ Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 #ifdef RelayProfilePath
 ; Only passphrase-encrypted credentials may be embedded. Import stages ciphertext
 ; for the first-launch unlock; no passphrase is passed to the installer or CLI.
-Source: "{#RelayProfilePath}"; DestName: "RemoteDebugger-Internet.rdrelay"; Flags: dontcopy
+Source: "{#RelayProfilePath}"; DestDir: "{app}"; DestName: "RemoteDebugger-Internet.rdrelay"; Flags: ignoreversion deleteafterinstall
 #endif
 Source: "..\artifacts\release\RemoteDebugger.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\artifacts\release\RemoteDebugger.exe"; DestName: "RemoteDebugger-InstallerHelper.exe"; Flags: dontcopy
 Source: "..\artifacts\release\RemoteDebugger.publisher.cer"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\artifacts\release\build-info.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\docs\*.md"; DestDir: "{app}\docs"; Excludes: "VALIDATION*.md"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{commonprograms}\Remote Debugger"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"
-Name: "{userstartup}\Remote Debugger"; Filename: "{app}\{#AppExeName}"; Parameters: "--startup"; WorkingDir: "{app}"
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,Remote Debugger}"; Flags: nowait postinstall skipifsilent runasoriginaluser
@@ -82,14 +84,27 @@ spanish.InternetSetupFailed=No se pudo guardar la configuración de Internet. Ej
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   HelperPath: String;
-  LegacyPath: String;
-  LegacyUninstaller: String;
   ResultCode: Integer;
 begin
   Result := '';
+  if CompareText(RemoveBackslashUnlessRoot(WizardDirValue), ExpandConstant('{autopf}\RemoteDebugger')) <> 0 then
+  begin
+    Result := 'Remote Debugger requires its protected Program Files directory. Remove the /DIR override.';
+    Exit;
+  end;
   ExtractTemporaryFile('RemoteDebugger-InstallerHelper.exe');
   HelperPath := ExpandConstant('{tmp}\RemoteDebugger-InstallerHelper.exe');
   try
+    if not ExecAsOriginalUser(HelperPath, '--installer-user-cleanup', ExpandConstant('{tmp}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    begin
+      Result := CustomMessage('LegacyUninstallFailed');
+      Exit;
+    end;
+    if ResultCode <> 0 then
+    begin
+      Result := CustomMessage('LegacyUninstallFailed');
+      Exit;
+    end;
     if not Exec(HelperPath, '--installer-shutdown', ExpandConstant('{tmp}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
     begin
       Result := CustomMessage('InstallerShutdownFailed');
@@ -104,30 +119,6 @@ begin
     DeleteFile(HelperPath);
   end;
 
-  LegacyPath := ExpandConstant('{localappdata}\Programs\Remote Debugger');
-  LegacyUninstaller := LegacyPath + '\unins000.exe';
-  if FileExists(LegacyUninstaller) then
-  begin
-    if not ExecAsOriginalUser(LegacyUninstaller,
-      '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS',
-      LegacyPath, SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-    begin
-      Result := CustomMessage('LegacyUninstallFailed');
-      Exit;
-    end;
-    if ResultCode <> 0 then
-    begin
-      Result := CustomMessage('LegacyUninstallFailed');
-      Exit;
-    end;
-  end;
-
-  DeleteFile(ExpandConstant('{userstartup}\Remote Debugger.lnk'));
-  DelTree(ExpandConstant('{userappdata}\Microsoft\Windows\Start Menu\Programs\Remote Debugger'), True, True, True);
-  RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER,
-    'Software\Microsoft\Windows\CurrentVersion\Uninstall\{B12489BE-DF12-4DD2-AFD4-FB82B032BE05}_is1');
-  if DirExists(LegacyPath) and not DelTree(LegacyPath, True, True, True) then
-    Result := CustomMessage('LegacyUninstallFailed');
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -138,8 +129,7 @@ begin
   if CurStep = ssPostInstall then
   begin
 #ifdef RelayProfilePath
-    ExtractTemporaryFile('RemoteDebugger-Internet.rdrelay');
-    ProfilePath := ExpandConstant('{tmp}\RemoteDebugger-Internet.rdrelay');
+    ProfilePath := ExpandConstant('{app}\RemoteDebugger-Internet.rdrelay');
     try
       if not ExecAsOriginalUser(ExpandConstant('{app}\{#AppExeName}'),
         'cli internet-import --file "' + ProfilePath + '"',
@@ -152,6 +142,10 @@ begin
       DeleteFile(ProfilePath);
     end;
 #endif
+    if not ExecAsOriginalUser(ExpandConstant('{app}\{#AppExeName}'),
+      '--installer-user-startup', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+      RaiseException('Unable to create the original user startup shortcut.');
+    if ResultCode <> 0 then RaiseException('Unable to create the original user startup shortcut.');
     if not Exec(ExpandConstant('{app}\{#AppExeName}'),
       '--support-refresh', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
       RaiseException(CustomMessage('SupportRefreshFailed'));
@@ -159,4 +153,13 @@ begin
       RaiseException(CustomMessage('SupportRefreshFailed'));
     Log('Program Files installation and protected support service refresh completed.');
   end;
+end;
+
+function InitializeUninstall(): Boolean;
+var
+  ResultCode: Integer;
+begin
+  Result := Exec(ExpandConstant('{app}\{#AppExeName}'), '--support-uninstall', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Result := Result and (ResultCode = 0);
+  if not Result then MsgBox('Protected support could not be removed. Finish any active update and retry uninstall.', mbError, MB_OK);
 end;

@@ -12,12 +12,12 @@ public sealed class PowerHoldPolicyTests
     }
 
     [Fact]
-    public void SynchronizingAgentMaySleep()
+    public void SynchronizingAgentStaysAwakeDuringTheInitialTransfer()
     {
         var session = new SupportSession();
         session.Pair(binaryMatched: false);
 
-        Assert.False(PowerHoldPolicy.ShouldHoldForAgent(session.Snapshot));
+        Assert.True(PowerHoldPolicy.ShouldHoldForAgent(session.Snapshot));
     }
 
     [Fact]

@@ -7,12 +7,18 @@ administrator approval and writes the single application beneath
 `%ProgramFiles%\RemoteDebugger`, creates a machine Start menu shortcut, and
 registers a machine uninstaller. It removes the legacy per-user installation
 from `%LOCALAPPDATA%\Programs\Remote Debugger` if one is present. It also
-creates a shortcut in the current user's Windows Startup folder, so the app
+creates a shortcut in the initiating user's Windows Startup folder, so the app
 starts in the system tray when that user signs in after boot. Use the tray icon
 to open its window; private support still waits for **Enable support**. The Start
 menu shortcut opens the window normally. The installed app launches at medium
 integrity after the administrator-owned setup completes. The portable single
 executable remains supported and behaves the same way.
+
+The installation directory is fixed; unsupported `/DIR` overrides are rejected
+before files are installed. User migration, profile import and startup integration
+run as the initiating user even when another administrator supplies credentials.
+`build-info.json` records the source commit, whether local changes were present,
+and the signed application SHA-256.
 
 The personal `RemoteDebugger-<version>-Private-Setup.exe` also embeds the private
 encrypted internet setup file. Installation stages ciphertext for a one-time
@@ -47,10 +53,17 @@ verify automatic configuration and first-launch relay registration in Hyper-V.
 
 Inno Setup must be installed or its compiler path supplied with
 `-CompilerPath`. Uninstalling the machine package removes its application files
-and machine Start menu shortcut; the current user's Windows Startup shortcut is
-also removed. Protected support provisioned by **Enable support** is managed
-separately because removing a Windows service and protected ProgramData state
-requires administrator authorization.
+and machine Start menu shortcut, registered user's Startup shortcut, support
+service, firewall rules and protected service state. Personal setup and diagnostic
+data are preserved. Uninstall refuses to interrupt an active executable replacement
+or its health verification; finish or cancel that update first.
+
+The 0.4.13 broker adds a signed input helper in the authorized interactive session
+for elevated windows such as Task Manager. It runs only while administrator
+maintenance is enabled and an input connection is active. Secure Windows desktops
+remain unavailable and report an input permission error. An agent-only update
+does not replace a pre-0.4.13 broker: run the current installer once on those agents
+to enable the new capability. Normal desktop input remains available meanwhile.
 
 Remote Debugger runs the visible support agent in the signed-in user's desktop.
 Silent administrator maintenance and protected executable replacement use a

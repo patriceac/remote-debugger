@@ -14,13 +14,20 @@ internal sealed record SupportProvisionRequest(
     int RequestingProcessId,
     long RequestingProcessStartTicks);
 
-internal static class SupportInstaller
+internal static partial class SupportInstaller
 {
     public static int StopForInstaller()
     {
         try
         {
-            StopKnownApplicationProcesses();
+            if (Native.IsElevated() && File.Exists(SupportPlatformPaths.ConfigurationPath))
+            {
+                using var installationLock = SupportPlatformPaths.AcquireUpdateLock();
+                RequireNoActiveUpdate();
+                StopKnownApplicationProcesses();
+                StopExistingService();
+            }
+            else StopKnownApplicationProcesses();
             return 0;
         }
         catch (Exception ex)
@@ -49,14 +56,23 @@ internal static class SupportInstaller
             _ = new SecurityIdentifier(configuration.RegisteredUserSid);
             _ = AuthenticodeVerifier.VerifyPinnedTrusted(source, configuration.PublisherThumbprint);
 
-            StopExistingService();
+            using var installationLock = SupportPlatformPaths.AcquireUpdateLock();
+            RequireNoActiveUpdate();
             Directory.CreateDirectory(SupportPlatformPaths.InstallDirectory);
             string serviceTemp = SupportPlatformPaths.ServiceExecutable + ".installer.new";
+            string serviceBackup = SupportPlatformPaths.ServiceExecutable + "." + Guid.NewGuid().ToString("N") + ".backup";
+            string configurationBackup = serviceBackup + ".json";
+            _ = PrivilegedPathSafety.RequireUnderNonReparseRoot(serviceTemp, SupportPlatformPaths.ProductDirectory, includeLeaf: File.Exists(serviceTemp));
+            _ = AuthenticodeVerifier.VerifyPinnedTrusted(SupportPlatformPaths.ServiceExecutable, configuration.PublisherThumbprint);
+            File.Copy(SupportPlatformPaths.ServiceExecutable, serviceBackup);
+            File.Copy(SupportPlatformPaths.ConfigurationPath, configurationBackup);
+            bool restoredOrUpdated = false;
             try
             {
                 File.Copy(source, serviceTemp, true);
                 _ = AuthenticodeVerifier.VerifyPinnedTrusted(serviceTemp, configuration.PublisherThumbprint);
-                File.Move(serviceTemp, SupportPlatformPaths.ServiceExecutable, true);
+                StopExistingService();
+                MoveServiceBinary(serviceTemp);
                 var updated = configuration with
                 {
                     ServiceVersion = typeof(Program).Assembly.GetName().Version?.ToString() ?? configuration.ServiceVersion
@@ -65,13 +81,36 @@ internal static class SupportInstaller
                 ConfigureService();
                 RunSc(true, "start", SupportPlatformPaths.ServiceName);
                 WaitForServiceReady();
+                VerifyServicePipe();
                 WriteReceipt(new(true, SupportPlatformPaths.ApplicationExecutable, SupportPlatformPaths.ServiceExecutable,
                     updated.PublisherThumbprint, updated.RegisteredUserSid, "demand", updated.ProvisionedUtc));
+                restoredOrUpdated = true;
                 return 0;
+            }
+            catch (Exception updateError)
+            {
+                try
+                {
+                    StopExistingService();
+                    File.Copy(serviceBackup, serviceTemp, true);
+                    MoveServiceBinary(serviceTemp);
+                    WriteConfiguration(configuration);
+                    ConfigureService();
+                    RunSc(true, "start", SupportPlatformPaths.ServiceName);
+                    WaitForServiceReady();
+                    VerifyServicePipe();
+                    restoredOrUpdated = true;
+                }
+                catch (Exception rollbackError)
+                {
+                    throw new AggregateException($"Support refresh and restoration failed. Recovery files: {serviceBackup}, {configurationBackup}.", updateError, rollbackError);
+                }
+                throw;
             }
             finally
             {
                 DeleteIfExists(serviceTemp);
+                if (restoredOrUpdated) { DeleteIfExists(serviceBackup); DeleteIfExists(configurationBackup); }
             }
         }
         catch (Exception ex)
@@ -79,6 +118,24 @@ internal static class SupportInstaller
             TryWriteMaintenanceError("support-refresh-error.txt", ex);
             return 2;
         }
+    }
+
+    private static void MoveServiceBinary(string source)
+    {
+        var deadline = Stopwatch.StartNew();
+        while (true)
+        {
+            try { File.Move(source, SupportPlatformPaths.ServiceExecutable, true); return; }
+            catch (IOException) when (deadline.Elapsed < TimeSpan.FromSeconds(5)) { Thread.Sleep(100); }
+        }
+    }
+
+    private static void VerifyServicePipe()
+    {
+        using var pipe = new System.IO.Pipes.NamedPipeClientStream(".", SupportPlatformPaths.PipeName,
+            System.IO.Pipes.PipeDirection.InOut, System.IO.Pipes.PipeOptions.Asynchronous);
+        pipe.Connect(10000);
+        SupportPipeIdentity.VerifyServer(pipe);
     }
 
     public static async Task ProvisionAsync(CancellationToken ct)
@@ -197,7 +254,8 @@ internal static class SupportInstaller
                 VerifiedProcessIdentity identity;
                 try { identity = ProcessIdentity.Capture(process.Id); }
                 catch (ArgumentException) { continue; }
-                if (identity.SessionId != sessionId || !string.Equals(identity.UserSid, userSid, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!(Native.IsElevated() && PathsEqual(executablePath, SupportPlatformPaths.ApplicationExecutable)) &&
+                    (identity.SessionId != sessionId || !string.Equals(identity.UserSid, userSid, StringComparison.OrdinalIgnoreCase))) continue;
                 if (process.HasExited) continue;
                 _ = process.CloseMainWindow();
                 if (!process.WaitForExit(5000) && !process.HasExited)

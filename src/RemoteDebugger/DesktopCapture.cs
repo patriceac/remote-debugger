@@ -12,9 +12,19 @@ namespace RemoteDebugger;
 
 public sealed record ScreenFrame(long Sequence, DateTimeOffset CapturedUtc, DesktopGeometry Geometry, int EncodedWidth, int EncodedHeight, double CaptureEncodeMs, string Mime, string Data, double CopyMs = 0, double JpegMs = 0);
 internal sealed record StreamCaptureResult(ScreenFrame? Frame, string Fingerprint);
-internal sealed record CapturedDesktop(Bitmap Bitmap, DateTimeOffset CapturedUtc, DesktopGeometry Geometry, string Fingerprint, double CopyMs) : IDisposable
+internal sealed record CapturedDesktop(Bitmap Bitmap, DateTimeOffset CapturedUtc, DesktopGeometry Geometry, string Fingerprint, double CopyMs, bool OwnsBitmap = true) : IDisposable
 {
-    public void Dispose() => Bitmap.Dispose();
+    public void Dispose() { if (OwnsBitmap) Bitmap.Dispose(); }
+}
+internal sealed class CaptureBuffer : IDisposable
+{
+    private Bitmap? bitmap;
+    public Bitmap Get(Size size)
+    {
+        if (bitmap?.Size != size) { bitmap?.Dispose(); bitmap = new Bitmap(size.Width, size.Height, PixelFormat.Format32bppArgb); }
+        return bitmap;
+    }
+    public void Dispose() => bitmap?.Dispose();
 }
 internal sealed record BitmapCaptureResult(CapturedDesktop? Capture, string Fingerprint);
 internal sealed record EncodedJpeg(ScreenFrame Frame, byte[] Bytes);
@@ -46,14 +56,14 @@ public static class DesktopCapture
         return EncodeJpeg(capture, maxWidth, quality, sequence).Frame;
     }
 
-    internal static StreamCaptureResult CaptureStream(int monitor, int maxWidth, int quality, long sequence, string? previousFingerprint)
+    internal static StreamCaptureResult CaptureStream(int monitor, int maxWidth, int quality, long sequence, string? previousFingerprint, CaptureBuffer? buffer = null)
     {
-        var result = CaptureBitmap(monitor, previousFingerprint);
+        var result = CaptureBitmap(monitor, previousFingerprint, buffer);
         if (result.Capture is not { } capture) return new StreamCaptureResult(null, result.Fingerprint);
         using (capture) return new StreamCaptureResult(EncodeJpeg(capture, maxWidth, quality, sequence).Frame, result.Fingerprint);
     }
 
-    internal static BitmapCaptureResult CaptureBitmap(int monitor, string? previousFingerprint)
+    internal static BitmapCaptureResult CaptureBitmap(int monitor, string? previousFingerprint, CaptureBuffer? buffer = null)
     {
         IntPtr old = SetThreadDpiAwarenessContext(new IntPtr(-4));
         try
@@ -63,16 +73,16 @@ public static class DesktopCapture
             var r = monitor == -1 ? Forms.SystemInformation.VirtualScreen : screens[monitor].Bounds;
             string layoutId = LayoutId(); DateTimeOffset captured = DateTimeOffset.UtcNow;
             double copyStart = sw.Elapsed.TotalMilliseconds;
-            var bmp = new Bitmap(r.Width, r.Height, PixelFormat.Format32bppArgb);
+            var bmp = buffer?.Get(r.Size) ?? new Bitmap(r.Width, r.Height, PixelFormat.Format32bppArgb);
             using (var g = Graphics.FromImage(bmp)) g.CopyFromScreen(r.Location, Point.Empty, r.Size);
             double copyMs = sw.Elapsed.TotalMilliseconds - copyStart;
             string fingerprint = Fingerprint(bmp, r, layoutId);
             if (previousFingerprint != null && string.Equals(previousFingerprint, fingerprint, StringComparison.Ordinal))
             {
-                bmp.Dispose();
+                if (buffer == null) bmp.Dispose();
                 return new BitmapCaptureResult(null, fingerprint);
             }
-            return new BitmapCaptureResult(new CapturedDesktop(bmp, captured, new DesktopGeometry(r.X, r.Y, r.Width, r.Height, layoutId), fingerprint, copyMs), fingerprint);
+            return new BitmapCaptureResult(new CapturedDesktop(bmp, captured, new DesktopGeometry(r.X, r.Y, r.Width, r.Height, layoutId), fingerprint, copyMs, buffer == null), fingerprint);
         }
         finally { SetThreadDpiAwarenessContext(old); }
     }
@@ -93,12 +103,11 @@ public static class DesktopCapture
         return new EncodedJpeg(new ScreenFrame(sequence, capture.CapturedUtc, capture.Geometry, width, height, capture.CopyMs + sw.Elapsed.TotalMilliseconds, "image/jpeg", Convert.ToBase64String(bytes), capture.CopyMs, jpegMs), bytes);
     }
 
-    internal static string Fingerprint(Bitmap bitmap, Rectangle bounds, string layoutId)
+    internal static unsafe string Fingerprint(Bitmap bitmap, Rectangle bounds, string layoutId)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         hash.AppendData(Encoding.UTF8.GetBytes($"{layoutId}|{bounds.X}|{bounds.Y}|{bounds.Width}|{bounds.Height}"));
         var area = new Rectangle(0, 0, bitmap.Width, bitmap.Height);
-        var row = new byte[bitmap.Width * 4];
         var data = bitmap.LockBits(area, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
         try
         {
@@ -107,8 +116,7 @@ public static class DesktopCapture
                 IntPtr address = data.Stride >= 0
                     ? IntPtr.Add(data.Scan0, y * data.Stride)
                     : IntPtr.Add(data.Scan0, (bitmap.Height - 1 - y) * data.Stride);
-                Marshal.Copy(address, row, 0, row.Length);
-                hash.AppendData(row);
+                hash.AppendData(new ReadOnlySpan<byte>(address.ToPointer(), bitmap.Width * 4));
             }
         }
         finally { bitmap.UnlockBits(data); }

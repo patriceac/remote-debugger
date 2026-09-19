@@ -41,6 +41,7 @@ public static partial class UiText
     public static string AvailablePcCount => Get(nameof(AvailablePcCount));
     public static string AvailablePcs => Get(nameof(AvailablePcs));
     public static string Cancel => Get(nameof(Cancel));
+    public static string TransferPaused => Get(nameof(TransferPaused));
     public static string CannotReadCheckPath => Get(nameof(CannotReadCheckPath));
     public static string CannotReadFolder => Get(nameof(CannotReadFolder));
     public static string CaptureMetrics => Get(nameof(CaptureMetrics));

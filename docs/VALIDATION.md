@@ -1,5 +1,35 @@
 # Validation record
 
+## 0.4.13 — audit fixes
+
+September 19, 2026: Luna Max executed **172 Core tests, 141 Windows platform tests
+and 8 relay tests**, all passing; TypeScript checking also passed. Coding and test
+implementation were performed by the primary agent.
+
+Isolated request `executable-test-20260919T032611390Z-3a09c462` passed all **57
+required application checks** on signed Release
+`F925D58A07DEA6BDB0C624EA1E8C0E83831E60671C78249C101BB7EE20311928`.
+Both 32 MiB binary transfers resumed after cancellation at a 2 MiB offset and
+verified exact hashes. The remaining upload took 1.33 seconds and download 0.19
+seconds in a single VM over loopback; these are not physical LAN/WAN benchmarks.
+An unchanged adaptive stream emitted one image, then a second after explicit
+refresh. Five-minute renewal, stale geometry rejection, hang/crash recovery and
+diagnostic/debugging workflows passed. Broker and guest harnesses succeeded,
+the worker ended Off, process/disk cleanup passed and no warnings were recorded.
+Later changes cover broker capability gating, input-helper teardown and installer
+recovery; that runtime result does not qualify those later changes.
+
+Installer request `executable-test-20260919T033254705Z-f0d4c6c7` had a successful
+harness and cleanup but failed its application assertion: Windows refused the
+initial elevation with error 1223 before installation. Provisioned input request
+`executable-test-20260919T034056686Z-81f63df3` was not evaluated because the protected
+broker configuration disables `RemoteDebuggerProvisionV1`. Consequently elevated
+Task Manager clicks, service refresh/rollback, and the new installer path/user/
+uninstall checks remain unqualified at runtime. Their focused Lab checks are
+available for a broker with the required capabilities. No host execution fallback
+or broker configuration change was made. Raw evidence is retained under
+`D:\Disk\VMs\Codex-Harness\Live\Broker\Results\<request-id>`.
+
 ## 0.3.0 — Windows startup and VM handoff
 
 September 17, 2026: **214 .NET unit tests pass** (154 Core, 60 platform). The installer now creates a current-user Windows Startup shortcut with `--startup`; that launch stays in the system tray and does not enable support. A normal Start menu launch continues to open the window. The signed Release executable has SHA-256 `0E1E8093C97ECA7304C81D3FBD7486B9EB4E490715D1649CF9F19980D3C83B5F`, and the private installer has SHA-256 `9EBF7F1E7C784812D6782ABFAA6F1DDC183817BFEDA59CE3A1E573BB9A7DCB71`.
