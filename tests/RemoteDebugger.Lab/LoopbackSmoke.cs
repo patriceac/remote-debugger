@@ -158,6 +158,13 @@ internal sealed partial class LabForm
             await FinishAsync();
             return;
         }
+        if (role == "loopbackeconomy")
+        {
+            await ProbeLoopbackMinimizeRestoreAsync();
+            CaptureDesktop("loopback-controller-economy-minimize.png");
+            await FinishAsync();
+            return;
+        }
         await ProbeAutoDataAsync();
         await CaptureLoopbackMinimumSizeAsync();
         await VerifyContinuousViewingAsync();

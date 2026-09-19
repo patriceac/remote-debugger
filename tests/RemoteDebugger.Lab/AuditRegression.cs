@@ -113,6 +113,7 @@ internal sealed partial class LabForm
             if (!root.TryGetCurrentPattern(WindowPattern.Pattern, out var pattern) || pattern is not WindowPattern state)
                 throw new InvalidOperationException("The loopback controller did not expose WindowPattern.");
             window = state;
+            var pauseButton = Element("pauseViewing");
 
             var before = await WaitForLiveEvidenceAsync(30);
             if (!before.BadgeVisible || !before.TelemetryVisible)
@@ -120,8 +121,8 @@ internal sealed partial class LabForm
 
             state.SetWindowVisualState(WindowVisualState.Minimized);
             await WaitForUiAsync(() => state.Current.WindowVisualState == WindowVisualState.Minimized, 10);
-            await WaitForUiAsync(IsResumeViewingButton, 10);
-            bool minimizedPaused = state.Current.WindowVisualState == WindowVisualState.Minimized && IsResumeViewingButton();
+            await WaitForUiAsync(() => IsResumeViewingButton(pauseButton), 10);
+            bool minimizedPaused = state.Current.WindowVisualState == WindowVisualState.Minimized && IsResumeViewingButton(pauseButton);
 
             state.SetWindowVisualState(WindowVisualState.Normal);
             await WaitForUiAsync(() => state.Current.WindowVisualState == WindowVisualState.Normal, 10);
@@ -130,14 +131,14 @@ internal sealed partial class LabForm
             bool sessionAfterRestore = heartbeat.ValueKind == JsonValueKind.Object;
 
             Click("pauseViewing");
-            await WaitForUiAsync(IsResumeViewingButton, 10);
+            await WaitForUiAsync(() => IsResumeViewingButton(pauseButton), 10);
             state.SetWindowVisualState(WindowVisualState.Minimized);
             await WaitForUiAsync(() => state.Current.WindowVisualState == WindowVisualState.Minimized, 10);
             state.SetWindowVisualState(WindowVisualState.Normal);
             await WaitForUiAsync(() => state.Current.WindowVisualState == WindowVisualState.Normal, 10);
             await Task.Delay(500, stop.Token);
-            string pauseButton = TryValue("pauseViewing"), pauseOverlay = TryValue("streamOverlay");
-            bool pauseIntentPreserved = IsResumeViewingButton()
+            string pauseButtonText = Value(pauseButton), pauseOverlay = TryValue("streamOverlay");
+            bool pauseIntentPreserved = IsResumeViewingButton(pauseButton)
                 && FindVisibleId(ContractId("liveBadge")) == null;
             var pausedHeartbeat = Data(await CallAsync("session.heartbeat"));
             bool sessionWhilePaused = pausedHeartbeat.ValueKind == JsonValueKind.Object;
@@ -149,7 +150,7 @@ internal sealed partial class LabForm
                 sessionAfterRestore,
                 pauseIntentPreserved,
                 sessionWhilePaused,
-                pauseButton,
+                pauseButton = pauseButtonText,
                 pauseOverlay,
                 restoredTelemetry = restored.TelemetryText
             };
@@ -174,9 +175,11 @@ internal sealed partial class LabForm
         }
     }
 
-    private bool IsResumeViewingButton()
+    private bool IsResumeViewingButton(AutomationElement? button = null)
     {
-        string actual = TryValue("pauseViewing");
+        string actual;
+        try { actual = button == null ? TryValue("pauseViewing") : Value(button); }
+        catch (ElementNotAvailableException) { return false; }
         return new[] { "en", "fr", "es" }
             .Select(language => UiText.Get(nameof(UiText.Resume), CultureInfo.GetCultureInfo(language)))
             .Any(expected => actual.Equals(expected, StringComparison.Ordinal));
