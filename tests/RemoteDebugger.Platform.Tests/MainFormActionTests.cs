@@ -45,4 +45,13 @@ public sealed class MainFormActionTests
     {
         Assert.Equal(expected, MainForm.CanUpdateClient(supportSession, hasClient, pairingBusy, clientUpdateBusy, terminating));
     }
+
+    [Theory]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, false)]
+    public void SavedConnectedSessionSynchronizesOnlyWhenItsBinaryDiffers(bool connected, bool binaryMatched, bool expected)
+    {
+        Assert.Equal(expected, MainForm.ShouldSynchronizeSavedSession(connected, binaryMatched));
+    }
 }

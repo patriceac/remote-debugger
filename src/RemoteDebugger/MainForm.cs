@@ -673,15 +673,32 @@ public sealed partial class MainForm : Forms.Form
     {
         RemoteClient? target = client;
         if (target == null || supportSession || quitting) return;
-        int generation = operationGeneration;
+        int generation = ++operationGeneration;
+        sessionGeneration++;
+        var resumeCts = new CancellationTokenSource();
+        pairingLifetime = resumeCts;
+        pairingBusy = true;
+        synchronizingAgent = false;
+        UpdateHeader(); RefreshControllerControls(); RefreshFooter();
         try
         {
-            JsonElement heartbeat = await target.HeartbeatAsync();
+            JsonElement heartbeat = await target.HeartbeatAsync(resumeCts.Token);
             bool connected = heartbeat.TryGetProperty("session", out var session) &&
                 session.TryGetProperty("connected", out var connectedValue) && connectedValue.GetBoolean();
             bool matched = heartbeat.TryGetProperty("binaryMatched", out var matchedValue) && matchedValue.GetBoolean();
-            if (generation != operationGeneration || !ReferenceEquals(target, client) || !connected || !matched) return;
-            supportSession = true; heartbeatHealthy = true; powerHold ??= PowerHold.Acquire();
+            if (generation != operationGeneration || !ReferenceEquals(target, client) || !connected) return;
+            if (ShouldSynchronizeSavedSession(connected, matched))
+            {
+                synchronizingAgent = true;
+                connectionState.SetText(() => UiText.AgentSynchronizing); SetFooterMessage(() => UiText.AgentSynchronizing); SetFooterDetail(() => UiText.TransferValidateVersion);
+                ShowUpdateProgress(new AgentUpdateProgress("idle", 0, 0)); UpdateHeader(); RefreshControllerControls(); RefreshFooter();
+                using var synchronization = CancellationTokenSource.CreateLinkedTokenSource(resumeCts.Token);
+                synchronization.CancelAfter(TimeSpan.FromSeconds(SupportOperationTimeouts.ControllerSynchronizationSeconds));
+                try { await SynchronizeClientAsync(target, generation, synchronization.Token); }
+                catch (OperationCanceledException) when (!resumeCts.IsCancellationRequested) { throw new TimeoutException(UiText.SynchronizationTimedOut); }
+            }
+            if (generation != operationGeneration || !ReferenceEquals(target, client)) return;
+            synchronizingAgent = false; updateProgressArea.Visible = false; supportSession = true; heartbeatHealthy = false; powerHold ??= PowerHold.Acquire();
             SelectRole(1); SelectControllerPage(1); code.SetText("");
             connectionState.SetText(() => UiText.SessionEstablished); SetFooterMessage(() => UiText.ActiveVersionsSynchronized); SetFooterDetail(() => UiText.LoadingMeasurements); RefreshFooter();
             StartHeartbeat(); _ = LoadInitialRemoteStateAsync(generation);
@@ -694,7 +711,29 @@ public sealed partial class MainForm : Forms.Form
                 SetFooterMessage(() => UiText.ConnectionFailed); footerDetail = ex.Message; RefreshFooter();
             }
         }
+        finally
+        {
+            bool ownsResume = ReferenceEquals(pairingLifetime, resumeCts);
+            if (ownsResume)
+            {
+                if (updateProgressArea.Visible && !supportSession)
+                {
+                    updateProgressText.SetText(() => UiText.SynchronizationInterrupted);
+                    updateProgressText.ForeColor = DestructiveText; updateProgressFill.BackColor = DestructiveText;
+                }
+                pairingLifetime = null;
+                synchronizingAgent = false;
+                resumeCts.Dispose();
+            }
+            if (ownsResume || generation == operationGeneration)
+            {
+                pairingBusy = false;
+                UpdateHeader(); RefreshControllerControls(); RefreshFooter();
+            }
+        }
     }
+
+    internal static bool ShouldSynchronizeSavedSession(bool connected, bool binaryMatched) => connected && !binaryMatched;
 
     private void OnManagedRelaunchRequested()
     {

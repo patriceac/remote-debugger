@@ -174,12 +174,14 @@ public static class Program
             }
             if (verb == "screenshot")
             {
+                await EnsureSynchronizedAsync(remote, ct.Token);
                 var elapsed = System.Diagnostics.Stopwatch.StartNew(); var data = RemoteClient.Require(await remote.CallAsync("screenshot", new { monitor = int.Parse(Option("--monitor", "0")) }, ct.Token));
                 var frame = data.Deserialize<ScreenFrame>(Json.Options)!; string file = Option("--file"); await File.WriteAllBytesAsync(file, Convert.FromBase64String(frame.Data), ct.Token);
                 Console.WriteLine(Json.Text(new { ok = true, file, frame.CapturedUtc, frame.Geometry, frame.EncodedWidth, frame.EncodedHeight, frame.CaptureEncodeMs, frame.CopyMs, frame.JpegMs, roundTripMs = elapsed.Elapsed.TotalMilliseconds })); return 0;
             }
             if (verb == "stream")
             {
+                await EnsureSynchronizedAsync(remote, ct.Token);
                 int seconds = Math.Clamp(int.Parse(Option("--seconds", "10")), 1, 290), fps = StreamPolicy.ClampFps(int.Parse(Option("--fps", StreamPolicy.MaximumFps.ToString())));
                 int presentationDelayMs = Math.Clamp(int.Parse(Option("--present-delay-ms", "0")), 0, 5000);
                 var presentedSequences = new List<long>();
@@ -201,12 +203,13 @@ public static class Program
                 var report = new { ok = true, transport = "TLS framed JPEG, receipt ACK, newest pending frame only", requestedFps = fps, frames, presentationDelayMs, presentedSequences, framesSkipped = last.Sequence + 1 - frames, distinctFrames = hashes.Count, durationSeconds = elapsed.Elapsed.TotalSeconds, receivedFps = frames / elapsed.Elapsed.TotalSeconds, estimatedApplicationMbitPerSecond = bytes * 8 / elapsed.Elapsed.TotalSeconds / 1e6, meanCaptureEncodeMs = capture.Average(), meanCopyMs = copies.Average(), meanJpegMs = jpegs.Average(), interFrameP95Ms = gaps.Length == 0 ? 0 : gaps[(int)((gaps.Length - 1) * .95)], controllerCpuPercentTotalMachine = (self.TotalProcessorTime - cpu).TotalMilliseconds / elapsed.Elapsed.TotalMilliseconds / Environment.ProcessorCount * 100, last.Geometry, last.EncodedWidth, last.EncodedHeight, decodeAndDisplayMeasured = false };
                 string reportPath = Option("--report"); if (reportPath.Length > 0) await File.WriteAllTextAsync(reportPath, Json.Text(report), ct.Token); Console.WriteLine(Json.Text(report)); return 0;
             }
-            if (verb == "upload") { var result = await remote.UploadAsync(Option("--file"), Option("--path"), ct.Token); Console.WriteLine(Json.Text(new { ok = true, data = result })); return 0; }
-            if (verb == "download") { await remote.DownloadAsync(Option("--path"), Option("--file"), ct.Token); Console.WriteLine(Json.Text(new { ok = true, file = Option("--file") })); return 0; }
+            if (verb == "upload") { await EnsureSynchronizedAsync(remote, ct.Token); var result = await remote.UploadAsync(Option("--file"), Option("--path"), ct.Token); Console.WriteLine(Json.Text(new { ok = true, data = result })); return 0; }
+            if (verb == "download") { await EnsureSynchronizedAsync(remote, ct.Token); await remote.DownloadAsync(Option("--path"), Option("--file"), ct.Token); Console.WriteLine(Json.Text(new { ok = true, file = Option("--file") })); return 0; }
             if (verb != "call") throw new ArgumentException("Unknown CLI verb.");
             string requestPath = Option("--request"); var request = JsonSerializer.Deserialize<JsonElement>(requestPath == "-" ? await Console.In.ReadToEndAsync(ct.Token) : await File.ReadAllTextAsync(requestPath, ct.Token));
             string op = request.Str("operation"), id = request.Str("id", Guid.NewGuid().ToString());
             if (op is "pair" or "screen.stream") throw new ArgumentException("Use the dedicated pair or stream CLI verb.");
+            await EnsureSynchronizedAsync(remote, ct.Token);
             var pending = remote.CallAsync(op, request.TryGetProperty("args", out var a) ? a : Json.Element(new { }), ct.Token, id, request.Int("timeoutSeconds", 60)); Reply reply;
             try { reply = await pending; }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { try { await remote.CallAsync("cancel", new { id }, seconds: 5); } catch (Exception) { } throw; }
@@ -225,4 +228,14 @@ public static class Program
             lanDiscovery,
             token => relayDiscovery(settings!, token),
             ct);
+
+    private static async Task EnsureSynchronizedAsync(RemoteClient remote, CancellationToken ct)
+    {
+        JsonElement heartbeat = await remote.HeartbeatAsync(ct);
+        bool connected = heartbeat.TryGetProperty("session", out var session) &&
+            session.TryGetProperty("connected", out var connectedValue) && connectedValue.GetBoolean();
+        bool matched = heartbeat.TryGetProperty("binaryMatched", out var matchedValue) && matchedValue.GetBoolean();
+        if (connected && !matched)
+            await SupportPlatform.SynchronizeAgentAsync(remote, ct);
+    }
 }
