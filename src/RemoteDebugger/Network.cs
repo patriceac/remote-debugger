@@ -1000,6 +1000,7 @@ public sealed partial class RemoteClient
     {
         await CloseInputChannelAsync().ConfigureAwait(false);
         await CloseUpdateChannelAsync().ConfigureAwait(false);
+        if (await TryResumeSavedConnectionAsync(ct).ConfigureAwait(false)) return;
         Connection = await PairingTransport.PairAsync(Connection, code, ct).ConfigureAwait(false);
     }
     public bool UsesDirectTransport => Connection.DirectHost.Length > 0;

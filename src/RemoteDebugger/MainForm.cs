@@ -1269,7 +1269,7 @@ public sealed partial class MainForm : Forms.Form
             string privateSupportId = selectedPeer?.SupportId ?? "";
             if (PrivateInternet && privateSupportId.Length == 0 && InternetSettings.IsSupportId(targetAddress)) privateSupportId = targetAddress;
             if (PrivateInternet && privateSupportId.Length == 0) throw new InvalidOperationException(UiText.PrivateLanPeerNeedsUpdate);
-            pairedClient = new RemoteClient(InternetSettings.Target(new Peer(selectedPeer?.Name ?? targetAddress, targetAddress, targetPort, selectedFingerprint, privateSupportId), root)); client = pairedClient; connectionState.SetText(() => UiText.Pairing); SetFooterMessage(() => UiText.Pairing); UpdateHeader(); RefreshFooter();
+            pairedClient = new RemoteClient(InternetSettings.Target(new Peer(selectedPeer?.Name ?? targetAddress, targetAddress, targetPort, selectedFingerprint, privateSupportId), root)) { AdminRoot = root }; client = pairedClient; connectionState.SetText(() => UiText.Pairing); SetFooterMessage(() => UiText.Pairing); UpdateHeader(); RefreshFooter();
             using (var handshake = CancellationTokenSource.CreateLinkedTokenSource(pairingCts.Token))
             {
                 handshake.CancelAfter(TimeSpan.FromSeconds(SupportOperationTimeouts.PairingHandshakeSeconds));
