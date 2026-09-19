@@ -1,6 +1,7 @@
 # Passphrase setup and remote migration
 
-Open **Security** in Remote Debugger on the controlling PC. Choose a strong,
+Quit any running Remote Debugger instance, including its tray instance, then
+launch `RemoteDebugger.exe --security` on the controlling PC. Choose a strong,
 unique passphrase (several random words, at least 16 characters), confirm it,
 and click **Create protected setup**. The Windows account remembers access.
 The passphrase is not hardcoded, sent to the relay, or saved by the app.

@@ -34,9 +34,8 @@ internal sealed partial class LabForm
                 if (peer == null) await Task.Delay(500, stop.Token);
             }
             if (peer == null) throw new IOException("The isolated test agent did not register.");
-            controllerProcess = LaunchInternetProduct(false, controllerRoot); product = controllerProcess;
+            controllerProcess = LaunchInternetProduct(false, controllerRoot, openSecurity: true); product = controllerProcess;
             await WaitUiAsync(); Native.FocusWindow(product.Id);
-            InvokeElement(Find("securitySettings", 5000)!);
             await Task.Delay(700, stop.Token);
             if (!SecurityControl("securityPassphrase").Current.IsPassword) throw new IOException("The passphrase field is not masked.");
             CaptureDesktop("security-setup.png", focusProduct: false);
@@ -100,7 +99,9 @@ internal sealed partial class LabForm
             if (!again.GetProperty("complete").GetBoolean()) throw new IOException("Completed migration was not idempotent.");
             Pass("security.idempotent", "Repeating completed migration leaves the protected PC intact");
             ((WindowPattern)SecurityControl("securityWindow").GetCurrentPattern(WindowPattern.Pattern)).Close();
-            InvokeElement(Find("securitySettings", 5000)!); await Task.Delay(500, stop.Token);
+            controllerProcess.Kill(true); await controllerProcess.WaitForExitAsync(stop.Token);
+            controllerProcess = LaunchInternetProduct(false, controllerRoot, openSecurity: true); product = controllerProcess;
+            await WaitUiAsync(); await Task.Delay(500, stop.Token);
             CaptureDesktop("security-migrated.png", focusProduct: false);
             string freshRoot = Path.Combine(output, "fresh-install");
             InternetSettings.Import(store.ProtectedSetupPath, freshRoot);

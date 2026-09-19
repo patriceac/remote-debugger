@@ -289,9 +289,6 @@ public sealed partial class MainForm : Forms.Form
         var work = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false, Margin = Forms.Padding.Empty, Padding = new Forms.Padding(0, 14, 0, 0), BackColor = Rail };
         work.Controls.Add(controllerNavCaption);
         work.Controls.Add(navConnection); work.Controls.Add(navScreen); work.Controls.Add(navProcesses); work.Controls.Add(navFiles); work.Controls.Add(navDiagnostics);
-        var security = RailSubButton(() => UiText.SecurityTitle, "securitySettings");
-        security.Click += (_, _) => BeginInvoke(ShowSecuritySetup);
-        work.Controls.Add(security);
         layout.Controls.Add(work, 0, 2);
 
         var local = new Forms.Panel { Dock = Forms.DockStyle.Fill };
@@ -1059,26 +1056,17 @@ public sealed partial class MainForm : Forms.Form
 
     private void SelectRole(int index)
     {
-        if (index == 0 && supportSession && agent == null)
-        {
-            // Ending a controller session is asynchronous. Switch only after
-            // the remote grant and held input have been released.
-            roleAgent.Enabled = false;
-            _ = TerminateSupportThenSelectAgentAsync();
-            return;
-        }
+        // Role navigation is presentation-only. Keep a local agent and a remote
+        // controller session alive independently when the user changes views.
         bool roleChanged = index != rolePages.SelectedIndex;
+        bool preserveSessions = ShouldPreserveActiveSessionsOnRoleSwitch(rolePages.SelectedIndex, index,
+            agent != null, supportSession || pairingBusy);
         if (roleChanged)
         {
             pairingLifetime?.Cancel();
+            if (preserveSessions && rolePages.SelectedIndex == 1 && liveStream != null)
+                StopStream(() => UiText.ViewingSuspended);
             InvalidateInputSession();
-        }
-        if (index == 1 && agent != null)
-        {
-            // A machine being used as the visible agent must stop offering its
-            // session before the user enters the controller workspace.
-            _ = StopAgentThenSelectControllerAsync();
-            return;
         }
         rolePages.SelectedIndex = index;
         controllerNavCaption.Visible = index == 1; navConnection.Visible = index == 1; navScreen.Visible = index == 1; navProcesses.Visible = index == 1; navFiles.Visible = index == 1; navDiagnostics.Visible = index == 1;
@@ -1089,22 +1077,9 @@ public sealed partial class MainForm : Forms.Form
             SetFooterDetail(() => UiText.CloseToTrayShort);
             RefreshFooter();
         }
+        if (index == 1 && supportSession && client != null && liveStream == null && controllerPages.SelectedIndex == 1)
+            _ = StartStreamAsync();
         UpdateHeader();
-    }
-
-    private async Task TerminateSupportThenSelectAgentAsync()
-    {
-        await TerminateSupportAsync(selectControllerAfter: false);
-        roleAgent.Enabled = true;
-        if (!quitting) SelectRole(0);
-    }
-
-    private async Task StopAgentThenSelectControllerAsync()
-    {
-        roleController.Enabled = false;
-        bool stopped = await StopAgentAsync();
-        roleController.Enabled = true;
-        if (stopped && !quitting) SelectRole(1);
     }
 
     private void SelectControllerPage(int index)
@@ -1452,7 +1427,7 @@ public sealed partial class MainForm : Forms.Form
             catch (RemoteOperationException ex) when (ex.Code is "access_denied" or "session_ended")
             {
                 if (!ct.IsCancellationRequested && ReferenceEquals(target, client))
-                    await TerminateSupportAsync();
+                    await TerminateControllerSessionAsync(selectControllerAfter: rolePages.SelectedIndex == 1);
                 break;
             }
             catch (Exception ex)
@@ -1845,46 +1820,62 @@ public sealed partial class MainForm : Forms.Form
         if (string.IsNullOrWhiteSpace(selectedFilePath)) { fileState.SetText(() => UiText.SelectFile); return; } using var dialog = new Forms.SaveFileDialog { FileName = Path.GetFileName(selectedFilePath) }; if (dialog.ShowDialog() != Forms.DialogResult.OK) return; try { RequireClient(); await client!.DownloadAsync(selectedFilePath, dialog.FileName); fileState.SetText(() => UiText.DownloadVerified); output.SetText(() => UiText.FileSavedPrefix + dialog.FileName); } catch (Exception ex) { fileState.SetText(() => UiText.DownloadFailedPrefix + ex.Message); }
     }
 
-    private async Task TerminateSupportAsync(bool selectControllerAfter = true)
+    private async Task TerminateSupportAsync()
     {
-        if (terminating) return; terminating = true; operationGeneration++; terminateSession.Enabled = false; SetFooterMessage(() => UiText.EndingSupport); RefreshFooter(); pairingLifetime?.Cancel(); clientUpdateLifetime?.Cancel(); heartbeatLifetime?.Cancel(); action?.Cancel(); resumeViewingOnRestore = false; StopStream(() => UiText.SupportEnded); QueueInput(new { kind = "release" });
-        bool wasAgent = agent != null || rolePages.SelectedIndex == 0;
+        SessionTerminationTarget target = SelectTerminationTarget(rolePages.SelectedIndex == 0,
+            agent != null, client != null && (supportSession || pairingBusy));
+        if (target == SessionTerminationTarget.Agent)
+        {
+            await TerminateAgentSessionAsync();
+            return;
+        }
+        if (target == SessionTerminationTarget.Controller)
+            await TerminateControllerSessionAsync(selectControllerAfter: true);
+    }
+
+    private async Task TerminateAgentSessionAsync()
+    {
+        if (terminating || agent is not { } oldAgent) return;
+        terminating = true; terminateSession.Enabled = false; roleAgent.Enabled = roleController.Enabled = false;
+        SetFooterMessage(() => UiText.EndingSupport); RefreshFooter();
+        bool stopped = true;
+        suppressTerminationEvent = true;
+        try { await oldAgent.TerminateAsync(CancellationToken.None); }
+        catch (Exception ex) { stopped = false; SetFooterDetail(() => UiText.TargetOfflineExpiration); output.SetText(Pretty(new { ok = false, message = ex.Message })); }
+        finally { suppressTerminationEvent = false; }
+        if (stopped && ReferenceEquals(agent, oldAgent))
+            await RestartAgentAfterSupportEndAsync(oldAgent);
+        roleAgent.Enabled = roleController.Enabled = true;
+        terminateSession.Enabled = true; terminating = false;
+        RefreshUiState();
+        if (stopped)
+        {
+            SetFooterMessage(() => UiText.WaitingForController); SetFooterDetail(() => UiText.CloseToTray); RefreshFooter();
+        }
+    }
+
+    private async Task TerminateControllerSessionAsync(bool selectControllerAfter)
+    {
+        if (terminating || (client == null && !pairingBusy)) return;
+        terminating = true; operationGeneration++; terminateSession.Enabled = false; roleAgent.Enabled = roleController.Enabled = false;
+        SetFooterMessage(() => UiText.EndingSupport); RefreshFooter();
+        pairingLifetime?.Cancel(); clientUpdateLifetime?.Cancel(); heartbeatLifetime?.Cancel(); action?.Cancel(); resumeViewingOnRestore = false;
+        StopStream(() => UiText.SupportEnded); QueueInput(new { kind = "release" });
         RemoteClient? oldClient = client;
-        sessionGeneration++;
-        supportSession = false;
-        heartbeatHealthy = false;
-        bool localAgentStopped = true;
+        sessionGeneration++; supportSession = false; heartbeatHealthy = false;
         try
         {
-            if (agent != null)
-            {
-                suppressTerminationEvent = true;
-                try { await agent.TerminateAsync(CancellationToken.None); }
-                catch { localAgentStopped = false; throw; }
-                finally { suppressTerminationEvent = false; }
-            }
-            else if (oldClient != null)
+            if (oldClient != null)
             {
                 await ReleaseHeldInputAsync(oldClient);
                 await oldClient.EndSessionAsync(CancellationToken.None);
             }
         }
         catch (Exception ex) { SetFooterDetail(() => UiText.TargetOfflineExpiration); output.SetText(Pretty(new { ok = false, message = ex.Message })); }
-        if (!localAgentStopped)
-        {
-            terminateSession.Enabled = true;
-            terminating = false;
-            return;
-        }
         ClearControllerSession();
+        roleAgent.Enabled = roleController.Enabled = true;
         terminateSession.Enabled = true; terminating = false;
-        if (wasAgent && agent != null)
-        {
-            await RestartAgentAfterSupportEndAsync(agent);
-            SetFooterMessage(() => UiText.WaitingForController); SetFooterDetail(() => UiText.CloseToTray); RefreshUiState();
-            return;
-        }
-        if (selectControllerAfter)
+        if (selectControllerAfter && !quitting)
         {
             SelectRole(1); SelectControllerPage(0);
         }
@@ -1907,7 +1898,7 @@ public sealed partial class MainForm : Forms.Form
         volumeSummary.SetText(() => UiText.NoMeasurementsAvailable); output.SetText(""); remoteText.SetText(""); pid.Value = 0;
         streamStatus.SetText(() => UiText.NoActiveConnection);
         connectionState.SetText(() => PrivateInternet ? UiText.SupportEnded : UiText.SupportEndedNewCode);
-        RefreshControllerControls();
+        RefreshControllerControls(); RefreshPowerHold();
     }
 
     private void RequestQuit()
@@ -2069,6 +2060,16 @@ public sealed partial class MainForm : Forms.Form
 
     internal static bool CanUpdateClient(bool supportSession, bool hasClient, bool pairingBusy, bool clientUpdateBusy, bool terminating) =>
         supportSession && hasClient && !pairingBusy && !clientUpdateBusy && !terminating;
+
+    internal static bool ShouldPreserveActiveSessionsOnRoleSwitch(
+        int currentRole, int targetRole, bool agentRunning, bool controllerSessionActive) =>
+        currentRole != targetRole && (agentRunning || controllerSessionActive);
+
+    private enum SessionTerminationTarget { None, Agent, Controller }
+
+    private static SessionTerminationTarget SelectTerminationTarget(bool onAgent, bool agentRunning, bool controllerSessionActive) =>
+        onAgent ? agentRunning ? SessionTerminationTarget.Agent : SessionTerminationTarget.None :
+        controllerSessionActive ? SessionTerminationTarget.Controller : SessionTerminationTarget.None;
 
     private static ProcessSortColumn ProcessColumn(int index) => index switch { 0 => ProcessSortColumn.Pid, 1 => ProcessSortColumn.Name, 2 => ProcessSortColumn.CpuPercentTotalMachine, 3 => ProcessSortColumn.WorkingSetBytes, 4 => ProcessSortColumn.Responding, _ => ProcessSortColumn.Window };
     private static FileSortColumn FileColumn(int index) => index switch { 0 => FileSortColumn.Name, 1 => FileSortColumn.Type, 2 => FileSortColumn.SizeBytes, _ => FileSortColumn.ModifiedUtc };

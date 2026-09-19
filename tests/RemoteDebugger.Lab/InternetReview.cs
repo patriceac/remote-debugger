@@ -10,10 +10,11 @@ namespace RemoteDebugger.Lab;
 
 internal sealed partial class LabForm
 {
-    private Process LaunchInternetProduct(bool isAgent, string dataRoot, bool enableSupport = false)
+    private Process LaunchInternetProduct(bool isAgent, string dataRoot, bool enableSupport = false, bool openSecurity = false)
     {
         var start = new ProcessStartInfo(application) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(application)! };
         if (isAgent && enableSupport) start.ArgumentList.Add("--enable-support");
+        if (openSecurity) start.ArgumentList.Add("--security");
         if (!isAgent)
         {
             start.ArgumentList.Add("--controller");
