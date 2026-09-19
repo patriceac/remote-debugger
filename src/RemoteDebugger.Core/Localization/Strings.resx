@@ -705,6 +705,15 @@
   <data name="Unavailable" xml:space="preserve">
     <value>Unavailable</value>
   </data>
+  <data name="UpdateClient" xml:space="preserve">
+    <value>Update client</value>
+  </data>
+  <data name="UpdateClientConfirmation" xml:space="preserve">
+    <value>The client will be updated to this controller's version. Remote control will pause briefly while it restarts. Continue?</value>
+  </data>
+  <data name="UpdateClientConfirmationTitle" xml:space="preserve">
+    <value>Update client</value>
+  </data>
   <data name="UploadDestination" xml:space="preserve">
     <value>Upload destination</value>
   </data>

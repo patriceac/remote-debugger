@@ -240,6 +240,9 @@ public static partial class UiText
     public static string TrayNotice => Get(nameof(TrayNotice));
     public static string TypeText => Get(nameof(TypeText));
     public static string Unavailable => Get(nameof(Unavailable));
+    public static string UpdateClient => Get(nameof(UpdateClient));
+    public static string UpdateClientConfirmation => Get(nameof(UpdateClientConfirmation));
+    public static string UpdateClientConfirmationTitle => Get(nameof(UpdateClientConfirmationTitle));
     public static string UploadDestination => Get(nameof(UploadDestination));
     public static string UploadFailedPrefix => Get(nameof(UploadFailedPrefix));
     public static string UploadFile => Get(nameof(UploadFile));

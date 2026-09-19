@@ -705,6 +705,15 @@
   <data name="Unavailable" xml:space="preserve">
     <value>Indisponible</value>
   </data>
+  <data name="UpdateClient" xml:space="preserve">
+    <value>Mettre à jour le client</value>
+  </data>
+  <data name="UpdateClientConfirmation" xml:space="preserve">
+    <value>Le client va être mis à jour avec la version de ce contrôleur. Le contrôle à distance sera brièvement interrompu pendant son redémarrage. Continuer ?</value>
+  </data>
+  <data name="UpdateClientConfirmationTitle" xml:space="preserve">
+    <value>Mettre à jour le client</value>
+  </data>
   <data name="UploadDestination" xml:space="preserve">
     <value>Destination des téléversements</value>
   </data>

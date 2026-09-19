@@ -32,4 +32,17 @@ public sealed class MainFormActionTests
     {
         Assert.Equal(expected, MainForm.IsOngoingUpdate(new AgentUpdateProgress(stage, 0, 100)));
     }
+
+    [Theory]
+    [InlineData(true, true, false, false, false, true)]
+    [InlineData(false, true, false, false, false, false)]
+    [InlineData(true, false, false, false, false, false)]
+    [InlineData(true, true, true, false, false, false)]
+    [InlineData(true, true, false, true, false, false)]
+    [InlineData(true, true, false, false, true, false)]
+    public void ConnectedClientUpdateRequiresAnIdleAuthenticatedSession(
+        bool supportSession, bool hasClient, bool pairingBusy, bool clientUpdateBusy, bool terminating, bool expected)
+    {
+        Assert.Equal(expected, MainForm.CanUpdateClient(supportSession, hasClient, pairingBusy, clientUpdateBusy, terminating));
+    }
 }

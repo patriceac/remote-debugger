@@ -85,10 +85,13 @@ public sealed partial class MainForm
     private void RefreshControllerControls()
     {
         if (executeButton == null) return;
-        var state = WorkspaceAvailability.For(supportSession, heartbeatHealthy, pairingBusy, terminating, action != null, selectedFilePath != null);
+        var state = WorkspaceAvailability.For(supportSession, heartbeatHealthy, pairingBusy || clientUpdateBusy, terminating, action != null, selectedFilePath != null);
         pairButton.Enabled = host.Enabled = code.Enabled = state.CanPair;
-        peers.Enabled = !pairingBusy && !terminating;
+        peers.Enabled = !pairingBusy && !clientUpdateBusy && !terminating;
         pairButton.SetText(() => pairingBusy ? UiText.Connecting : supportSession ? UiText.Connected : UiText.Connect);
+        updateClientButton.Visible = supportSession || clientUpdateBusy;
+        updateClientButton.Enabled = CanUpdateClient(supportSession, client != null, pairingBusy, clientUpdateBusy, terminating) && action == null;
+        updateClientButton.SetText(() => clientUpdateBusy ? UiText.Synchronizing : UiText.UpdateClient);
         refreshResourcesButton.Enabled = state.CanOperate && !resourcesLoading;
         browseFilesButton.Enabled = fileDirectory.Enabled = state.CanOperate && !filesLoading;
         parentFolderButton.Enabled = state.CanOperate && !filesLoading && !string.IsNullOrEmpty(currentDirectory);
@@ -99,7 +102,7 @@ public sealed partial class MainForm
         cancelButton.Enabled = state.CanCancel;
         operations.Enabled = arguments.Enabled = state.CanOperate && action == null;
         pid.Enabled = state.CanOperate && action == null && operations.SelectedItem is string operation && WorkspacePresentation.UsesPid(Templates[operation]);
-        pauseViewing.Enabled = supportSession && !terminating;
+        pauseViewing.Enabled = supportSession && !clientUpdateBusy && !terminating;
         monitor.Enabled = state.CanOperate;
         typeText.Enabled = enterKey.Enabled = remoteText.Enabled = state.CanOperate && liveFrameFresh;
         technicalIdentity.SetText(WorkspacePresentation.Identity(supportSession && client != null, heartbeatHealthy,

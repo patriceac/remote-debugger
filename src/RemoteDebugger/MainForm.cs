@@ -83,6 +83,7 @@ public sealed partial class MainForm : Forms.Form
     private readonly Forms.TextBox host = TextBox("host");
     private readonly Forms.TextBox code = TextBox("pairCode");
     private readonly Forms.Button pairButton = Button(() => UiText.Connect, "pair", 110, primary: true);
+    private readonly Forms.Button updateClientButton = Button(() => UiText.UpdateClient, "updateClient", 150);
     private readonly Forms.Button discoverButton = Button(() => UiText.Refresh, "discover", 92);
     private readonly Forms.Label connectionState = new() { Name = "connectionFormState", AutoSize = true, ForeColor = SecondaryText, MaximumSize = new Size(460, 0) };
     private readonly Forms.TableLayoutPanel updateProgressArea = new() { Dock = Forms.DockStyle.Top, Height = 50, ColumnCount = 1, RowCount = 2, Margin = Forms.Padding.Empty, Visible = false };
@@ -167,11 +168,13 @@ public sealed partial class MainForm : Forms.Form
     private CancellationTokenSource? heartbeatLifetime;
     private CancellationTokenSource? discoveryLifetime;
     private CancellationTokenSource? pairingLifetime;
+    private CancellationTokenSource? clientUpdateLifetime;
     private Task? heartbeatTask;
     private PowerHold? powerHold;
     private bool heartbeatHealthy;
     private bool supportSession;
     private bool pairingBusy;
+    private bool clientUpdateBusy;
     private bool synchronizingAgent;
     private bool terminating;
     private bool quitting;
@@ -438,14 +441,14 @@ public sealed partial class MainForm : Forms.Form
     private Forms.Control BuildConnectionForm()
     {
         if (PrivateInternet) { selectedPeerName.SetText(() => UiText.SelectComputer); selectedPeerAddress.SetText(""); }
-        var panel = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 8, Padding = new Forms.Padding(24, 0, 0, 0) };
+        var panel = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 9, Padding = new Forms.Padding(24, 0, 0, 0) };
         panel.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
         selectedPeerName.AutoSize = selectedPeerAddress.AutoSize = connectionState.AutoSize = false;
         selectedPeerName.Dock = selectedPeerAddress.Dock = connectionState.Dock = Forms.DockStyle.Fill;
         selectedPeerName.AutoEllipsis = selectedPeerAddress.AutoEllipsis = connectionState.AutoEllipsis = true;
         connectionState.MaximumSize = Size.Empty;
         panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 34)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 30));
-        for (int i = 2; i < 6; i++) panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
+        for (int i = 2; i < 7; i++) panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 60)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
         panel.Controls.Add(selectedPeerName, 0, 0); panel.Controls.Add(selectedPeerAddress, 0, 1);
         if (!PrivateInternet)
@@ -455,14 +458,16 @@ public sealed partial class MainForm : Forms.Form
         }
         if (!PrivateInternet) panel.Controls.Add(new WorkspaceLabel { AutoSize = true, ForeColor = SecondaryText, Margin = Forms.Padding.Empty, Dock = Forms.DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }.WithText(() => UiText.SixDigitCode), 0, 4);
         code.Width = 150; code.Font = new Font("Consolas", 20); code.MaxLength = 6; code.TextAlign = Forms.HorizontalAlignment.Center;
+        updateClientButton.Visible = false;
         var codeRow = PrivateInternet ? ControlRow(pairButton) : ControlRow(code, pairButton); codeRow.Margin = new Forms.Padding(0, 4, 0, 0); panel.Controls.Add(codeRow, 0, 5);
-        connectionState.Margin = new Forms.Padding(0, 7, 0, 0); panel.Controls.Add(connectionState, 0, 6);
+        var updateRow = ControlRow(updateClientButton); updateRow.Margin = Forms.Padding.Empty; panel.Controls.Add(updateRow, 0, 6);
+        connectionState.Margin = new Forms.Padding(0, 7, 0, 0); panel.Controls.Add(connectionState, 0, 7);
         updateProgressArea.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 10));
         updateProgressArea.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
         updateProgressTrack.Controls.Add(updateProgressFill);
         updateProgressTrack.SizeChanged += (_, _) => updateProgressFill.Width = updateProgressTrack.ClientSize.Width * updateTransferPercent / 100;
         updateProgressArea.Controls.Add(updateProgressTrack, 0, 0); updateProgressArea.Controls.Add(updateProgressText, 0, 1);
-        panel.Controls.Add(updateProgressArea, 0, 7); return panel;
+        panel.Controls.Add(updateProgressArea, 0, 8); return panel;
     }
 
     private static string UpdateProgressDescription(AgentUpdateProgress progress) => progress.Stage switch
@@ -599,6 +604,7 @@ public sealed partial class MainForm : Forms.Form
         code.KeyPress += (_, e) => { if (!char.IsControl(e.KeyChar) && !char.IsAsciiDigit(e.KeyChar)) e.Handled = true; };
         code.KeyDown += async (_, e) => { if (e.KeyCode == Forms.Keys.Enter) { e.SuppressKeyPress = true; await PairSelectedAsync(); } };
         pairButton.Click += async (_, _) => await PairSelectedAsync();
+        updateClientButton.Click += async (_, _) => await UpdateConnectedClientAsync();
         pauseViewing.Click += (_, _) => { if (liveStream == null) _ = StartStreamAsync(); else StopStream(() => UiText.ViewingPaused); };
         monitor.SelectedIndexChanged += (_, _) => { if (!refreshingMonitorLabels && liveStream != null) { StopStream(() => UiText.MonitorChanged); _ = StartStreamAsync(); } };
         mouseEnabled.CheckedChanged += (_, _) => { inputState.Enabled = mouseEnabled.Checked; if (!mouseEnabled.Checked) ReleaseHeldInputForCurrentSession(); RefreshInputStatus(); };
@@ -985,11 +991,11 @@ public sealed partial class MainForm : Forms.Form
         }
 
         bool updateOngoing = onAgent && agent != null && IsOngoingUpdate(agent.UpdateProgress);
-        bool connected = onAgent ? agent?.Session is { Connected: true, BinaryMatched: true } && !updateOngoing : heartbeatHealthy && supportSession;
-        bool reconnecting = onAgent ? agent?.Session.State == "reconnecting" : supportSession && !heartbeatHealthy;
+        bool connected = onAgent ? agent?.Session is { Connected: true, BinaryMatched: true } && !updateOngoing : heartbeatHealthy && supportSession && !clientUpdateBusy;
+        bool reconnecting = onAgent ? agent?.Session.State == "reconnecting" : supportSession && !heartbeatHealthy && !clientUpdateBusy;
         bool pairing = onController && pairingBusy && !synchronizingAgent;
         bool synchronizing = onAgent && (agent?.Session is { Connected: true, BinaryMatched: false } || updateOngoing) ||
-            onController && pairingBusy && synchronizingAgent;
+            onController && ((pairingBusy && synchronizingAgent) || clientUpdateBusy);
         statusPill.BackColor = connected ? ConnectedBack : reconnecting ? Color.FromArgb(255, 244, 222) : Color.FromArgb(237, 241, 244);
         statusDot.ForeColor = connected ? Color.FromArgb(50, 137, 91) : reconnecting ? WarningText : SecondaryText;
         statusLabel.ForeColor = connected ? ConnectedText : reconnecting ? WarningText : Color.FromArgb(80, 103, 113);
@@ -1008,7 +1014,7 @@ public sealed partial class MainForm : Forms.Form
             resourceState.Text, fileState.Text, diagnosticState.Text, PrivateInternet ? selectedPeer?.Name ?? "" : host.Text,
             lastMeasurementUtc is { } measured ? UiText.Format(UiText.ProcessMeasurement, processRows.Count, measured.ToLocalTime()) : UiText.NoMeasurement,
             currentDirectory, operations.SelectedItem?.ToString() ?? "");
-        footerLeft.SetText(() => supportSession && !heartbeatHealthy ? UiText.ReconnectionInProgress : text.Status);
+        footerLeft.SetText(() => clientUpdateBusy ? UiText.Synchronizing : supportSession && !heartbeatHealthy ? UiText.ReconnectionInProgress : text.Status);
         footerRight.SetText(PrivateInternet && controllerPages.SelectedIndex == 0 && selectedPeer == null ? "" : text.Detail);
     }
 
@@ -1189,11 +1195,7 @@ public sealed partial class MainForm : Forms.Form
             using (var synchronization = CancellationTokenSource.CreateLinkedTokenSource(pairingCts.Token))
             {
                 synchronization.CancelAfter(TimeSpan.FromSeconds(SupportOperationTimeouts.ControllerSynchronizationSeconds));
-                var progress = new Progress<AgentUpdateProgress>(value =>
-                {
-                    if (!IsDisposed && generation == operationGeneration && pairingBusy) ShowUpdateProgress(value);
-                });
-                try { await SupportPlatform.SynchronizeAgentAsync(pairedClient, synchronization.Token, progress); }
+                try { await SynchronizeClientAsync(pairedClient, generation, synchronization.Token); }
                 catch (OperationCanceledException) when (!pairingCts.IsCancellationRequested) { throw new TimeoutException(UiText.SynchronizationTimedOut); }
             }
             if (generation != operationGeneration) return; synchronizingAgent = false; updateProgressArea.Visible = false; supportSession = true; heartbeatHealthy = false; powerHold ??= PowerHold.Acquire(); StartHeartbeat(); SelectRole(1); SelectControllerPage(1); code.SetText(""); connectionState.SetText(() => UiText.SessionEstablished); SetFooterMessage(() => UiText.ActiveVersionsSynchronized); SetFooterDetail(() => UiText.LoadingMeasurements); RefreshFooter(); _ = LoadInitialRemoteStateAsync(generation);
@@ -1215,6 +1217,132 @@ public sealed partial class MainForm : Forms.Form
                 pairingCts.Dispose();
             }
             if (ownsPairing || generation == operationGeneration) { pairingBusy = false; discoverButton.Enabled = true; UpdateHeader(); RefreshControllerControls(); RefreshFooter(); }
+        }
+    }
+
+    private async Task<AgentSynchronizationResult> SynchronizeClientAsync(RemoteClient target, int generation, CancellationToken ct)
+    {
+        var progress = new Progress<AgentUpdateProgress>(value =>
+        {
+            if (!IsDisposed && generation == operationGeneration && ReferenceEquals(target, client) && (pairingBusy || clientUpdateBusy))
+                ShowUpdateProgress(value);
+        });
+        return await SupportPlatform.SynchronizeAgentAsync(target, ct, progress);
+    }
+
+    private async Task UpdateConnectedClientAsync()
+    {
+        if (client is not { } target || !CanUpdateClient(supportSession, hasClient: true, pairingBusy, clientUpdateBusy, terminating) || action != null)
+            return;
+        if (Forms.MessageBox.Show(this, UiText.UpdateClientConfirmation, UiText.UpdateClientConfirmationTitle,
+            Forms.MessageBoxButtons.YesNo, Forms.MessageBoxIcon.Warning) != Forms.DialogResult.Yes)
+            return;
+
+        // Re-check the target after the confirmation dialog yielded to other UI
+        // events, then run the same authenticated update protocol used by pairing.
+        if (!CanUpdateClient(supportSession, hasClient: client != null, pairingBusy, clientUpdateBusy, terminating) || action != null || !ReferenceEquals(target, client))
+            return;
+
+        bool resumeStream = liveStream != null;
+        clientUpdateBusy = true;
+        clientUpdateLifetime = new CancellationTokenSource();
+        int generation = ++operationGeneration;
+        sessionGeneration++;
+        heartbeatLifetime?.Cancel();
+        if (resumeStream)
+            StopStream(() => UiText.ViewingSuspended);
+        else
+        {
+            liveFrameFresh = false;
+            liveBadge.Visible = false;
+            ReleaseHeldInputForCurrentSession();
+            RefreshInputStatus();
+        }
+        heartbeatHealthy = false;
+        connectionState.SetText(() => UiText.AgentSynchronizing);
+        SetFooterMessage(() => UiText.AgentSynchronizing);
+        SetFooterDetail(() => UiText.TransferValidateVersion);
+        ShowUpdateProgress(new AgentUpdateProgress("idle", 0, 0));
+        UpdateHeader(); RefreshControllerControls(); RefreshFooter();
+
+        var lifetime = clientUpdateLifetime!;
+        bool synchronizationSucceeded = false;
+        try
+        {
+            using var synchronization = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+            synchronization.CancelAfter(TimeSpan.FromSeconds(SupportOperationTimeouts.ControllerSynchronizationSeconds));
+            await SynchronizeClientAsync(target, generation, synchronization.Token);
+            synchronizationSucceeded = true;
+            if (generation != operationGeneration || !ReferenceEquals(target, client)) return;
+
+            heartbeatHealthy = await ConfirmHealthySessionAsync(target, synchronization.Token);
+            if (generation != operationGeneration || !ReferenceEquals(target, client)) return;
+            synchronization.Token.ThrowIfCancellationRequested();
+            updateProgressArea.Visible = false;
+            connectionState.SetText(() => UiText.SessionEstablished);
+            SetFooterMessage(() => UiText.ActiveVersionsSynchronized);
+            SetFooterDetail(() => heartbeatHealthy ? UiText.SessionEstablished : UiText.ReconnectionInProgress);
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested || terminating)
+        {
+        }
+        catch (OperationCanceledException)
+        {
+            if (generation == operationGeneration && ReferenceEquals(target, client) && !terminating)
+                ShowSynchronizationFailure(UiText.SynchronizationTimedOut);
+        }
+        catch (Exception ex)
+        {
+            if (generation == operationGeneration && ReferenceEquals(target, client) && !terminating)
+                ShowSynchronizationFailure(ex.Message);
+        }
+        finally
+        {
+            if (ReferenceEquals(clientUpdateLifetime, lifetime)) clientUpdateLifetime = null;
+            lifetime.Dispose();
+            if (generation == operationGeneration && ReferenceEquals(target, client))
+            {
+                clientUpdateBusy = false;
+                StartHeartbeat();
+                UpdateHeader(); RefreshControllerControls(); RefreshInputStatus(); RefreshFooter();
+                if (synchronizationSucceeded && resumeStream && controllerPages.SelectedIndex == 1)
+                    _ = StartStreamAsync();
+            }
+        }
+    }
+
+    private void ShowSynchronizationFailure(string detail)
+    {
+        updateProgressText.SetText(() => UiText.SynchronizationInterrupted);
+        updateProgressText.ForeColor = DestructiveText;
+        updateProgressFill.BackColor = DestructiveText;
+        updateProgressTrack.AccessibleName = updateProgressText.Text;
+        connectionState.SetText(() => UiText.FailurePrefix + detail);
+        SetFooterMessage(() => UiText.ConnectionFailed);
+        footerDetail = detail;
+    }
+
+    private static async Task<bool> ConfirmHealthySessionAsync(RemoteClient target, CancellationToken ct)
+    {
+        try
+        {
+            JsonElement heartbeat = await target.HeartbeatAsync(ct);
+            bool connected = heartbeat.TryGetProperty("session", out var session) &&
+                session.TryGetProperty("connected", out var connectedValue) && connectedValue.GetBoolean();
+            bool matched = heartbeat.TryGetProperty("binaryMatched", out var matchedValue) && matchedValue.GetBoolean();
+            return connected && matched;
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return false;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return false;
         }
     }
 
@@ -1451,13 +1579,13 @@ public sealed partial class MainForm : Forms.Form
         QueueInput(new { kind = "text", text = remoteText.Text });
     }
 
-    private bool CanSendFocusedInput() => supportSession && heartbeatHealthy && !trayVisible && liveFrameFresh;
+    private bool CanSendFocusedInput() => !clientUpdateBusy && supportSession && heartbeatHealthy && !trayVisible && liveFrameFresh;
 
-    private bool CanSendInput() => inputState.CanSend(supportSession && heartbeatHealthy && !trayVisible, liveFrameFresh, screen.ContainsFocus && ContainsFocus);
+    private bool CanSendInput() => !clientUpdateBusy && inputState.CanSend(supportSession && heartbeatHealthy && !trayVisible, liveFrameFresh, screen.ContainsFocus && ContainsFocus);
 
     private void RefreshInputStatus()
     {
-        inputStatus.SetText(() => !supportSession ? UiText.ConnectToControl : !inputState.Enabled ? UiText.ViewOnly : !heartbeatHealthy ? UiText.ControlAwaitingConnection : inputState.Suspended ? UiText.RestoringControl : !liveFrameFresh ? UiText.WaitingFreshFrame : screen.ContainsFocus && ContainsFocus ? UiText.MouseKeyboardActive : UiText.ClickScreenToControl);
+        inputStatus.SetText(() => !supportSession ? UiText.ConnectToControl : clientUpdateBusy ? UiText.Synchronizing : !inputState.Enabled ? UiText.ViewOnly : !heartbeatHealthy ? UiText.ControlAwaitingConnection : inputState.Suspended ? UiText.RestoringControl : !liveFrameFresh ? UiText.WaitingFreshFrame : screen.ContainsFocus && ContainsFocus ? UiText.MouseKeyboardActive : UiText.ClickScreenToControl);
     }
 
     private void QueueInput(object value)
@@ -1465,6 +1593,7 @@ public sealed partial class MainForm : Forms.Form
         RemoteClient? target = client;
         if (target == null || !supportSession) return;
         string kind = Json.Element(value).Str("kind");
+        if (clientUpdateBusy && kind != "release") return;
         if (kind == "release") { ReleaseHeldInputForCurrentSession(); return; }
         if (!inputQueue.TryWrite(kind, new QueuedInput(target, sessionGeneration, value)))
         {
@@ -1677,7 +1806,7 @@ public sealed partial class MainForm : Forms.Form
 
     private async Task TerminateSupportAsync(bool selectControllerAfter = true)
     {
-        if (terminating) return; terminating = true; operationGeneration++; terminateSession.Enabled = false; SetFooterMessage(() => UiText.EndingSupport); RefreshFooter(); pairingLifetime?.Cancel(); heartbeatLifetime?.Cancel(); action?.Cancel(); resumeViewingOnRestore = false; StopStream(() => UiText.SupportEnded); QueueInput(new { kind = "release" });
+        if (terminating) return; terminating = true; operationGeneration++; terminateSession.Enabled = false; SetFooterMessage(() => UiText.EndingSupport); RefreshFooter(); pairingLifetime?.Cancel(); clientUpdateLifetime?.Cancel(); heartbeatLifetime?.Cancel(); action?.Cancel(); resumeViewingOnRestore = false; StopStream(() => UiText.SupportEnded); QueueInput(new { kind = "release" });
         bool wasAgent = agent != null || rolePages.SelectedIndex == 0;
         RemoteClient? oldClient = client;
         sessionGeneration++;
@@ -1723,6 +1852,9 @@ public sealed partial class MainForm : Forms.Form
 
     private void ClearControllerSession()
     {
+        clientUpdateLifetime?.Cancel();
+        clientUpdateBusy = false;
+        updateProgressArea.Visible = false;
         client = null; selectedPeer = null; selectedFingerprint = ""; selectedFilePath = null;
         selectedPeerName.SetText(() => UiText.NewConnection); selectedPeerAddress.SetText(() => PrivateInternet ? UiText.PrivateConnectInstructions : UiText.EnterRemoteCode);
         geometry = null; inputState.Released(); inputRecoveryTimer.Stop(); code.SetText("");
@@ -1812,7 +1944,7 @@ public sealed partial class MainForm : Forms.Form
 
     private async Task<bool> ShutdownAsync()
     {
-        renderTimer.Stop(); inputRecoveryTimer.Stop(); discoveryLifetime?.Cancel(); heartbeatLifetime?.Cancel(); pairingLifetime?.Cancel(); liveStream?.Cancel(); action?.Cancel();
+        renderTimer.Stop(); inputRecoveryTimer.Stop(); discoveryLifetime?.Cancel(); heartbeatLifetime?.Cancel(); pairingLifetime?.Cancel(); clientUpdateLifetime?.Cancel(); liveStream?.Cancel(); action?.Cancel();
         // A saved connection only pre-fills the controller form. It is not an
         // active outbound session, and must never delay an agent replacement
         // while trying to contact an unrelated (possibly offline) old peer.
@@ -1851,7 +1983,7 @@ public sealed partial class MainForm : Forms.Form
     private void DisposeResources()
     {
         SupportPlatform.ManagedRelaunchRequested -= OnManagedRelaunchRequested;
-        renderTimer.Dispose(); inputRecoveryTimer.Dispose(); discoveryLifetime?.Dispose(); heartbeatLifetime?.Dispose(); pairingLifetime?.Dispose(); liveStream?.Dispose(); action?.Dispose(); powerHold?.Dispose(); tray.Dispose();
+        renderTimer.Dispose(); inputRecoveryTimer.Dispose(); discoveryLifetime?.Dispose(); heartbeatLifetime?.Dispose(); pairingLifetime?.Dispose(); clientUpdateLifetime?.Dispose(); liveStream?.Dispose(); action?.Dispose(); powerHold?.Dispose(); tray.Dispose();
     }
 
     private void RequireClient() { if (client == null || !supportSession) throw new InvalidOperationException(UiText.ConnectBeforeAction); }
@@ -1893,6 +2025,9 @@ public sealed partial class MainForm : Forms.Form
             : supportSession || synchronizingAgent;
 
     internal static bool IsOngoingUpdate(AgentUpdateProgress progress) => progress.Stage is not ("idle" or "complete");
+
+    internal static bool CanUpdateClient(bool supportSession, bool hasClient, bool pairingBusy, bool clientUpdateBusy, bool terminating) =>
+        supportSession && hasClient && !pairingBusy && !clientUpdateBusy && !terminating;
 
     private static ProcessSortColumn ProcessColumn(int index) => index switch { 0 => ProcessSortColumn.Pid, 1 => ProcessSortColumn.Name, 2 => ProcessSortColumn.CpuPercentTotalMachine, 3 => ProcessSortColumn.WorkingSetBytes, 4 => ProcessSortColumn.Responding, _ => ProcessSortColumn.Window };
     private static FileSortColumn FileColumn(int index) => index switch { 0 => FileSortColumn.Name, 1 => FileSortColumn.Type, 2 => FileSortColumn.SizeBytes, _ => FileSortColumn.ModifiedUtc };

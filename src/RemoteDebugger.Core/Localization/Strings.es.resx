@@ -705,6 +705,15 @@
   <data name="Unavailable" xml:space="preserve">
     <value>No disponible</value>
   </data>
+  <data name="UpdateClient" xml:space="preserve">
+    <value>Actualizar cliente</value>
+  </data>
+  <data name="UpdateClientConfirmation" xml:space="preserve">
+    <value>El cliente se actualizará a la versión de este controlador. El control remoto se interrumpirá brevemente mientras se reinicia. ¿Continuar?</value>
+  </data>
+  <data name="UpdateClientConfirmationTitle" xml:space="preserve">
+    <value>Actualizar cliente</value>
+  </data>
   <data name="UploadDestination" xml:space="preserve">
     <value>Destino de las subidas</value>
   </data>
