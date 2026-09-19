@@ -110,6 +110,7 @@ public sealed partial class MainForm
                     }
                     var remote = snapshot.GetProperty("agent").Deserialize<ExecutableSnapshot>(Json.Options)!;
                     remote.Validate();
+                    RememberWakeAdapter(device.Peer, snapshot);
                     int comparison = UpdatePolicy.ReleaseVersion(remote.FileVersion).CompareTo(UpdatePolicy.ReleaseVersion(controller.FileVersion));
                     string state = comparison > 0 ? "newer" : busy ? "busy" : Safety.Equal(remote.Sha256, controller.Sha256) ? "current" : comparison < 0 ? "available" : "conflict";
                     RecordDevice(device with { Version = remote.FileVersion ?? "", Sha256 = remote.Sha256, State = state });

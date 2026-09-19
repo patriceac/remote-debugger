@@ -274,4 +274,21 @@ public static partial class UiText
     public static string Workspace => Get(nameof(Workspace));
     public static string WorkspaceCaption => Get(nameof(WorkspaceCaption));
     public static string Yes => Get(nameof(Yes));
+    public static string WakePc => Get(nameof(WakePc));
+    public static string WakeSettings => Get(nameof(WakeSettings));
+    public static string WakeSettingsTitle => Get(nameof(WakeSettingsTitle));
+    public static string WakeMac => Get(nameof(WakeMac));
+    public static string WakeSender => Get(nameof(WakeSender));
+    public static string WakeThisPc => Get(nameof(WakeThisPc));
+    public static string WakeDestination => Get(nameof(WakeDestination));
+    public static string WakePort => Get(nameof(WakePort));
+    public static string WakeHelp => Get(nameof(WakeHelp));
+    public static string WakeSettingsSaved => Get(nameof(WakeSettingsSaved));
+    public static string WakePacketSent => Get(nameof(WakePacketSent));
+    public static string WakeSending => Get(nameof(WakeSending));
+    public static string WakeHelperUnavailable => Get(nameof(WakeHelperUnavailable));
+    public static string InvalidWakeMac => Get(nameof(InvalidWakeMac));
+    public static string InvalidWakeDestination => Get(nameof(InvalidWakeDestination));
+    public static string WakeNoNetwork => Get(nameof(WakeNoNetwork));
+    public static string WakeSendFailed => Get(nameof(WakeSendFailed));
 }

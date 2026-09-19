@@ -85,10 +85,11 @@ public sealed partial class MainForm
     private void RefreshControllerControls()
     {
         RefreshWanAddress();
+        RefreshWakeControls();
         if (executeButton == null) return;
         var state = WorkspaceAvailability.For(supportSession, heartbeatHealthy, pairingBusy || clientUpdateBusy || FleetBusy, terminating, action != null, selectedFilePath != null);
         pairButton.Enabled = host.Enabled = code.Enabled = state.CanPair;
-        peers.Enabled = !pairingBusy && !clientUpdateBusy && !terminating;
+        peers.Enabled = !pairingBusy && !clientUpdateBusy && !terminating && !wakeBusy;
         pairButton.SetText(() => pairingBusy ? UiText.Connecting : supportSession ? UiText.Connected : UiText.Connect);
         updateClientButton.Visible = supportSession || clientUpdateBusy;
         updateClientButton.Enabled = isUpdateAdmin && !NewerDeviceKnown && CanUpdateClient(supportSession, client != null, pairingBusy, clientUpdateBusy, terminating, clientUpToDate) && action == null;
@@ -97,7 +98,7 @@ public sealed partial class MainForm
         updateAllDevices.SetText(() => FleetBusy ? UiText.StopUpdates : UiText.UpdateAllDevices);
         if (NewerDeviceKnown) discoveryState.SetText(() => UiText.UpdateControllerFirst);
         discoverButton.Enabled = !pairingBusy && !clientUpdateBusy && !FleetBusy && !fleetRefreshing && !terminating && !supportSession;
-        if (FleetBusy || fleetRefreshing) { pairButton.Enabled = false; discoverButton.Enabled = false; updateClientButton.Enabled = false; }
+        if (FleetBusy || fleetRefreshing || wakeBusy) { pairButton.Enabled = false; discoverButton.Enabled = false; updateClientButton.Enabled = false; }
         refreshResourcesButton.Enabled = state.CanOperate && !resourcesLoading;
         bool filesAvailable = state.CanOperate && !filesLoading && fileTransferLifetime == null;
         browseFilesButton.Enabled = fileDirectory.Enabled = openFolderButton.Enabled = filesAvailable;

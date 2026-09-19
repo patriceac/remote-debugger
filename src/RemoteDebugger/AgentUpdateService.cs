@@ -125,7 +125,7 @@ public sealed class AgentUpdateService : IDisposable
             try { transaction = await SupportPlatform.BrokerCallAsync("update.status", new { }, ct); }
             catch (InvalidOperationException) { }
         }
-        return new { agent, platform, transaction, requiresUpdateAdmin = true, controllerSynchronized = ControllerSynchronized, actualRunningSha256 = agent.Sha256 };
+        return new { agent, platform, transaction, requiresUpdateAdmin = true, controllerSynchronized = ControllerSynchronized, actualRunningSha256 = agent.Sha256, wakeAdapters = WakeOnLan.GetAdapters() };
     }
 
     private object NewChallenge()

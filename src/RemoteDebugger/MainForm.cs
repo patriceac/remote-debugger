@@ -445,7 +445,8 @@ public sealed partial class MainForm : Forms.Form
         if (!PrivateInternet) peers.Columns.Add("", 125).WithText(() => UiText.Address);
         if (PrivateInternet) peers.Columns.Add("", 62).WithText(() => UiText.DeviceVersion);
         peers.Columns.Add("", PrivateInternet ? 150 : 90).WithText(() => UiText.State);
-        if (PrivateInternet) { peers.Columns.Add("", 120).WithText(() => UiText.DeviceProgress); InitializeFleet(); }
+        if (PrivateInternet) peers.Columns.Add("", 120).WithText(() => UiText.DeviceProgress);
+        InitializeFleet();
         peers.RememberLayout(root, PrivateInternet ? ["name", "version", "state", "progress"] : ["name", "address", "state"]); panel.Controls.Add(peers, 0, 3);
         return panel;
     }
@@ -473,7 +474,7 @@ public sealed partial class MainForm : Forms.Form
         code.Width = 150; code.Font = new Font("Consolas", 20); code.MaxLength = 6; code.TextAlign = Forms.HorizontalAlignment.Center;
         updateClientButton.Visible = false;
         var codeRow = PrivateInternet ? ControlRow(pairButton, saveWanAddress) : ControlRow(code, pairButton); codeRow.Margin = new Forms.Padding(0, 4, 0, 0); panel.Controls.Add(codeRow, 0, 5);
-        var updateRow = ControlRow(updateClientButton); updateRow.Margin = Forms.Padding.Empty; panel.Controls.Add(updateRow, 0, 6);
+        panel.Controls.Add(BuildWakeControls(), 0, 6);
         connectionState.Margin = new Forms.Padding(0, 7, 0, 0); panel.Controls.Add(connectionState, 0, 7);
         updateProgressArea.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 10));
         updateProgressArea.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
@@ -1162,8 +1163,8 @@ public sealed partial class MainForm : Forms.Form
             discoveredPeers.Clear();
             string? localSupportId = PrivateInternet ? agent?.Internet?.SupportId : null;
             discoveredPeers.AddRange(PeerDiscovery.DistinctPeers(found.Where(p => !PeerDiscovery.IsLocalPeer(p, localSupportId) && (InternetSettings.IsSupportId(p.Host) || IsRemotePeer(p)))).OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase));
-            if (PrivateInternet) ObserveFleet();
-            if (selectedPeer != null) selectedPeer = PeerDiscovery.Rebind(selectedPeer, discoveredPeers) ?? (PrivateInternet ? selectedPeer : null);
+            ObserveFleet(); SaveFleet();
+            if (selectedPeer != null) selectedPeer = PeerDiscovery.Rebind(selectedPeer, discoveredPeers) ?? selectedPeer;
             if (selectedPeer != null)
             {
                 selectedFingerprint = selectedPeer.Fingerprint; host.SetText(selectedPeer.Host); selectedPeerName.SetText(selectedPeer.Name);
@@ -1212,7 +1213,7 @@ public sealed partial class MainForm : Forms.Form
         try
         {
             peers.Items.Clear();
-            foreach (var peer in PrivateInternet ? fleet.Values.OrderBy(d => d.Peer.Name, StringComparer.CurrentCultureIgnoreCase).Select(d => d.Peer) : discoveredPeers)
+            foreach (var peer in fleet.Values.OrderBy(d => d.Peer.Name, StringComparer.CurrentCultureIgnoreCase).Select(d => d.Peer))
             {
                 var item = new Forms.ListViewItem(peer.Name);
                 if (!PrivateInternet) item.SubItems.Add(peer.Host);
@@ -1221,7 +1222,7 @@ public sealed partial class MainForm : Forms.Form
                     item.SubItems.Add(device.Version.Length == 0 ? "—" : device.Version);
                     item.SubItems.Add(FleetState(device)); item.SubItems.Add(device.Detail);
                 }
-                else item.SubItems.Add(UiText.Available);
+                else item.SubItems.Add(fleet.TryGetValue(DeviceKey(peer), out var known) && !known.Online ? UiText.DeviceOffline : UiText.Available);
                 item.Tag = peer; peers.Items.Add(item); if (peer.Host == keep) item.Selected = true;
             }
         }
@@ -1456,6 +1457,7 @@ public sealed partial class MainForm : Forms.Form
         try
         {
             if (client == null) return;
+            _ = RememberConnectedWakeAdapterAsync(client);
             if (liveStream == null) _ = StartStreamAsync();
             var resourcesTask = RefreshResourcesAsync(); var monitorsTask = LoadMonitorsAsync(generation); currentDirectory = ""; fileDirectory.SetText(""); var filesTask = BrowseFilesAsync(); await Task.WhenAll(resourcesTask, monitorsTask, filesTask); if (generation != operationGeneration) return; SetFooterDetail(() => UiText.MeasurementsFilesLoaded); RefreshFooter();
         }

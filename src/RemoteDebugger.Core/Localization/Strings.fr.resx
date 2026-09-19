@@ -896,4 +896,21 @@
   <data name="InvalidWanAddress" xml:space="preserve"><value>Saisissez un nom d’hôte ou une adresse IPv4, suivi éventuellement de :port (1–65535), ou laissez vide.</value></data>
   <data name="WanAddressSaved" xml:space="preserve"><value>Préférence de connexion enregistrée pour cet appareil.</value></data>
   <data name="RelayEconomy" xml:space="preserve"><value>Mode éco</value></data>
+  <data name="WakePc" xml:space="preserve"><value>Réveiller</value></data>
+  <data name="WakeSettings" xml:space="preserve"><value>Réveil réseau</value></data>
+  <data name="WakeSettingsTitle" xml:space="preserve"><value>Réveil réseau · {0}</value></data>
+  <data name="WakeMac" xml:space="preserve"><value>Adresse MAC de la carte réseau</value></data>
+  <data name="WakeSender" xml:space="preserve"><value>Envoyer depuis</value></data>
+  <data name="WakeThisPc" xml:space="preserve"><value>Ce PC</value></data>
+  <data name="WakeDestination" xml:space="preserve"><value>Adresse de diffusion / routeur (facultatif)</value></data>
+  <data name="WakePort" xml:space="preserve"><value>Port UDP</value></data>
+  <data name="WakeHelp" xml:space="preserve"><value>Activez le réveil réseau dans le firmware et la carte réseau du PC cible. Laissez l'adresse vide pour diffuser sur le réseau local de l'expéditeur. Sur un autre réseau, choisissez un PC relais allumé sur ce réseau ; il utilise ses propres diffusions locales. Un paquet envoyé ne confirme pas le démarrage.</value></data>
+  <data name="WakeSettingsSaved" xml:space="preserve"><value>Réglages de réveil enregistrés pour ce PC.</value></data>
+  <data name="WakePacketSent" xml:space="preserve"><value>Paquets de réveil envoyés. Actualisez pour vérifier si le PC est en ligne.</value></data>
+  <data name="WakeSending" xml:space="preserve"><value>Envoi des paquets de réveil…</value></data>
+  <data name="WakeHelperUnavailable" xml:space="preserve"><value>Choisissez un PC relais en ligne sur le réseau local de la cible. Un PC administrateur est requis.</value></data>
+  <data name="InvalidWakeMac" xml:space="preserve"><value>Saisissez une adresse MAC unicast valide, par exemple 00:11:22:33:44:55.</value></data>
+  <data name="InvalidWakeDestination" xml:space="preserve"><value>Saisissez une adresse IPv4 ou un nom d'hôte sans port, et un port UDP de 1 à 65535.</value></data>
+  <data name="WakeNoNetwork" xml:space="preserve"><value>Aucun réseau IPv4 disponible pour envoyer les paquets de réveil.</value></data>
+  <data name="WakeSendFailed" xml:space="preserve"><value>Les paquets de réveil n'ont pas pu être envoyés.</value></data>
 </root>

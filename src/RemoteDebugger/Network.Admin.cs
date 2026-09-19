@@ -23,6 +23,12 @@ public sealed partial class AgentServer
             await Wire.WriteAsync(stream, Reply.Success(request.Id, new { nonce }), ct);
             var proof = await Wire.ReadAsync<JsonElement>(stream, ct);
             UpdateAdminProof.Verify(proof.Str("authorization"), nonce, Fingerprint, request.Operation, request.BinarySha256!);
+            if (request.Operation == "admin.wake")
+            {
+                var sent = await WakeOnLan.SendAsync(request.Args.Str("macAddress"), "", request.Args.Int("port", 9), ct);
+                await Wire.WriteAsync(stream, Reply.Success(request.Id, sent), ct);
+                return;
+            }
             if (request.Operation == "admin.inspect")
             {
                 await Wire.WriteAsync(stream, Reply.Success(request.Id, new
@@ -50,7 +56,7 @@ public sealed partial class AgentServer
             }
             finally { pairingSlot.Release(); }
         }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+        catch (Exception ex) when (ex is UnauthorizedAccessException or InvalidOperationException or ArgumentException or IOException)
         { await Wire.WriteAsync(stream, Reply.Failure(request.Id, "admin_rejected", ex.Message), ct); }
     }
 
@@ -69,13 +75,13 @@ public sealed partial class AgentServer
 
 public sealed partial class RemoteClient
 {
-    internal async Task<JsonElement> AdminRequestAsync(string operation, CancellationToken ct)
+    internal async Task<JsonElement> AdminRequestAsync(string operation, CancellationToken ct, object? args = null)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadline.CancelAfter(TimeSpan.FromSeconds(30));
         await using var stream = await OpenTransportAsync(deadline.Token);
         string id = Guid.NewGuid().ToString();
-        await Wire.WriteAsync(stream, new Request(id, "", operation, Json.Element(new { }), 30, controllerBinarySha256), deadline.Token);
+        await Wire.WriteAsync(stream, new Request(id, "", operation, Json.Element(args ?? new { }), 30, controllerBinarySha256), deadline.Token);
         var challenge = Require(await Wire.ReadAsync<Reply>(stream, deadline.Token));
         string authorization = new UpdateAdminStore(AdminRoot).Sign(challenge.Str("nonce"), Connection.Fingerprint, operation, controllerBinarySha256);
         await Wire.WriteAsync(stream, new { authorization }, deadline.Token);

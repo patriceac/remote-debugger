@@ -33,6 +33,8 @@ public sealed partial class Operations
     {
         switch (op)
         {
+            case "wake.info": return new { wakeAdapters = WakeOnLan.GetAdapters() };
+            case "wake": return await WakeOnLan.SendAsync(a.Str("macAddress"), a.Str("destination"), a.Int("port", 9), ct);
             case "status": return new { machine = Environment.MachineName, user = Environment.UserName, version = Version, os = Environment.OSVersion.VersionString, workspace = Workspace, elevated = Native.IsElevated(), processId = Environment.ProcessId, agentBinarySha256 = ExecutableIdentity.Sha256 };
             case "history": lock (historyLock) return File.Exists(Path.Combine(Root, "history.jsonl")) ? File.ReadLines(Path.Combine(Root, "history.jsonl")).TakeLast(200).Select(x => JsonSerializer.Deserialize<JsonElement>(x)).ToArray() : [];
             case "upload.begin": case "upload.chunk": case "upload.commit": case "upload.status": case "upload.abort":

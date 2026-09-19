@@ -112,6 +112,15 @@ CPU values are percentages of total logical-processor capacity, not a single cor
 
 File reads and uploads accept full paths accessible to the agent user. Relative upload paths stay beneath the agent workspace; `..` cannot escape it. Namespaces and drive letters belong to the remote PC.
 
+## Wake-on-LAN
+
+For Wake-on-LAN, use `cli wake --mac 00:11:22:33:44:55`, optionally with
+`--address 192.168.1.255 --port 9`. This sends from the local PC without a saved
+connection. With no address it broadcasts on active IPv4 Ethernet/Wi-Fi networks.
+An authenticated support session also accepts `wake.info` and `wake` operations;
+`wake` takes `macAddress`, optional `destination`, and optional `port` arguments.
+Success confirms packet transmission, not startup. See [Wake-on-LAN](WAKE_ON_LAN.md).
+
 ## Files
 
 ```powershell

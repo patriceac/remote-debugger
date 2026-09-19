@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('Both', 'Agent', 'Controller', 'Input', 'Loopback', 'LoopbackEconomy', 'LoopbackTray', 'LoopbackLifetime', 'LoopbackUi', 'LoopbackExit', 'LoopbackScale', 'LoopbackColumns', 'LoopbackWan', 'Localization', 'LanguageSelection', 'SingleInstance')]
+    [ValidateSet('Both', 'Agent', 'Controller', 'Input', 'Loopback', 'LoopbackEconomy', 'LoopbackTray', 'LoopbackLifetime', 'LoopbackUi', 'LoopbackExit', 'LoopbackScale', 'LoopbackColumns', 'LoopbackWan', 'LoopbackWake', 'Localization', 'LanguageSelection', 'SingleInstance')]
     [string]$Role = 'Both',
     [ValidateSet('Runtime', 'Provisioned', 'Full')]
     [string]$Scope = 'Runtime',
@@ -26,7 +26,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $artifact 'lab\RemoteDebugger.Lab.ex
 if ($ExecutionTimeoutSeconds -lt 300 -or $ExecutionTimeoutSeconds -gt 1800) { throw 'ExecutionTimeoutSeconds must be between 300 and 1800 seconds.' }
 if ($UpdateVariant -ne 'None' -and $Scope -notin @('Provisioned', 'Full')) { throw 'UpdateVariant requires a Provisioned or Full scope.' }
 if ($Role -eq 'Input' -and ($Scope -ne 'Provisioned' -or $UpdateVariant -ne 'None')) { throw 'Input requires Provisioned scope and None update variant.' }
-if ($Role -in @('Loopback', 'LoopbackEconomy', 'LoopbackTray', 'LoopbackLifetime', 'LoopbackUi', 'LoopbackExit', 'LoopbackScale', 'LoopbackColumns', 'LoopbackWan', 'Localization', 'LanguageSelection', 'SingleInstance') -and ($Scope -ne 'Runtime' -or $UpdateVariant -ne 'None')) { throw 'Loopback roles require Runtime scope and None update variant.' }
+if ($Role -in @('Loopback', 'LoopbackEconomy', 'LoopbackTray', 'LoopbackLifetime', 'LoopbackUi', 'LoopbackExit', 'LoopbackScale', 'LoopbackColumns', 'LoopbackWan', 'LoopbackWake', 'Localization', 'LanguageSelection', 'SingleInstance') -and ($Scope -ne 'Runtime' -or $UpdateVariant -ne 'None')) { throw 'Loopback roles require Runtime scope and None update variant.' }
 if ($Scope -in @('Provisioned', 'Full')) {
     if ([string]::IsNullOrWhiteSpace($BrokerRoot)) { throw 'Provisioned and Full scopes require -BrokerRoot for the dedicated SYSTEM broker.' }
     if ([string]::IsNullOrWhiteSpace($RunnerPath)) { throw 'Provisioned and Full scopes require -RunnerPath for the dedicated runner that supports RemoteDebuggerProvisionV1.' }
@@ -57,7 +57,7 @@ function New-RoleRequest([string]$roleName) {
         ExecutionTimeoutSeconds = $ExecutionTimeoutSeconds
         ThrowOnFailure = $true
     }
-    if ($roleName -in @('Loopback', 'LoopbackEconomy', 'LoopbackTray', 'LoopbackLifetime', 'LoopbackUi', 'LoopbackExit', 'LoopbackScale', 'LoopbackColumns', 'LoopbackWan', 'Localization', 'LanguageSelection', 'SingleInstance')) {
+    if ($roleName -in @('Loopback', 'LoopbackEconomy', 'LoopbackTray', 'LoopbackLifetime', 'LoopbackUi', 'LoopbackExit', 'LoopbackScale', 'LoopbackColumns', 'LoopbackWan', 'LoopbackWake', 'Localization', 'LanguageSelection', 'SingleInstance')) {
         # Runtime checks consume the two canonical build outputs only. Old
         # installers, tampered signing fixtures and update variants are unrelated.
         $request.ArtifactPath = Join-Path $artifact 'lab'
@@ -80,7 +80,7 @@ function New-RoleRequest([string]$roleName) {
         $request.GuestSetupExecutableRelativePath = $setupRelativePath
         $request.GuestSetupExecutableSha256 = $setupHash
     }
-    if ($roleName -notin @('Local', 'Input', 'Loopback', 'LoopbackEconomy', 'LoopbackTray', 'LoopbackLifetime', 'LoopbackUi', 'LoopbackExit', 'LoopbackScale', 'LoopbackColumns', 'LoopbackWan', 'Localization', 'LanguageSelection', 'SingleInstance')) {
+    if ($roleName -notin @('Local', 'Input', 'Loopback', 'LoopbackEconomy', 'LoopbackTray', 'LoopbackLifetime', 'LoopbackUi', 'LoopbackExit', 'LoopbackScale', 'LoopbackColumns', 'LoopbackWan', 'LoopbackWake', 'Localization', 'LanguageSelection', 'SingleInstance')) {
         $request.NetworkProfile = 'IsolatedTestNet'
         $request.NetworkCohort = $Cohort
     }

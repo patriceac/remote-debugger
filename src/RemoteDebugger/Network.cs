@@ -498,7 +498,7 @@ public sealed partial class AgentServer : IDisposable
                         return;
                     }
                     Reply reply;
-                    if (r.Operation is "admin.inspect" or "admin.connect")
+                    if (r.Operation is "admin.inspect" or "admin.connect" or "admin.wake")
                     {
                         handshake.CancelAfter(TimeSpan.FromSeconds(30));
                         await ServeAdminAsync(tls, r, handshake.Token);
@@ -741,7 +741,7 @@ public sealed partial class AgentServer : IDisposable
                         else if ((r.Operation is "maintenance.session" or "maintenance.elevated") && !Operations.Maintenance.Enabled)
                             reply = Reply.Failure(r.Id, "maintenance_disabled", MaintenanceSession.DisabledMessage);
                         else if (!Guid.TryParse(r.Id, out _)) reply = Reply.Failure(r.Id, "invalid_id", "Request id must be a UUID.");
-                        else if (r.Operation is "screenshot" or "monitors" or "status" or "file.info" or "file.read" or "files" or "processes" or "process.info" or "system" or "network" or "services" or "events" or "history" or "windows" or "ui.inspect" or "upload.chunk" or "upload.status" or "ui.input") reply = await ExecuteAsync(r, grant);
+                        else if (r.Operation is "wake.info" or "screenshot" or "monitors" or "status" or "file.info" or "file.read" or "files" or "processes" or "process.info" or "system" or "network" or "services" or "events" or "history" or "windows" or "ui.inspect" or "upload.chunk" or "upload.status" or "ui.input") reply = await ExecuteAsync(r, grant);
                         else if (requests.Count >= 2048 && !requests.ContainsKey(r.Id)) reply = Reply.Failure(r.Id, "session_limit", "Restart the agent to clear its 2048-mutation retry cache.");
                         else
                         {

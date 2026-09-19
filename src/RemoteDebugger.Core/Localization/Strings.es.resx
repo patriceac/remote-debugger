@@ -896,4 +896,21 @@
   <data name="InvalidWanAddress" xml:space="preserve"><value>Introduzca un nombre de host o una dirección IPv4, seguido opcionalmente de :puerto (1–65535), o déjelo vacío.</value></data>
   <data name="WanAddressSaved" xml:space="preserve"><value>Preferencia de conexión guardada para este dispositivo.</value></data>
   <data name="RelayEconomy" xml:space="preserve"><value>Modo ahorro</value></data>
+  <data name="WakePc" xml:space="preserve"><value>Despertar</value></data>
+  <data name="WakeSettings" xml:space="preserve"><value>Configurar WOL</value></data>
+  <data name="WakeSettingsTitle" xml:space="preserve"><value>Wake-on-LAN · {0}</value></data>
+  <data name="WakeMac" xml:space="preserve"><value>Dirección MAC del adaptador</value></data>
+  <data name="WakeSender" xml:space="preserve"><value>Enviar desde</value></data>
+  <data name="WakeThisPc" xml:space="preserve"><value>Este PC</value></data>
+  <data name="WakeDestination" xml:space="preserve"><value>Dirección de difusión / router (opcional)</value></data>
+  <data name="WakePort" xml:space="preserve"><value>Puerto UDP</value></data>
+  <data name="WakeHelp" xml:space="preserve"><value>Active Wake-on-LAN en el firmware y adaptador de red del PC de destino. Deje la dirección vacía para difundir en la LAN del emisor. Para otra red, elija un PC auxiliar encendido en esa LAN; usará su difusión local. Enviar un paquete no confirma el arranque.</value></data>
+  <data name="WakeSettingsSaved" xml:space="preserve"><value>Configuración de WOL guardada para este PC.</value></data>
+  <data name="WakePacketSent" xml:space="preserve"><value>Paquetes de activación enviados. Actualice para comprobar si el PC está en línea.</value></data>
+  <data name="WakeSending" xml:space="preserve"><value>Enviando paquetes de activación…</value></data>
+  <data name="WakeHelperUnavailable" xml:space="preserve"><value>Elija un PC auxiliar en línea en la LAN de destino. Se requiere un PC administrador.</value></data>
+  <data name="InvalidWakeMac" xml:space="preserve"><value>Introduzca una dirección MAC unicast válida, como 00:11:22:33:44:55.</value></data>
+  <data name="InvalidWakeDestination" xml:space="preserve"><value>Introduzca una dirección IPv4 o nombre de host sin puerto y un puerto UDP entre 1 y 65535.</value></data>
+  <data name="WakeNoNetwork" xml:space="preserve"><value>No hay una red IPv4 disponible para enviar paquetes de activación.</value></data>
+  <data name="WakeSendFailed" xml:space="preserve"><value>No se pudieron enviar los paquetes de activación.</value></data>
 </root>

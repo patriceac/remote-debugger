@@ -118,6 +118,12 @@ public static class Program
         try
         {
             string verb = args.FirstOrDefault() ?? "help", config = Option("--connection", RemoteClient.DefaultPath);
+            if (verb == "wake")
+            {
+                var sent = await WakeOnLan.SendAsync(Option("--mac"), Option("--address"), int.Parse(Option("--port", "9")), ct.Token);
+                Console.WriteLine(Json.Text(new { ok = true, data = sent }));
+                return 0;
+            }
             if (verb == "admin-import")
             {
                 new UpdateAdminStore(Option("--data-root", Vault.DefaultRoot)).Import(Option("--file"));
@@ -191,7 +197,7 @@ public static class Program
             }
             if (verb == "help")
             {
-                Console.WriteLine("RemoteDebugger cli discover | internet-import --file SETUP.rdrelay | pair --host IP_OR_SUPPORT_ID [--fingerprint SHA256] (code on stdin) | sync | platform-status | platform-provision | call --request FILE | upload --file FILE --path RELATIVE | download --path REMOTE --file LOCAL | screenshot --file IMAGE | stream --seconds 10 --fps 5\nOptional: --connection FILE; --data-root DIRECTORY for internet-import and pair. Request JSON: {\"operation\":\"status\",\"args\":{},\"timeoutSeconds\":60,\"id\":\"UUID\"}. Exit 0=success, 1=operation failure, 2=transport/input failure. See docs/CLI.md."); return 0;
+                Console.WriteLine("RemoteDebugger cli wake --mac MAC [--address HOST] [--port PORT] | discover | internet-import --file SETUP.rdrelay | pair --host IP_OR_SUPPORT_ID [--fingerprint SHA256] (code on stdin) | sync | platform-status | platform-provision | call --request FILE | upload --file FILE --path RELATIVE | download --path REMOTE --file LOCAL | screenshot --file IMAGE | stream --seconds 10 --fps 5\nOptional: --connection FILE; --data-root DIRECTORY for internet-import and pair. Request JSON: {\"operation\":\"status\",\"args\":{},\"timeoutSeconds\":60,\"id\":\"UUID\"}. Exit 0=success, 1=operation failure, 2=transport/input failure. See docs/CLI.md."); return 0;
             }
             var remote = RemoteClient.Load(config);
             if (verb == "sync")

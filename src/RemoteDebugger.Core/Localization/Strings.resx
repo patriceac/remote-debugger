@@ -896,4 +896,21 @@
   <data name="InvalidWanAddress" xml:space="preserve"><value>Enter a hostname or IPv4 address, optionally followed by :port (1–65535), or leave blank.</value></data>
   <data name="WanAddressSaved" xml:space="preserve"><value>Connection preference saved for this device.</value></data>
   <data name="RelayEconomy" xml:space="preserve"><value>Economy mode</value></data>
+  <data name="WakePc" xml:space="preserve"><value>Wake</value></data>
+  <data name="WakeSettings" xml:space="preserve"><value>Wake settings</value></data>
+  <data name="WakeSettingsTitle" xml:space="preserve"><value>Wake-on-LAN · {0}</value></data>
+  <data name="WakeMac" xml:space="preserve"><value>Network adapter MAC address</value></data>
+  <data name="WakeSender" xml:space="preserve"><value>Send from</value></data>
+  <data name="WakeThisPc" xml:space="preserve"><value>This PC</value></data>
+  <data name="WakeDestination" xml:space="preserve"><value>Broadcast / router address (optional)</value></data>
+  <data name="WakePort" xml:space="preserve"><value>UDP port</value></data>
+  <data name="WakeHelp" xml:space="preserve"><value>Enable Wake-on-LAN in the target PC's firmware and network adapter. Leave the address blank to broadcast on the sender's LAN. For another network, select an awake helper on that LAN; it uses its own local broadcasts. A sent packet does not confirm startup.</value></data>
+  <data name="WakeSettingsSaved" xml:space="preserve"><value>Wake settings saved for this PC.</value></data>
+  <data name="WakePacketSent" xml:space="preserve"><value>Wake packets sent. Refresh to check whether the PC is online.</value></data>
+  <data name="WakeSending" xml:space="preserve"><value>Sending wake packets…</value></data>
+  <data name="WakeHelperUnavailable" xml:space="preserve"><value>Choose an online helper PC on the target's LAN. An admin PC is required.</value></data>
+  <data name="InvalidWakeMac" xml:space="preserve"><value>Enter a valid unicast MAC address, such as 00:11:22:33:44:55.</value></data>
+  <data name="InvalidWakeDestination" xml:space="preserve"><value>Enter an IPv4 address or hostname without a port, and a UDP port from 1 to 65535.</value></data>
+  <data name="WakeNoNetwork" xml:space="preserve"><value>No IPv4 network is available to send wake packets.</value></data>
+  <data name="WakeSendFailed" xml:space="preserve"><value>Wake packets could not be sent.</value></data>
 </root>

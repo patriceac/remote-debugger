@@ -31,6 +31,10 @@ Closing either window keeps the application and connection in the system tray. R
 
 The available-PC, process and file tables remember their column widths and order separately. Drag a header to reorder it, drag its edge to resize it, or double-click an edge to fit its contents. Preferences survive restarting and use logical widths so changing display scaling preserves the layout.
 
+Saved PCs support **Wake settings** and **Wake** on the Connection page, including
+local broadcasts, a configured router destination, or an authenticated awake helper
+on a remote LAN. See [Wake-on-LAN](docs/WAKE_ON_LAN.md) for setup and network requirements.
+
 ## Development
 
 ```powershell
