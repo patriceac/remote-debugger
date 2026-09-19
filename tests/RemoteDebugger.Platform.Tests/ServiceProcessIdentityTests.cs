@@ -91,6 +91,17 @@ public sealed class FleetUpdateRecoveryTests
         Assert.True(AgentUpdateClient.IsRetryableStageFailure(new RemoteOperationException("update_cancelled", "Timed out")));
         Assert.False(AgentUpdateClient.IsRetryableStageFailure(new RemoteOperationException("update_failed", "Hash mismatch")));
     }
+
+    [Fact]
+    public void LegacyVerificationWaitsForTheDetachedBrokerBeforeRetrying()
+    {
+        var cancelled = new RemoteOperationException("update_cancelled", "Update operation was cancelled.");
+
+        Assert.True(AgentUpdateClient.StageRetryDelay("0.4.15.0", cancelled) > TimeSpan.FromMinutes(3));
+        Assert.Equal(TimeSpan.Zero, AgentUpdateClient.StageRetryDelay("0.4.20.0", cancelled));
+        Assert.True(SupportOperationTimeouts.ControllerSynchronizationSeconds >
+                    SupportOperationTimeouts.UpdateStageSeconds + SupportOperationTimeouts.LegacyUpdateStageSettleSeconds);
+    }
 }
 
 public sealed class AgentUpdateHealthTests
