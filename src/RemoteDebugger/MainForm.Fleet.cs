@@ -50,6 +50,7 @@ public sealed partial class MainForm
                 new Rectangle(e.Bounds.X + 5, e.Bounds.Y, e.Bounds.Width - 10, e.Bounds.Height - 5),
                 e.Item.Selected ? SystemColors.HighlightText : PrimaryText, Forms.TextFormatFlags.EndEllipsis | Forms.TextFormatFlags.VerticalCenter);
         };
+        RenderPeers();
     }
 
     private void ObserveFleet()

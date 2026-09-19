@@ -1179,7 +1179,15 @@ public sealed partial class MainForm : Forms.Form
             await RefreshFleetVersionsAsync(discoveryLifetime.Token);
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { discoveryState.SetText(() => UiText.SearchUnavailablePrefix + ex.Message); }
+        catch (Exception ex)
+        {
+            if (PrivateInternet)
+            {
+                foreach (var key in fleet.Keys.ToArray()) fleet[key] = fleet[key] with { Online = false, State = "offline", Detail = "" };
+                RenderPeers();
+            }
+            discoveryState.SetText(() => UiText.SearchUnavailablePrefix + ex.Message);
+        }
         finally { discoverButton.Enabled = true; }
     }
 
