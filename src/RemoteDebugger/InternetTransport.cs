@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Sockets;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -105,7 +106,8 @@ public sealed record InternetSettings(string RelayUrl, string AccessKey, string 
     {
         if (!IsSupportId(address)) return new(address, port, fingerprint, "");
         var settings = Load(root) ?? throw new InvalidOperationException(UiText.InternetSetupRequired);
-        return new(DisplayId(SessionId(address)), 443, fingerprint, "", settings.RelayUrl, settings.AccessKey);
+        return new(DisplayId(SessionId(address)), 443, fingerprint, "", settings.RelayUrl, settings.AccessKey,
+            WanEndpoint: DeviceWanAddress.Load(root, fingerprint));
     }
 
     internal static Connection Target(Peer peer, string root)
@@ -113,7 +115,8 @@ public sealed record InternetSettings(string RelayUrl, string AccessKey, string 
         if (peer.SupportId.Length == 0 || IsSupportId(peer.Host)) return Target(peer.Host, peer.Port, peer.Fingerprint, root);
         var settings = Load(root);
         return settings == null ? new(peer.Host, peer.Port, peer.Fingerprint, "")
-            : new(peer.SupportId, 443, peer.Fingerprint, "", settings.RelayUrl, settings.AccessKey, peer.Host, peer.Port);
+            : new(peer.SupportId, 443, peer.Fingerprint, "", settings.RelayUrl, settings.AccessKey, peer.Host, peer.Port,
+                DeviceWanAddress.Load(root, peer.Fingerprint));
     }
 
     internal ClientWebSocket Socket(string? sessionKey = null)
@@ -143,7 +146,14 @@ public static class ConnectionTransport
     private static async Task<Stream> OpenTcpAsync(string host, int port, CancellationToken ct)
     {
         var tcp = new TcpClient { NoDelay = true };
-        try { await tcp.ConnectAsync(host, port, ct).ConfigureAwait(false); return tcp.GetStream(); }
+        try
+        {
+            // The agent listens on IPv4; do not spend the direct-route deadline
+            // attempting an IPv6 address returned first for a dual-stack name.
+            var addresses = await Dns.GetHostAddressesAsync(host, AddressFamily.InterNetwork, ct).ConfigureAwait(false);
+            await tcp.ConnectAsync(addresses, port, ct).ConfigureAwait(false);
+            return tcp.GetStream();
+        }
         catch { tcp.Dispose(); throw; }
     }
 

@@ -21,12 +21,15 @@ internal static class PairingTransport
 {
     public static async Task<Connection> PairAsync(Connection target, string code, CancellationToken ct)
     {
-        if (target.DirectHost.Length > 0 && target.RelayUrl.Length > 0)
+        if (target.RelayUrl.Length > 0)
         {
-            using var attempt = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            attempt.CancelAfter(TimeSpan.FromSeconds(5));
-            try { return await PairOnceAsync(target, code, attempt.Token).ConfigureAwait(false); }
-            catch (Exception ex) when (!ct.IsCancellationRequested && ex is IOException or SocketException or AuthenticationException or OperationCanceledException) { }
+            foreach (var endpoint in RemoteClient.PreferredDirectEndpoints(target))
+            {
+                using var attempt = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                attempt.CancelAfter(TimeSpan.FromSeconds(5));
+                try { return await PairOnceAsync(target with { DirectHost = endpoint.Host, DirectPort = endpoint.Port }, code, attempt.Token).ConfigureAwait(false); }
+                catch (Exception ex) when (!ct.IsCancellationRequested && ex is IOException or SocketException or AuthenticationException or OperationCanceledException) { }
+            }
             target = target with { DirectHost = "", DirectPort = 0 };
         }
         return await PairOnceAsync(target, code, ct).ConfigureAwait(false);

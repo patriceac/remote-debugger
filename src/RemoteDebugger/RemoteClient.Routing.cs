@@ -41,23 +41,33 @@ public sealed partial class RemoteClient
     private bool CoolingDown(DirectEndpoint endpoint) => failedRoutes.TryGetValue($"{endpoint.Host}:{endpoint.Port}", out var until) && until > DateTimeOffset.UtcNow;
     private void CoolDown(string host, int port) => failedRoutes[$"{host}:{port}"] = DateTimeOffset.UtcNow.AddMinutes(2);
 
+    internal static IEnumerable<DirectEndpoint> PreferredDirectEndpoints(Connection route)
+    {
+        if (route.DirectHost.Length > 0 && IsLanAddress(route.DirectHost))
+            yield return new(route.DirectHost, route.DirectPort);
+        if (route.WanEndpoint is { } wan && (wan.Host != route.DirectHost || wan.Port != route.DirectPort || !IsLanAddress(route.DirectHost)))
+            yield return wan;
+    }
+
     internal async Task<Stream> OpenTransportAsync(CancellationToken ct)
     {
         if (discoverRoutes) await RefreshRoutesIfNeededAsync(ct).ConfigureAwait(false);
         var route = Connection;
-        if (route.DirectHost.Length > 0 && route.RelayUrl.Length > 0)
+        if (route.RelayUrl.Length > 0)
         {
-            if (!CoolingDown(new(route.DirectHost, route.DirectPort)))
+            foreach (var endpoint in PreferredDirectEndpoints(route).Where(endpoint => !CoolingDown(endpoint)))
             {
                 using var attempt = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 attempt.CancelAfter(TimeSpan.FromSeconds(2));
                 try
                 {
-                    var stream = await transportFactory(route, attempt.Token).ConfigureAwait(false);
-                    ActiveRoute = IsLanAddress(route.DirectHost) ? "Direct LAN" : "Direct WAN";
+                    var direct = route with { DirectHost = endpoint.Host, DirectPort = endpoint.Port };
+                    var stream = await transportFactory(direct, attempt.Token).ConfigureAwait(false);
+                    if (ReferenceEquals(Connection, route)) Connection = direct;
+                    ActiveRoute = IsLanAddress(endpoint.Host) ? "Direct LAN" : "Direct WAN";
                     return stream;
                 }
-                catch (Exception) when (!ct.IsCancellationRequested) { CoolDown(route.DirectHost, route.DirectPort); }
+                catch (Exception) when (!ct.IsCancellationRequested) { CoolDown(endpoint.Host, endpoint.Port); }
             }
             if (ReferenceEquals(Connection, route)) Connection = route with { DirectHost = "", DirectPort = 0 };
             route = route with { DirectHost = "", DirectPort = 0 };
@@ -86,9 +96,10 @@ public sealed partial class RemoteClient
             if (peer != null)
             {
                 if (Connection.RelayUrl.Length == 0) Connection = Connection with { Host = peer.Host, Port = peer.Port };
+                else if (Connection.Token.Length == 0) { Connection = Connection with { DirectHost = peer.Host, DirectPort = peer.Port }; return; }
                 else if (await TryPreferDirectAsync([new(peer.Host, peer.Port)], deadline.Token).ConfigureAwait(false)) return;
             }
-            if (Connection.RelayUrl.Length > 0)
+            if (Connection.RelayUrl.Length > 0 && Connection.Token.Length > 0)
                 await TryPreferDirectAsync(await GetDirectEndpointsAsync(deadline.Token).ConfigureAwait(false), deadline.Token).ConfigureAwait(false);
         }
         catch (Exception) when (!ct.IsCancellationRequested) { }

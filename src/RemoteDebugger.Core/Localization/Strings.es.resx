@@ -890,4 +890,9 @@
   <data name="AdminSetupHelp" xml:space="preserve"><value>Introduzca la contraseña de administrador para autorizar a este PC a actualizar sus dispositivos. Windows recordará este acceso.</value></data>
   <data name="ActivateAdmin" xml:space="preserve"><value>Autorizar este PC</value></data>
   <data name="AdminCredentialRejected" xml:space="preserve"><value>No se pudo verificar la contraseña o la credencial de administrador. Inténtelo de nuevo.</value></data>
+  <data name="OptionalWanAddress" xml:space="preserve"><value>Dirección WAN (opcional)</value></data>
+  <data name="SaveWanAddress" xml:space="preserve"><value>Guardar</value></data>
+  <data name="WanAddressHelp" xml:space="preserve"><value>LAN → WAN → relé. Puerto predeterminado: 45832. Déjelo vacío para omitir WAN.</value></data>
+  <data name="InvalidWanAddress" xml:space="preserve"><value>Introduzca un nombre de host o una dirección IPv4, seguido opcionalmente de :puerto (1–65535), o déjelo vacío.</value></data>
+  <data name="WanAddressSaved" xml:space="preserve"><value>Preferencia de conexión guardada para este dispositivo.</value></data>
 </root>

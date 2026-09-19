@@ -890,4 +890,9 @@
   <data name="AdminSetupHelp" xml:space="preserve"><value>Enter the admin password to authorize this PC to update your devices. Windows will remember this access.</value></data>
   <data name="ActivateAdmin" xml:space="preserve"><value>Authorize this PC</value></data>
   <data name="AdminCredentialRejected" xml:space="preserve"><value>The password or admin credential could not be verified. Try again.</value></data>
+  <data name="OptionalWanAddress" xml:space="preserve"><value>WAN address (optional)</value></data>
+  <data name="SaveWanAddress" xml:space="preserve"><value>Save</value></data>
+  <data name="WanAddressHelp" xml:space="preserve"><value>LAN → WAN → relay. Default port: 45832. Leave blank to skip WAN.</value></data>
+  <data name="InvalidWanAddress" xml:space="preserve"><value>Enter a hostname or IPv4 address, optionally followed by :port (1–65535), or leave blank.</value></data>
+  <data name="WanAddressSaved" xml:space="preserve"><value>Connection preference saved for this device.</value></data>
 </root>

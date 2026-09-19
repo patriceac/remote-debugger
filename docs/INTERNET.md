@@ -1,6 +1,6 @@
 # Internet support
 
-Discovery queries LAN and the private relay together and prefers LAN results for the same certificate identity. A private LAN pair uses the current invitation and protected pairing secret directly, without a relay handshake. Reachable authenticated LAN candidates take priority over public-IP candidates; HTTPS/WebSockets on port 443 provide rendezvous and fallback when direct TCP is unavailable. RPC, screen, input, updates and file transfers share the same pinned connection policy. Failed direct endpoints have a two-minute cooldown; relay connections are reconsidered for direct routing once a minute and after network changes. Existing streams switch at their next safe connection boundary. No VPN, port forwarding or incoming firewall rule is required for relay use.
+Discovery queries LAN and the private relay together and prefers LAN results for the same certificate identity. A private LAN pair uses the current invitation and protected pairing secret directly, without a relay handshake. Connectivity prefers LAN, then an optional configured WAN address, then HTTPS/WebSockets relay on port 443. RPC, screen, input, updates and file transfers share the same pinned connection policy. Failed direct endpoints have a two-minute cooldown; relay connections are reconsidered for direct routing once a minute and after network changes. Existing streams switch at their next safe connection boundary. No VPN, port forwarding or incoming firewall rule is required for relay use.
 
 ## Set up your devices
 
@@ -14,9 +14,15 @@ The installer contains passphrase-encrypted relay and pairing credentials. After
 
 Use the private installer for the normal setup and for relay configuration updates. The developer CLI can still import a `.rdrelay` profile for a portable build; this is not part of the app's setup flow.
 
-Routing IDs remain internal and change between support sessions. **End support** immediately revokes access; the computer disappears on a subsequent discovery refresh. After an abrupt disconnection, presence can remain stale for up to a minute before the next refresh. A fresh launch waits for **Enable support** again. Transient relay failures reconnect with backoff while the existing support-session grace period applies. If local support is provisioned, the agent also prepares its LAN listener and firewall rule; the controller then discovers it locally and authenticates with the same private session identity. Direct WAN use additionally requires the advertised public IP and TCP 45832 to be reachable through the router and any upstream firewall; otherwise the saved relay route is used.
+Routing IDs remain internal and change between support sessions. **End support** immediately revokes access; the computer disappears on a subsequent discovery refresh. After an abrupt disconnection, presence can remain stale for up to a minute before the next refresh. A fresh launch waits for **Enable support** again. Transient relay failures reconnect with backoff while the existing support-session grace period applies. If local support is provisioned, the agent also prepares its LAN listener and firewall rule; the controller then discovers it locally and authenticates with the same private session identity. Direct WAN requires an optional configured address reachable through the router and firewalls; otherwise the relay route is used.
 
 `--loopback-only` also disables internet registration. Importing a setup file does not enable Windows administrator maintenance; the existing separate Windows provisioning rules still apply.
+
+### Optional direct WAN access
+
+Select a device under **Take control**, enter its **WAN address (optional)** and click **Save**. `bedros.hd.free.fr` uses TCP 45832; `bedros.hd.free.fr:55001` uses TCP 55001. Clear and save to use LAN → relay only. This controller remembers the setting by device certificate, including after restart or connection failure, and shares it with CLI/fleet connections. Automatically reported public IPs do not enable WAN access. Relay discovery still supplies current private session invitations outside the LAN.
+
+Reserve the receiving PC's LAN IP and forward its fixed **external TCP port** to that PC's **TCP 45832**. Several PCs sharing a public IP need distinct external ports (55001 → PC A:45832, 55002 → PC B:45832). Enter the external port in the app. UDP 45833 is LAN discovery only. The app's automatic Windows firewall rules allow only `LocalSubnet`; direct WAN additionally needs an explicit inbound TCP 45832 rule for the app permitting the intended remote source. Saving a WAN address does not change router or firewall rules. TLS pinning and private pairing apply on every route.
 
 ## CLI
 

@@ -24,7 +24,7 @@ For private internet access, unlock the personal installer's encrypted setup onc
 ./RemoteDebugger.exe cli sync
 ```
 
-`--data-root DIRECTORY` selects the settings directory for `internet-import`, `discover` and `pair`; `--connection FILE` still selects the saved connection. With a private profile, discovery lists online computers and pairing authenticates using the separate installer secret. Without one, discovery and code entry retain their LAN behavior. Both internet endpoints connect outward over port 443 for relay work. After private pairing, the controller probes the agent's authenticated LAN/public candidates and saves a direct endpoint when reachable; later commands prefer it and fall back to the protected relay route with the pinned endpoint. Direct WAN use still requires TCP 45832 to be reachable. See [internet support](INTERNET.md).
+`--data-root DIRECTORY` selects the settings directory for `internet-import`, `discover` and `pair`; `--connection FILE` still selects the saved connection. With a private profile, discovery lists online computers and pairing authenticates using the separate installer secret. Without one, discovery and code entry retain their LAN behavior. Both internet endpoints connect outward over port 443 for relay work. Private connections prefer LAN, then the optional per-device WAN address saved in the app, then the protected relay with the pinned endpoint. The external WAN port defaults to 45832 and may be overridden; it must be forwarded to the receiving PC's TCP 45832. See [internet support](INTERNET.md).
 
 Private discovery also returns LAN peers and their current `supportId`. Pairing to
 their LAN IP derives the same private secret automatically; `--support-id RD-...`

@@ -84,6 +84,7 @@ public sealed partial class MainForm
 
     private void RefreshControllerControls()
     {
+        RefreshWanAddress();
         if (executeButton == null) return;
         var state = WorkspaceAvailability.For(supportSession, heartbeatHealthy, pairingBusy || clientUpdateBusy || FleetBusy, terminating, action != null, selectedFilePath != null);
         pairButton.Enabled = host.Enabled = code.Enabled = state.CanPair;

@@ -2,6 +2,11 @@ namespace RemoteDebugger.Core;
 
 public static partial class UiText
 {
+    public static string OptionalWanAddress => Get(nameof(OptionalWanAddress));
+    public static string SaveWanAddress => Get(nameof(SaveWanAddress));
+    public static string WanAddressHelp => Get(nameof(WanAddressHelp));
+    public static string InvalidWanAddress => Get(nameof(InvalidWanAddress));
+    public static string WanAddressSaved => Get(nameof(WanAddressSaved));
     public static string UpdateAllDevices => Get(nameof(UpdateAllDevices));
     public static string StopUpdates => Get(nameof(StopUpdates));
     public static string DeviceVersion => Get(nameof(DeviceVersion));

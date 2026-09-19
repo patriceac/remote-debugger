@@ -460,6 +460,7 @@ public sealed partial class MainForm : Forms.Form
         for (int i = 2; i < 7; i++) panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 60)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
         panel.Controls.Add(selectedPeerName, 0, 0); panel.Controls.Add(selectedPeerAddress, 0, 1);
+        if (PrivateInternet) BuildWanAddressFields(panel);
         if (!PrivateInternet)
         {
             panel.Controls.Add(new WorkspaceLabel { AutoSize = true, ForeColor = SecondaryText, Margin = Forms.Padding.Empty, Dock = Forms.DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }.WithText(() => UiText.IpOrManual), 0, 2);
@@ -1158,7 +1159,7 @@ public sealed partial class MainForm : Forms.Form
             string? localSupportId = PrivateInternet ? agent?.Internet?.SupportId : null;
             discoveredPeers.AddRange(PeerDiscovery.DistinctPeers(found.Where(p => !PeerDiscovery.IsLocalPeer(p, localSupportId) && (InternetSettings.IsSupportId(p.Host) || IsRemotePeer(p)))).OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase));
             if (PrivateInternet) ObserveFleet();
-            if (selectedPeer != null) selectedPeer = PeerDiscovery.Rebind(selectedPeer, discoveredPeers);
+            if (selectedPeer != null) selectedPeer = PeerDiscovery.Rebind(selectedPeer, discoveredPeers) ?? (PrivateInternet ? selectedPeer : null);
             if (selectedPeer != null)
             {
                 selectedFingerprint = selectedPeer.Fingerprint; host.SetText(selectedPeer.Host); selectedPeerName.SetText(selectedPeer.Name);
@@ -1235,6 +1236,7 @@ public sealed partial class MainForm : Forms.Form
         if (peers.SelectedItems.Count == 0 || peers.SelectedItems[0].Tag is not Peer peer) return;
         InvalidateInputSession();
         selectedPeer = peer; selectedFingerprint = peer.Fingerprint; host.SetText(peer.Host); selectedPeerName.SetText(peer.Name);
+        RefreshWanAddress();
         selectedPeerAddress.SetText(() => PrivateInternet
             ? InternetSettings.IsSupportId(peer.Host) ? UiText.InternetReady : UiText.LanFallbackReady
             : peer.Host);
@@ -1247,6 +1249,7 @@ public sealed partial class MainForm : Forms.Form
         if (supportSession) { connectionState.SetText(() => UiText.EndSupportBeforeNewCode); return; }
         if (pairingBusy || FleetBusy || fleetRefreshing || string.IsNullOrWhiteSpace(host.Text)) { connectionState.SetText(() => PrivateInternet ? UiText.SelectComputer : UiText.ChoosePcPeriod); return; }
         if (!PrivateInternet && (code.Text.Length != 6 || !code.Text.All(char.IsAsciiDigit))) { connectionState.SetText(() => UiText.CodeMustBeSixDigits); code.Focus(); return; }
+        if (PrivateInternet && !SaveWanAddress()) return;
         pairingBusy = true; synchronizingAgent = false; pairButton.Enabled = false; discoverButton.Enabled = false; code.Enabled = false; host.Enabled = false; operationGeneration++; int generation = operationGeneration; sessionGeneration++; liveFrameFresh = false; var pairingCts = new CancellationTokenSource(); pairingLifetime = pairingCts;
         RemoteClient? pairedClient = null;
         updateProgressArea.Visible = false;

@@ -35,7 +35,8 @@ public sealed record Connection(
     string RelayUrl = "",
     string RelayAccessKey = "",
     string DirectHost = "",
-    int DirectPort = 0);
+    int DirectPort = 0,
+    DirectEndpoint? WanEndpoint = null);
 
 public static class Discovery
 {
@@ -1008,7 +1009,7 @@ public sealed partial class RemoteClient
         var data = Require(await CallAsync("connection.candidates", ct: ct, seconds: 10).ConfigureAwait(false));
         if (!data.TryGetProperty("candidates", out var candidates)) return [];
         return candidates.Deserialize<List<DirectEndpoint>>(Json.Options)?
-            .Where(candidate => IPAddress.TryParse(candidate.Host, out var address) && address.AddressFamily == AddressFamily.InterNetwork && candidate.Port is > 0 and < 65536)
+            .Where(candidate => IsLanAddress(candidate.Host) && candidate.Port is > 0 and < 65536)
             .DistinctBy(candidate => $"{candidate.Host}:{candidate.Port}", StringComparer.OrdinalIgnoreCase)
             .Take(16)
             .ToArray() ?? [];
@@ -1019,7 +1020,7 @@ public sealed partial class RemoteClient
         Connection relay = Connection;
         async Task<DirectEndpoint?> Probe(DirectEndpoint candidate)
         {
-            if (!IPAddress.TryParse(candidate.Host, out var address) || address.AddressFamily != AddressFamily.InterNetwork ||
+            if (!(IsLanAddress(candidate.Host) || candidate == relay.WanEndpoint) ||
                 candidate.Port is not (> 0 and < 65536) || CoolingDown(candidate)) return null;
             using var attempt = CancellationTokenSource.CreateLinkedTokenSource(ct);
             attempt.CancelAfter(TimeSpan.FromSeconds(2));
@@ -1034,7 +1035,7 @@ public sealed partial class RemoteClient
             };
             try
             {
-                await using var tls = await OpenAuthenticatedTransportOnceAsync(direct, attempt.Token).ConfigureAwait(false);
+                await using var tls = await transportFactory(direct, attempt.Token).ConfigureAwait(false);
                 var id = Guid.NewGuid().ToString();
                 // Status is intentionally allowed before binary synchronization so
                 // a newly paired controller can move the synchronization itself
@@ -1048,11 +1049,16 @@ public sealed partial class RemoteClient
             CoolDown(candidate.Host, candidate.Port);
             return null;
         }
-        var results = await Task.WhenAll(candidates.Distinct().Take(16).OrderByDescending(c => IsLanAddress(c.Host)).Select(Probe)).ConfigureAwait(false);
-        var preferred = results.FirstOrDefault(candidate => candidate != null);
-        if (preferred == null) return false;
-        Connection = Connection with { DirectHost = preferred.Host, DirectPort = preferred.Port };
-        return true;
+        var endpoints = candidates.Where(c => IsLanAddress(c.Host)).Take(16)
+            .Concat(relay.WanEndpoint is { } wan ? [wan] : []).Distinct();
+        foreach (var group in endpoints.OrderByDescending(c => IsLanAddress(c.Host)).GroupBy(c => IsLanAddress(c.Host)))
+        {
+            var results = await Task.WhenAll(group.Select(Probe)).ConfigureAwait(false);
+            if (results.FirstOrDefault(candidate => candidate != null) is not { } preferred) continue;
+            Connection = Connection with { DirectHost = preferred.Host, DirectPort = preferred.Port };
+            return true;
+        }
+        return false;
     }
     public async Task<JsonElement> HeartbeatAsync(CancellationToken ct = default) => Require(await CallAsync("session.heartbeat", ct: ct, seconds: 5).ConfigureAwait(false));
     public async Task EndSessionAsync(CancellationToken ct = default)

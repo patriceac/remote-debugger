@@ -291,8 +291,10 @@ public sealed class InternetTransportTests
         Assert.Equal(peer, roundTrip);
     }
 
-    [Fact]
-    public async Task RelayPairedConnectionSwitchesToAnAuthenticatedDirectEndpoint()
+    [Theory]
+    [InlineData("127.0.0.1")]
+    [InlineData("localhost")]
+    public async Task RelayPairedConnectionSwitchesToAnAuthenticatedDirectEndpoint(string directHost)
     {
         string root = Path.Combine(Path.GetTempPath(), "RemoteDebugger-DirectRoute-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -303,23 +305,30 @@ public sealed class InternetTransportTests
             server = new AgentServer(root, port, loopbackOnly: true, enableInternet: false);
             server.Start();
             string code = server.Pairing.CurrentCode ?? throw new InvalidOperationException("Agent did not expose a pairing code.");
-            var paired = await PairingTransport.PairAsync(new Connection("127.0.0.1", port, server.Fingerprint, ""), code, CancellationToken.None);
+            var pairTarget = directHost == "localhost"
+                ? new Connection("RD-0123-4567-89AB-CDEF", 443, server.Fingerprint, "", "https://relay.example", new string('a', 64),
+                    "127.0.0.1", ReserveTcpPort(), new(directHost, port))
+                : new Connection("127.0.0.1", port, server.Fingerprint, "");
+            var paired = await PairingTransport.PairAsync(pairTarget, code, CancellationToken.None);
+            if (directHost == "localhost") Assert.Equal(directHost, paired.DirectHost);
             var client = new RemoteClient(new Connection(
                 "RD-0123-4567-89AB-CDEF",
                 443,
                 paired.Fingerprint,
                 paired.Token,
                 "https://relay.example",
-                new string('a', 64)));
+                new string('a', 64), WanEndpoint: directHost == "localhost" ? new(directHost, port) : null));
 
-            Assert.True(await client.TryPreferDirectAsync([new DirectEndpoint("127.0.0.1", port)]));
+            Assert.True(await client.TryPreferDirectAsync([new DirectEndpoint(directHost, port)]));
             Assert.True(client.UsesDirectTransport);
-            Assert.Equal("127.0.0.1", client.Connection.DirectHost);
+            Assert.Equal(directHost, client.Connection.DirectHost);
             Assert.Equal(port, client.Connection.DirectPort);
             Assert.Equal("https://relay.example", client.Connection.RelayUrl);
             Assert.Equal(client.Connection, JsonSerializer.Deserialize<Connection>(
                 JsonSerializer.SerializeToUtf8Bytes(client.Connection, Json.Options), Json.Options));
             Assert.True((await client.HeartbeatAsync()).GetProperty("session").GetProperty("connected").GetBoolean());
+            var wrongIdentity = new RemoteClient(client.Connection with { Fingerprint = new string('f', 64), DirectHost = "", DirectPort = 0 });
+            Assert.False(await wrongIdentity.TryPreferDirectAsync([new DirectEndpoint(directHost, port)]));
         }
         finally
         {
