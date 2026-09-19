@@ -515,12 +515,15 @@ internal static class AgentUpdateClient
             throw new InvalidOperationException(platform.Message);
     }
 
-    private static async Task StageTransferredAgentAsync(RemoteClient client, string transactionId, string? agentVersion, CancellationToken ct)
+    internal static async Task StageTransferredAgentAsync(RemoteClient client, string transactionId, string? agentVersion, CancellationToken ct)
     {
         for (int attempt = 0; ; attempt++)
         {
             try
             {
+                // The broker idles out during long transfers. A full snapshot wakes
+                // it before staging, including on clients predating this fix.
+                RequireUpdatePlatform(RemoteClient.Require(await client.CallAsync("update.snapshot", ct: ct, seconds: 120)));
                 RemoteClient.Require(await client.SendUpdateAsync("update.stage", new { transactionId }, ct,
                     seconds: SupportOperationTimeouts.UpdateStageSeconds));
                 return;

@@ -646,6 +646,47 @@ public sealed class InternetTransportTests
         Assert.Equal(bytes, Assert.Single(stream.BinaryChunks));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task UpdateVerificationWakesServiceThatStoppedDuringTransfer(bool canStartService)
+    {
+        bool serviceRunning = true;
+        int stageCalls = 0;
+        Reply Respond(Request request)
+        {
+            Assert.Equal("token", request.Token);
+            if (request.Operation == "update.chunk") serviceRunning = false;
+            if (request.Operation == "update.snapshot")
+            {
+                Assert.False(request.Args.TryGetProperty("versionOnly", out _));
+                serviceRunning = canStartService;
+                return Reply.Success(request.Id, new { platform = new { available = serviceRunning, message = "Service could not start." } });
+            }
+            if (request.Operation == "update.stage")
+            {
+                stageCalls++;
+                if (!serviceRunning) return Reply.Failure(request.Id, "update_cancelled", "Update operation was cancelled.");
+            }
+            return Reply.Success(request.Id, new { });
+        }
+        var client = new RemoteClient(new Connection("127.0.0.1", 45832, new string('a', 64), "token"),
+            (_, _) => Task.FromResult<Stream>(new ScriptedInputStream { Respond = Respond }));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        try
+        {
+            string transactionId = new string('b', 32);
+            RemoteClient.Require(await client.SendUpdateAsync("update.chunk", new { transactionId, offset = 0L, data = "AQI=" }, timeout.Token));
+            if (canStartService)
+                await AgentUpdateClient.StageTransferredAgentAsync(client, transactionId, "0.4.15.0", timeout.Token);
+            else
+                Assert.Equal("Service could not start.", (await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                    AgentUpdateClient.StageTransferredAgentAsync(client, transactionId, "0.4.15.0", timeout.Token))).Message);
+            Assert.Equal(canStartService ? 1 : 0, stageCalls);
+        }
+        finally { await client.CloseUpdateChannelAsync(); }
+    }
+
     [Fact]
     public async Task LegacyUpdatePeerConvertsBinaryChunkToBase64WithoutWritingRawBytes()
     {
@@ -906,6 +947,7 @@ public sealed class InternetTransportTests
         public bool RejectUpdateOpen { get; init; }
         public bool SupportsPersistentHeartbeat { get; init; }
         public bool SupportsBinaryChunks { get; init; }
+        public Func<Request, Reply>? Respond { get; init; }
         public bool Disposed { get; private set; }
         public override bool CanRead => true;
         public override bool CanSeek => false;
@@ -952,7 +994,9 @@ public sealed class InternetTransportTests
                 byte[] body = pending.GetRange(4, size).ToArray(); pending.RemoveRange(0, size + 4);
                 Request request = JsonSerializer.Deserialize<Request>(body, Json.Options)!;
                 Requests.Add(request);
-                if (RejectUpdateOpen && request.Operation == "update.open")
+                if (Respond != null)
+                    QueueReply(Respond(request));
+                else if (RejectUpdateOpen && request.Operation == "update.open")
                     QueueReply(Reply.Failure(request.Id, "binary_mismatch", "Synchronize the agent with the controller executable before starting support."));
                 else if (request.Operation == "session.heartbeat")
                 {
