@@ -413,6 +413,7 @@ internal static class AgentUpdateClient
         }
 
         UpdatePolicy.RequireNewerRelease(controller, agent);
+        RequireUpdatePlatform(snapshot);
         if (!new UpdateAdminStore(client.AdminRoot).IsAdmin)
             throw new UnauthorizedAccessException("Set up this computer as an admin in the installer before updating clients.");
 
@@ -506,6 +507,13 @@ internal static class AgentUpdateClient
 
     private static bool IsExact(ExecutableSnapshot left, ExecutableSnapshot right) =>
         left.Size == right.Size && UpdatePolicy.FixedHexEquals(left.Sha256, right.Sha256);
+
+    internal static void RequireUpdatePlatform(JsonElement snapshot)
+    {
+        if (snapshot.TryGetProperty("platform", out var value) &&
+            value.Deserialize<SupportPlatformStatus>(Json.Options) is { Available: false } platform)
+            throw new InvalidOperationException(platform.Message);
+    }
 
     private static async Task StageTransferredAgentAsync(RemoteClient client, string transactionId, string? agentVersion, CancellationToken ct)
     {

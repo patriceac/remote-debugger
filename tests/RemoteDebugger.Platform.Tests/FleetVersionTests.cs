@@ -1,11 +1,22 @@
 using System.Collections.Concurrent;
 using RemoteDebugger;
+using RemoteDebugger.Core;
 using Xunit;
 
 namespace RemoteDebugger.Platform.Tests;
 
 public sealed class FleetVersionTests
 {
+    [Fact]
+    public void UpdatePreflightRejectsUnavailablePlatformAndAcceptsLegacySnapshots()
+    {
+        var unavailable = Json.Element(new { platform = new { available = false, message = "Repair the installed support service." } });
+        Assert.Equal("Repair the installed support service.", Assert.Throws<InvalidOperationException>(() =>
+            AgentUpdateClient.RequireUpdatePlatform(unavailable)).Message);
+        AgentUpdateClient.RequireUpdatePlatform(Json.Element(new { platform = new { available = true } }));
+        AgentUpdateClient.RequireUpdatePlatform(Json.Element(new { }));
+    }
+
     [Fact]
     public async Task SlowClientDoesNotBlockOtherChecksAndConcurrencyIsBounded()
     {
