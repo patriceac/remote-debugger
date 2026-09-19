@@ -1016,7 +1016,7 @@ public sealed partial class MainForm : Forms.Form
         }
         if (session.Connected && session.BinaryMatched)
         {
-            CurrentPairingCode = null; pairingCountdownText.SetText(() => UiText.CodeConsumed); pairingCountdown.Value = 0; string duration = session.StartedUtc is { } started ? FormatDuration(DateTimeOffset.UtcNow - started) : UiText.JustNow; agentPairCode.SetText(() => UiText.ControllerConnected); agentState.SetText(() => UiText.Format(UiText.ConnectedDuration, duration)); agentSessionNote.SetText(() => UiText.AuthenticatedControllerNote);
+            CurrentPairingCode = null; pairingCountdownText.SetText(() => UiText.CodeConsumed); if (transfer == null) pairingCountdown.Value = 0; string duration = session.StartedUtc is { } started ? FormatDuration(DateTimeOffset.UtcNow - started) : UiText.JustNow; agentPairCode.SetText(() => UiText.ControllerConnected); agentState.SetText(() => UiText.Format(UiText.ConnectedDuration, duration)); agentSessionNote.SetText(() => UiText.AuthenticatedControllerNote);
             if (transfer != null)
             {
                 var metrics = FileTransferMetrics.Calculate(transfer.TransferredBytes, transfer.TotalBytes, transfer.BytesThisAttempt, transfer.Elapsed);
