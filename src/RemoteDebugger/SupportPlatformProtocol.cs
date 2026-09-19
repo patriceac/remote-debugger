@@ -42,7 +42,6 @@ internal static class SupportOperationTimeouts
     public const int PairingHandshakeSeconds = 120;
     public const int ControllerSynchronizationSeconds = 1200;
     public const int UpdateStageSeconds = 300;
-    public const int LegacyUpdateStageSettleSeconds = 185;
     public const int UpdateStartupHealthReportSeconds = 300;
     public const int UpdateStartupHealthRollbackSeconds = 360;
 }

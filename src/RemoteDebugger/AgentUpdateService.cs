@@ -448,7 +448,7 @@ internal static class AgentUpdateClient
                 }
             }
             progress?.Report(new("verifying", controller.Size, controller.Size));
-            await StageTransferredAgentAsync(client, transactionId, agent.FileVersion, ct);
+            await StageTransferredAgentAsync(client, transactionId, ct);
             var commit = RemoteClient.Require(await client.SendUpdateAsync("update.commit", new { transactionId }, ct, seconds: 60));
             await client.CloseUpdateChannelAsync().ConfigureAwait(false);
             progress?.Report(new("restarting", controller.Size, controller.Size));
@@ -515,15 +515,12 @@ internal static class AgentUpdateClient
             throw new InvalidOperationException(platform.Message);
     }
 
-    internal static async Task StageTransferredAgentAsync(RemoteClient client, string transactionId, string? agentVersion, CancellationToken ct)
+    private static async Task StageTransferredAgentAsync(RemoteClient client, string transactionId, CancellationToken ct)
     {
         for (int attempt = 0; ; attempt++)
         {
             try
             {
-                // The broker idles out during long transfers. A full snapshot wakes
-                // it before staging, including on clients predating this fix.
-                RequireUpdatePlatform(RemoteClient.Require(await client.CallAsync("update.snapshot", ct: ct, seconds: 120)));
                 RemoteClient.Require(await client.SendUpdateAsync("update.stage", new { transactionId }, ct,
                     seconds: SupportOperationTimeouts.UpdateStageSeconds));
                 return;
@@ -531,16 +528,9 @@ internal static class AgentUpdateClient
             catch (Exception ex) when (attempt == 0 && !ct.IsCancellationRequested && IsRetryableStageFailure(ex))
             {
                 await client.CloseUpdateChannelAsync().ConfigureAwait(false);
-                TimeSpan delay = StageRetryDelay(agentVersion, ex);
-                if (delay > TimeSpan.Zero) await Task.Delay(delay, ct);
             }
         }
     }
-
-    internal static TimeSpan StageRetryDelay(string? agentVersion, Exception ex) =>
-        IsRetryableStageFailure(ex) && UpdatePolicy.ReleaseVersion(agentVersion) < new Version(0, 4, 20)
-            ? TimeSpan.FromSeconds(SupportOperationTimeouts.LegacyUpdateStageSettleSeconds)
-            : TimeSpan.Zero;
 
     internal static bool IsRetryableStageFailure(Exception ex) => ex switch
     {
