@@ -58,4 +58,14 @@ public sealed class MainFormActionTests
     [Fact]
     public void MatchingClientBuildDisablesTheUpdateAction() =>
         Assert.False(MainForm.CanUpdateClient(true, true, false, false, false, clientUpToDate: true));
+
+    [Fact]
+    public void FleetProgressUsesOneCompactSharedUnit()
+    {
+        string progress = MainForm.FormatFleetBytes(24 * 1024 * 1024, 143 * 1024 * 1024);
+
+        Assert.EndsWith(" MiB", progress);
+        Assert.Equal(1, progress.Count(character => character == '/'));
+        Assert.Equal(1, progress.Split("MiB").Length - 1);
+    }
 }

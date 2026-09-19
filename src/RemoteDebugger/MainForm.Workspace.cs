@@ -95,7 +95,7 @@ public sealed partial class MainForm
         updateClientButton.Enabled = isUpdateAdmin && !NewerDeviceKnown && CanUpdateClient(supportSession, client != null, pairingBusy, clientUpdateBusy, terminating, clientUpToDate) && action == null;
         updateClientButton.SetText(() => clientUpdateBusy ? UiText.Synchronizing : clientUpToDate ? UiText.ClientUpToDate : UiText.UpdateClient);
         updateAllDevices.Enabled = FleetBusy || isUpdateAdmin && !NewerDeviceKnown && !fleetRefreshing && !pairingBusy && !clientUpdateBusy && !terminating && action == null && fleet.Values.Any(d => d.Online && d.State is "available" or "legacy" or "failed");
-        updateAllDevices.SetText(() => FleetBusy ? UiText.StopUpdates : UiText.UpdateAllDevices);
+        updateAllDevices.SetText(() => fleetRefreshing ? UiText.CheckingVersion : FleetBusy ? UiText.StopUpdates : UiText.UpdateAllDevices);
         if (NewerDeviceKnown) discoveryState.SetText(() => UiText.UpdateControllerFirst);
         discoverButton.Enabled = !pairingBusy && !clientUpdateBusy && !FleetBusy && !fleetRefreshing && !terminating && !supportSession;
         if (FleetBusy || fleetRefreshing || wakeBusy) { pairButton.Enabled = false; discoverButton.Enabled = false; updateClientButton.Enabled = false; }

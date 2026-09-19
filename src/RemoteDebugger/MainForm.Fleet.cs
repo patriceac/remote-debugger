@@ -9,6 +9,7 @@ public sealed partial class MainForm
     private sealed record FleetDevice(Peer Peer, string Version = "", string Sha256 = "", bool Online = false,
         string State = "unknown", int Percent = 0, string Detail = "");
     private readonly Dictionary<string, FleetDevice> fleet = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, DateTimeOffset> fleetStageStarted = new(StringComparer.OrdinalIgnoreCase);
     private readonly Forms.Button updateAllDevices = Button(() => UiText.UpdateAllDevices, "updateAllDevices", 178, primary: true);
     private CancellationTokenSource? fleetLifetime;
     private bool fleetRefreshing;
@@ -39,15 +40,29 @@ public sealed partial class MainForm
         peers.DrawColumnHeader += (_, e) => e.DrawDefault = true;
         peers.DrawSubItem += (_, e) =>
         {
-            if (e.ColumnIndex != 3 || e.Item?.Tag is not Peer peer || !fleet.TryGetValue(DeviceKey(peer), out var device) || device.State != "transferring")
+            if (e.ColumnIndex != 3 || e.Item?.Tag is not Peer peer || !fleet.TryGetValue(DeviceKey(peer), out var device) ||
+                device.State is not ("transferring" or "checking" or "verifying" or "restarting"))
             { e.DrawDefault = true; return; }
             using var background = new SolidBrush(e.Item.Selected ? SystemColors.Highlight : peers.BackColor);
             e.Graphics.FillRectangle(background, e.Bounds);
             var track = new Rectangle(e.Bounds.X + 5, e.Bounds.Bottom - 5, Math.Max(0, e.Bounds.Width - 10), 3);
             using var back = new SolidBrush(Divider); using var fill = new SolidBrush(Teal);
             e.Graphics.FillRectangle(back, track);
-            e.Graphics.FillRectangle(fill, track with { Width = track.Width * device.Percent / 100 });
-            Forms.TextRenderer.DrawText(e.Graphics, e.SubItem?.Text, peers.Font,
+            if (device.State == "transferring") e.Graphics.FillRectangle(fill, track with { Width = track.Width * device.Percent / 100 });
+            else if (track.Width > 0)
+            {
+                int pulseWidth = Math.Min(track.Width, Math.Max(18, track.Width / 3));
+                int pulseLeft = (int)(Environment.TickCount64 / 12 % (track.Width + pulseWidth)) - pulseWidth;
+                var pulse = Rectangle.Intersect(track, new Rectangle(track.X + pulseLeft, track.Y, pulseWidth, track.Height));
+                if (pulse.Width > 0) e.Graphics.FillRectangle(fill, pulse);
+            }
+            string detail = device.Detail;
+            if (device.State != "transferring" && fleetStageStarted.TryGetValue(DeviceKey(peer), out var started))
+            {
+                string elapsed = UiText.Format(UiText.ElapsedTime, FormatTransferEta(DateTimeOffset.UtcNow - started));
+                detail = detail.Length == 0 ? elapsed : detail + " · " + elapsed;
+            }
+            Forms.TextRenderer.DrawText(e.Graphics, detail, peers.Font,
                 new Rectangle(e.Bounds.X + 5, e.Bounds.Y, e.Bounds.Width - 10, e.Bounds.Height - 5),
                 e.Item.Selected ? SystemColors.HighlightText : PrimaryText, Forms.TextFormatFlags.EndEllipsis | Forms.TextFormatFlags.VerticalCenter);
         };
@@ -69,7 +84,10 @@ public sealed partial class MainForm
 
     private void RecordDevice(FleetDevice device)
     {
-        fleet[DeviceKey(device.Peer)] = device;
+        string key = DeviceKey(device.Peer);
+        if (!fleet.TryGetValue(key, out var previous) || previous.State != device.State || !fleetStageStarted.ContainsKey(key))
+            fleetStageStarted[key] = DateTimeOffset.UtcNow;
+        fleet[key] = device;
         if (!IsDisposed) RenderPeers();
     }
 
@@ -92,7 +110,10 @@ public sealed partial class MainForm
     private async Task RefreshFleetVersionsAsync(CancellationToken ct)
     {
         if (!PrivateInternet || !isUpdateAdmin || FleetBusy) return;
-        fleetRefreshing = true; RefreshControllerControls();
+        fleetRefreshing = true;
+        foreach (var device in fleet.Values.Where(device => device.Online).ToArray())
+            RecordDevice(device with { State = "checking", Percent = 0, Detail = "" });
+        RefreshControllerControls();
         try
         {
             var controller = await (controllerSnapshot ??= SupportPlatform.CaptureCurrentExecutableAsync(CancellationToken.None));
@@ -171,8 +192,10 @@ public sealed partial class MainForm
                         if (baseline < 0) baseline = value.TransferredBytes;
                         var metrics = FileTransferMetrics.Calculate(value.TransferredBytes, value.TotalBytes, value.TransferredBytes - baseline, watch.Elapsed);
                         device = device with { State = value.Stage, Percent = value.TransferPercent,
-                            Detail = $"{value.TransferPercent}% · {FormatBytes(value.TransferredBytes)}/{FormatBytes(value.TotalBytes)}" +
-                                (metrics.Remaining is { } eta ? " · " + FormatTransferEta(eta) : "") };
+                            Detail = value.Stage == "transferring"
+                                ? $"{value.TransferPercent}% · {FormatFleetBytes(value.TransferredBytes, value.TotalBytes)}" +
+                                    (metrics.Remaining is { } eta ? " · " + FormatTransferEta(eta) : "")
+                                : FormatBytes(value.TotalBytes) };
                         RecordDevice(device);
                     });
                     try { await SupportPlatform.SynchronizeAgentAsync(target, timeout.Token, progress); }
@@ -198,4 +221,8 @@ public sealed partial class MainForm
             if (!IsDisposed) { RefreshControllerControls(); discoveryState.SetText(() => UiText.UpdateBatchFinished); }
         }
     }
+
+    internal static string FormatFleetBytes(long transferred, long total) => total >= 1024 * 1024
+        ? $"{transferred / 1048576d:F1}/{total / 1048576d:F1} MiB"
+        : $"{transferred / 1024d:F0}/{total / 1024d:F0} KiB";
 }

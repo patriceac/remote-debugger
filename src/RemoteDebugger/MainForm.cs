@@ -445,7 +445,7 @@ public sealed partial class MainForm : Forms.Form
         if (!PrivateInternet) peers.Columns.Add("", 125).WithText(() => UiText.Address);
         if (PrivateInternet) peers.Columns.Add("", 62).WithText(() => UiText.DeviceVersion);
         peers.Columns.Add("", PrivateInternet ? 150 : 90).WithText(() => UiText.State);
-        if (PrivateInternet) peers.Columns.Add("", 120).WithText(() => UiText.DeviceProgress);
+        if (PrivateInternet) peers.Columns.Add("", 180).WithText(() => UiText.DeviceProgress);
         InitializeFleet();
         peers.RememberLayout(root, PrivateInternet ? ["name", "version", "state", "progress"] : ["name", "address", "state"]); panel.Controls.Add(peers, 0, 3);
         return panel;
@@ -954,6 +954,7 @@ public sealed partial class MainForm : Forms.Form
         if (IsDisposed) return;
         RefreshPowerHold();
         UpdateAgentState(); if (PrivateInternet) UpdatePrivateAgentState(); UpdateInternetState(); UpdateHeader(); RefreshControllerControls(); RefreshFooter(); RefreshInputStatus();
+        if (fleetRefreshing || fleet.Values.Any(device => device.State is "checking" or "verifying" or "restarting")) peers.Invalidate();
         if (!agentIdle && agent?.Operations.Maintenance is { } maintenance)
         {
             var state = Json.Element(maintenance.Status); bool active = state.TryGetProperty("active", out var a) && a.GetBoolean(); bool brokerAvailable = !state.TryGetProperty("brokerAvailable", out var broker) || broker.GetBoolean(); bool requiresProvisioning = state.TryGetProperty("requiresProvisioning", out var provisioning) && provisioning.GetBoolean(); bool paired = agent?.Session.HasPaired == true;

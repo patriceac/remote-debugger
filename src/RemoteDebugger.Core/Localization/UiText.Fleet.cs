@@ -11,6 +11,7 @@ public static partial class UiText
     public static string StopUpdates => Get(nameof(StopUpdates));
     public static string DeviceVersion => Get(nameof(DeviceVersion));
     public static string DeviceProgress => Get(nameof(DeviceProgress));
+    public static string ElapsedTime => Get(nameof(ElapsedTime));
     public static string UpdateControllerFirst => Get(nameof(UpdateControllerFirst));
     public static string UpdateAvailable => Get(nameof(UpdateAvailable));
     public static string DeviceOffline => Get(nameof(DeviceOffline));

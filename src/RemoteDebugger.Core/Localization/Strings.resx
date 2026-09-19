@@ -874,6 +874,7 @@
   <data name="StopUpdates" xml:space="preserve"><value>Stop updates</value></data>
   <data name="DeviceVersion" xml:space="preserve"><value>Version</value></data>
   <data name="DeviceProgress" xml:space="preserve"><value>Progress / ETA</value></data>
+  <data name="ElapsedTime" xml:space="preserve"><value>elapsed {0}</value></data>
   <data name="UpdateControllerFirst" xml:space="preserve"><value>Update this controller first</value></data>
   <data name="UpdateAvailable" xml:space="preserve"><value>Update available</value></data>
   <data name="DeviceOffline" xml:space="preserve"><value>Offline · last known version</value></data>
