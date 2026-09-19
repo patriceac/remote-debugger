@@ -438,11 +438,11 @@ public sealed partial class MainForm : Forms.Form
         panel.Controls.Add(new WorkspaceLabel { AutoSize = true, Font = new Font("Segoe UI", 15, FontStyle.Bold), ForeColor = PrimaryText, Anchor = Forms.AnchorStyles.Left }.WithText(() => UiText.AvailablePcs), 0, 0);
         discoverButton.Anchor = Forms.AnchorStyles.Left;
         panel.Controls.Add(PrivateInternet ? ControlRow(discoverButton, updateAllDevices) : discoverButton, 0, 1); panel.Controls.Add(discoveryState, 0, 2);
-        peers.Columns.Add("", PrivateInternet ? 125 : 110).WithText(() => UiText.Name);
+        peers.Columns.Add("", 110).WithText(() => UiText.Name);
         if (!PrivateInternet) peers.Columns.Add("", 125).WithText(() => UiText.Address);
-        if (PrivateInternet) peers.Columns.Add("", 78).WithText(() => UiText.DeviceVersion);
+        if (PrivateInternet) peers.Columns.Add("", 62).WithText(() => UiText.DeviceVersion);
         peers.Columns.Add("", PrivateInternet ? 150 : 90).WithText(() => UiText.State);
-        if (PrivateInternet) { peers.Columns.Add("", 130).WithText(() => UiText.DeviceProgress); InitializeFleet(); }
+        if (PrivateInternet) { peers.Columns.Add("", 120).WithText(() => UiText.DeviceProgress); InitializeFleet(); }
         peers.RememberLayout(root, PrivateInternet ? ["name", "version", "state", "progress"] : ["name", "address", "state"]); panel.Controls.Add(peers, 0, 3);
         return panel;
     }
