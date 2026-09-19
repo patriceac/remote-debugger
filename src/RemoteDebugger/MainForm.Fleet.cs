@@ -86,10 +86,17 @@ public sealed partial class MainForm
     private void RecordDevice(FleetDevice device)
     {
         string key = DeviceKey(device.Peer);
-        if (!fleet.TryGetValue(key, out var previous) || previous.State != device.State || !fleetStageStarted.ContainsKey(key))
+        bool redrawOnly = fleet.TryGetValue(key, out var previous) && previous.State == device.State &&
+            previous.Version == device.Version && previous.Peer.Name == device.Peer.Name &&
+            device.State is "transferring" or "checking" or "verifying" or "restarting";
+        if (previous == null || previous.State != device.State || !fleetStageStarted.ContainsKey(key))
             fleetStageStarted[key] = DateTimeOffset.UtcNow;
         fleet[key] = device;
-        if (!IsDisposed) RenderPeers();
+        if (!IsDisposed)
+        {
+            if (redrawOnly) peers.Invalidate();
+            else RenderPeers();
+        }
     }
 
     private void SaveFleet() => Vault.Save(Path.Combine(root, "devices.dpapi"), JsonSerializer.SerializeToUtf8Bytes(fleet.Values, Json.Options));

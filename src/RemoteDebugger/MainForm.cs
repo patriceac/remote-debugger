@@ -1262,7 +1262,9 @@ public sealed partial class MainForm : Forms.Form
         updateProgressArea.Visible = false;
         try
         {
-            if (selectedPeer is { } previous)
+            // A discovered LAN endpoint is already identity-pinned. Re-running the
+            // full LAN/relay discovery here adds a fixed delay before pairing.
+            if (selectedPeer is { } previous && !RemoteClient.IsLanAddress(previous.Host))
             {
                 var fresh = await PeerDiscovery.FindAsync(PrivateInternet, token => Discovery.FindAsync(1500, token),
                     token => InternetSettings.Load(root)!.FindAsync(token), pairingCts.Token);
@@ -1283,7 +1285,8 @@ public sealed partial class MainForm : Forms.Form
                 try { await pairedClient.PairAsync(PrivateInternet ? InternetSettings.Load(root)!.AuthenticationSecret(privateSupportId) : code.Text, handshake.Token); }
                 catch (OperationCanceledException) when (!pairingCts.IsCancellationRequested) { throw new TimeoutException(UiText.PairingTimedOut); }
             }
-            if (pairedClient.Connection.RelayUrl.Length > 0)
+            // Pairing already proved this LAN route; do not probe every adapter again.
+            if (pairedClient.Connection.RelayUrl.Length > 0 && !RemoteClient.IsLanAddress(pairedClient.Connection.DirectHost))
             {
                 using var directUpgrade = CancellationTokenSource.CreateLinkedTokenSource(pairingCts.Token);
                 directUpgrade.CancelAfter(TimeSpan.FromSeconds(15));
@@ -1325,17 +1328,22 @@ public sealed partial class MainForm : Forms.Form
         }
     }
 
-    private async Task<AgentSynchronizationResult> SynchronizeClientAsync(RemoteClient target, int generation, CancellationToken ct)
+    private async Task SynchronizeClientAsync(RemoteClient target, int generation, CancellationToken ct)
     {
+        var heartbeat = await target.HeartbeatAsync(ct);
+        if (heartbeat.TryGetProperty("binaryMatched", out var matched) && matched.ValueKind == JsonValueKind.True)
+        {
+            if (generation == operationGeneration && ReferenceEquals(target, client)) clientUpToDate = true;
+            return;
+        }
         var progress = new Progress<AgentUpdateProgress>(value =>
         {
             if (!IsDisposed && generation == operationGeneration && ReferenceEquals(target, client) && (pairingBusy || clientUpdateBusy))
                 ShowUpdateProgress(value);
         });
         target.AdminRoot = root;
-        var result = await SupportPlatform.SynchronizeAgentAsync(target, ct, progress);
+        await SupportPlatform.SynchronizeAgentAsync(target, ct, progress);
         if (generation == operationGeneration && ReferenceEquals(target, client)) clientUpToDate = true;
-        return result;
     }
 
     private async Task UpdateConnectedClientAsync()

@@ -10,6 +10,8 @@ internal sealed class RememberedListView : Forms.ListView
     private TableColumnLayout[] layout = [];
     private bool applying;
 
+    public RememberedListView() => DoubleBuffered = true;
+
     public void RememberLayout(string root, params string[] columnIds)
     {
         if (columnIds.Length != Columns.Count) throw new ArgumentException("Every column needs a stable ID.", nameof(columnIds));
