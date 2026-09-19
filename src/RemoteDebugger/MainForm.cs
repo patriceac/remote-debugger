@@ -1131,8 +1131,9 @@ public sealed partial class MainForm : Forms.Form
             var found = result.Peers;
             if (pairingBusy || supportSession || rolePages.SelectedIndex != 1) return;
             discoveredPeers.Clear();
+            string? localSupportId = PrivateInternet ? agent?.Internet?.SupportId : null;
             bool includeLocalPeers = PrivateInternet && !result.UsedLanFallback;
-            discoveredPeers.AddRange(PeerDiscovery.DistinctPeers(found.Where(p => includeLocalPeers || IsRemotePeer(p))).OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase));
+            discoveredPeers.AddRange(PeerDiscovery.DistinctPeers(found.Where(p => !PeerDiscovery.IsLocalPeer(p, localSupportId) && (includeLocalPeers || IsRemotePeer(p)))).OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase));
             if (PrivateInternet && selectedPeer != null && !discoveredPeers.Any(p => p.Host == selectedPeer.Host))
             {
                 selectedPeer = null; selectedFingerprint = ""; host.SetText(""); code.SetText("");

@@ -173,6 +173,31 @@ public sealed class InternetTransportTests
     }
 
     [Fact]
+    public void RelayIdentityFilterExcludesMatchingSupportIdButKeepsSameNamedDifferentPeer()
+    {
+        const string localSupportId = "RD-0123-4567-89AB-CDEF";
+        var localPeer = new Peer("PC-PATRICE", "relay-route", 443, "", localSupportId);
+        var sameNameDifferentPeer = new Peer("PC-PATRICE", "RD-9876-5432-10FE-DCBA", 443, "", "RD-9876-5432-10FE-DCBA");
+
+        Assert.True(PeerDiscovery.IsLocalPeer(localPeer, localSupportId));
+        Assert.False(PeerDiscovery.IsLocalPeer(sameNameDifferentPeer, localSupportId));
+
+        var visible = new[] { localPeer, sameNameDifferentPeer }
+            .Where(peer => !PeerDiscovery.IsLocalPeer(peer, localSupportId))
+            .ToArray();
+        Assert.Equal(new[] { sameNameDifferentPeer }, visible);
+    }
+
+    [Fact]
+    public void RelayIdentityFilterAlsoRecognizesTheLocalSupportIdInHost()
+    {
+        const string localSupportId = "RD-0123-4567-89AB-CDEF";
+        var localPeer = new Peer("PC-PATRICE", localSupportId, 443, "");
+
+        Assert.True(PeerDiscovery.IsLocalPeer(localPeer, localSupportId.ToLowerInvariant()));
+    }
+
+    [Fact]
     public async Task CliDiscoveryUsesLanWhenThePrivateRelayFails()
     {
         var nearby = new Peer("Nearby", "192.168.1.20", 45832, new string('a', 64), "RD-0123-4567-89AB-CDEF");

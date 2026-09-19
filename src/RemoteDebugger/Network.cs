@@ -87,6 +87,13 @@ internal sealed record PeerDiscoveryResult(IReadOnlyList<Peer> Peers, bool UsedL
 
 internal static class PeerDiscovery
 {
+    internal static bool IsLocalPeer(Peer peer, string? localSupportId)
+    {
+        if (string.IsNullOrWhiteSpace(localSupportId)) return false;
+        return string.Equals(peer.SupportId, localSupportId, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(peer.Host, localSupportId, StringComparison.OrdinalIgnoreCase);
+    }
+
     internal static List<Peer> DistinctPeers(IEnumerable<Peer> peers)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
