@@ -13,17 +13,18 @@ public sealed partial class MainForm
     {
         panel.Controls.Add(new WorkspaceLabel { AutoSize = true, ForeColor = SecondaryText, Margin = Forms.Padding.Empty }
             .WithText(() => UiText.OptionalWanAddress), 0, 2);
-        var row = new Forms.TableLayoutPanel { AutoSize = true, Dock = Forms.DockStyle.Top, ColumnCount = 2, Margin = new Forms.Padding(0, 4, 0, 0) };
+        wanAddress.Dock = Forms.DockStyle.Top; wanAddress.Margin = new Forms.Padding(0, 4, 0, 0);
+        wanAddress.PlaceholderText = "hostname[:port]";
+        panel.Controls.Add(wanAddress, 0, 3);
+        var row = new Forms.TableLayoutPanel { AutoSize = true, Dock = Forms.DockStyle.Top, ColumnCount = 2, Margin = new Forms.Padding(0, 6, 0, 12) };
         row.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
         row.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
-        wanAddress.Dock = Forms.DockStyle.Fill; wanAddress.Margin = new Forms.Padding(0, 4, 8, 0);
-        wanAddress.PlaceholderText = "hostname[:port]";
-        row.Controls.Add(wanAddress, 0, 0); row.Controls.Add(saveWanAddress, 1, 0);
-        panel.Controls.Add(row, 0, 3);
-        var help = new WorkspaceLabel { AutoSize = true, ForeColor = SecondaryText, Margin = new Forms.Padding(0, 4, 0, 12) }
+        var help = new WorkspaceLabel { AutoSize = true, ForeColor = SecondaryText, Margin = Forms.Padding.Empty }
             .WithText(() => UiText.WanAddressHelp);
-        panel.SizeChanged += (_, _) => help.MaximumSize = new Size(Math.Max(120, panel.ClientSize.Width - panel.Padding.Horizontal), 0);
-        panel.Controls.Add(help, 0, 4);
+        saveWanAddress.Margin = new Forms.Padding(8, 0, 0, 0);
+        row.SizeChanged += (_, _) => help.MaximumSize = new Size(Math.Max(120, row.ClientSize.Width - saveWanAddress.Width - 8), 0);
+        row.Controls.Add(help, 0, 0); row.Controls.Add(saveWanAddress, 1, 0);
+        panel.Controls.Add(row, 0, 4);
         saveWanAddress.Click += (_, _) => SaveWanAddress();
         RefreshWanAddress();
     }

@@ -38,6 +38,7 @@ internal sealed partial class LabForm
             product.Kill(entireProcessTree: true); await product.WaitForExitAsync(stop.Token);
             product.Dispose(); product = loopbackController = LaunchLoopbackProduct(false, root);
             await WaitUiAsync();
+            ResizeProductWindow(1060, 720);
             await SelectDevice("WAN fixture A");
             Check("restart_persistence", "bedros.hd.free.fr:55001");
             await Save("");
