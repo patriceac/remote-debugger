@@ -864,4 +864,10 @@
   <data name="FileTransferNumbers" xml:space="preserve"><value>{0} % · {1} / {2} · {3} · Tiempo restante {4}</value></data>
   <data name="UploadingTo" xml:space="preserve"><value>Subida a {0}</value></data>
   <data name="DownloadingTo" xml:space="preserve"><value>Descarga a {0}</value></data>
+  <data name="ClientUpdateProgress" xml:space="preserve"><value>Actualización de la aplicación</value></data>
+  <data name="ReceivingFile" xml:space="preserve"><value>Archivo entrante: {0}</value></data>
+  <data name="SendingFile" xml:space="preserve"><value>Archivo saliente: {0}</value></data>
+  <data name="FileReceived" xml:space="preserve"><value>100 % · Archivo recibido y verificado</value></data>
+  <data name="FileSent" xml:space="preserve"><value>100 % · Archivo enviado</value></data>
+  <data name="ClientUpToDate" xml:space="preserve"><value>✓ Cliente actualizado</value></data>
 </root>

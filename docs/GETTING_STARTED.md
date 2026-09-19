@@ -18,6 +18,8 @@ Launching Remote Debugger again brings the existing desktop window forward. It d
 
 The header shows connection state. **LIVE** appears only while fresh frames arrive. The viewer enables mouse and keyboard by default; click inside it to direct input to the remote desktop. Moving focus away returns keyboard input to the local PC. Pause, lost connection, target changes, and termination release held input. The monitor selector changes the viewed desktop. Secure-desktop prompts and Ctrl+Alt+Delete remain Windows-controlled.
 
+When the authenticated client runs the same build as the controller, the update button is disabled and reads **✓ Client up to date**. A detected build mismatch makes **Update client** available again.
+
 **Processes** loads CPU, memory and process measurements after connection. Click a column header to sort; click again to reverse direction. Unavailable values remain unavailable instead of appearing as zero. CPU values represent total logical-processor capacity. **Files** loads the remote workspace and storage information automatically, supports typed sorting, and keeps the current directory separate from the selected file.
 
 The close button on either PC hides the application in the system tray and keeps the session running. Double-click its icon or use **Open** to restore it. The controller resumes live viewing automatically if it was viewing before being hidden. The tray also offers **End support** and **Quit**. Ending support on either PC immediately revokes access, cancels work, closes administrator maintenance, and releases the temporary sleep request. The receiving PC displays a ten-minute automatic-exit countdown, which continues in the tray. Choose **New support session** before it expires to cancel the exit and get a new code. The controlling PC remains open. A lost controller first starts a separate ten-minute reconnect grace period; reconnecting cancels that grace period. Saved Windows power settings are never modified.
@@ -29,6 +31,8 @@ The mouse and keyboard checkbox is your preference. Temporary input errors do no
 ## Files and diagnostics
 
 In **Files**, enter a full remote folder path and click **Go** (or press Enter), or double-click folders in the list. **Upload file** sends a local file into the open remote folder; **Upload folder** sends a local folder's contents there, preserving subfolders. Select a remote file and click **Download** to choose where to save it on this PC. The transfer area shows percentage, bytes, speed and ETA (for the whole selection when uploading a folder), followed by verification. **Cancel** pauses the transfer; repeat it to resume. Files must be accessible to the receiving Windows user. Transfers verify the complete SHA-256 before replacing their destination.
+
+The assisted PC also shows progress on **Give control** during application updates and incoming or outgoing files. File transfers identify the current filename and show speed and ETA; completed incoming files are marked as verified.
 
 **Diagnostics** exposes structured operations, bounded command output, process launch/stop/restart, event and service information, native debugger attachment, minidumps, and intervention history. `maintenance.session` runs through the administrator broker for the paired session when **Admin maintenance** is enabled. `maintenance.status` reports actual availability. No one-hour maintenance button or recurring elevation dialog is required after setup.
 

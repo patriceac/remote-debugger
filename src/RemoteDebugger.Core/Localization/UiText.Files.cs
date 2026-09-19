@@ -2,6 +2,12 @@ namespace RemoteDebugger.Core;
 
 public static partial class UiText
 {
+    public static string ClientUpToDate => Get(nameof(ClientUpToDate));
+    public static string ClientUpdateProgress => Get(nameof(ClientUpdateProgress));
+    public static string ReceivingFile => Get(nameof(ReceivingFile));
+    public static string SendingFile => Get(nameof(SendingFile));
+    public static string FileReceived => Get(nameof(FileReceived));
+    public static string FileSent => Get(nameof(FileSent));
     public static string RemoteFolder => Get(nameof(RemoteFolder));
     public static string RemoteFolderPlaceholder => Get(nameof(RemoteFolderPlaceholder));
     public static string OpenRemoteFolder => Get(nameof(OpenRemoteFolder));

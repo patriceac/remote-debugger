@@ -54,4 +54,8 @@ public sealed class MainFormActionTests
     {
         Assert.Equal(expected, MainForm.ShouldSynchronizeSavedSession(connected, binaryMatched));
     }
+
+    [Fact]
+    public void MatchingClientBuildDisablesTheUpdateAction() =>
+        Assert.False(MainForm.CanUpdateClient(true, true, false, false, false, clientUpToDate: true));
 }

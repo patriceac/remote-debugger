@@ -182,6 +182,7 @@ public sealed partial class MainForm : Forms.Form
     private bool supportSession;
     private bool pairingBusy;
     private bool clientUpdateBusy;
+    private bool clientUpToDate;
     private bool synchronizingAgent;
     private bool terminating;
     private bool quitting;
@@ -360,7 +361,7 @@ public sealed partial class MainForm : Forms.Form
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, PrivateInternet ? 0 : 8));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 38));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 90));
@@ -377,8 +378,8 @@ public sealed partial class MainForm : Forms.Form
         if (PrivateInternet) codeRow.Controls.Add(enableSupport);
         else { codeRow.Controls.Add(agentPairCode); codeRow.Controls.Add(copyAgentCode); }
         restartAgent.Visible = false; codeRow.Controls.Add(restartAgent); layout.Controls.Add(codeRow, 0, 3);
-        pairingCountdown.Width = 480; pairingCountdown.Height = 4; pairingCountdown.Margin = new Forms.Padding(0, 2, 0, 0);
-        if (!PrivateInternet) layout.Controls.Add(pairingCountdown, 0, 4);
+        pairingCountdown.Width = 480; pairingCountdown.Height = 12; pairingCountdown.Margin = new Forms.Padding(0, 2, 0, 4);
+        pairingCountdown.Visible = !PrivateInternet; layout.Controls.Add(pairingCountdown, 0, 4);
         pairingCountdownText.AutoSize = false; pairingCountdownText.Dock = Forms.DockStyle.Fill; pairingCountdownText.Margin = Forms.Padding.Empty; layout.Controls.Add(pairingCountdownText, 0, 5);
 
         var divider = new Forms.Panel { Dock = Forms.DockStyle.Top, Height = 1, BackColor = Divider, Margin = new Forms.Padding(0, 18, 0, 0) }; layout.Controls.Add(divider, 0, 6);
@@ -703,6 +704,7 @@ public sealed partial class MainForm : Forms.Form
                 session.TryGetProperty("connected", out var connectedValue) && connectedValue.GetBoolean();
             bool matched = heartbeat.TryGetProperty("binaryMatched", out var matchedValue) && matchedValue.GetBoolean();
             if (generation != operationGeneration || !ReferenceEquals(target, client) || !connected) return;
+            clientUpToDate = matched;
             if (ShouldSynchronizeSavedSession(connected, matched))
             {
                 synchronizingAgent = true;
@@ -960,6 +962,12 @@ public sealed partial class MainForm : Forms.Form
 
     private void UpdateAgentState()
     {
+        var transfer = agent?.Session.Connected == true ? agent.Operations.FileTransfer : null;
+        bool updateOngoing = agent != null && !agentIdle && IsOngoingUpdate(agent.UpdateProgress);
+        pairingCountdown.Visible = !PrivateInternet || !agentIdle && (updateOngoing || transfer != null);
+        pairingCountdown.Height = updateOngoing || transfer != null ? 12 : 4;
+        pairingCountdown.Style = transfer?.Stage == "preparing" && !updateOngoing ? Forms.ProgressBarStyle.Marquee : Forms.ProgressBarStyle.Continuous;
+        pairingCountdown.AccessibleName = updateOngoing ? UiText.ClientUpdateProgress : transfer != null ? UiText.FileTransfers : UiText.PairingCodeCaption;
         agentSleepState.SetText(() => powerHold != null ? UiText.Suspended : UiText.Active);
         agentSleepState.ForeColor = powerHold != null ? PrimaryText : SecondaryText;
         bool paired = agent?.Session.HasPaired == true;
@@ -1005,6 +1013,23 @@ public sealed partial class MainForm : Forms.Form
         if (session.Connected && session.BinaryMatched)
         {
             CurrentPairingCode = null; pairingCountdownText.SetText(() => UiText.CodeConsumed); pairingCountdown.Value = 0; string duration = session.StartedUtc is { } started ? FormatDuration(DateTimeOffset.UtcNow - started) : UiText.JustNow; agentPairCode.SetText(() => UiText.ControllerConnected); agentState.SetText(() => UiText.Format(UiText.ConnectedDuration, duration)); agentSessionNote.SetText(() => UiText.AuthenticatedControllerNote);
+            if (transfer != null)
+            {
+                var metrics = FileTransferMetrics.Calculate(transfer.TransferredBytes, transfer.TotalBytes, transfer.BytesThisAttempt, transfer.Elapsed);
+                pairingCountdown.Value = metrics.Percent * 3;
+                agentState.SetText(() => UiText.Format(transfer.Receiving ? UiText.ReceivingFile : UiText.SendingFile, Path.GetFileName(transfer.Path)));
+                pairingCountdownText.SetText(() => transfer.Stage switch
+                {
+                    "preparing" => UiText.PreparingFileTransfer,
+                    "verifying" => UiText.VerifyingFileTransfer,
+                    "complete" => transfer.Receiving ? UiText.FileReceived : UiText.FileSent,
+                    "paused" => UiText.TransferPaused,
+                    "failed" => transfer.Error ?? UiText.CannotReadFolder,
+                    _ => UiText.Format(UiText.FileTransferNumbers, metrics.Percent, FormatBytes(transfer.TransferredBytes), FormatBytes(transfer.TotalBytes),
+                        metrics.BytesPerSecond > 0 ? FormatBytes((long)metrics.BytesPerSecond) + "/s" : "—",
+                        metrics.Remaining is { } eta ? FormatTransferEta(eta) : UiText.CalculatingTransferEta)
+                });
+            }
         }
         else if (session.Connected)
         {
@@ -1277,12 +1302,14 @@ public sealed partial class MainForm : Forms.Form
             if (!IsDisposed && generation == operationGeneration && ReferenceEquals(target, client) && (pairingBusy || clientUpdateBusy))
                 ShowUpdateProgress(value);
         });
-        return await SupportPlatform.SynchronizeAgentAsync(target, ct, progress);
+        var result = await SupportPlatform.SynchronizeAgentAsync(target, ct, progress);
+        if (generation == operationGeneration && ReferenceEquals(target, client)) clientUpToDate = true;
+        return result;
     }
 
     private async Task UpdateConnectedClientAsync()
     {
-        if (client is not { } target || !CanUpdateClient(supportSession, hasClient: true, pairingBusy, clientUpdateBusy, terminating) || action != null)
+        if (client is not { } target || !CanUpdateClient(supportSession, hasClient: true, pairingBusy, clientUpdateBusy, terminating, clientUpToDate) || action != null)
             return;
         if (Forms.MessageBox.Show(this, UiText.UpdateClientConfirmation, UiText.UpdateClientConfirmationTitle,
             Forms.MessageBoxButtons.YesNo, Forms.MessageBoxIcon.Warning) != Forms.DialogResult.Yes)
@@ -1290,7 +1317,7 @@ public sealed partial class MainForm : Forms.Form
 
         // Re-check the target after the confirmation dialog yielded to other UI
         // events, then run the same authenticated update protocol used by pairing.
-        if (!CanUpdateClient(supportSession, hasClient: client != null, pairingBusy, clientUpdateBusy, terminating) || action != null || !ReferenceEquals(target, client))
+        if (!CanUpdateClient(supportSession, hasClient: client != null, pairingBusy, clientUpdateBusy, terminating, clientUpToDate) || action != null || !ReferenceEquals(target, client))
             return;
 
         bool resumeStream = liveStream != null;
@@ -1449,6 +1476,7 @@ public sealed partial class MainForm : Forms.Form
                 bool binaryMatched = heartbeat.TryGetProperty("binaryMatched", out var matched) && matched.GetBoolean();
                 if (ct.IsCancellationRequested || !ReferenceEquals(target, client)) break;
                 heartbeatHealthy = sessionConnected && binaryMatched;
+                clientUpToDate = binaryMatched;
                 if (!heartbeatHealthy)
                 {
                     liveFrameFresh = false;
@@ -2025,7 +2053,7 @@ public sealed partial class MainForm : Forms.Form
         fileTransferProgress.Style = Forms.ProgressBarStyle.Continuous; fileTransferProgress.Value = 0;
         fileTransferStatus.SetText(() => UiText.FileTransfers); fileTransferDetails.SetText(() => UiText.FileTransferReady);
         clientUpdateLifetime?.Cancel();
-        clientUpdateBusy = false;
+        clientUpdateBusy = false; clientUpToDate = false;
         updateProgressArea.Visible = false;
         client = null; selectedPeer = null; selectedFingerprint = ""; selectedFilePath = null;
         selectedPeerName.SetText(() => UiText.NewConnection); selectedPeerAddress.SetText(() => PrivateInternet ? UiText.PrivateConnectInstructions : UiText.EnterRemoteCode);
@@ -2198,8 +2226,8 @@ public sealed partial class MainForm : Forms.Form
 
     internal static bool IsOngoingUpdate(AgentUpdateProgress progress) => progress.Stage is not ("idle" or "complete");
 
-    internal static bool CanUpdateClient(bool supportSession, bool hasClient, bool pairingBusy, bool clientUpdateBusy, bool terminating) =>
-        supportSession && hasClient && !pairingBusy && !clientUpdateBusy && !terminating;
+    internal static bool CanUpdateClient(bool supportSession, bool hasClient, bool pairingBusy, bool clientUpdateBusy, bool terminating, bool clientUpToDate = false) =>
+        supportSession && hasClient && !pairingBusy && !clientUpdateBusy && !terminating && !clientUpToDate;
 
     internal static bool ShouldPreserveActiveSessionsOnRoleSwitch(
         int currentRole, int targetRole, bool agentRunning, bool controllerSessionActive) =>

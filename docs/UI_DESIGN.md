@@ -44,7 +44,7 @@ Selected machine name, IP, one 6-digit field (160 px, Consolas 20), teal Connect
 
 During pairing/sync keep selected target fixed, disable duplicate submissions, show Appairage... / Synchronisation de l'agent... / Reconnexion... in the form. Do not label Live until a fresh frame is displayed and hashes match. Selecting another target cancels pending work and clears its input queue/state.
 
-During an update, show a thin transfer bar and an explicit percentage plus received/total MiB. The controller uses acknowledged bytes, and the agent uses bytes actually written. The agent reuses the code-countdown area after pairing. At 100 percent, label verification and restart/reconnection separately; transfer completion must not imply a live session. The terminate action remains available during synchronization.
+During an update, show a thin transfer bar and an explicit percentage plus received/total MiB. The controller uses acknowledged bytes, and the agent uses bytes actually written. The agent reuses the code-countdown area after pairing, including in private support mode. Incoming and outgoing files also use that area, with the filename, percentage, bytes, speed and ETA for the current file. At 100 percent, label verification and restart/reconnection separately; transfer completion must not imply a live session. The terminate action remains available during synchronization.
 
 ## Controller: live view (controller-live.svg)
 

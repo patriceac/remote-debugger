@@ -46,7 +46,7 @@ public sealed partial class MainForm
         enableSupport.Visible = ((agent == null || agentIdle) && !privateSupportEnabled) || lanFallbackNeedsSetup;
         restartAgent.Visible = false; copyAgentCode.Visible = false;
         bool updateOngoing = agent != null && !agentIdle && MainForm.IsOngoingUpdate(agent.UpdateProgress);
-        pairingCountdownText.Visible = agentIdle || updateOngoing;
+        pairingCountdownText.Visible = agentIdle || updateOngoing || agent?.Session.Connected == true && agent.Operations.FileTransfer != null;
         if (agent?.Session.HasPaired == true || updateOngoing) return;
         agentHeading.SetText(() => agentIdle ? UiText.SupportEnded : active ? UiText.PrivateSupportReady : UiText.EnableOnThisPc);
         agentEyebrow.SetText(() => UiText.GiveControl);

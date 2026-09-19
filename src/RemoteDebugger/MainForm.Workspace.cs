@@ -90,8 +90,8 @@ public sealed partial class MainForm
         peers.Enabled = !pairingBusy && !clientUpdateBusy && !terminating;
         pairButton.SetText(() => pairingBusy ? UiText.Connecting : supportSession ? UiText.Connected : UiText.Connect);
         updateClientButton.Visible = supportSession || clientUpdateBusy;
-        updateClientButton.Enabled = CanUpdateClient(supportSession, client != null, pairingBusy, clientUpdateBusy, terminating) && action == null;
-        updateClientButton.SetText(() => clientUpdateBusy ? UiText.Synchronizing : UiText.UpdateClient);
+        updateClientButton.Enabled = CanUpdateClient(supportSession, client != null, pairingBusy, clientUpdateBusy, terminating, clientUpToDate) && action == null;
+        updateClientButton.SetText(() => clientUpdateBusy ? UiText.Synchronizing : clientUpToDate ? UiText.ClientUpToDate : UiText.UpdateClient);
         refreshResourcesButton.Enabled = state.CanOperate && !resourcesLoading;
         bool filesAvailable = state.CanOperate && !filesLoading && fileTransferLifetime == null;
         browseFilesButton.Enabled = fileDirectory.Enabled = openFolderButton.Enabled = filesAvailable;
