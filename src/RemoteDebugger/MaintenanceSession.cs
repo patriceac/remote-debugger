@@ -72,7 +72,7 @@ public sealed class MaintenanceSession(string root) : IDisposable
             }
             using var connect = CancellationTokenSource.CreateLinkedTokenSource(ct, lifetime.Token);
             connect.CancelAfter(TimeSpan.FromSeconds(10));
-            var candidate = await SupportPlatform.OpenMaintenancePipeAsync(connect.Token);
+            var candidate = await SupportPlatform.OpenBrokerPipeAsync(connect.Token);
             try
             {
                 string id = Guid.NewGuid().ToString();

@@ -91,7 +91,7 @@ internal sealed class PrivilegedInputSession
             if (!permitted()) throw new InputBlockedException(MaintenanceSession.DisabledMessage);
             if (pipe == null)
             {
-                var candidate = await SupportPlatform.OpenMaintenancePipeAsync(ct);
+                var candidate = await SupportPlatform.OpenBrokerPipeAsync(ct);
                 try
                 {
                     await Wire.WriteAsync(candidate, new Request(Guid.NewGuid().ToString(), "", "input.open", Json.Element(new { })), ct);

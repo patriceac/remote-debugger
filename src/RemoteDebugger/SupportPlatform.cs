@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.IO.Pipes;
 using System.Security.Cryptography;
 using System.Security.Principal;
+using ServiceController = System.ServiceProcess.ServiceController;
+using ServiceControllerStatus = System.ServiceProcess.ServiceControllerStatus;
 using System.Text.Json;
 using RemoteDebugger.Core;
 
@@ -143,7 +145,6 @@ public static class SupportPlatform
             return new(SupportPlatformAvailability.IdentityRejected, true, false, false, false, false,
                 "Privileged support is installed for the managed Remote Debugger application. Relaunch that signed Program Files copy.",
                 localConfiguration?.RegisteredApplicationPath, localConfiguration?.PublisherThumbprint, localConfiguration?.ServiceVersion);
-        _ = await TryStartServiceAsync(ct);
         try
         {
             JsonElement data = await BrokerCallAsync("platform.status", new { }, ct, SupportOperationTimeouts.PlatformStatusRoundTripSeconds);
@@ -216,20 +217,30 @@ public static class SupportPlatform
         return await GetStatusAsync(ct);
     }
 
-    private static async Task<bool> TryStartServiceAsync(CancellationToken ct)
+    private static Task StartServiceAsync(CancellationToken ct) => Task.Run(async () =>
     {
-        var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "sc.exe"))
+        using var service = new ServiceController(SupportPlatformPaths.ServiceName);
+        await EnsureServiceRunningAsync(() => { service.Refresh(); return service.Status; }, () => service.Start(), ct);
+    }, ct);
+
+    internal static async Task EnsureServiceRunningAsync(Func<ServiceControllerStatus> getStatus, Action start, CancellationToken ct)
+    {
+        bool startRequested = false;
+        while (true)
         {
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true
-        };
-        start.ArgumentList.Add("start");
-        start.ArgumentList.Add(SupportPlatformPaths.ServiceName);
-        using var process = Process.Start(start) ?? throw new IOException("Windows Service Control Manager did not start.");
-        await process.WaitForExitAsync(ct);
-        return process.ExitCode == 0 || (await process.StandardOutput.ReadToEndAsync(ct)).Contains("1056", StringComparison.Ordinal);
+            ct.ThrowIfCancellationRequested();
+            var status = getStatus();
+            if (status == ServiceControllerStatus.Running) return;
+            if (status == ServiceControllerStatus.Stopped && !startRequested)
+            {
+                try { start(); }
+                catch (InvalidOperationException ex) when (ex.InnerException is Win32Exception { NativeErrorCode: 1056 }) { }
+                startRequested = true;
+            }
+            else if (status is not (ServiceControllerStatus.StartPending or ServiceControllerStatus.StopPending))
+                throw new InvalidOperationException($"The support service entered {status} instead of Running.");
+            await Task.Delay(100, ct);
+        }
     }
 
     public static async Task<AgentSynchronizationResult> SynchronizeAgentAsync(
@@ -242,12 +253,9 @@ public static class SupportPlatform
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
-        using var pipe = new NamedPipeClientStream(".", SupportPlatformPaths.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
         try
         {
-            await pipe.ConnectAsync(timeout.Token);
-            SupportPipeIdentity.VerifyServer(pipe);
-            timeout.Token.ThrowIfCancellationRequested();
+            using var pipe = await OpenBrokerPipeAsync(timeout.Token);
             string id = Guid.NewGuid().ToString();
             await Wire.WriteAsync(pipe, new Request(id, "", operation, args is JsonElement element ? element : Json.Element(args)), timeout.Token);
             var reply = await Wire.ReadAsync<Reply>(pipe, timeout.Token);
@@ -265,13 +273,15 @@ public static class SupportPlatform
         }
     }
 
-    internal static async Task<NamedPipeClientStream> OpenMaintenancePipeAsync(CancellationToken ct)
+    internal static async Task<NamedPipeClientStream> OpenBrokerPipeAsync(CancellationToken ct)
     {
+        await StartServiceAsync(ct);
         var pipe = new NamedPipeClientStream(".", SupportPlatformPaths.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
         try
         {
             await pipe.ConnectAsync(ct);
             SupportPipeIdentity.VerifyServer(pipe);
+            ct.ThrowIfCancellationRequested();
             return pipe;
         }
         catch { pipe.Dispose(); throw; }
