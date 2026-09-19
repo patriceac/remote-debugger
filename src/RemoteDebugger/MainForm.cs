@@ -469,7 +469,7 @@ public sealed partial class MainForm : Forms.Form
         if (!PrivateInternet) panel.Controls.Add(new WorkspaceLabel { AutoSize = true, ForeColor = SecondaryText, Margin = Forms.Padding.Empty, Dock = Forms.DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }.WithText(() => UiText.SixDigitCode), 0, 4);
         code.Width = 150; code.Font = new Font("Consolas", 20); code.MaxLength = 6; code.TextAlign = Forms.HorizontalAlignment.Center;
         updateClientButton.Visible = false;
-        var codeRow = PrivateInternet ? ControlRow(pairButton) : ControlRow(code, pairButton); codeRow.Margin = new Forms.Padding(0, 4, 0, 0); panel.Controls.Add(codeRow, 0, 5);
+        var codeRow = PrivateInternet ? ControlRow(pairButton, saveWanAddress) : ControlRow(code, pairButton); codeRow.Margin = new Forms.Padding(0, 4, 0, 0); panel.Controls.Add(codeRow, 0, 5);
         var updateRow = ControlRow(updateClientButton); updateRow.Margin = Forms.Padding.Empty; panel.Controls.Add(updateRow, 0, 6);
         connectionState.Margin = new Forms.Padding(0, 7, 0, 0); panel.Controls.Add(connectionState, 0, 7);
         updateProgressArea.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 10));

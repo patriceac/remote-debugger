@@ -45,11 +45,17 @@ internal sealed partial class LabForm
             Check("optional_clear", "");
             CaptureDesktop("wan-optional-blank.png");
         }
+        catch
+        {
+            CaptureDesktop("wan-failure.png", focusProduct: false);
+            throw;
+        }
         finally { await CleanupLoopbackProcessesAsync(); }
         await FinishAsync();
 
         async Task SelectDevice(string name)
         {
+            await WaitForUiAsync(() => Find("peers", 100) != null, 10);
             var item = Find("peers")!.FindAll(TreeScope.Descendants, Condition.TrueCondition).Cast<AutomationElement>()
                 .First(element => element.Current.Name == name && element.TryGetCurrentPattern(SelectionItemPattern.Pattern, out _));
             ((SelectionItemPattern)item.GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
@@ -69,9 +75,10 @@ internal sealed partial class LabForm
             string saved = DeviceWanAddress.Format(DeviceWanAddress.Load(root, fingerprint));
             if (actual != expected || saved != expected) throw new IOException($"WAN {stage}: field '{actual}', saved '{saved}', expected '{expected}'.");
             var saveBounds = Find("saveWanAddress")!.Current.BoundingRectangle;
+            var addressBounds = Find("wanAddress")!.Current.BoundingRectangle;
             var connectBounds = Find("pair")!.Current.BoundingRectangle;
-            if (connectBounds.Top - saveBounds.Bottom > saveBounds.Height * 4) throw new IOException("The WAN editor pushes Connect away from the connection fields.");
-            Pass("wan." + stage, "The shipped per-device WAN editor saves, restores and clears an optional address", new { actual, saved, connectGap = connectBounds.Top - saveBounds.Bottom });
+            if (connectBounds.Top - addressBounds.Bottom > saveBounds.Height * 4) throw new IOException("The WAN editor pushes Connect away from the connection fields.");
+            Pass("wan." + stage, "The shipped per-device WAN editor saves, restores and clears an optional address", new { actual, saved, connectGap = connectBounds.Top - addressBounds.Bottom });
         }
     }
 }

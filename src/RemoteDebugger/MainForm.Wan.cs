@@ -16,17 +16,10 @@ public sealed partial class MainForm
         wanAddress.Dock = Forms.DockStyle.Top; wanAddress.Margin = new Forms.Padding(0, 4, 0, 0);
         wanAddress.PlaceholderText = "hostname[:port]";
         panel.Controls.Add(wanAddress, 0, 3);
-        var row = new Forms.TableLayoutPanel { AutoSize = true, AutoSizeMode = Forms.AutoSizeMode.GrowAndShrink,
-            Dock = Forms.DockStyle.Top, ColumnCount = 2, RowCount = 1, Margin = new Forms.Padding(0, 6, 0, 12) };
-        row.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
-        row.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
-        row.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
-        var help = new WorkspaceLabel { AutoSize = true, ForeColor = SecondaryText, Margin = Forms.Padding.Empty }
+        var help = new WorkspaceLabel { AutoSize = true, ForeColor = SecondaryText, Margin = new Forms.Padding(0, 4, 0, 12) }
             .WithText(() => UiText.WanAddressHelp);
-        saveWanAddress.Margin = new Forms.Padding(8, 0, 0, 0);
-        row.SizeChanged += (_, _) => help.MaximumSize = new Size(Math.Max(120, row.ClientSize.Width - saveWanAddress.Width - 8), 0);
-        row.Controls.Add(help, 0, 0); row.Controls.Add(saveWanAddress, 1, 0);
-        panel.Controls.Add(row, 0, 4);
+        panel.SizeChanged += (_, _) => help.MaximumSize = new Size(Math.Max(120, panel.ClientSize.Width - panel.Padding.Horizontal), 0);
+        panel.Controls.Add(help, 0, 4);
         saveWanAddress.Click += (_, _) => SaveWanAddress();
         RefreshWanAddress();
     }
