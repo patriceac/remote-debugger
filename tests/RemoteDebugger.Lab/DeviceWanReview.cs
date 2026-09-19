@@ -68,7 +68,10 @@ internal sealed partial class LabForm
             string actual = Value(Find("wanAddress")!);
             string saved = DeviceWanAddress.Format(DeviceWanAddress.Load(root, fingerprint));
             if (actual != expected || saved != expected) throw new IOException($"WAN {stage}: field '{actual}', saved '{saved}', expected '{expected}'.");
-            Pass("wan." + stage, "The shipped per-device WAN editor saves, restores and clears an optional address", new { actual, saved });
+            var saveBounds = Find("saveWanAddress")!.Current.BoundingRectangle;
+            var connectBounds = Find("pair")!.Current.BoundingRectangle;
+            if (connectBounds.Top - saveBounds.Bottom > saveBounds.Height * 4) throw new IOException("The WAN editor pushes Connect away from the connection fields.");
+            Pass("wan." + stage, "The shipped per-device WAN editor saves, restores and clears an optional address", new { actual, saved, connectGap = connectBounds.Top - saveBounds.Bottom });
         }
     }
 }

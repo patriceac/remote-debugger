@@ -16,7 +16,9 @@ public sealed partial class MainForm
         wanAddress.Dock = Forms.DockStyle.Top; wanAddress.Margin = new Forms.Padding(0, 4, 0, 0);
         wanAddress.PlaceholderText = "hostname[:port]";
         panel.Controls.Add(wanAddress, 0, 3);
-        var row = new Forms.TableLayoutPanel { AutoSize = true, Dock = Forms.DockStyle.Top, ColumnCount = 2, Margin = new Forms.Padding(0, 6, 0, 12) };
+        var row = new Forms.TableLayoutPanel { AutoSize = true, AutoSizeMode = Forms.AutoSizeMode.GrowAndShrink,
+            Dock = Forms.DockStyle.Top, ColumnCount = 2, RowCount = 1, Margin = new Forms.Padding(0, 6, 0, 12) };
+        row.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         row.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
         row.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
         var help = new WorkspaceLabel { AutoSize = true, ForeColor = SecondaryText, Margin = Forms.Padding.Empty }
