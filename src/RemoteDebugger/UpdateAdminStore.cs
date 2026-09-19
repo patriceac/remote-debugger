@@ -72,9 +72,13 @@ internal sealed class UpdateAdminStore(string root, string trustedPublicKey = Up
             privateKey = Convert.FromBase64String(recovery.PrivateKey);
             using var key = ReadKey(privateKey);
             recovery.Settings?.Validate(true);
+            string pendingSetup = new SecurityMigrationStore(root).PendingSetupPath;
+            bool completedSetup = recovery.Settings?.SecurityId.Length > 0 && File.Exists(pendingSetup) &&
+                ProtectedSetup.Read(File.ReadAllBytes(pendingSetup)).ProfileId == recovery.Settings.SecurityId;
             // Authenticate and validate the entire recovery before changing saved access.
             recovery.Settings?.Save(root);
             Vault.Save(KeyPath, privateKey);
+            if (completedSetup) File.Delete(pendingSetup);
         }
         finally
         {

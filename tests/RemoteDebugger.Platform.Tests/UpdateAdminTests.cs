@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.Json;
 using RemoteDebugger;
 using RemoteDebugger.Core;
 using Xunit;
@@ -26,18 +27,23 @@ public sealed class UpdateAdminTests
         try
         {
             Vault.Save(Path.Combine(source, "update-admin.dpapi"), key.ExportPkcs8PrivateKey());
-            var settings = new InternetSettings("https://example.test", new('A', 64), new('B', 64));
+            var settings = new InternetSettings("https://example.test", new('A', 64), new('B', 64), Guid.NewGuid().ToString("N"));
             settings.Save(source);
             string backup = Path.Combine(root, "admin.rdadmin");
             new UpdateAdminStore(source, publicKey).Export(backup, "fixture password 1234");
             var restored = new UpdateAdminStore(target, publicKey);
             restored.Import(backup);
+            string pendingSetup = new SecurityMigrationStore(target).PendingSetupPath;
+            var clientSetup = ProtectedSetup.Seal(JsonSerializer.SerializeToUtf8Bytes(settings, Json.Options), "fixture password 1234", settings.SecurityId);
+            File.WriteAllBytes(pendingSetup, JsonSerializer.SerializeToUtf8Bytes(clientSetup, Json.Options));
             Assert.False(restored.IsAdmin);
             Assert.Throws<CryptographicException>(() => restored.Restore(restored.PendingPath, "wrong password"));
             Assert.False(File.Exists(Path.Combine(target, "update-admin.dpapi")));
+            Assert.True(File.Exists(pendingSetup));
             restored.Restore(restored.PendingPath, "fixture password 1234");
             Assert.True(restored.IsAdmin);
             Assert.Equal(settings, InternetSettings.Load(target));
+            Assert.False(File.Exists(pendingSetup));
             string proof = restored.Sign(new('C', 64), new('D', 64), "update.begin", new('E', 64));
             UpdateAdminProof.Verify(proof, new('C', 64), new('D', 64), "update.begin", new('E', 64), publicKey);
             byte[] before = File.ReadAllBytes(Path.Combine(target, "update-admin.dpapi"));
