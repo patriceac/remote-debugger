@@ -41,7 +41,8 @@ public sealed partial class MainForm
         {
             if (e.ColumnIndex != 3 || e.Item?.Tag is not Peer peer || !fleet.TryGetValue(DeviceKey(peer), out var device) || device.State != "transferring")
             { e.DrawDefault = true; return; }
-            e.DrawBackground();
+            using var background = new SolidBrush(e.Item.Selected ? SystemColors.Highlight : peers.BackColor);
+            e.Graphics.FillRectangle(background, e.Bounds);
             var track = new Rectangle(e.Bounds.X + 5, e.Bounds.Bottom - 5, Math.Max(0, e.Bounds.Width - 10), 3);
             using var back = new SolidBrush(Divider); using var fill = new SolidBrush(Teal);
             e.Graphics.FillRectangle(back, track);
@@ -170,7 +171,8 @@ public sealed partial class MainForm
                         if (baseline < 0) baseline = value.TransferredBytes;
                         var metrics = FileTransferMetrics.Calculate(value.TransferredBytes, value.TotalBytes, value.TransferredBytes - baseline, watch.Elapsed);
                         device = device with { State = value.Stage, Percent = value.TransferPercent,
-                            Detail = $"{value.TransferPercent}%" + (metrics.Remaining is { } eta ? " · " + FormatTransferEta(eta) : "") };
+                            Detail = $"{value.TransferPercent}% · {FormatBytes(value.TransferredBytes)}/{FormatBytes(value.TotalBytes)}" +
+                                (metrics.Remaining is { } eta ? " · " + FormatTransferEta(eta) : "") };
                         RecordDevice(device);
                     });
                     try { await SupportPlatform.SynchronizeAgentAsync(target, timeout.Token, progress); }

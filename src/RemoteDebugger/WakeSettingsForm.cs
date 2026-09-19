@@ -12,7 +12,7 @@ internal sealed class WakeSettingsForm : Forms.Form
     {
         Name = "wakeSettingsDialog"; Text = UiText.Format(UiText.WakeSettingsTitle, name);
         Font = new Font("Segoe UI", 10.5f); AutoScaleMode = Forms.AutoScaleMode.Dpi;
-        ClientSize = new Size(550, 490); MinimumSize = Size;
+        ClientSize = new Size(550, 550); MinimumSize = Size;
         StartPosition = Forms.FormStartPosition.CenterParent; MaximizeBox = false; MinimizeBox = false;
         var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, Padding = new(20), ColumnCount = 1, RowCount = 12 };
         layout.ColumnStyles.Add(new(Forms.SizeType.Percent, 100));
