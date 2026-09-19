@@ -15,6 +15,14 @@ public sealed partial class RemoteClient
     private static int networkVersion;
     public string ActiveRoute { get; private set; } = "";
 
+    internal static RemoteClient ForDiscoveredPeer(Peer peer, string root) => new(InternetSettings.Target(peer, root))
+    {
+        AdminRoot = root,
+        // The fleet just ran LAN/relay discovery; do not repeat it for every PC.
+        nextRouteProbe = DateTimeOffset.UtcNow.AddMinutes(1),
+        observedNetworkVersion = Volatile.Read(ref networkVersion)
+    };
+
     static RemoteClient() => NetworkChange.NetworkAddressChanged += (_, _) => Interlocked.Increment(ref networkVersion);
 
     internal static bool IsLanAddress(string host)

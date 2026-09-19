@@ -53,6 +53,10 @@ public sealed record UpdateExitPlan(string TransactionId, DateTimeOffset Deadlin
 public static class SupportPlatform
 {
     public static event Action? ManagedRelaunchRequested;
+    // Version-list display only. Update authorization still captures fresh bytes.
+    private static readonly Lazy<Task<ExecutableSnapshot>> versionSnapshot = new(() =>
+        Task.Run(() => CaptureCurrentExecutableAsync(CancellationToken.None)));
+    internal static Task<ExecutableSnapshot> GetCurrentVersionAsync(CancellationToken ct) => versionSnapshot.Value.WaitAsync(ct);
 
     internal static bool RequiresAdministratorProvisioning(SupportPlatformStatus status) => !status.Provisioned;
 

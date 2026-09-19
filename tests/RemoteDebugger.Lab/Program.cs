@@ -137,6 +137,7 @@ internal sealed partial class LabForm : Forms.Form
                 else if (role == "singleinstance") await SingleInstanceReviewAsync();
                 else if (role == "loopbackwan") await LoopbackWanAsync();
                 else if (role == "loopbackwake") await LoopbackWakeAsync();
+                else if (role == "loopbackversions") await LoopbackVersionsAsync();
                 else if (role is "loopback" or "loopback-smoke" or "loopbackeconomy") await LoopbackSmokeAsync();
                 else if (role is "loopbacktray" or "loopback-tray" or "loopbackui") await LoopbackTrayAsync();
                 else if (role == "loopbackexit") await LoopbackExitAsync();

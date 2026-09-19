@@ -33,7 +33,8 @@ public sealed partial class AgentServer
             {
                 await Wire.WriteAsync(stream, Reply.Success(request.Id, new
                 {
-                    snapshot = await updates.SnapshotAsync(ct), busy = Session.HasPaired && !updateOnly,
+                    snapshot = await updates.SnapshotAsync(ct, request.Args.TryGetProperty("versionOnly", out var versionOnly) && versionOnly.ValueKind == JsonValueKind.True),
+                    busy = Session.HasPaired && !updateOnly,
                     fingerprint = Fingerprint, computer = Environment.MachineName
                 }), ct);
                 return;

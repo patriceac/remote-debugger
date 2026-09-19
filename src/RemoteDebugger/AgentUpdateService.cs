@@ -83,7 +83,7 @@ public sealed class AgentUpdateService : IDisposable
             if (!IsOperation(request.Operation)) return Reply.Failure(request.Id, "unknown_update_operation", "Unknown update operation.");
             object result = request.Operation switch
             {
-                "update.snapshot" => await SnapshotAsync(ct),
+                "update.snapshot" => await SnapshotAsync(ct, request.Args.TryGetProperty("versionOnly", out var versionOnly) && versionOnly.ValueKind == JsonValueKind.True),
                 "update.challenge" => await WithTransferGateAsync(() => Task.FromResult(NewChallenge()), ct),
                 "update.begin" => await WithTransferGateAsync(() => BeginAsync(request.Args, ct), ct),
                 "update.status" => await WithTransferGateAsync(() => TransferStatusAsync(request.Args, ct), ct),
@@ -116,8 +116,10 @@ public sealed class AgentUpdateService : IDisposable
         UpdateRestartRequested?.Invoke();
     }
 
-    internal async Task<object> SnapshotAsync(CancellationToken ct)
+    internal async Task<object> SnapshotAsync(CancellationToken ct, bool versionOnly = false)
     {
+        if (versionOnly)
+            return new { agent = await SupportPlatform.GetCurrentVersionAsync(ct), wakeAdapters = WakeOnLan.GetAdapters() };
         var agent = await SupportPlatform.CaptureCurrentExecutableAsync(ct);
         var platform = await SupportPlatform.GetStatusAsync(ct);
         object? transaction = null;

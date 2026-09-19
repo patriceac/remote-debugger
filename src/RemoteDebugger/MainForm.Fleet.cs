@@ -15,6 +15,7 @@ public sealed partial class MainForm
     private bool fleetRefreshing;
     private bool isUpdateAdmin;
     private Task<ExecutableSnapshot>? controllerSnapshot;
+    private DateTimeOffset fleetCheckedAt;
     private bool FleetBusy => fleetLifetime != null;
     private static string DeviceKey(Peer peer) => peer.Fingerprint.Length > 0 ? peer.Fingerprint : peer.Host;
     private bool NewerDeviceKnown => controllerSnapshot is { IsCompletedSuccessfully: true } &&
@@ -107,27 +108,41 @@ public sealed partial class MainForm
     private RemoteClient FleetClient(Peer peer) => new(InternetSettings.Target(peer, root)) { AdminRoot = root };
     private bool IsActiveDevice(Peer peer) => supportSession && client != null && Safety.Equal(client.Connection.Fingerprint, peer.Fingerprint);
 
-    private async Task RefreshFleetVersionsAsync(CancellationToken ct)
+    internal static async Task CheckFleetVersionsAsync<T>(IEnumerable<T> devices, Func<T, Task> inspect, CancellationToken ct)
     {
-        if (!PrivateInternet || !isUpdateAdmin || FleetBusy) return;
+        using var slots = new SemaphoreSlim(4);
+        await Task.WhenAll(devices.Select(async device =>
+        {
+            await slots.WaitAsync(ct);
+            try { ct.ThrowIfCancellationRequested(); await inspect(device); }
+            finally { slots.Release(); }
+        }));
+    }
+
+    private async Task RefreshFleetVersionsAsync(CancellationToken ct, bool reuseRecent = false)
+    {
+        if (!PrivateInternet || !isUpdateAdmin || FleetBusy || fleetRefreshing) return;
+        if (reuseRecent && DateTimeOffset.UtcNow - fleetCheckedAt < TimeSpan.FromSeconds(30)) return;
+        fleetCheckedAt = default;
         fleetRefreshing = true;
         foreach (var device in fleet.Values.Where(device => device.Online).ToArray())
             RecordDevice(device with { State = "checking", Percent = 0, Detail = "" });
         RefreshControllerControls();
         try
         {
-            var controller = await (controllerSnapshot ??= SupportPlatform.CaptureCurrentExecutableAsync(CancellationToken.None));
-            foreach (var device in fleet.Values.Where(d => d.Online).ToArray())
+            var controller = await (controllerSnapshot ??= SupportPlatform.GetCurrentVersionAsync(CancellationToken.None)).WaitAsync(ct);
+            await CheckFleetVersionsAsync(fleet.Values.Where(d => d.Online).ToArray(), async device =>
             {
                 ct.ThrowIfCancellationRequested();
                 try
                 {
                     JsonElement snapshot;
                     bool busy = false;
-                    if (IsActiveDevice(device.Peer)) snapshot = RemoteClient.Require(await client!.CallAsync("update.snapshot", ct: ct, seconds: 15));
+                    if (IsActiveDevice(device.Peer)) snapshot = RemoteClient.Require(await client!.CallAsync("update.snapshot", new { versionOnly = true }, ct: ct, seconds: 15));
                     else
                     {
-                        var inspected = await FleetClient(device.Peer).AdminRequestAsync("admin.inspect", ct);
+                        // Older clients ignore this optional flag and return their full snapshot.
+                        var inspected = await RemoteClient.ForDiscoveredPeer(device.Peer, root).AdminRequestAsync("admin.inspect", ct, new { versionOnly = true });
                         snapshot = inspected.GetProperty("snapshot"); busy = inspected.GetProperty("busy").GetBoolean();
                     }
                     var remote = snapshot.GetProperty("agent").Deserialize<ExecutableSnapshot>(Json.Options)!;
@@ -137,7 +152,7 @@ public sealed partial class MainForm
                     {
                         RecordDevice(device with { Version = remote.FileVersion ?? "", Sha256 = remote.Sha256,
                             State = "failed", Detail = platform.Message });
-                        continue;
+                        return;
                     }
                     RememberWakeAdapter(device.Peer, snapshot);
                     int comparison = UpdatePolicy.ReleaseVersion(remote.FileVersion).CompareTo(UpdatePolicy.ReleaseVersion(controller.FileVersion));
@@ -147,22 +162,29 @@ public sealed partial class MainForm
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
                 catch (RemoteOperationException ex) when (ex.Code is "access_denied" or "unknown_operation")
                 { RecordDevice(device with { State = "legacy" }); }
-                catch (Exception) { RecordDevice(device with { State = "failed" }); }
-            }
+                catch (Exception ex) { RecordDevice(device with { State = "failed", Detail = FleetFailureDetail(ex) }); }
+            }, ct);
             SaveFleet();
+            fleetCheckedAt = DateTimeOffset.UtcNow;
         }
-        finally { fleetRefreshing = false; RefreshControllerControls(); }
+        finally
+        {
+            foreach (var device in fleet.Values.Where(d => d.State == "checking").ToArray())
+                RecordDevice(device with { State = "failed" });
+            fleetRefreshing = false; RefreshControllerControls();
+        }
     }
 
     private async Task UpdateAllDevicesAsync()
     {
         if (!PrivateInternet || !isUpdateAdmin || FleetBusy || fleetRefreshing || pairingBusy || clientUpdateBusy || terminating || action != null) return;
-        // Inspect all reachable modern clients before sending any update bytes.
+        // Reuse a just-completed discovery pass; each target is validated again before transfer.
         using var preparation = new CancellationTokenSource(TimeSpan.FromMinutes(3));
-        await RefreshFleetVersionsAsync(preparation.Token);
-        var controller = await (controllerSnapshot ??= SupportPlatform.CaptureCurrentExecutableAsync(CancellationToken.None));
+        await RefreshFleetVersionsAsync(preparation.Token, reuseRecent: true);
+        var controller = await (controllerSnapshot ??= SupportPlatform.GetCurrentVersionAsync(CancellationToken.None));
         if (NewerDeviceKnown)
         { discoveryState.SetText(() => UiText.UpdateControllerFirst); return; }
+        fleetCheckedAt = default;
         using var lifetime = new CancellationTokenSource(); fleetLifetime = lifetime;
         RefreshControllerControls();
         try
