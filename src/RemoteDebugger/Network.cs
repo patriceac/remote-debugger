@@ -642,7 +642,8 @@ public sealed partial class AgentServer : IDisposable
                                 else
                                 {
                                     using var updateDeadline = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, grant);
-                                    updateDeadline.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(r.TimeoutSeconds, 1, 120)));
+                                    int maximumSeconds = r.Operation == "update.stage" ? SupportOperationTimeouts.UpdateStageSeconds : 120;
+                                    updateDeadline.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(r.TimeoutSeconds, 1, maximumSeconds)));
                                     byte[] binaryChunk = [];
                                     if (r.Operation == "update.chunk.binary")
                                     {

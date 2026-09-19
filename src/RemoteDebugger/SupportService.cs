@@ -157,7 +157,7 @@ internal sealed class SupportBrokerHost : IDisposable
 
                 requestTimeout.CancelAfter(request.Operation switch
                 {
-                    "update.stage" => TimeSpan.FromMinutes(3),
+                    "update.stage" => TimeSpan.FromSeconds(SupportOperationTimeouts.UpdateStageSeconds),
                     "update.arm" => TimeSpan.FromMinutes(1),
                     "platform.status" => TimeSpan.FromSeconds(SupportOperationTimeouts.PlatformStatusExecutionSeconds),
                     "firewall.ensure" => TimeSpan.FromSeconds(SupportOperationTimeouts.FirewallEnsureExecutionSeconds),

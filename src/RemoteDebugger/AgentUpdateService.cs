@@ -21,6 +21,7 @@ internal enum UpdateRemoteHealthReadiness
 
 public sealed class AgentUpdateService : IDisposable
 {
+    internal const int StageBrokerTimeoutSeconds = SupportOperationTimeouts.UpdateStageSeconds;
     private static readonly HashSet<string> Operations = new(StringComparer.Ordinal)
     {
         "update.snapshot", "update.challenge", "update.begin", "update.status", "update.chunk", "update.chunk.binary", "update.stage",
@@ -212,7 +213,7 @@ public sealed class AgentUpdateService : IDisposable
         var actual = await SnapshotTransferredFileAsync(partial, ct);
         RequireTransferMatch(actual, transfer.Candidate);
         UpdatePolicy.RequireNewerRelease(actual, await SupportPlatform.CaptureCurrentExecutableAsync(ct));
-        var result = await SupportPlatform.BrokerCallAsync("update.stage", new { transactionId, sourcePath = partial, candidate = transfer.Candidate }, ct, 120);
+        var result = await SupportPlatform.BrokerCallAsync("update.stage", new { transactionId, sourcePath = partial, candidate = transfer.Candidate }, ct, StageBrokerTimeoutSeconds);
         string metaTemp = MetaPath(transactionId) + ".new";
         await File.WriteAllTextAsync(metaTemp, JsonSerializer.Serialize(transfer with { BrokerStaged = true }, Json.Options), ct);
         File.Move(metaTemp, MetaPath(transactionId), true);
@@ -444,7 +445,7 @@ internal static class AgentUpdateClient
                 }
             }
             progress?.Report(new("verifying", controller.Size, controller.Size));
-            RemoteClient.Require(await client.SendUpdateAsync("update.stage", new { transactionId }, ct, seconds: 180));
+            await StageTransferredAgentAsync(client, transactionId, ct);
             var commit = RemoteClient.Require(await client.SendUpdateAsync("update.commit", new { transactionId }, ct, seconds: 60));
             await client.CloseUpdateChannelAsync().ConfigureAwait(false);
             progress?.Report(new("restarting", controller.Size, controller.Size));
@@ -503,4 +504,30 @@ internal static class AgentUpdateClient
 
     private static bool IsExact(ExecutableSnapshot left, ExecutableSnapshot right) =>
         left.Size == right.Size && UpdatePolicy.FixedHexEquals(left.Sha256, right.Sha256);
+
+    private static async Task StageTransferredAgentAsync(RemoteClient client, string transactionId, CancellationToken ct)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                RemoteClient.Require(await client.SendUpdateAsync("update.stage", new { transactionId }, ct,
+                    seconds: SupportOperationTimeouts.UpdateStageSeconds));
+                return;
+            }
+            catch (Exception ex) when (attempt == 0 && !ct.IsCancellationRequested && IsRetryableStageFailure(ex))
+            {
+                await client.CloseUpdateChannelAsync().ConfigureAwait(false);
+            }
+        }
+    }
+
+    internal static bool IsRetryableStageFailure(Exception ex) => ex switch
+    {
+        OperationCanceledException => true,
+        IOException => true,
+        RemoteOperationException remote => remote.Code == "update_cancelled" ||
+            remote.Message.Contains("broker_cancelled", StringComparison.OrdinalIgnoreCase),
+        _ => false
+    };
 }

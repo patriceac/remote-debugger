@@ -54,6 +54,8 @@ public sealed class SupportOperationTimeoutTests
     {
         Assert.True(SupportOperationTimeouts.ControllerSynchronizationSeconds >
                     SupportOperationTimeouts.PairingHandshakeSeconds);
+        Assert.True(SupportOperationTimeouts.UpdateStageSeconds > 180);
+        Assert.Equal(SupportOperationTimeouts.UpdateStageSeconds, AgentUpdateService.StageBrokerTimeoutSeconds);
 
         int supportedColdPreparationSeconds =
             SupportOperationTimeouts.PlatformStatusRoundTripSeconds * 2 +
@@ -63,6 +65,31 @@ public sealed class SupportOperationTimeoutTests
                     SupportOperationTimeouts.UpdateStartupHealthReportSeconds + 15);
         Assert.True(UpdateReconnectGrant.MaximumLifetime.TotalSeconds >
                     SupportOperationTimeouts.UpdateStartupHealthRollbackSeconds);
+    }
+}
+
+public sealed class FleetUpdateRecoveryTests
+{
+    [Fact]
+    public void OnlyDisconnectedUpdateOnlySessionsCanBeReclaimed()
+    {
+        var disconnected = new SupportSessionSnapshot(false, true, DateTimeOffset.UtcNow.AddMinutes(10),
+            "reconnecting", false, DateTimeOffset.UtcNow);
+        var connected = disconnected with { Connected = true, State = "connected" };
+
+        Assert.True(AgentServer.CanReclaimUpdateSession(true, disconnected, null));
+        Assert.False(AgentServer.CanReclaimUpdateSession(false, disconnected, null));
+        Assert.False(AgentServer.CanReclaimUpdateSession(true, connected, null));
+        Assert.False(AgentServer.CanReclaimUpdateSession(true, disconnected,
+            new UpdateExitPlan(Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow.AddMinutes(1))));
+    }
+
+    [Fact]
+    public void VerificationRetriesOnlyTransientFailures()
+    {
+        Assert.True(AgentUpdateClient.IsRetryableStageFailure(new OperationCanceledException()));
+        Assert.True(AgentUpdateClient.IsRetryableStageFailure(new RemoteOperationException("update_cancelled", "Timed out")));
+        Assert.False(AgentUpdateClient.IsRetryableStageFailure(new RemoteOperationException("update_failed", "Hash mismatch")));
     }
 }
 

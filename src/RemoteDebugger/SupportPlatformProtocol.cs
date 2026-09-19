@@ -41,6 +41,7 @@ internal static class SupportOperationTimeouts
     public const int FirewallEnsureRoundTripSeconds = 135;
     public const int PairingHandshakeSeconds = 120;
     public const int ControllerSynchronizationSeconds = 600;
+    public const int UpdateStageSeconds = 300;
     public const int UpdateStartupHealthReportSeconds = 300;
     public const int UpdateStartupHealthRollbackSeconds = 360;
 }

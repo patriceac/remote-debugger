@@ -41,6 +41,7 @@ public sealed partial class AgentServer
             await pairingSlot.WaitAsync(ct);
             try
             {
+                ReclaimDisconnectedUpdateSession();
                 lock (authLock)
                 {
                     if (Session.HasPaired || updates.PendingExitPlan != null)
@@ -63,13 +64,28 @@ public sealed partial class AgentServer
     private void ReleaseUpdateSession()
     {
         lock (authLock)
+            ReleaseUpdateSessionUnsafe();
+    }
+
+    private void ReclaimDisconnectedUpdateSession()
+    {
+        lock (authLock)
         {
-            tokenHash = ""; controllerBinaryHash = ""; updateOnly = false;
-            grantLifetime.Cancel(); grantLifetime = new(); resumeStore.Clear(); resumed = null;
-            Operations.Maintenance.End(); updates.ResetControllerSynchronization();
-            session.ResetForPairing();
-            if (Internet != null) Pairing.OpenPrivate(Internet.AuthenticationSecret); else Pairing.Open();
+            if (CanReclaimUpdateSession(updateOnly, Session, updates.PendingExitPlan))
+                ReleaseUpdateSessionUnsafe();
         }
+    }
+
+    internal static bool CanReclaimUpdateSession(bool updateOnly, SupportSessionSnapshot session, UpdateExitPlan? pendingExitPlan) =>
+        updateOnly && session.HasPaired && !session.Connected && pendingExitPlan == null;
+
+    private void ReleaseUpdateSessionUnsafe()
+    {
+        tokenHash = ""; controllerBinaryHash = ""; updateOnly = false;
+        grantLifetime.Cancel(); grantLifetime = new(); resumeStore.Clear(); resumed = null;
+        Operations.Maintenance.End(); updates.ResetControllerSynchronization();
+        session.ResetForPairing();
+        if (Internet != null) Pairing.OpenPrivate(Internet.AuthenticationSecret); else Pairing.Open();
     }
 }
 

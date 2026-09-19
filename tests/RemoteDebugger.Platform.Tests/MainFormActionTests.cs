@@ -68,4 +68,9 @@ public sealed class MainFormActionTests
         Assert.Equal(1, progress.Count(character => character == '/'));
         Assert.Equal(1, progress.Split("MiB").Length - 1);
     }
+
+    [Fact]
+    public void FleetFailureShowsTheActualRemoteReason() =>
+        Assert.Equal("update_failed: Publisher mismatch", MainForm.FleetFailureDetail(
+            new RemoteOperationException("update_failed", "Publisher mismatch")));
 }

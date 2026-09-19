@@ -1221,7 +1221,7 @@ public sealed partial class MainForm : Forms.Form
                 if (PrivateInternet && fleet.TryGetValue(DeviceKey(peer), out var device))
                 {
                     item.SubItems.Add(device.Version.Length == 0 ? "—" : device.Version);
-                    item.SubItems.Add(FleetState(device)); item.SubItems.Add(device.Detail);
+                    item.SubItems.Add(FleetState(device)); item.SubItems.Add(device.Detail); item.ToolTipText = device.Detail;
                 }
                 else item.SubItems.Add(fleet.TryGetValue(DeviceKey(peer), out var known) && !known.Online ? UiText.DeviceOffline : UiText.Available);
                 item.Tag = peer; peers.Items.Add(item); if (peer.Host == keep) item.Selected = true;

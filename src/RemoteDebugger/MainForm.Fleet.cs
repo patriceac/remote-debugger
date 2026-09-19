@@ -132,6 +132,13 @@ public sealed partial class MainForm
                     }
                     var remote = snapshot.GetProperty("agent").Deserialize<ExecutableSnapshot>(Json.Options)!;
                     remote.Validate();
+                    if (snapshot.TryGetProperty("platform", out var platformValue) &&
+                        platformValue.Deserialize<SupportPlatformStatus>(Json.Options) is { Available: false } platform)
+                    {
+                        RecordDevice(device with { Version = remote.FileVersion ?? "", Sha256 = remote.Sha256,
+                            State = "failed", Detail = platform.Message });
+                        continue;
+                    }
                     RememberWakeAdapter(device.Peer, snapshot);
                     int comparison = UpdatePolicy.ReleaseVersion(remote.FileVersion).CompareTo(UpdatePolicy.ReleaseVersion(controller.FileVersion));
                     string state = comparison > 0 ? "newer" : busy ? "busy" : Safety.Equal(remote.Sha256, controller.Sha256) ? "current" : comparison < 0 ? "available" : "conflict";
@@ -202,7 +209,7 @@ public sealed partial class MainForm
                     finally { receiving = false; }
                     RecordDevice(device with { Version = controller.FileVersion ?? "", Sha256 = controller.Sha256, State = "current", Percent = 100, Detail = "" });
                 }
-                catch (Exception) { RecordDevice(device with { State = "failed", Detail = lifetime.IsCancellationRequested ? UiText.TransferPaused : UiText.RetryUpdate }); }
+                catch (Exception ex) { RecordDevice(device with { State = "failed", Detail = lifetime.IsCancellationRequested ? UiText.TransferPaused : FleetFailureDetail(ex) }); }
                 finally
                 {
                     if (acquired)
@@ -225,4 +232,10 @@ public sealed partial class MainForm
     internal static string FormatFleetBytes(long transferred, long total) => total >= 1024 * 1024
         ? $"{transferred / 1048576d:F1}/{total / 1048576d:F1} MiB"
         : $"{transferred / 1024d:F0}/{total / 1024d:F0} KiB";
+
+    internal static string FleetFailureDetail(Exception ex)
+    {
+        string message = ex.GetBaseException().Message.Trim();
+        return message.Length == 0 ? UiText.RetryUpdate : message;
+    }
 }
