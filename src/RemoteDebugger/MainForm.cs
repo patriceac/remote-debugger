@@ -139,7 +139,11 @@ public sealed partial class MainForm : Forms.Form
     private readonly List<FileSortRow> fileRows = [];
     private string currentDirectory = "";
     private string? selectedFilePath;
-    private readonly Forms.TextBox destination = TextBox("destination");
+    private bool fileDirectoryLoaded;
+    private Forms.Button openFolderButton = null!;
+    private readonly Forms.ProgressBar fileTransferProgress = new() { Name = "fileTransferProgress", Dock = Forms.DockStyle.Top, Height = 12 };
+    private readonly Forms.Label fileTransferStatus = new() { Name = "fileTransferStatus", AutoSize = false, AutoEllipsis = true, Height = 26, ForeColor = PrimaryText };
+    private readonly Forms.Label fileTransferDetails = new() { Name = "fileTransferDetails", AutoSize = false, AutoEllipsis = true, Height = 26, Dock = Forms.DockStyle.Top, ForeColor = SecondaryText };
 
     // Diagnostics.
     private readonly Forms.ComboBox operations = new() { Name = "operation", DropDownStyle = Forms.ComboBoxStyle.DropDownList, Width = 190 };
@@ -538,30 +542,40 @@ public sealed partial class MainForm : Forms.Form
     private PagePanel BuildFilePage()
     {
         var page = new PagePanel(() => UiText.Files) { BackColor = Canvas, Padding = new Forms.Padding(28) };
-        fileDirectory.ReadOnly = false; fileDirectory.PlaceholderText = UiText.Workspace;
-        uploadButton = Button(() => UiText.UploadFile, "upload", 150); var parent = parentFolderButton = Button(() => UiText.ParentFolder, "parentFolder", 78); var refresh = browseFilesButton = Button(() => UiText.Refresh, "browseFiles", 92);
-        var pathRow = ControlRow(fileDirectory, parent, refresh);
+        fileDirectory.ReadOnly = false; fileDirectory.PlaceholderText = UiText.RemoteFolderPlaceholder;
+        uploadButton = Button(() => UiText.UploadFile, "upload", 150, primary: true); var parent = parentFolderButton = Button(() => UiText.ParentFolder, "parentFolder", 78); var refresh = browseFilesButton = Button(() => UiText.Refresh, "browseFiles", 92);
+        openFolderButton = Button(() => UiText.OpenRemoteFolder, "openRemoteFolder", 64);
+        var pathRow = ControlRow(fileDirectory, openFolderButton, parent, refresh);
         pathRow.ColumnStyles[0] = new Forms.ColumnStyle(Forms.SizeType.Percent, 100); fileDirectory.Anchor |= Forms.AnchorStyles.Right;
         remotePath.ReadOnly = true; remotePath.PlaceholderText = UiText.SelectFileInList;
         var selectionRow = ControlRow(RowLabel(() => UiText.SelectedFile, "selectionLabel"), remotePath);
         selectionRow.ColumnStyles[1] = new Forms.ColumnStyle(Forms.SizeType.Percent, 100); remotePath.Anchor |= Forms.AnchorStyles.Right;
-        destination.SetText("deployments/");
         uploadFolderButton = Button(() => UiText.UploadFolder, "uploadFolder", 160); downloadButton = Button(() => UiText.Download, "download", 102);
         transferCancelButton = Button(() => UiText.Cancel, "cancelTransfer", 100); transferCancelButton.Enabled = false;
         transferCancelButton.Click += (_, _) => fileTransferLifetime?.Cancel();
-        var fileButtons = ControlRow(uploadButton, uploadFolderButton, downloadButton, transferCancelButton);
-        var destinationRow = ControlRow(RowLabel(() => UiText.UploadDestination, "destinationLabel"), destination);
-        destinationRow.ColumnStyles[1] = new Forms.ColumnStyle(Forms.SizeType.Percent, 100); destination.Anchor |= Forms.AnchorStyles.Right;
+        var fileButtons = ControlRow(uploadButton, uploadFolderButton, downloadButton);
+        var transferHeader = ControlRow(fileTransferStatus, transferCancelButton);
+        transferHeader.ColumnStyles[0] = new Forms.ColumnStyle(Forms.SizeType.Percent, 100); fileTransferStatus.Anchor |= Forms.AnchorStyles.Right;
+        fileTransferStatus.SetText(() => UiText.FileTransfers); fileTransferDetails.SetText(() => UiText.FileTransferReady);
+        var transferArea = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Top, AutoSize = true, ColumnCount = 1, RowCount = 3, Margin = new Forms.Padding(0, 12, 0, 0) };
+        transferArea.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
+        for (int i = 0; i < 3; i++) transferArea.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
+        transferArea.Controls.Add(transferHeader, 0, 0); transferArea.Controls.Add(fileTransferProgress, 0, 1); transferArea.Controls.Add(fileTransferDetails, 0, 2);
         fileList.Columns.Add("", 330).WithText(() => UiText.Name); fileList.Columns.Add("", 100).WithText(() => UiText.FileType); fileList.Columns.Add("", 105, Forms.HorizontalAlignment.Right).WithText(() => UiText.Size); fileList.Columns.Add("", 220).WithText(() => UiText.Modified);
         fileList.RememberLayout(root, "name", "type", "size", "modified");
-        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 6, Margin = Forms.Padding.Empty };
+        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 7, Margin = Forms.Padding.Empty };
         layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
         for (int i = 0; i < 5; i++) layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         fileState.Margin = new Forms.Padding(0, 4, 0, 12); fileState.Dock = Forms.DockStyle.Top;
-        layout.Controls.Add(pathRow, 0, 0); layout.Controls.Add(selectionRow, 0, 1); layout.Controls.Add(fileButtons, 0, 2);
-        layout.Controls.Add(destinationRow, 0, 3); layout.Controls.Add(fileState, 0, 4); layout.Controls.Add(fileList, 0, 5); page.Controls.Add(layout);
-        parent.Click += async (_, _) => { currentDirectory = ParentPath(currentDirectory); selectedFilePath = null; remotePath.SetText(""); fileDirectory.SetText(currentDirectory); await BrowseFilesAsync(); }; refresh.Click += async (_, _) => await BrowseFilesAsync(); fileDirectory.KeyDown += async (_, e) => { if (e.KeyCode == Forms.Keys.Enter) { e.SuppressKeyPress = true; currentDirectory = fileDirectory.Text.Trim(); selectedFilePath = null; remotePath.SetText(""); await BrowseFilesAsync(); } };
+        layout.Controls.Add(RowLabel(() => UiText.RemoteFolder, "remoteFolderLabel"), 0, 0); layout.Controls.Add(pathRow, 0, 1); layout.Controls.Add(fileButtons, 0, 2);
+        layout.Controls.Add(selectionRow, 0, 3); layout.Controls.Add(fileState, 0, 4); layout.Controls.Add(fileList, 0, 5); layout.Controls.Add(transferArea, 0, 6); page.Controls.Add(layout);
+        parent.Click += async (_, _) => await OpenRemoteFolderAsync(ParentPath(currentDirectory));
+        refresh.Click += async (_, _) => await BrowseFilesAsync();
+        openFolderButton.Click += async (_, _) => await OpenRemoteFolderAsync(fileDirectory.Text.Trim().Trim('"'));
+        fileDirectory.KeyDown += async (_, e) => { if (e.KeyCode == Forms.Keys.Enter) { e.SuppressKeyPress = true; await OpenRemoteFolderAsync(fileDirectory.Text.Trim().Trim('"')); } };
+        fileDirectory.TextChanged += (_, _) => RefreshControllerControls();
         return page;
     }
 
@@ -617,7 +631,7 @@ public sealed partial class MainForm : Forms.Form
         screen.MouseDown += (_, e) => { screen.Focus(); RefreshInputStatus(); QueueMouse("down", e); }; screen.MouseUp += (_, e) => QueueMouse("up", e); screen.MouseMove += (_, e) => { long now = Environment.TickCount64; if (now - lastMove < 33) return; lastMove = now; QueueMouse("move", e); }; screen.MouseWheel += (_, e) => QueueMouse("wheel", e); screen.PreviewKeyDown += (_, e) => e.IsInputKey = true; screen.KeyDown += (_, e) => { if (!CanSendInput()) return; e.SuppressKeyPress = true; QueueInput(new { kind = "keyDown", virtualKey = (int)e.KeyCode }); }; screen.KeyUp += (_, e) => { if (!CanSendInput()) return; e.SuppressKeyPress = true; QueueInput(new { kind = "keyUp", virtualKey = (int)e.KeyCode }); }; screen.GotFocus += (_, _) => RefreshInputStatus(); screen.LostFocus += (_, _) => { ReleaseHeldInputForCurrentSession(); RefreshInputStatus(); };
         typeText.Click += (_, _) => QueueFocusedText(); enterKey.Click += async (_, _) => await ExecuteAsync("ui.key", new { pid = (int)pid.Value, key = "ENTER" });
         processList.ColumnClick += (_, e) => { processSort = processSort.Toggle(ProcessColumn(e.Column)); RenderProcesses(); }; processList.SelectedIndexChanged += (_, _) => { if (processList.SelectedItems.Count > 0 && processList.SelectedItems[0].Tag is ProcessSortRow row) { pid.Value = row.Pid; } };
-        fileList.ColumnClick += (_, e) => { fileSort = fileSort.Toggle(FileColumn(e.Column)); RenderFiles(); }; fileList.SelectedIndexChanged += (_, _) => { selectedFilePath = fileList.SelectedItems.Count > 0 && fileList.SelectedItems[0].Tag is FileSortRow row && !row.IsDirectory ? row.Path : null; remotePath.SetText(selectedFilePath ?? ""); RefreshControllerControls(); }; fileList.DoubleClick += async (_, _) => { if (fileList.SelectedItems.Count == 0 || fileList.SelectedItems[0].Tag is not FileSortRow row) return; if (row.IsDirectory) { currentDirectory = row.Path; selectedFilePath = null; remotePath.SetText(""); fileDirectory.SetText(currentDirectory); await BrowseFilesAsync(); } };
+        fileList.ColumnClick += (_, e) => { fileSort = fileSort.Toggle(FileColumn(e.Column)); RenderFiles(); }; fileList.SelectedIndexChanged += (_, _) => { selectedFilePath = fileList.SelectedItems.Count > 0 && fileList.SelectedItems[0].Tag is FileSortRow row && !row.IsDirectory ? row.Path : null; remotePath.SetText(selectedFilePath ?? ""); RefreshControllerControls(); }; fileList.DoubleClick += async (_, _) => { if (fileList.SelectedItems.Count > 0 && fileList.SelectedItems[0].Tag is FileSortRow { IsDirectory: true } row) await OpenRemoteFolderAsync(row.Path); };
         refreshResourcesButton.Click += async (_, _) => await RefreshResourcesAsync(); executeButton.Click += async (_, _) => await ExecuteSelectedAsync(); cancelButton.Click += async (_, _) => await CancelActionAsync(); uploadButton.Click += async (_, _) => await UploadFileAsync(); uploadFolderButton.Click += async (_, _) => await UploadFolderAsync(); downloadButton.Click += async (_, _) => await DownloadFileAsync();
     }
 
@@ -1765,6 +1779,14 @@ public sealed partial class MainForm : Forms.Form
         int? keep = selectedPid ?? (processList.SelectedItems.Count > 0 && processList.SelectedItems[0].Tag is ProcessSortRow selectedRow ? selectedRow.Pid : null); var sorted = UiSorting.SortProcesses(processRows, processSort); processList.BeginUpdate(); processList.Items.Clear(); foreach (var row in sorted) { var item = new Forms.ListViewItem(row.Pid.ToString()); item.SubItems.Add(row.Name); item.SubItems.Add(row.CpuPercentTotalMachine is { } cpu ? cpu.ToString("F1") : "—"); item.SubItems.Add(row.WorkingSetBytes is { } bytes ? (bytes / 1048576d).ToString("F1") : "—"); item.SubItems.Add(row.Responding is null ? "—" : row.Responding.Value ? UiText.Yes : UiText.NotResponding); item.SubItems.Add(string.IsNullOrWhiteSpace(row.Window) ? "—" : row.Window); item.Tag = row; if (keep == row.Pid) item.Selected = true; processList.Items.Add(item); } processList.EndUpdate();
     }
 
+    private async Task OpenRemoteFolderAsync(string path)
+    {
+        if (filesLoading || fileTransferLifetime != null) return;
+        currentDirectory = path; fileDirectoryLoaded = false; selectedFilePath = null;
+        remotePath.SetText(""); fileDirectory.SetText(path);
+        await BrowseFilesAsync();
+    }
+
     private async Task BrowseFilesAsync()
     {
         if (filesLoading) return;
@@ -1772,9 +1794,20 @@ public sealed partial class MainForm : Forms.Form
         int generation = sessionGeneration; RemoteClient? target = client; string directory = currentDirectory;
         try
         {
-            RequireClient(); fileState.SetText(() => UiText.Loading); string keep = selectedFilePath ?? ""; var data = RemoteClient.Require(await target!.CallAsync("files", new { path = directory }, seconds: 30)); if (generation != sessionGeneration || !ReferenceEquals(target, client) || directory != currentDirectory) return; fileRows.Clear(); foreach (var entry in data.EnumerateArray()) fileRows.Add(new FileSortRow(entry.Str("name"), entry.TryGetProperty("directory", out var d) && d.GetBoolean(), NullableLong(entry, "size"), NullableDate(entry, "modifiedUtc"), entry.Str("path"))); RenderFiles(keep); fileState.SetText(() => fileRows.Count == 0 ? UiText.EmptyFolder : UiText.Format(UiText.ItemCount, fileRows.Count)); fileDirectory.SetText(currentDirectory); SetFooterDetail(() => UiText.Format(UiText.FilesItemCount, fileRows.Count)); RefreshFooter();
+            RequireClient(); fileState.SetText(() => UiText.Loading); string keep = selectedFilePath ?? "";
+            string resolvedDirectory = directory;
+            if (!Path.IsPathFullyQualified(directory))
+            {
+                var status = RemoteClient.Require(await target!.CallAsync("status", seconds: 15));
+                resolvedDirectory = string.IsNullOrWhiteSpace(directory) ? status.Str("workspace") : Path.GetFullPath(Path.Combine(status.Str("workspace"), directory));
+            }
+            var data = RemoteClient.Require(await target!.CallAsync("files", new { path = directory }, seconds: 30));
+            if (generation != sessionGeneration || !ReferenceEquals(target, client) || directory != currentDirectory) return;
+            currentDirectory = resolvedDirectory; fileDirectoryLoaded = true; fileRows.Clear();
+            foreach (var entry in data.EnumerateArray()) fileRows.Add(new FileSortRow(entry.Str("name"), entry.TryGetProperty("directory", out var d) && d.GetBoolean(), NullableLong(entry, "size"), NullableDate(entry, "modifiedUtc"), entry.Str("path")));
+            RenderFiles(keep); fileState.SetText(() => fileRows.Count == 0 ? UiText.EmptyFolder : UiText.Format(UiText.ItemCount, fileRows.Count)); fileDirectory.SetText(currentDirectory); SetFooterDetail(() => UiText.Format(UiText.FilesItemCount, fileRows.Count)); RefreshFooter();
         }
-        catch (Exception ex) { if (generation != sessionGeneration || directory != currentDirectory) return; fileRows.Clear(); fileList.Items.Clear(); selectedFilePath = null; remotePath.SetText(""); fileState.SetText(() => UiText.CannotReadCheckPath); SetFooterMessage(() => UiText.CannotReadFolder); footerDetail = ex.Message; RefreshFooter(); }
+        catch (Exception ex) { if (generation != sessionGeneration || directory != currentDirectory) return; fileDirectoryLoaded = false; fileRows.Clear(); fileList.Items.Clear(); selectedFilePath = null; remotePath.SetText(""); fileState.SetText(() => UiText.CannotReadCheckPath); SetFooterMessage(() => UiText.CannotReadFolder); footerDetail = ex.Message; RefreshFooter(); }
         finally { filesLoading = false; RefreshControllerControls(); }
     }
 
@@ -1834,10 +1867,10 @@ public sealed partial class MainForm : Forms.Form
 
     private async Task UploadFileAsync()
     {
-        if (fileTransferLifetime != null) return;
+        if (fileTransferLifetime != null || !fileDirectoryLoaded) return;
         using var dialog = new Forms.OpenFileDialog(); if (dialog.ShowDialog() != Forms.DialogResult.OK) return;
-        string path = destination.Text.TrimEnd('/', '\\') + "/" + Path.GetFileName(dialog.FileName);
-        await TransferFileAsync(Path.GetFileName(dialog.FileName), async (target, ct, progress) =>
+        string path = Path.Combine(currentDirectory, Path.GetFileName(dialog.FileName));
+        await TransferFileAsync(path, async (target, ct, progress) =>
         {
             var result = await target.UploadAsync(dialog.FileName, path, ct, progress);
             output.SetText(Pretty(result));
@@ -1846,13 +1879,25 @@ public sealed partial class MainForm : Forms.Form
 
     private async Task UploadFolderAsync()
     {
-        if (fileTransferLifetime != null) return;
+        if (fileTransferLifetime != null || !fileDirectoryLoaded) return;
         using var dialog = new Forms.FolderBrowserDialog(); if (dialog.ShowDialog() != Forms.DialogResult.OK) return;
-        string folderDestination = destination.Text.TrimEnd('/', '\\');
-        await TransferFileAsync(Path.GetFileName(dialog.SelectedPath), async (target, ct, progress) =>
+        string folderDestination = currentDirectory;
+        await TransferFileAsync(folderDestination, async (target, ct, progress) =>
         {
-            foreach (string file in Directory.EnumerateFiles(dialog.SelectedPath, "*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint }))
-                await target.UploadAsync(file, folderDestination + "/" + Path.GetRelativePath(dialog.SelectedPath, file), ct, progress);
+            var files = await Task.Run(() => Directory.EnumerateFiles(dialog.SelectedPath, "*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint }).Select(path => new FileInfo(path)).ToArray(), ct);
+            long total = files.Sum(file => file.Length), completed = 0, sent = 0;
+            foreach (var file in files)
+            {
+                long attempt = 0;
+                var fileProgress = new ForwardFileProgress(value =>
+                {
+                    attempt = value.BytesThisAttempt;
+                    progress.Report(new(completed + value.TransferredBytes, total, sent + attempt));
+                });
+                await target.UploadAsync(file.FullName, Path.Combine(folderDestination, Path.GetRelativePath(dialog.SelectedPath, file.FullName)), ct, fileProgress);
+                completed += file.Length; sent += attempt;
+                progress.Report(new(completed, total, sent));
+            }
         });
     }
 
@@ -1862,7 +1907,7 @@ public sealed partial class MainForm : Forms.Form
         if (string.IsNullOrWhiteSpace(selectedFilePath)) { fileState.SetText(() => UiText.SelectFile); return; }
         string path = selectedFilePath;
         using var dialog = new Forms.SaveFileDialog { FileName = Path.GetFileName(path) }; if (dialog.ShowDialog() != Forms.DialogResult.OK) return;
-        await TransferFileAsync(Path.GetFileName(path), (target, ct, progress) => target.DownloadAsync(path, dialog.FileName, ct, progress), download: true);
+        await TransferFileAsync(dialog.FileName, (target, ct, progress) => target.DownloadAsync(path, dialog.FileName, ct, progress), download: true);
     }
 
     private async Task TransferFileAsync(string name, Func<RemoteClient, CancellationToken, IProgress<FileTransferProgress>, Task> transfer, bool download = false)
@@ -1870,27 +1915,47 @@ public sealed partial class MainForm : Forms.Form
         if (fileTransferLifetime != null) return;
         using var lifetime = new CancellationTokenSource();
         int generation = sessionGeneration;
+        bool receivingProgress = true, measuring = false;
         try
         {
             RequireClient(); var target = client!;
-            fileTransferLifetime = lifetime; transferCancelButton.Enabled = true;
-            fileState.SetText(name + " · " + UiText.Loading);
-            var watch = Stopwatch.StartNew(); long initial = -1, previous = -1;
+            fileTransferLifetime = lifetime; RefreshControllerControls();
+            fileTransferProgress.Value = 0; fileTransferProgress.Style = Forms.ProgressBarStyle.Marquee;
+            fileTransferStatus.SetText(() => UiText.Format(download ? UiText.DownloadingTo : UiText.UploadingTo, name));
+            fileTransferDetails.SetText(() => UiText.PreparingFileTransfer);
+            var watch = Stopwatch.StartNew();
             var progress = new Progress<FileTransferProgress>(value =>
             {
-                if (generation != sessionGeneration || !ReferenceEquals(fileTransferLifetime, lifetime)) return;
-                if (initial < 0 || value.TransferredBytes < previous) { initial = value.TransferredBytes; watch.Restart(); }
-                previous = value.TransferredBytes;
-                long rate = (long)((value.TransferredBytes - initial) / Math.Max(.001, watch.Elapsed.TotalSeconds));
-                fileState.SetText($"{name} · {FormatBytes(value.TransferredBytes)} / {FormatBytes(value.TotalBytes)} · {FormatBytes(rate)}/s · {target.ActiveRoute}");
+                if (!receivingProgress || generation != sessionGeneration || !ReferenceEquals(fileTransferLifetime, lifetime)) return;
+                if (!measuring) { watch.Restart(); measuring = true; }
+                var metrics = FileTransferMetrics.Calculate(value.TransferredBytes, value.TotalBytes, value.BytesThisAttempt, watch.Elapsed);
+                fileTransferProgress.Style = Forms.ProgressBarStyle.Continuous; fileTransferProgress.Value = metrics.Percent;
+                fileTransferDetails.SetText(() => value.TransferredBytes >= value.TotalBytes ? UiText.VerifyingFileTransfer :
+                    UiText.Format(UiText.FileTransferNumbers, metrics.Percent, FormatBytes(value.TransferredBytes), FormatBytes(value.TotalBytes),
+                        metrics.BytesPerSecond > 0 ? FormatBytes((long)metrics.BytesPerSecond) + "/s" : "—",
+                        metrics.Remaining is { } eta ? FormatTransferEta(eta) : UiText.CalculatingTransferEta));
             });
             await transfer(target, lifetime.Token, progress);
-            if (generation == sessionGeneration) { await BrowseFilesAsync(); fileState.SetText(name + " · " + (download ? UiText.DownloadVerified : UiText.UploadVerified)); }
+            receivingProgress = false;
+            if (generation == sessionGeneration)
+            {
+                fileTransferProgress.Style = Forms.ProgressBarStyle.Continuous; fileTransferProgress.Value = 100;
+                fileTransferDetails.SetText(() => download ? UiText.DownloadVerified : UiText.UploadVerified);
+                await BrowseFilesAsync();
+            }
         }
-        catch (OperationCanceledException) { if (generation == sessionGeneration) fileState.SetText(name + " · " + UiText.TransferPaused); }
-        catch (Exception ex) { if (generation == sessionGeneration) fileState.SetText(name + " · " + ex.Message); }
-        finally { if (ReferenceEquals(fileTransferLifetime, lifetime)) { fileTransferLifetime = null; transferCancelButton.Enabled = false; } }
+        catch (OperationCanceledException) { if (generation == sessionGeneration) fileTransferDetails.SetText(() => UiText.TransferPaused); }
+        catch (Exception ex) { if (generation == sessionGeneration) fileTransferDetails.SetText(ex.Message); }
+        finally { receivingProgress = false; if (ReferenceEquals(fileTransferLifetime, lifetime)) { fileTransferLifetime = null; fileTransferProgress.Style = Forms.ProgressBarStyle.Continuous; RefreshControllerControls(); } }
     }
+
+    private sealed class ForwardFileProgress(Action<FileTransferProgress> report) : IProgress<FileTransferProgress>
+    {
+        public void Report(FileTransferProgress value) => report(value);
+    }
+
+    private static string FormatTransferEta(TimeSpan eta) => eta.TotalHours >= 1
+        ? $"{(int)eta.TotalHours}:{eta.Minutes:00}:{eta.Seconds:00}" : $"{eta.Minutes}:{eta.Seconds:00}";
 
     private async Task TerminateSupportAsync()
     {
@@ -1956,6 +2021,9 @@ public sealed partial class MainForm : Forms.Form
 
     private void ClearControllerSession()
     {
+        fileTransferLifetime?.Cancel(); fileTransferLifetime = null; fileDirectoryLoaded = false;
+        fileTransferProgress.Style = Forms.ProgressBarStyle.Continuous; fileTransferProgress.Value = 0;
+        fileTransferStatus.SetText(() => UiText.FileTransfers); fileTransferDetails.SetText(() => UiText.FileTransferReady);
         clientUpdateLifetime?.Cancel();
         clientUpdateBusy = false;
         updateProgressArea.Visible = false;
@@ -2094,7 +2162,7 @@ public sealed partial class MainForm : Forms.Form
     private int MonitorValue() => monitor.SelectedItem is MonitorChoice choice ? choice.Index : 0;
     private static string FormatPairingCode(string code) => code.Length == 6 ? code[..3] + " " + code[3..] : "— — —";
     private static string FormatDuration(TimeSpan duration) => duration.TotalHours >= 1 ? $"{(int)duration.TotalHours} h {duration.Minutes:00}" : duration.TotalMinutes >= 1 ? $"{duration.Minutes} min" : UiText.JustNow;
-    private static string ParentPath(string path) => string.IsNullOrWhiteSpace(path) ? "" : Path.GetDirectoryName(path) ?? "";
+    private static string ParentPath(string path) => string.IsNullOrWhiteSpace(path) ? "" : Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(path)) ?? path;
     private static string FormatVolumes(JsonElement system)
     {
         if (!system.TryGetProperty("volumes", out var volumes) || volumes.ValueKind != JsonValueKind.Array) return UiText.VolumesUnavailable;

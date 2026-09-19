@@ -17,7 +17,7 @@ internal sealed partial class LabForm
             "connection" => [["pairCode", "pair"]],
             "screen" => [["monitorLabel", "monitor", "mouseKeyboard", "pauseViewing"], ["remoteText", "typeText", "enterKey"]],
             "processes" => [["refreshResources", "resourceState"]],
-            "files" => [["remoteDirectory", "parentFolder", "browseFiles"], ["selectionLabel", "remotePath"], ["destinationLabel", "destination"]],
+            "files" => [["remoteDirectory", "openRemoteFolder", "parentFolder", "browseFiles"], ["selectionLabel", "remotePath"], ["fileTransferStatus", "cancelTransfer"]],
             _ => [["operationLabel", "operation", "pidLabel", "targetPid", "execute", "cancel"]]
         };
         var evidence = rows.Select(ids =>

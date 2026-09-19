@@ -102,7 +102,12 @@ public sealed partial class Operations
         }
     }
     public string Resolve(string path) => Path.IsPathRooted(path) ? Path.GetFullPath(path) : Safety.UnderRoot(Workspace, path);
-    private sealed record Upload(string Path, long Size, string Sha256);
+    private static string ResolveAbsoluteUpload(string path)
+    {
+        string volume = Path.GetPathRoot(path)!;
+        return Safety.UnderRoot(volume, Path.GetRelativePath(volume, path));
+    }
+    private sealed record Upload(string Path, long Size, string Sha256, bool WorkspaceRelative = true);
     private async Task<object> UploadAsync(string op, JsonElement a, CancellationToken ct)
     {
         string id = a.Str("transfer"); if (!Guid.TryParseExact(id, "N", out _)) throw new ArgumentException("Transfer must be a UUID in N format.");
@@ -110,10 +115,11 @@ public sealed partial class Operations
         if (op == "upload.abort") { if (File.Exists(partial)) File.Delete(partial); if (File.Exists(meta)) File.Delete(meta); return new { aborted = true, transfer = id }; }
         if (op == "upload.begin")
         {
-            string path = Safety.UnderRoot(Workspace, a.Str("path")); long size = a.Long("size"); string hash = a.Str("sha256");
+            bool relative = !Path.IsPathFullyQualified(a.Str("path"));
+            string path = relative ? Safety.UnderRoot(Workspace, a.Str("path")) : ResolveAbsoluteUpload(a.Str("path")); long size = a.Long("size"); string hash = a.Str("sha256");
             if (size < 0 || size > 16L * 1024 * 1024 * 1024 || hash.Length != 64 || !hash.All(Uri.IsHexDigit)) throw new ArgumentException("Invalid size or SHA-256.");
             if (File.Exists(meta)) throw new IOException("Transfer already exists; use upload.status to resume.");
-            await File.WriteAllTextAsync(meta, Json.Text(new Upload(path, size, hash.ToUpperInvariant())), ct); using (File.Create(partial)) { }
+            await File.WriteAllTextAsync(meta, Json.Text(new Upload(path, size, hash.ToUpperInvariant(), relative)), ct); using (File.Create(partial)) { }
             return new { transfer = id, offset = 0 };
         }
         var upload = JsonSerializer.Deserialize<Upload>(await File.ReadAllTextAsync(meta, ct), Json.Options)!;
@@ -131,7 +137,7 @@ public sealed partial class Operations
             else { if (offset != f.Length) throw new IOException("Unexpected offset. Query upload.status."); f.Position = offset; await f.WriteAsync(data, ct); }
             return new { offset = f.Length };
         }
-        string validated = Safety.UnderRoot(Workspace, Path.GetRelativePath(Workspace, upload.Path));
+        string validated = upload.WorkspaceRelative ? Safety.UnderRoot(Workspace, Path.GetRelativePath(Workspace, upload.Path)) : ResolveAbsoluteUpload(upload.Path);
         var actual = await FileInfoAsync(partial, ct);
         if (actual.Size != upload.Size) throw new IOException("Incomplete transfer.");
         if (!Safety.Equal(actual.Sha256, upload.Sha256))

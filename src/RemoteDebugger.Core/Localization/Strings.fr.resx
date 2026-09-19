@@ -289,7 +289,7 @@
     <value>Fichiers · éléments : {0}</value>
   </data>
   <data name="FilesSubtitle" xml:space="preserve">
-    <value>Parcourez l’espace de travail distant et vérifiez les transferts.</value>
+    <value>Ouvrez un dossier distant pour y envoyer ou en télécharger des fichiers.</value>
   </data>
   <data name="Folder" xml:space="preserve">
     <value>Dossier</value>
@@ -853,4 +853,15 @@
   <data name="SecurityStopping" xml:space="preserve"><value>Arrêt en cours… La progression sera conservée.</value></data>
   <data name="SecurityStopped" xml:space="preserve"><value>Arrêté. Vous pouvez reprendre la migration depuis cette fenêtre.</value></data>
   <data name="TransferPaused" xml:space="preserve"><value>Transfert interrompu. Réessayez pour reprendre.</value></data>
+  <data name="RemoteFolder" xml:space="preserve"><value>Dossier distant</value></data>
+  <data name="RemoteFolderPlaceholder" xml:space="preserve"><value>Saisissez un chemin distant, ex. C:\Users</value></data>
+  <data name="OpenRemoteFolder" xml:space="preserve"><value>Ouvrir</value></data>
+  <data name="FileTransfers" xml:space="preserve"><value>Transferts</value></data>
+  <data name="FileTransferReady" xml:space="preserve"><value>Envoyez dans ce dossier, ou sélectionnez un fichier à télécharger.</value></data>
+  <data name="PreparingFileTransfer" xml:space="preserve"><value>Préparation du transfert…</value></data>
+  <data name="VerifyingFileTransfer" xml:space="preserve"><value>100 % · Vérification du fichier…</value></data>
+  <data name="CalculatingTransferEta" xml:space="preserve"><value>calcul en cours…</value></data>
+  <data name="FileTransferNumbers" xml:space="preserve"><value>{0} % · {1} / {2} · {3} · Temps restant {4}</value></data>
+  <data name="UploadingTo" xml:space="preserve"><value>Envoi vers {0}</value></data>
+  <data name="DownloadingTo" xml:space="preserve"><value>Téléchargement vers {0}</value></data>
 </root>

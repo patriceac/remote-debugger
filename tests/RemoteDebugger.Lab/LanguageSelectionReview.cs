@@ -66,7 +66,7 @@ internal sealed partial class LabForm
                 AuditControlAlignment("processes", "language-selector-" + language.Code, GetDpiForWindow(Root().Current.NativeWindowHandle));
                 CaptureDesktop("language-selector-" + language.Code + "-processes.png");
                 Click("navFiles");
-                Set("destination", "deployments/keep-language-choice");
+                Set("remoteDirectory", "C:\\keep-language-choice");
                 CheckLocalizedText("selector." + language.Code + ".upload", "upload", UiText.UploadFile);
                 CaptureDesktop("language-selector-" + language.Code + "-files.png");
             }
@@ -79,8 +79,8 @@ internal sealed partial class LabForm
                 "Language changes preserve the diagnostic editor and original technical error result");
             CaptureDesktop("language-selector-spanish-diagnostic.png");
             Click("navFiles");
-            CheckLanguageState("destination_preserved", TryValue("destination") == "deployments/keep-language-choice",
-                "The file destination survives a language change and tab navigation");
+            CheckLanguageState("directory_preserved", TryValue("remoteDirectory") == "C:\\keep-language-choice",
+                "The remote folder editor survives a language change and tab navigation");
             Click("navScreen"); await WaitForTextAsync("liveBadge", value => value.Contains(UiText.Live), 30);
             Click("pauseViewing");
             await SelectInterfaceLanguageAsync("Français", "fr");

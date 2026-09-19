@@ -289,7 +289,7 @@
     <value>Files · items: {0}</value>
   </data>
   <data name="FilesSubtitle" xml:space="preserve">
-    <value>Browse the remote workspace and verify transfers.</value>
+    <value>Open a remote folder, then upload here or download a selected file.</value>
   </data>
   <data name="Folder" xml:space="preserve">
     <value>Folder</value>
@@ -853,4 +853,15 @@
   <data name="SecurityStopping" xml:space="preserve"><value>Stopping safely… Saved progress will be kept.</value></data>
   <data name="SecurityStopped" xml:space="preserve"><value>Stopped. You can resume the migration from this window.</value></data>
   <data name="TransferPaused" xml:space="preserve"><value>Transfer paused. Retry to resume.</value></data>
+  <data name="RemoteFolder" xml:space="preserve"><value>Remote folder</value></data>
+  <data name="RemoteFolderPlaceholder" xml:space="preserve"><value>Enter a remote path, e.g. C:\Users</value></data>
+  <data name="OpenRemoteFolder" xml:space="preserve"><value>Go</value></data>
+  <data name="FileTransfers" xml:space="preserve"><value>Transfers</value></data>
+  <data name="FileTransferReady" xml:space="preserve"><value>Upload into this folder, or select a file to download.</value></data>
+  <data name="PreparingFileTransfer" xml:space="preserve"><value>Preparing transfer…</value></data>
+  <data name="VerifyingFileTransfer" xml:space="preserve"><value>100% · Verifying file…</value></data>
+  <data name="CalculatingTransferEta" xml:space="preserve"><value>calculating…</value></data>
+  <data name="FileTransferNumbers" xml:space="preserve"><value>{0}% · {1} / {2} · {3} · ETA {4}</value></data>
+  <data name="UploadingTo" xml:space="preserve"><value>Upload to {0}</value></data>
+  <data name="DownloadingTo" xml:space="preserve"><value>Download to {0}</value></data>
 </root>

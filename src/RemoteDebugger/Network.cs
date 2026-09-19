@@ -1343,8 +1343,8 @@ public sealed partial class RemoteClient
         offset = ready.Long("offset");
         if (ready.Long("size") != input.Length || offset < 0 || offset > input.Length) throw new IOException("Invalid upload resume offset.");
         input.Position = offset;
-        progress?.Report(new(offset, input.Length));
-        await BulkTransfer.SendAsync(input, channel, offset, input.Length, value => progress?.Report(new(value, input.Length)), ct);
+        progress?.Report(new(offset, input.Length, 0));
+        await BulkTransfer.SendAsync(input, channel, offset, input.Length, value => progress?.Report(new(value, input.Length, value - offset)), ct);
         var committed = Require(await Wire.ReadAsync<Reply>(channel, ct));
         if (!Safety.Equal(committed.Str("sha256"), hash) || committed.Long("size") != input.Length) throw new IOException("Upload verification failed.");
         File.Delete(resume); return committed;
@@ -1365,8 +1365,8 @@ public sealed partial class RemoteClient
         {
             output.SetLength(offset); output.Position = offset;
             await File.WriteAllTextAsync(metadata, hash, ct);
-            progress?.Report(new(offset, length));
-            await BulkTransfer.ReceiveAsync(channel, output, offset, length, value => progress?.Report(new(value, length)), ct);
+            progress?.Report(new(offset, length, 0));
+            await BulkTransfer.ReceiveAsync(channel, output, offset, length, value => progress?.Report(new(value, length, value - offset)), ct);
         }
         Require(await Wire.ReadAsync<Reply>(channel, ct));
         await using (var verify = File.OpenRead(temp))
@@ -1376,4 +1376,4 @@ public sealed partial class RemoteClient
     }
 }
 
-public sealed record FileTransferProgress(long TransferredBytes, long TotalBytes);
+public sealed record FileTransferProgress(long TransferredBytes, long TotalBytes, long BytesThisAttempt = 0);

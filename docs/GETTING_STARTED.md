@@ -28,7 +28,7 @@ The mouse and keyboard checkbox is your preference. Temporary input errors do no
 
 ## Files and diagnostics
 
-Use versioned upload destinations such as `deployments/MyApp/1.2.3`. Upload writes stay beneath the remote workspace and use resumable chunks plus complete SHA-256 verification. File reads and downloads may use paths accessible to the receiving Windows user. A changed download fails verification instead of replacing the destination with unverified data.
+In **Files**, enter a full remote folder path and click **Go** (or press Enter), or double-click folders in the list. **Upload file** sends a local file into the open remote folder; **Upload folder** sends a local folder's contents there, preserving subfolders. Select a remote file and click **Download** to choose where to save it on this PC. The transfer area shows percentage, bytes, speed and ETA (for the whole selection when uploading a folder), followed by verification. **Cancel** pauses the transfer; repeat it to resume. Files must be accessible to the receiving Windows user. Transfers verify the complete SHA-256 before replacing their destination.
 
 **Diagnostics** exposes structured operations, bounded command output, process launch/stop/restart, event and service information, native debugger attachment, minidumps, and intervention history. `maintenance.session` runs through the administrator broker for the paired session when **Admin maintenance** is enabled. `maintenance.status` reports actual availability. No one-hour maintenance button or recurring elevation dialog is required after setup.
 

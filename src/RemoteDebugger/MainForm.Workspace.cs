@@ -52,9 +52,9 @@ public sealed partial class MainForm
         host.AccessibleName = UiText.Address;
         code.AccessibleName = UiText.SixDigitCode;
         remoteText.AccessibleName = UiText.RemoteTextPlaceholder;
-        fileDirectory.AccessibleName = UiText.Workspace;
+        fileDirectory.AccessibleName = UiText.RemoteFolder;
         remotePath.AccessibleName = UiText.SelectedFile;
-        destination.AccessibleName = UiText.UploadDestination;
+        fileTransferProgress.AccessibleName = UiText.FileTransfers;
         monitor.AccessibleName = UiText.Monitor;
         operations.AccessibleName = UiText.Action;
         pid.AccessibleName = "PID";
@@ -62,7 +62,7 @@ public sealed partial class MainForm
         output.AccessibleName = UiText.ActionResult;
         output.PlaceholderText = UiText.ResultPlaceholder;
         remoteText.PlaceholderText = UiText.RemoteTextPlaceholder;
-        fileDirectory.PlaceholderText = UiText.Workspace;
+        fileDirectory.PlaceholderText = UiText.RemoteFolderPlaceholder;
         remotePath.PlaceholderText = UiText.SelectFileInList;
     }
 
@@ -93,10 +93,14 @@ public sealed partial class MainForm
         updateClientButton.Enabled = CanUpdateClient(supportSession, client != null, pairingBusy, clientUpdateBusy, terminating) && action == null;
         updateClientButton.SetText(() => clientUpdateBusy ? UiText.Synchronizing : UiText.UpdateClient);
         refreshResourcesButton.Enabled = state.CanOperate && !resourcesLoading;
-        browseFilesButton.Enabled = fileDirectory.Enabled = state.CanOperate && !filesLoading;
-        parentFolderButton.Enabled = state.CanOperate && !filesLoading && !string.IsNullOrEmpty(currentDirectory);
-        uploadButton.Enabled = uploadFolderButton.Enabled = destination.Enabled = state.CanOperate;
-        downloadButton.Enabled = state.CanDownload;
+        bool filesAvailable = state.CanOperate && !filesLoading && fileTransferLifetime == null;
+        browseFilesButton.Enabled = fileDirectory.Enabled = openFolderButton.Enabled = filesAvailable;
+        parentFolderButton.Enabled = filesAvailable && !string.IsNullOrEmpty(currentDirectory) && ParentPath(currentDirectory) != currentDirectory;
+        bool folderReady = filesAvailable && fileDirectoryLoaded && string.Equals(fileDirectory.Text.Trim(), currentDirectory, StringComparison.OrdinalIgnoreCase);
+        uploadButton.Enabled = uploadFolderButton.Enabled = folderReady;
+        downloadButton.Enabled = folderReady && state.CanDownload;
+        fileList.Enabled = filesAvailable;
+        transferCancelButton.Enabled = fileTransferLifetime != null && !fileTransferLifetime.IsCancellationRequested;
         executeButton.Enabled = state.CanOperate && action == null;
         if (state.CanOperate && diagnosticState.Text == ConnectToContinue) diagnosticState.SetText(() => UiText.ReadyToRun);
         cancelButton.Enabled = state.CanCancel;

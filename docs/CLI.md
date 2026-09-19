@@ -110,7 +110,7 @@ Ctrl+C attempts cancellation of an in-flight `call`. Another controller process 
 
 CPU values are percentages of total logical-processor capacity, not a single core. `null` means unavailable/newly created/inaccessible, never zero. Check `sampleStartUtc`, `sampleEndUtc` and `intervalMs`. A process without a main window has no GUI response state (`responding: null`). System and process requests are independent samples.
 
-File reads accept absolute paths visible to the agent user. Upload writes are confined to the agent workspace. Namespaces and drive letters belong to the remote PC.
+File reads and uploads accept full paths accessible to the agent user. Relative upload paths stay beneath the agent workspace; `..` cannot escape it. Namespaces and drive letters belong to the remote PC.
 
 ## Files
 
@@ -125,7 +125,7 @@ Low-level resumable upload operations are also available for automation:
 
 | Operation | Arguments |
 |---|---|
-| `upload.begin` | `transfer` (32 hex UUID), `path` (workspace-relative), `size`, `sha256` |
+| `upload.begin` | `transfer` (32 hex UUID), `path` (workspace-relative or full remote path), `size`, `sha256` |
 | `upload.status` | `transfer`; returns accepted `offset` and `size` |
 | `upload.chunk` | `transfer`, `offset`, `data` (base64, max 256 KiB decoded) |
 | `upload.commit` | `transfer`; requires full size/hash, then promotes file |

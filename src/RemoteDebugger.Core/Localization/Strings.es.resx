@@ -289,7 +289,7 @@
     <value>Archivos · elementos: {0}</value>
   </data>
   <data name="FilesSubtitle" xml:space="preserve">
-    <value>Explore el espacio de trabajo remoto y verifique las transferencias.</value>
+    <value>Abra una carpeta remota para subir archivos o descargar el seleccionado.</value>
   </data>
   <data name="Folder" xml:space="preserve">
     <value>Carpeta</value>
@@ -853,4 +853,15 @@
   <data name="SecurityStopping" xml:space="preserve"><value>Deteniendo… Se conservará el progreso.</value></data>
   <data name="SecurityStopped" xml:space="preserve"><value>Detenido. Puede reanudar la migración desde esta ventana.</value></data>
   <data name="TransferPaused" xml:space="preserve"><value>Transferencia en pausa. Vuelva a intentarlo para reanudar.</value></data>
+  <data name="RemoteFolder" xml:space="preserve"><value>Carpeta remota</value></data>
+  <data name="RemoteFolderPlaceholder" xml:space="preserve"><value>Escriba una ruta remota, p. ej. C:\Users</value></data>
+  <data name="OpenRemoteFolder" xml:space="preserve"><value>Ir</value></data>
+  <data name="FileTransfers" xml:space="preserve"><value>Transferencias</value></data>
+  <data name="FileTransferReady" xml:space="preserve"><value>Suba archivos a esta carpeta o seleccione uno para descargar.</value></data>
+  <data name="PreparingFileTransfer" xml:space="preserve"><value>Preparando transferencia…</value></data>
+  <data name="VerifyingFileTransfer" xml:space="preserve"><value>100 % · Verificando archivo…</value></data>
+  <data name="CalculatingTransferEta" xml:space="preserve"><value>calculando…</value></data>
+  <data name="FileTransferNumbers" xml:space="preserve"><value>{0} % · {1} / {2} · {3} · Tiempo restante {4}</value></data>
+  <data name="UploadingTo" xml:space="preserve"><value>Subida a {0}</value></data>
+  <data name="DownloadingTo" xml:space="preserve"><value>Descarga a {0}</value></data>
 </root>
