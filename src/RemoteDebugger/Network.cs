@@ -79,7 +79,7 @@ public static class Discovery
             }
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
-        return peers.Values.ToList();
+        return PeerDiscovery.DistinctPeers(peers.Values);
     }
 }
 
@@ -87,17 +87,31 @@ internal sealed record PeerDiscoveryResult(IReadOnlyList<Peer> Peers, bool UsedL
 
 internal static class PeerDiscovery
 {
+    internal static List<Peer> DistinctPeers(IEnumerable<Peer> peers)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<Peer>();
+        foreach (var peer in peers)
+        {
+            string identity = peer.Fingerprint.Length == 64
+                ? $"fingerprint:{peer.Fingerprint}"
+                : $"endpoint:{peer.Host}:{peer.Port}";
+            if (seen.Add(identity)) result.Add(peer);
+        }
+        return result;
+    }
+
     public static async Task<PeerDiscoveryResult> FindAsync(
         bool privateInternet,
         Func<CancellationToken, Task<List<Peer>>> lanDiscovery,
         Func<CancellationToken, Task<List<Peer>>> relayDiscovery,
         CancellationToken ct = default)
     {
-        if (!privateInternet) return new(await lanDiscovery(ct).ConfigureAwait(false), false);
+        if (!privateInternet) return new(DistinctPeers(await lanDiscovery(ct).ConfigureAwait(false)), false);
         try { return new(await relayDiscovery(ct).ConfigureAwait(false), false); }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
         catch (Exception) when (!ct.IsCancellationRequested) { }
-        return new(await lanDiscovery(ct).ConfigureAwait(false), true);
+        return new(DistinctPeers(await lanDiscovery(ct).ConfigureAwait(false)), true);
     }
 }
 

@@ -126,6 +126,53 @@ public sealed class InternetTransportTests
     }
 
     [Fact]
+    public void LanPeerIdentityCollapsesMultipleAddressesAndKeepsAnEndpoint()
+    {
+        string fingerprint = new string('a', 64);
+        var firstAddress = new Peer("PC-PATRICE", "192.168.1.20", 45832, fingerprint, "RD-0123-4567-89AB-CDEF");
+        var secondAddress = firstAddress with { Host = "172.16.0.20" };
+        var otherPeer = new Peer("PC-YOLANDE", "192.168.1.21", 45832, new string('b', 64), "RD-9876-5432-10FE-DCBA");
+
+        var result = PeerDiscovery.DistinctPeers(new[] { firstAddress, secondAddress, otherPeer });
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal(firstAddress, Assert.Single(result, peer => peer.Fingerprint == fingerprint));
+        Assert.Equal(otherPeer, Assert.Single(result, peer => peer.Fingerprint == otherPeer.Fingerprint));
+    }
+
+    [Fact]
+    public async Task PrivateLanFallbackReturnsOneEntryForDuplicatePeerAddresses()
+    {
+        string fingerprint = new string('a', 64);
+        var firstAddress = new Peer("PC-PATRICE", "192.168.1.20", 45832, fingerprint, "RD-0123-4567-89AB-CDEF");
+        var secondAddress = firstAddress with { Host = "172.16.0.20" };
+
+        var result = await PeerDiscovery.FindAsync(
+            privateInternet: true,
+            lanDiscovery: _ => Task.FromResult(new List<Peer> { firstAddress, secondAddress }),
+            relayDiscovery: _ => Task.FromException<List<Peer>>(new HttpRequestException("relay unavailable")));
+
+        Assert.True(result.UsedLanFallback);
+        Assert.Equal(firstAddress, Assert.Single(result.Peers));
+    }
+
+    [Fact]
+    public void RelayPeersWithoutFingerprintsRemainDistinctByHostAndPort()
+    {
+        var first = new Peer("PC-PATRICE", "RD-0123-4567-89AB-CDEF", 443, "");
+        var duplicate = first with { Name = "Renamed PC-PATRICE" };
+        var otherHost = first with { Host = "RD-9876-5432-10FE-DCBA" };
+        var otherPort = first with { Port = 45832 };
+
+        var result = PeerDiscovery.DistinctPeers(new[] { first, duplicate, otherHost, otherPort });
+
+        Assert.Equal(3, result.Count);
+        Assert.Equal(first, Assert.Single(result, peer => peer.Host == first.Host && peer.Port == first.Port));
+        Assert.Contains(result, peer => peer.Host == otherHost.Host && peer.Port == otherHost.Port);
+        Assert.Contains(result, peer => peer.Host == otherPort.Host && peer.Port == otherPort.Port);
+    }
+
+    [Fact]
     public async Task CliDiscoveryUsesLanWhenThePrivateRelayFails()
     {
         var nearby = new Peer("Nearby", "192.168.1.20", 45832, new string('a', 64), "RD-0123-4567-89AB-CDEF");
