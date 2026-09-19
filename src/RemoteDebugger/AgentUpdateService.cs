@@ -23,7 +23,7 @@ public sealed class AgentUpdateService : IDisposable
 {
     private static readonly HashSet<string> Operations = new(StringComparer.Ordinal)
     {
-        "update.snapshot", "update.challenge", "update.begin", "update.status", "update.chunk", "update.stage",
+        "update.snapshot", "update.challenge", "update.begin", "update.status", "update.chunk", "update.chunk.binary", "update.stage",
         "update.commit", "update.health", "update.cancel", "update.confirm"
     };
 
@@ -75,7 +75,7 @@ public sealed class AgentUpdateService : IDisposable
         SetProgress("idle", 0, 0);
     }
 
-    public async Task<Reply> DispatchAsync(Request request, CancellationToken ct)
+    public async Task<Reply> DispatchAsync(Request request, CancellationToken ct, ReadOnlyMemory<byte> binaryChunk = default)
     {
         try
         {
@@ -86,7 +86,8 @@ public sealed class AgentUpdateService : IDisposable
                 "update.challenge" => await WithTransferGateAsync(() => Task.FromResult(NewChallenge()), ct),
                 "update.begin" => await WithTransferGateAsync(() => BeginAsync(request.Args, ct), ct),
                 "update.status" => await WithTransferGateAsync(() => TransferStatusAsync(request.Args, ct), ct),
-                "update.chunk" => await WithTransferGateAsync(() => ChunkAsync(request.Args, ct), ct),
+                "update.chunk" => await WithTransferGateAsync(() => ChunkAsync(request.Args, Convert.FromBase64String(request.Args.Str("data")), ct), ct),
+                "update.chunk.binary" => await WithTransferGateAsync(() => ChunkAsync(request.Args, binaryChunk, ct), ct),
                 "update.stage" => await WithTransferGateAsync(() => StageAsync(request.Args, ct), ct),
                 "update.commit" => await CommitAsync(request.Args, ct),
                 "update.health" => await HealthAsync(request.Args, ct),
@@ -174,11 +175,10 @@ public sealed class AgentUpdateService : IDisposable
         return new { transactionId, offset, transfer.Candidate.Size };
     }
 
-    private async Task<object> ChunkAsync(JsonElement args, CancellationToken ct)
+    private async Task<object> ChunkAsync(JsonElement args, ReadOnlyMemory<byte> data, CancellationToken ct)
     {
         string transactionId = ValidateTransactionId(args.Str("transactionId"));
         var transfer = await LoadTransferAsync(transactionId, ct);
-        byte[] data = Convert.FromBase64String(args.Str("data"));
         if (data.Length is < 1 or > 512 * 1024) throw new ArgumentException("Update chunk must contain at most 512 KiB.");
         long offset = args.Long("offset");
         await using var stream = File.Open(PartialPath(transactionId), FileMode.Open, FileAccess.ReadWrite, FileShare.None);
@@ -189,7 +189,7 @@ public sealed class AgentUpdateService : IDisposable
             stream.Position = offset;
             byte[] existing = new byte[data.Length];
             await stream.ReadExactlyAsync(existing, ct);
-            if (!existing.SequenceEqual(data)) throw new IOException("Retry chunk conflicts with received bytes.");
+            if (!existing.AsSpan().SequenceEqual(data.Span)) throw new IOException("Retry chunk conflicts with received bytes.");
         }
         else
         {
@@ -434,7 +434,7 @@ internal static class AgentUpdateClient
                 {
                     int count = await input.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, input.Length - offset)), ct);
                     if (count == 0) throw new EndOfStreamException("Controller executable changed while transferring.");
-                    var result = RemoteClient.Require(await client.SendUpdateAsync("update.chunk", new { transactionId, offset, data = Convert.ToBase64String(buffer, 0, count) }, ct, seconds: 60));
+                    var result = RemoteClient.Require(await client.SendUpdateAsync("update.chunk.binary", new { transactionId, offset, count }, ct, seconds: 60, binaryChunk: buffer.AsMemory(0, count)));
                     long acknowledged = result.Long("offset");
                     if (acknowledged != offset + count)
                         throw new InvalidDataException("Agent returned an invalid acknowledged update offset.");
@@ -491,6 +491,7 @@ internal static class AgentUpdateClient
             agent = finalSnapshot.GetProperty("agent").Deserialize<ExecutableSnapshot>(Json.Options) ?? throw new InvalidDataException("Updated agent did not return an executable snapshot.");
             UpdatePolicy.RequireExactControllerBinary(controller, agent);
             RemoteClient.Require(await client.CallAsync("update.confirm", new { sha256 = controller.Sha256, transactionId, ticket }, ct, seconds: 30));
+            await client.CloseHeartbeatChannelAsync().ConfigureAwait(false);
             progress?.Report(new("complete", controller.Size, controller.Size));
             return new(false, true, controller, agent, planned, "Agent replaced, relaunched, health-checked, and confirmed on the controller's exact executable bytes.");
         }

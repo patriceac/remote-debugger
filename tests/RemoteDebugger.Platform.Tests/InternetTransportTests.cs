@@ -1,9 +1,14 @@
 using System.Net;
+using System.Net.Security;
 using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Runtime.InteropServices;
+using System.Security.Authentication;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Channels;
 using RemoteDebugger;
 using RemoteDebugger.Core;
 using Xunit;
@@ -67,6 +72,102 @@ public sealed class InternetTransportTests
         Assert.Equal(3, socket.Sent.Count);
         Assert.All(socket.Sent, block => Assert.InRange(block.Length, 1, 65536));
         Assert.Equal(bytes, socket.Sent.SelectMany(x => x).ToArray());
+    }
+
+    [Fact]
+    public async Task OptInWriteBufferingCoalescesWritesUntilFlush()
+    {
+        var socket = new RecordingSocket(); using var stream = new WebSocketStream(socket);
+        stream.EnableWriteBuffering();
+
+        await stream.WriteAsync(new byte[] { 1, 2 });
+        await stream.WriteAsync(new byte[] { 3, 4, 5 });
+        Assert.Empty(socket.Sent);
+
+        await stream.FlushAsync();
+
+        Assert.Equal(new byte[] { 1, 2, 3, 4, 5 }, Assert.Single(socket.Sent));
+    }
+
+    [Fact]
+    public async Task BufferedWritesFlushBeforeTheFirstRead()
+    {
+        var socket = new RecordingSocket { ReceivedType = WebSocketMessageType.Close };
+        using var stream = new WebSocketStream(socket);
+        stream.EnableWriteBuffering();
+        await stream.WriteAsync(new byte[] { 9, 8, 7 });
+        Assert.Empty(socket.Sent);
+
+        Assert.Equal(0, await stream.ReadAsync(new byte[8]));
+
+        Assert.Equal(new byte[] { 9, 8, 7 }, Assert.Single(socket.Sent));
+    }
+
+    [Fact]
+    public async Task TlsHandshakeStaysUnbufferedThenBufferedFramesCarryWireAndLargePayloads()
+    {
+        var (clientSocket, serverSocket) = LoopbackSocket.CreatePair();
+        await using var clientTransport = new WebSocketStream(clientSocket);
+        await using var serverTransport = new WebSocketStream(serverSocket);
+        using var certificate = CreateTestCertificate();
+        await using var clientTls = new SslStream(clientTransport, leaveInnerStreamOpen: true, (_, _, _, _) => true);
+        await using var serverTls = new SslStream(serverTransport, leaveInnerStreamOpen: true);
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        Task serverHandshake = serverTls.AuthenticateAsServerAsync(new SslServerAuthenticationOptions
+        {
+            ServerCertificate = certificate,
+            EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+            CertificateRevocationCheckMode = X509RevocationMode.NoCheck
+        }, deadline.Token);
+        Task clientHandshake = clientTls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
+        {
+            TargetHost = "RemoteDebugger",
+            EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+            CertificateRevocationCheckMode = X509RevocationMode.NoCheck
+        }, deadline.Token);
+        await Task.WhenAll(serverHandshake, clientHandshake);
+
+        int handshakeFrames = clientSocket.Sent.Count;
+        Assert.True(handshakeFrames > 0);
+        clientTransport.EnableWriteBuffering();
+        serverTransport.EnableWriteBuffering();
+
+        var request = new Request("tls-request", "token", "status", Json.Element(new { value = "é日本" }));
+        Task<Request> requestRead = Wire.ReadAsync<Request>(serverTls, deadline.Token);
+        await Wire.WriteAsync(clientTls, request, deadline.Token);
+        Request actualRequest = await requestRead;
+        Assert.Equal(request.Id, actualRequest.Id);
+        Assert.Equal(request.Token, actualRequest.Token);
+        Assert.Equal(request.Operation, actualRequest.Operation);
+        Assert.Equal(request.Args.Str("value"), actualRequest.Args.Str("value"));
+
+        Task<Reply> replyRead = Wire.ReadAsync<Reply>(clientTls, deadline.Token);
+        await Wire.WriteAsync(serverTls, Reply.Success(request.Id, new { accepted = true }), deadline.Token);
+        Reply reply = await replyRead;
+        Assert.True(reply.Ok);
+        Assert.True(reply.Data.GetProperty("accepted").GetBoolean());
+
+        byte[] payload = Enumerable.Range(0, 100_000).Select(i => (byte)i).ToArray();
+        int payloadFrameStart = clientSocket.Sent.Count;
+        await clientTls.WriteAsync(payload, deadline.Token);
+        await clientTls.FlushAsync(deadline.Token);
+        byte[] received = new byte[payload.Length];
+        await serverTls.ReadExactlyAsync(received, deadline.Token);
+
+        Assert.Equal(payload, received);
+        var payloadFrames = clientSocket.Sent.Skip(payloadFrameStart).ToArray();
+        Assert.Equal(2, payloadFrames.Length);
+        Assert.All(payloadFrames, frame => Assert.InRange(frame.Length, 1, 65536));
+    }
+
+    [Fact]
+    public void RetryDelayStaysWithinTheFiveMinuteCapAtIntegerExtremes()
+    {
+        Assert.Equal(TimeSpan.FromMilliseconds(800), InternetAgent.RetryDelay(int.MinValue, 0));
+        Assert.Equal(TimeSpan.FromSeconds(300), InternetAgent.RetryDelay(int.MaxValue, 1));
+        Assert.Equal(TimeSpan.FromSeconds(1.6), InternetAgent.RetryDelay(2, -1));
+        Assert.Equal(TimeSpan.FromSeconds(1.8), InternetAgent.RetryDelay(2, 0.5));
     }
 
     [Fact]
@@ -338,6 +439,122 @@ public sealed class InternetTransportTests
     }
 
     [Fact]
+    public async Task PersistentHeartbeatReusesOneAuthenticatedStream()
+    {
+        var stream = new ScriptedInputStream { SupportsPersistentHeartbeat = true };
+        int opens = 0;
+        var client = new RemoteClient(new Connection("127.0.0.1", 45832, new string('a', 64), "token"), (_, _) =>
+        {
+            opens++;
+            return Task.FromResult<Stream>(stream);
+        });
+
+        JsonElement first = await client.HeartbeatAsync();
+        JsonElement second = await client.HeartbeatAsync();
+
+        Assert.True(first.GetProperty("persistent").GetBoolean());
+        Assert.True(second.GetProperty("persistent").GetBoolean());
+        Assert.Equal(1, opens);
+        Assert.Collection(stream.Requests,
+            open =>
+            {
+                Assert.Equal("session.heartbeat", open.Operation);
+                Assert.True(open.Args.GetProperty("keepAlive").GetBoolean());
+            },
+            heartbeat =>
+            {
+                Assert.Equal("session.heartbeat", heartbeat.Operation);
+                Assert.False(heartbeat.Args.TryGetProperty("keepAlive", out _));
+            });
+    }
+
+    [Fact]
+    public async Task LegacyHeartbeatReturnsProbeReplyAndRenegotiatesAfterClose()
+    {
+        var probe = new ScriptedInputStream();
+        var legacy = new ScriptedInputStream();
+        var reopened = new ScriptedInputStream { SupportsPersistentHeartbeat = true };
+        int opens = 0;
+        var client = new RemoteClient(new Connection("127.0.0.1", 45832, new string('a', 64), "token"), (_, _) =>
+        {
+            opens++;
+            return Task.FromResult<Stream>(opens switch { 1 => probe, 2 => legacy, _ => reopened });
+        });
+
+        JsonElement first = await client.HeartbeatAsync();
+        JsonElement second = await client.HeartbeatAsync();
+
+        Assert.True(first.GetProperty("legacy").GetBoolean());
+        Assert.True(second.GetProperty("legacy").GetBoolean());
+        Assert.Equal(2, opens);
+        Assert.True(probe.Disposed);
+        Assert.Collection(probe.Requests,
+            open =>
+            {
+                Assert.Equal("session.heartbeat", open.Operation);
+                Assert.True(open.Args.GetProperty("keepAlive").GetBoolean());
+            });
+        Assert.Collection(legacy.Requests,
+            heartbeat =>
+            {
+                Assert.Equal("session.heartbeat", heartbeat.Operation);
+                Assert.False(heartbeat.Args.TryGetProperty("keepAlive", out _));
+            });
+
+        await client.CloseHeartbeatChannelAsync();
+        JsonElement renegotiated = await client.HeartbeatAsync();
+
+        Assert.True(renegotiated.GetProperty("persistent").GetBoolean());
+        Assert.Equal(3, opens);
+        Assert.Collection(reopened.Requests,
+            open =>
+            {
+                Assert.Equal("session.heartbeat", open.Operation);
+                Assert.True(open.Args.GetProperty("keepAlive").GetBoolean());
+            });
+        await client.CloseHeartbeatChannelAsync();
+        Assert.True(reopened.Disposed);
+    }
+
+    [Fact]
+    public async Task FailedPersistentHeartbeatDisposesItsStreamBeforeTheNextCall()
+    {
+        var failed = new ScriptedInputStream { SupportsPersistentHeartbeat = true, FailAfterRequests = 1 };
+        var recovered = new ScriptedInputStream { SupportsPersistentHeartbeat = true };
+        int opens = 0;
+        var client = new RemoteClient(new Connection("127.0.0.1", 45832, new string('a', 64), "token"), (_, _) =>
+        {
+            opens++;
+            return Task.FromResult<Stream>(opens == 1 ? failed : recovered);
+        });
+
+        await client.HeartbeatAsync();
+        await Assert.ThrowsAsync<IOException>(() => client.HeartbeatAsync());
+        await client.HeartbeatAsync();
+
+        Assert.True(failed.Disposed);
+        Assert.Equal(2, opens);
+        Assert.Collection(recovered.Requests,
+            open =>
+            {
+                Assert.Equal("session.heartbeat", open.Operation);
+                Assert.True(open.Args.GetProperty("keepAlive").GetBoolean());
+            });
+    }
+
+    [Fact]
+    public async Task ClosingHeartbeatChannelDisposesThePersistentStream()
+    {
+        var stream = new ScriptedInputStream { SupportsPersistentHeartbeat = true };
+        var client = new RemoteClient(new Connection("127.0.0.1", 45832, new string('a', 64), "token"), (_, _) => Task.FromResult<Stream>(stream));
+
+        await client.HeartbeatAsync();
+        await client.CloseHeartbeatChannelAsync();
+
+        Assert.True(stream.Disposed);
+    }
+
+    [Fact]
     public async Task PersistentInputReusesOneAuthenticatedStreamAndPreservesRequestOrder()
     {
         var stream = new ScriptedInputStream();
@@ -403,6 +620,56 @@ public sealed class InternetTransportTests
                 stage => { Assert.Equal("update.stage", stage.Operation); Assert.Equal(transactionId, stage.Args.Str("transactionId")); });
         }
         finally { await client.CloseUpdateChannelAsync(); }
+    }
+
+    [Fact]
+    public async Task BinaryUpdateChunkUsesNegotiatedRawBytesAndCount()
+    {
+        var stream = new ScriptedInputStream { SupportsBinaryChunks = true };
+        var client = new RemoteClient(new Connection("127.0.0.1", 45832, new string('a', 64), "token"), (_, _) => Task.FromResult<Stream>(stream));
+        byte[] bytes = [0, 1, 2, 255];
+        string transactionId = new string('e', 32);
+
+        Assert.True((await client.SendUpdateAsync(
+            "update.chunk.binary",
+            new { transactionId, offset = 0L, count = bytes.Length },
+            seconds: 60,
+            binaryChunk: bytes)).Ok);
+
+        Assert.Collection(stream.Requests,
+            open => Assert.Equal("update.open", open.Operation),
+            chunk =>
+            {
+                Assert.Equal("update.chunk.binary", chunk.Operation);
+                Assert.Equal(bytes.Length, chunk.Args.Int("count"));
+            });
+        Assert.Equal(bytes, Assert.Single(stream.BinaryChunks));
+    }
+
+    [Fact]
+    public async Task LegacyUpdatePeerConvertsBinaryChunkToBase64WithoutWritingRawBytes()
+    {
+        var stream = new ScriptedInputStream();
+        var client = new RemoteClient(new Connection("127.0.0.1", 45832, new string('a', 64), "token"), (_, _) => Task.FromResult<Stream>(stream));
+        byte[] bytes = [0, 1, 2, 255];
+        string transactionId = new string('f', 32);
+
+        Assert.True((await client.SendUpdateAsync(
+            "update.chunk.binary",
+            new { transactionId, offset = 0L, count = bytes.Length },
+            seconds: 60,
+            binaryChunk: bytes)).Ok);
+
+        Assert.Collection(stream.Requests,
+            open => Assert.Equal("update.open", open.Operation),
+            chunk =>
+            {
+                Assert.Equal("update.chunk", chunk.Operation);
+                Assert.Equal(transactionId, chunk.Args.Str("transactionId"));
+                Assert.Equal(Convert.ToBase64String(bytes), chunk.Args.Str("data"));
+                Assert.False(chunk.Args.TryGetProperty("count", out _));
+            });
+        Assert.Empty(stream.BinaryChunks);
     }
 
     [Fact]
@@ -539,18 +806,113 @@ public sealed class InternetTransportTests
         return ((IPEndPoint)listener.LocalEndpoint).Port;
     }
 
+    private static X509Certificate2 CreateTestCertificate()
+    {
+        using var rsa = RSA.Create(2048);
+        var request = new CertificateRequest("CN=RemoteDebugger", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, false));
+        request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature, false));
+        request.CertificateExtensions.Add(new X509SubjectKeyIdentifierExtension(request.PublicKey, false));
+        using var generated = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddMinutes(5));
+        return new X509Certificate2(generated.Export(X509ContentType.Pfx), (string?)null,
+            X509KeyStorageFlags.UserKeySet | X509KeyStorageFlags.Exportable);
+    }
+
+    private sealed class LoopbackSocket : WebSocket
+    {
+        private readonly Channel<byte[]> incoming;
+        private LoopbackSocket peer = null!;
+        private byte[]? current;
+        private int currentOffset;
+        private WebSocketState state = WebSocketState.Open;
+
+        private LoopbackSocket()
+        {
+            incoming = Channel.CreateUnbounded<byte[]>(new UnboundedChannelOptions
+            {
+                SingleReader = true,
+                SingleWriter = true,
+                AllowSynchronousContinuations = true
+            });
+        }
+
+        public List<byte[]> Sent { get; } = [];
+
+        public static (LoopbackSocket Client, LoopbackSocket Server) CreatePair()
+        {
+            var client = new LoopbackSocket();
+            var server = new LoopbackSocket();
+            client.peer = server;
+            server.peer = client;
+            return (client, server);
+        }
+
+        public override WebSocketCloseStatus? CloseStatus => null;
+        public override string? CloseStatusDescription => null;
+        public override WebSocketState State => state;
+        public override string? SubProtocol => null;
+        public override void Abort() { state = WebSocketState.Aborted; incoming.Writer.TryComplete(); }
+        public override void Dispose() { state = WebSocketState.Closed; incoming.Writer.TryComplete(); }
+        public override Task CloseAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken)
+        {
+            state = WebSocketState.Closed;
+            peer.incoming.Writer.TryComplete();
+            return Task.CompletedTask;
+        }
+        public override Task CloseOutputAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken) => Task.CompletedTask;
+        public override Task SendAsync(ArraySegment<byte> buffer, WebSocketMessageType messageType, bool endOfMessage, CancellationToken cancellationToken) =>
+            SendAsync(buffer.AsMemory(), messageType, endOfMessage, cancellationToken).AsTask();
+        public override ValueTask SendAsync(ReadOnlyMemory<byte> buffer, WebSocketMessageType messageType, bool endOfMessage, CancellationToken cancellationToken)
+        {
+            byte[] copy = buffer.ToArray();
+            Sent.Add(copy);
+            if (messageType == WebSocketMessageType.Close) peer.incoming.Writer.TryComplete();
+            else if (!peer.incoming.Writer.TryWrite(copy)) throw new IOException("Loopback WebSocket is closed.");
+            return ValueTask.CompletedTask;
+        }
+        public override Task<WebSocketReceiveResult> ReceiveAsync(ArraySegment<byte> buffer, CancellationToken cancellationToken) =>
+            ReceiveLegacyAsync(buffer, cancellationToken);
+        private async Task<WebSocketReceiveResult> ReceiveLegacyAsync(ArraySegment<byte> buffer, CancellationToken cancellationToken)
+        {
+            var result = await ReceiveAsync(buffer.AsMemory(), cancellationToken);
+            return new WebSocketReceiveResult(result.Count, result.MessageType, result.EndOfMessage);
+        }
+        public override async ValueTask<ValueWebSocketReceiveResult> ReceiveAsync(Memory<byte> buffer, CancellationToken cancellationToken)
+        {
+            if (buffer.Length == 0) return new ValueWebSocketReceiveResult(0, WebSocketMessageType.Binary, true);
+            while (current == null || currentOffset == current.Length)
+            {
+                current = await incoming.Reader.ReadAsync(cancellationToken);
+                currentOffset = 0;
+            }
+            int count = Math.Min(buffer.Length, current.Length - currentOffset);
+            current.AsMemory(currentOffset, count).CopyTo(buffer);
+            currentOffset += count;
+            return new ValueWebSocketReceiveResult(count, WebSocketMessageType.Binary, currentOffset == current.Length);
+        }
+    }
+
     private sealed class ScriptedInputStream : Stream
     {
         private readonly List<byte> pending = [];
         private readonly List<byte> incoming = [];
+        private readonly List<byte> binaryPending = [];
+        private int expectedBinaryBytes;
+        private string? pendingBinaryReplyId;
+        private bool persistentHeartbeatEstablished;
         public List<Request> Requests { get; } = [];
+        public List<byte[]> BinaryChunks { get; } = [];
         public int FailAfterRequests { get; init; } = int.MaxValue;
         public bool RejectUpdateOpen { get; init; }
+        public bool SupportsPersistentHeartbeat { get; init; }
+        public bool SupportsBinaryChunks { get; init; }
+        public bool Disposed { get; private set; }
         public override bool CanRead => true;
         public override bool CanSeek => false;
         public override bool CanWrite => true;
         public override long Length => throw new NotSupportedException();
         public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        protected override void Dispose(bool disposing) { if (disposing) Disposed = true; base.Dispose(disposing); }
         public override void Flush() { }
         public override Task FlushAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public override int Read(byte[] buffer, int offset, int count) => ReadAsync(buffer.AsMemory(offset, count)).AsTask().GetAwaiter().GetResult();
@@ -568,6 +930,20 @@ public sealed class InternetTransportTests
         public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
         {
             if (Requests.Count >= FailAfterRequests) throw new IOException("scripted input transport failure");
+            if (expectedBinaryBytes > 0)
+            {
+                int count = Math.Min(expectedBinaryBytes - binaryPending.Count, buffer.Length);
+                binaryPending.AddRange(buffer[..count].ToArray());
+                if (binaryPending.Count == expectedBinaryBytes)
+                {
+                    BinaryChunks.Add(binaryPending.ToArray());
+                    binaryPending.Clear(); expectedBinaryBytes = 0;
+                    QueueReply(Reply.Success(pendingBinaryReplyId!, new { sent = true }));
+                    pendingBinaryReplyId = null;
+                }
+                if (count != buffer.Length) throw new InvalidDataException("scripted binary chunk contained trailing bytes");
+                return ValueTask.CompletedTask;
+            }
             pending.AddRange(buffer.ToArray());
             while (pending.Count >= 4)
             {
@@ -578,6 +954,24 @@ public sealed class InternetTransportTests
                 Requests.Add(request);
                 if (RejectUpdateOpen && request.Operation == "update.open")
                     QueueReply(Reply.Failure(request.Id, "binary_mismatch", "Synchronize the agent with the controller executable before starting support."));
+                else if (request.Operation == "session.heartbeat")
+                {
+                    if (SupportsPersistentHeartbeat && request.Args.TryGetProperty("keepAlive", out var keepAlive) && keepAlive.ValueKind == JsonValueKind.True)
+                        persistentHeartbeatEstablished = true;
+                    QueueReply(persistentHeartbeatEstablished
+                        ? Reply.Success(request.Id, new { sent = true, persistent = true })
+                        : Reply.Success(request.Id, new { sent = true, legacy = true }));
+                }
+                else if (request.Operation == "update.open")
+                    QueueReply(SupportsBinaryChunks
+                        ? Reply.Success(request.Id, new { sent = true, binaryChunks = true })
+                        : Reply.Success(request.Id, new { sent = true }));
+                else if (request.Operation == "update.chunk.binary")
+                {
+                    expectedBinaryBytes = request.Args.Int("count");
+                    pendingBinaryReplyId = request.Id;
+                    if (expectedBinaryBytes < 1) QueueReply(Reply.Failure(request.Id, "invalid_chunk", "scripted binary chunk length is invalid."));
+                }
                 else
                     QueueReply(Reply.Success(request.Id, new { sent = true }));
             }

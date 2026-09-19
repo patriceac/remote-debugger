@@ -1,7 +1,9 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Windows.Automation;
 using RemoteDebugger;
 using RemoteDebugger.Core;
 using Forms = System.Windows.Forms;
@@ -59,38 +61,124 @@ internal sealed partial class LabForm
         catch (Exception ex) { Fail("audit.bulk_resume", "Binary transfers preserve offsets and bytes through cancellation", new { error = ex.ToString() }); }
 
         if (loopbackAgent == null) return;
-        using var cover = new Forms.Form { FormBorderStyle = Forms.FormBorderStyle.None, ShowInTaskbar = false, TopMost = true,
-            Bounds = Forms.Screen.PrimaryScreen!.Bounds, BackColor = System.Drawing.Color.DarkSlateBlue };
-        cover.Show(); cover.Refresh();
-        using var streamStop = CancellationTokenSource.CreateLinkedTokenSource(stop.Token);
-        streamStop.CancelAfter(TimeSpan.FromSeconds(15));
-        var first = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var refreshed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        int frames = 0;
-        var stream = remote.StreamAdaptiveAsync(frame =>
+        using (var cover = new Forms.Form { FormBorderStyle = Forms.FormBorderStyle.None, ShowInTaskbar = false, TopMost = true,
+            Bounds = Forms.Screen.PrimaryScreen!.Bounds, BackColor = System.Drawing.Color.DarkSlateBlue })
         {
-            using (frame)
+            cover.Show(); cover.Refresh();
+            using var streamStop = CancellationTokenSource.CreateLinkedTokenSource(stop.Token);
+            streamStop.CancelAfter(TimeSpan.FromSeconds(15));
+            var first = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var refreshed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            int frames = 0;
+            var stream = remote.StreamAdaptiveAsync(frame =>
             {
-                if (Interlocked.Increment(ref frames) == 1) first.TrySetResult();
-                else refreshed.TrySetResult();
+                using (frame)
+                {
+                    if (Interlocked.Increment(ref frames) == 1) first.TrySetResult();
+                    else refreshed.TrySetResult();
+                }
+                return Task.CompletedTask;
+            }, null, ct: streamStop.Token);
+            try
+            {
+                await first.Task.WaitAsync(streamStop.Token);
+                await Task.Delay(1500, streamStop.Token);
+                int idleFrames = Volatile.Read(ref frames);
+                RemoteClient.Require(await remote.CallAsync("screen.refresh", ct: streamStop.Token));
+                await refreshed.Task.WaitAsync(streamStop.Token);
+                if (idleFrames != 1) throw new IOException($"Static desktop produced {idleFrames} frames before the refresh request.");
+                Pass("audit.static_refresh", "An unchanged adaptive stream suppresses duplicate images and responds to an explicit fresh-frame request", new { idleFrames, refreshedFrames = frames });
             }
-            return Task.CompletedTask;
-        }, null, ct: streamStop.Token);
+            catch (Exception ex) { Fail("audit.static_refresh", "An unchanged adaptive stream recovers without a pixel change", new { error = ex.ToString() }); }
+            finally
+            {
+                streamStop.Cancel();
+                try { await stream; } catch (OperationCanceledException) { } catch (IOException) { }
+            }
+        }
+
+        if (loopbackAgent != null && loopbackController != null)
+            await ProbeLoopbackMinimizeRestoreAsync();
+    }
+
+    private async Task ProbeLoopbackMinimizeRestoreAsync()
+    {
+        if (loopbackController == null) return;
+        product = loopbackController;
+        WindowPattern? window = null;
         try
         {
-            await first.Task.WaitAsync(streamStop.Token);
-            await Task.Delay(1500, streamStop.Token);
-            int idleFrames = Volatile.Read(ref frames);
-            RemoteClient.Require(await remote.CallAsync("screen.refresh", ct: streamStop.Token));
-            await refreshed.Task.WaitAsync(streamStop.Token);
-            if (idleFrames != 1) throw new IOException($"Static desktop produced {idleFrames} frames before the refresh request.");
-            Pass("audit.static_refresh", "An unchanged adaptive stream suppresses duplicate images and responds to an explicit fresh-frame request", new { idleFrames, refreshedFrames = frames });
+            Native.FocusWindow(loopbackController.Id);
+            var root = Root();
+            if (!root.TryGetCurrentPattern(WindowPattern.Pattern, out var pattern) || pattern is not WindowPattern state)
+                throw new InvalidOperationException("The loopback controller did not expose WindowPattern.");
+            window = state;
+
+            var before = await WaitForLiveEvidenceAsync(30);
+            if (!before.BadgeVisible || !before.TelemetryVisible)
+                throw new IOException("Live viewing was not ready before the minimize/restore check.");
+
+            state.SetWindowVisualState(WindowVisualState.Minimized);
+            await WaitForUiAsync(() => state.Current.WindowVisualState == WindowVisualState.Minimized, 10);
+            await WaitForUiAsync(IsResumeViewingButton, 10);
+            bool minimizedPaused = state.Current.WindowVisualState == WindowVisualState.Minimized && IsResumeViewingButton();
+
+            state.SetWindowVisualState(WindowVisualState.Normal);
+            await WaitForUiAsync(() => state.Current.WindowVisualState == WindowVisualState.Normal, 10);
+            var restored = await WaitForLiveEvidenceAsync(30);
+            var heartbeat = Data(await CallAsync("session.heartbeat"));
+            bool sessionAfterRestore = heartbeat.ValueKind == JsonValueKind.Object;
+
+            Click("pauseViewing");
+            await WaitForUiAsync(IsResumeViewingButton, 10);
+            state.SetWindowVisualState(WindowVisualState.Minimized);
+            await WaitForUiAsync(() => state.Current.WindowVisualState == WindowVisualState.Minimized, 10);
+            state.SetWindowVisualState(WindowVisualState.Normal);
+            await WaitForUiAsync(() => state.Current.WindowVisualState == WindowVisualState.Normal, 10);
+            await Task.Delay(500, stop.Token);
+            string pauseButton = TryValue("pauseViewing"), pauseOverlay = TryValue("streamOverlay");
+            bool pauseIntentPreserved = IsResumeViewingButton()
+                && FindVisibleId(ContractId("liveBadge")) == null;
+            var pausedHeartbeat = Data(await CallAsync("session.heartbeat"));
+            bool sessionWhilePaused = pausedHeartbeat.ValueKind == JsonValueKind.Object;
+
+            var evidence = new
+            {
+                minimizedPaused,
+                restoredLive = restored.BadgeVisible && restored.TelemetryVisible,
+                sessionAfterRestore,
+                pauseIntentPreserved,
+                sessionWhilePaused,
+                pauseButton,
+                pauseOverlay,
+                restoredTelemetry = restored.TelemetryText
+            };
+            if (minimizedPaused && restored.BadgeVisible && restored.TelemetryVisible && sessionAfterRestore && pauseIntentPreserved && sessionWhilePaused)
+                Pass("loopback.normal_minimize_restore", "Ordinary minimize pauses live viewing to save work, restores it for an active stream, and preserves an explicit pause without ending the session", evidence);
+            else
+                Fail("loopback.normal_minimize_restore", "Ordinary minimize pauses live viewing to save work, restores it for an active stream, and preserves an explicit pause without ending the session", evidence);
         }
-        catch (Exception ex) { Fail("audit.static_refresh", "An unchanged adaptive stream recovers without a pixel change", new { error = ex.ToString() }); }
+        catch (Exception ex)
+        {
+            Fail("loopback.normal_minimize_restore", "Ordinary minimize pauses live viewing to save work, restores it for an active stream, and preserves an explicit pause without ending the session", new { error = ex.ToString() });
+        }
         finally
         {
-            streamStop.Cancel();
-            try { await stream; } catch (OperationCanceledException) { } catch (IOException) { }
+            try
+            {
+                if (window != null && window.Current.WindowVisualState == WindowVisualState.Minimized)
+                    window.SetWindowVisualState(WindowVisualState.Normal);
+            }
+            catch (Exception) { }
+            Native.FocusWindow(loopbackController.Id);
         }
+    }
+
+    private bool IsResumeViewingButton()
+    {
+        string actual = TryValue("pauseViewing");
+        return new[] { "en", "fr", "es" }
+            .Select(language => UiText.Get(nameof(UiText.Resume), CultureInfo.GetCultureInfo(language)))
+            .Any(expected => actual.Equals(expected, StringComparison.Ordinal));
     }
 }

@@ -895,4 +895,5 @@
   <data name="WanAddressHelp" xml:space="preserve"><value>LAN → WAN → relay. Default port: 45832. Leave blank to skip WAN.</value></data>
   <data name="InvalidWanAddress" xml:space="preserve"><value>Enter a hostname or IPv4 address, optionally followed by :port (1–65535), or leave blank.</value></data>
   <data name="WanAddressSaved" xml:space="preserve"><value>Connection preference saved for this device.</value></data>
+  <data name="RelayEconomy" xml:space="preserve"><value>Economy mode</value></data>
 </root>

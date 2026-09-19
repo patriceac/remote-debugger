@@ -107,6 +107,8 @@ public sealed partial class MainForm : Forms.Form
     private readonly Forms.Button pauseViewing = Button(() => UiText.Pause, "pauseViewing", 82);
     private readonly LocalizedComboBox monitor = new() { Name = "monitor", DropDownStyle = Forms.ComboBoxStyle.DropDownList, Width = 130 };
     private readonly Forms.CheckBox mouseEnabled = new Forms.CheckBox { Name = "mouseKeyboard", Checked = true, AutoSize = true, ForeColor = PrimaryText, Margin = new Forms.Padding(12, 10, 0, 0) }.WithText(() => UiText.MouseKeyboardControl);
+    private readonly Forms.CheckBox relayEconomy = new Forms.CheckBox { Name = "relayEconomy", Checked = true, AutoSize = true, ForeColor = PrimaryText, Margin = new Forms.Padding(12, 10, 0, 0) }.WithText(() => UiText.RelayEconomy);
+    private bool resumeViewingAfterMinimize;
     private readonly Forms.Label streamStatus = new() { Name = "streamStatus", AutoSize = true, ForeColor = SecondaryText };
     private readonly Forms.Label inputStatus = new() { Name = "inputStatus", AutoSize = false, Dock = Forms.DockStyle.Fill, ForeColor = SecondaryText, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleRight };
     private readonly RemoteInputState inputState = new();
@@ -255,6 +257,7 @@ public sealed partial class MainForm : Forms.Form
         Shown += MainFormShown;
         FormClosing += MainFormClosing;
         FormClosed += (_, _) => DisposeResources();
+        Resize += (_, _) => UpdateMinimizedViewing();
         ResumeLayout(true);
     }
 
@@ -504,9 +507,9 @@ public sealed partial class MainForm : Forms.Form
     {
         var page = new PagePanel(() => UiText.RemoteScreen) { BackColor = Canvas, Padding = new Forms.Padding(20, 8, 20, 12) };
         monitor.Items.Add(new MonitorChoice(0, () => UiText.PrimaryMonitor)); monitor.SelectedIndex = 0;
-        var top = ControlRow(RowLabel(() => UiText.Monitor, "monitorLabel"), monitor, mouseEnabled, new Forms.Panel { Size = new Size(1, 1) }, pauseViewing);
+        var top = ControlRow(RowLabel(() => UiText.Monitor, "monitorLabel"), monitor, mouseEnabled, relayEconomy, new Forms.Panel { Size = new Size(1, 1) }, pauseViewing);
         top.Dock = Forms.DockStyle.Top; top.Padding = new Forms.Padding(0, 0, 0, 8);
-        top.ColumnStyles[3] = new Forms.ColumnStyle(Forms.SizeType.Percent, 100);
+        top.ColumnStyles[4] = new Forms.ColumnStyle(Forms.SizeType.Percent, 100);
         screenSurface.Controls.Add(screen); screenSurface.Controls.Add(liveBadge); screenSurface.Controls.Add(streamOverlay); liveBadge.BringToFront(); streamOverlay.BringToFront(); liveBadge.Location = new Point(16, 14); streamOverlay.Anchor = Forms.AnchorStyles.None; screenSurface.Resize += (_, _) => streamOverlay.Location = new Point(Math.Max(0, (screenSurface.Width - streamOverlay.Width) / 2), Math.Max(0, (screenSurface.Height - streamOverlay.Height) / 2));
         var view = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
         // An automatic column can grow to the bitmap's preferred width when DPI
@@ -628,6 +631,7 @@ public sealed partial class MainForm : Forms.Form
         pairButton.Click += async (_, _) => await PairSelectedAsync();
         updateClientButton.Click += async (_, _) => await UpdateConnectedClientAsync();
         pauseViewing.Click += (_, _) => { if (liveStream == null) _ = StartStreamAsync(); else StopStream(() => UiText.ViewingPaused); };
+        relayEconomy.CheckedChanged += (_, _) => { if (liveStream != null) { StopStream(() => UiText.ViewingSuspended); _ = StartStreamAsync(); } };
         monitor.SelectedIndexChanged += (_, _) => { if (!refreshingMonitorLabels && liveStream != null) { StopStream(() => UiText.MonitorChanged); _ = StartStreamAsync(); } };
         mouseEnabled.CheckedChanged += (_, _) => { inputState.Enabled = mouseEnabled.Checked; if (!mouseEnabled.Checked) ReleaseHeldInputForCurrentSession(); RefreshInputStatus(); };
         restartAgent.Click += (_, _) => { agent?.Dispose(); agent = null; agentIdle = false; StartAgent(); _ = PrepareAgentAsync(); };
@@ -1537,6 +1541,7 @@ public sealed partial class MainForm : Forms.Form
     private async Task StartStreamAsync()
     {
         if (liveStream != null || client == null || trayVisible || rolePages.SelectedIndex != 1) return;
+        if (WindowState == Forms.FormWindowState.Minimized) { resumeViewingAfterMinimize = true; return; }
         try { RequireClient(); } catch (Exception ex) { streamStatus.SetText(ex.Message); return; }
         RemoteClient target = client;
         int generation = sessionGeneration;
@@ -1553,7 +1558,7 @@ public sealed partial class MainForm : Forms.Form
                     {
                         if (!lifetime.IsCancellationRequested && ReferenceEquals(liveStream, lifetime) && generation == sessionGeneration && ReferenceEquals(target, client) && supportSession) Present(frame);
                         return Task.CompletedTask;
-                    }, (codec, reason) => SetStreamCodec(codec, reason), StreamPolicy.MaximumFps, MonitorValue(), 300, lifetime.Token);
+                    }, (codec, reason) => SetStreamCodec(codec, reason), StreamPolicy.MaximumFps, MonitorValue(), 300, lifetime.Token, relayEconomy.Checked);
                 }
                 catch (Exception ex) when (!lifetime.IsCancellationRequested && ex is IOException or System.Net.Sockets.SocketException or OperationCanceledException)
                 {
@@ -2048,7 +2053,7 @@ public sealed partial class MainForm : Forms.Form
         if (terminating || (client == null && !pairingBusy)) return;
         terminating = true; operationGeneration++; terminateSession.Enabled = false; roleAgent.Enabled = roleController.Enabled = false;
         SetFooterMessage(() => UiText.EndingSupport); RefreshFooter();
-        pairingLifetime?.Cancel(); clientUpdateLifetime?.Cancel(); heartbeatLifetime?.Cancel(); action?.Cancel(); fileTransferLifetime?.Cancel(); resumeViewingOnRestore = false;
+        pairingLifetime?.Cancel(); clientUpdateLifetime?.Cancel(); heartbeatLifetime?.Cancel(); action?.Cancel(); fileTransferLifetime?.Cancel(); resumeViewingOnRestore = false; resumeViewingAfterMinimize = false;
         StopStream(() => UiText.SupportEnded); QueueInput(new { kind = "release" });
         RemoteClient? oldClient = client;
         sessionGeneration++; supportSession = false; heartbeatHealthy = false;
@@ -2295,6 +2300,19 @@ public sealed partial class MainForm : Forms.Form
     {
         if (viewportHeight <= 0 || contentHeight <= viewportHeight) return Size.Empty;
         return new Size(0, contentHeight);
+    }
+
+    private void UpdateMinimizedViewing()
+    {
+        if (WindowState == Forms.FormWindowState.Minimized)
+        {
+            if (liveStream != null) { resumeViewingAfterMinimize = true; StopStream(() => UiText.MinimizedConnected); }
+        }
+        else if (resumeViewingAfterMinimize && !trayVisible)
+        {
+            resumeViewingAfterMinimize = false;
+            if (supportSession && controllerPages.SelectedIndex == 1) _ = StartStreamAsync();
+        }
     }
     private static void UpdateAgentScrollExtent(Forms.Panel host, int height)
     {

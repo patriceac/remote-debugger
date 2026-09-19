@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Text.Json;
 using RemoteDebugger.Core;
 using Xunit;
 
@@ -30,6 +31,40 @@ public sealed class ProtocolTests
     public async Task RejectsBadFrameBeforeAllocating(int length) { byte[] data = new byte[4]; BinaryPrimitives.WriteInt32BigEndian(data, length); await Assert.ThrowsAsync<InvalidDataException>(() => Wire.ReadAsync<Request>(new MemoryStream(data), default)); }
     [Fact] public async Task RejectsTruncatedFrame() { byte[] data = new byte[5]; BinaryPrimitives.WriteInt32BigEndian(data, 10); await Assert.ThrowsAsync<EndOfStreamException>(() => Wire.ReadAsync<Request>(new MemoryStream(data), default)); }
     [Fact] public async Task FrameRoundTrip() { var expected = new Request(Guid.NewGuid().ToString(), "test-only", "status", Json.Element(new { value = "é日本" })); using var ms = new MemoryStream(); await Wire.WriteAsync(ms, expected, default); ms.Position = 0; var actual = await Wire.ReadAsync<Request>(ms, default); Assert.Equal(expected.Id, actual.Id); Assert.Equal("é日本", actual.Args.Str("value")); }
+    [Fact]
+    public async Task FrameWriteCombinesLengthAndPayloadIntoOneWrite()
+    {
+        var expected = new Request("fixed-id", "token", "status", Json.Element(new { value = "é日本" }));
+        var stream = new WriteRecordingStream();
+
+        await Wire.WriteAsync(stream, expected, default);
+
+        byte[] body = JsonSerializer.SerializeToUtf8Bytes(expected, Json.Options);
+        byte[] frame = Assert.Single(stream.Writes);
+        Assert.Equal(body.Length, BinaryPrimitives.ReadInt32BigEndian(frame));
+        Assert.Equal(body, frame[4..]);
+        Assert.Equal(1, stream.FlushCount);
+    }
     [Fact] public async Task BinaryStreamPacketRoundTripsWithoutBase64() { var expected = new StreamPacket(StreamPacketKind.H264, 7, DateTimeOffset.UnixEpoch.AddSeconds(3), 12.5, [0, 1, 2, 255]); using var ms = new MemoryStream(); await Wire.WriteStreamPacketAsync(ms, expected, default); ms.Position = 0; var actual = await Wire.ReadStreamPacketAsync(ms, default); Assert.Equal(expected.Kind, actual.Kind); Assert.Equal(expected.Sequence, actual.Sequence); Assert.Equal(expected.CapturedUtc, actual.CapturedUtc); Assert.Equal(expected.CaptureEncodeMs, actual.CaptureEncodeMs); Assert.Equal(expected.Payload, actual.Payload); }
     [Fact] public void HashComparisonRejectsDifferentLength() { Assert.True(Safety.Equal(Safety.Hash("a"), Safety.Hash("a"))); Assert.False(Safety.Equal("a", "aa")); Assert.False(Safety.Equal(Safety.Hash("a"), Safety.Hash("b"))); }
+
+    private sealed class WriteRecordingStream : Stream
+    {
+        public List<byte[]> Writes { get; } = [];
+        public int FlushCount { get; private set; }
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() => FlushCount++;
+        public override Task FlushAsync(CancellationToken cancellationToken) { FlushCount++; return Task.CompletedTask; }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => Writes.Add(buffer.AsSpan(offset, count).ToArray());
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) { Write(buffer, offset, count); return Task.CompletedTask; }
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) { Writes.Add(buffer.ToArray()); return ValueTask.CompletedTask; }
+    }
 }

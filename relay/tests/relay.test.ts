@@ -1,5 +1,5 @@
 import { SELF } from "cloudflare:test";
-import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
+import { evictDurableObject, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -73,6 +73,41 @@ describe("private encrypted transport relay", () => {
     await expect.poll(async () => (await list()).some(client => client.id === room)).toBe(false);
   });
 
+  it("reuses the short-lived directory cache until registration invalidates it", async () => {
+    const room = id(), agent = await connect(room, "agent", owner, "PC-Cached"); await receive(agent);
+    const list = async () => {
+      const response = await SELF.fetch("https://relay/v1/clients", { headers: { Authorization: `Bearer ${key}` } });
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+      return await response.json() as { id: string; name: string }[];
+    };
+    expect(await list()).toContainEqual({ id: room, name: "PC-Cached" });
+    await runInDurableObject(env.DIRECTORY.getByName("private-clients"), (_, state) => {
+      state.storage.sql.exec("DELETE FROM clients WHERE id = ?", room);
+    });
+    expect(await list()).toContainEqual({ id: room, name: "PC-Cached" });
+
+    const replacement = await connect(room, "agent", owner, "PC-Invalidated"); await receive(replacement);
+    await expect.poll(async () => (await list()).filter(client => client.id === room)).toEqual([{ id: room, name: "PC-Invalidated" }]);
+    replacement.close();
+    await expect.poll(async () => (await list()).some(client => client.id === room)).toBe(false);
+  });
+
+  it("migrates an old directory schema and prunes an ended session after a cold start", async () => {
+    const directory = env.DIRECTORY.getByName(`migration-${id()}`), room = id();
+    await runInDurableObject(directory, (_, state) => {
+      state.storage.sql.exec("ALTER TABLE clients DROP COLUMN generation");
+      state.storage.sql.exec("INSERT INTO clients (id, registered) VALUES (?, ?)", room, Date.now());
+    });
+    await evictDurableObject(directory);
+
+    const columns = await runInDurableObject(directory, (_, state) =>
+      state.storage.sql.exec<{ name: string }>("PRAGMA table_info(clients)").toArray());
+    expect(columns.some(column => column.name === "generation")).toBe(true);
+    expect(await runInDurableObject(directory, directoryObject => directoryObject.list("legacy"))).toEqual([]);
+    expect(await runInDurableObject(directory, (_, state) =>
+      state.storage.sql.exec<{ id: string }>("SELECT id FROM clients").toArray())).toEqual([]);
+  });
+
   it("rejects missing hosting credentials and unknown sessions", async () => {
     expect((await SELF.fetch("https://relay/v1/sessions/1111111111111111/agent", { headers: { Upgrade: "websocket" } })).status).toBe(401);
     expect((await SELF.fetch(`https://relay/v1/sessions/${id()}/connect`, { headers: { Upgrade: "websocket", Authorization: `Bearer ${key}` } })).status).toBe(404);
@@ -115,10 +150,12 @@ describe("private encrypted transport relay", () => {
   });
 
   it("does not let a stale disconnect close a replacement registration", async () => {
-    const room = id(), first = await connect(room, "agent", owner); await receive(first);
-    const second = await connect(room, "agent", owner); await receive(second);
+    const room = id(), first = await connect(room, "agent", owner, "PC-Old"); await receive(first);
+    const second = await connect(room, "agent", owner, "PC-New"); await receive(second);
     const open = receive(second), controller = await connect(room, "connect");
     expect(JSON.parse(await open as string).type).toBe("open");
     expect(controller.readyState).toBe(WebSocket.OPEN);
+    const list = await SELF.fetch("https://relay/v1/clients", { headers: { Authorization: `Bearer ${key}` } });
+    expect(await list.json()).toContainEqual({ id: room, name: "PC-New" });
   });
 });

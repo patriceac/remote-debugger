@@ -180,13 +180,28 @@ public sealed class WebSocketStream(WebSocket socket) : Stream
     private int disposed;
     private long writeWindow = System.Diagnostics.Stopwatch.GetTimestamp();
     private int writeBytes;
+    private readonly SemaphoreSlim writeGate = new(1, 1);
+    private byte[]? writeBuffer;
+    private int bufferedBytes;
+    internal void EnableWriteBuffering() => writeBuffer ??= new byte[65536];
     public override bool CanRead => true;
     public override bool CanWrite => true;
     public override bool CanSeek => false;
     public override long Length => throw new NotSupportedException();
     public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
-    public override void Flush() { }
-    public override Task FlushAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public override void Flush() => FlushAsync(CancellationToken.None).GetAwaiter().GetResult();
+    public override async Task FlushAsync(CancellationToken cancellationToken)
+    {
+        await writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try { await FlushBufferAsync(cancellationToken).ConfigureAwait(false); }
+        finally { writeGate.Release(); }
+    }
+    private async Task FlushBufferAsync(CancellationToken ct)
+    {
+        if (bufferedBytes == 0) return;
+        await SendRecordAsync(writeBuffer!.AsMemory(0, bufferedBytes), ct).ConfigureAwait(false);
+        bufferedBytes = 0;
+    }
     public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
     public override void SetLength(long value) => throw new NotSupportedException();
     public override int Read(byte[] buffer, int offset, int count) => ReadAsync(buffer.AsMemory(offset, count)).AsTask().GetAwaiter().GetResult();
@@ -196,6 +211,7 @@ public sealed class WebSocketStream(WebSocket socket) : Stream
     public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken ct = default)
     {
         if (buffer.Length == 0) return 0;
+        await FlushAsync(ct).ConfigureAwait(false);
         try
         {
             while (true)
@@ -210,22 +226,36 @@ public sealed class WebSocketStream(WebSocket socket) : Stream
     }
     public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken ct = default)
     {
+        await writeGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             while (buffer.Length != 0)
             {
-                int size = Math.Min(buffer.Length, 65536);
-                // Leave headroom below the relay's 16 MiB/s disconnect limit.
-                if (writeBytes + size > 1024 * 1024)
+                int size = Math.Min(buffer.Length, 65536 - bufferedBytes);
+                if (writeBuffer == null) await SendRecordAsync(buffer[..size], ct).ConfigureAwait(false);
+                else
                 {
-                    var delay = TimeSpan.FromMilliseconds(100) - System.Diagnostics.Stopwatch.GetElapsedTime(writeWindow);
-                    if (delay > TimeSpan.Zero) await Task.Delay(delay, ct).ConfigureAwait(false);
-                    writeWindow = System.Diagnostics.Stopwatch.GetTimestamp(); writeBytes = 0;
+                    buffer[..size].CopyTo(writeBuffer.AsMemory(bufferedBytes)); bufferedBytes += size;
+                    if (bufferedBytes == writeBuffer.Length) await FlushBufferAsync(ct).ConfigureAwait(false);
                 }
-                await socket.SendAsync(buffer[..size], WebSocketMessageType.Binary, true, ct).ConfigureAwait(false);
-                writeBytes += size;
                 buffer = buffer[size..];
             }
+        }
+        finally { writeGate.Release(); }
+    }
+    private async Task SendRecordAsync(ReadOnlyMemory<byte> buffer, CancellationToken ct)
+    {
+        // Leave headroom below the relay's 16 MiB/s disconnect limit.
+        if (writeBytes + buffer.Length > 1024 * 1024)
+        {
+            var delay = TimeSpan.FromMilliseconds(100) - System.Diagnostics.Stopwatch.GetElapsedTime(writeWindow);
+            if (delay > TimeSpan.Zero) await Task.Delay(delay, ct).ConfigureAwait(false);
+            writeWindow = System.Diagnostics.Stopwatch.GetTimestamp(); writeBytes = 0;
+        }
+        try
+        {
+            await socket.SendAsync(buffer, WebSocketMessageType.Binary, true, ct).ConfigureAwait(false);
+            writeBytes += buffer.Length;
         }
         catch (WebSocketException ex) { throw new IOException("Internet connection interrupted.", ex); }
     }
@@ -244,10 +274,11 @@ public sealed class WebSocketStream(WebSocket socket) : Stream
             if (socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
             {
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                await FlushAsync(timeout.Token).ConfigureAwait(false);
                 await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "", timeout.Token).ConfigureAwait(false);
             }
         }
-        catch (Exception ex) when (ex is WebSocketException or OperationCanceledException or InvalidOperationException) { }
+        catch (Exception ex) when (ex is WebSocketException or IOException or OperationCanceledException or InvalidOperationException) { }
         finally { socket.Abort(); socket.Dispose(); GC.SuppressFinalize(this); }
     }
     internal static async Task<string> ReadTextAsync(WebSocket socket, CancellationToken ct)
@@ -291,9 +322,10 @@ public sealed class InternetAgent : IDisposable
     public void Start() => _ = RunAsync();
     private async Task RunAsync()
     {
-        int delay = 1;
+        int failures = 0;
         while (!stop.IsCancellationRequested)
         {
+            long connectedAt = 0;
             try
             {
                 using var socket = settings.Socket(invitation.Key); control = socket;
@@ -311,7 +343,7 @@ public sealed class InternetAgent : IDisposable
                         string text = await WebSocketStream.ReadTextAsync(socket, idle.Token).ConfigureAwait(false);
                         if (text == "pong") continue;
                         using var message = JsonDocument.Parse(text); var data = message.RootElement;
-                        if (data.Str("type") == "registered") { PublicIp = data.Str("publicIp"); Connected = true; Error = ""; delay = 1; }
+                        if (data.Str("type") == "registered") { PublicIp = data.Str("publicIp"); Connected = true; Error = ""; connectedAt = Environment.TickCount64; }
                         else if (data.Str("type") == "open" && channels.Wait(0)) _ = OpenChannelAsync(data.Str("channel"));
                     }
                 }
@@ -320,11 +352,13 @@ public sealed class InternetAgent : IDisposable
             catch (Exception ex) when (ex is WebSocketException or IOException or OperationCanceledException or JsonException)
             { Error = ex is OperationCanceledException ? "Connection timed out" : ex.Message; }
             finally { Connected = false; control = null; }
-            try { await Task.Delay(TimeSpan.FromSeconds(delay), stop.Token).ConfigureAwait(false); }
+            if (connectedAt != 0 && Environment.TickCount64 - connectedAt >= 60000) failures = 0;
+            try { await Task.Delay(RetryDelay(failures = Math.Min(failures + 1, 10), Random.Shared.NextDouble()), stop.Token).ConfigureAwait(false); }
             catch (OperationCanceledException) { break; }
-            delay = Math.Min(delay * 2, 30);
         }
     }
+    internal static TimeSpan RetryDelay(int failures, double jitter) =>
+        TimeSpan.FromSeconds(Math.Min(300, Math.Pow(2, Math.Clamp((long)failures - 1, 0, 9))) * (0.8 + 0.2 * Math.Clamp(jitter, 0, 1)));
     private static async Task PulseAsync(ClientWebSocket socket, CancellationToken ct)
     {
         while (true) { await Task.Delay(20000, ct).ConfigureAwait(false); await socket.SendAsync("ping"u8.ToArray(), WebSocketMessageType.Text, true, ct).ConfigureAwait(false); }

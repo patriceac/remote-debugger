@@ -36,8 +36,7 @@ public static class Wire
     {
         byte[] body = JsonSerializer.SerializeToUtf8Bytes(value, Json.Options);
         if (body.Length > MaxFrame) throw new InvalidDataException("Frame exceeds 4 MiB.");
-        byte[] length = new byte[4]; BinaryPrimitives.WriteInt32BigEndian(length, body.Length);
-        await stream.WriteAsync(length, ct); await stream.WriteAsync(body, ct); await stream.FlushAsync(ct);
+        await WriteBodyAsync(stream, body, ct);
     }
     public static async Task<T> ReadAsync<T>(Stream stream, CancellationToken ct)
     {
@@ -75,8 +74,9 @@ public static class Wire
 
     private static async Task WriteBodyAsync(Stream stream, byte[] body, CancellationToken ct)
     {
-        byte[] length = new byte[4]; BinaryPrimitives.WriteInt32BigEndian(length, body.Length);
-        await stream.WriteAsync(length, ct); await stream.WriteAsync(body, ct); await stream.FlushAsync(ct);
+        byte[] frame = new byte[4 + body.Length];
+        BinaryPrimitives.WriteInt32BigEndian(frame, body.Length); body.CopyTo(frame, 4);
+        await stream.WriteAsync(frame, ct); await stream.FlushAsync(ct);
     }
 }
 public static class Safety

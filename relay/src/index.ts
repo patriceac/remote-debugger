@@ -11,6 +11,7 @@ type SocketState = {
   name?: string;
   fingerprint?: string;
   scope?: string;
+  id?: string;
 };
 const unavailable = () => new Response("Session unavailable", { status: 404 });
 const validId = (s: string) => /^[A-F0-9]{16}$/.test(s);
@@ -55,23 +56,38 @@ export default {
 // The private install's small directory stores routing IDs only. A computer is
 // listed only while its session has a live, recently responsive agent socket.
 export class ClientDirectory extends DurableObject<RelayEnv> {
+  private revision = 0;
+  private cache?: { scope: string; expires: number; clients: { id: string; name: string; fingerprint?: string }[] };
   constructor(ctx: DurableObjectState, env: RelayEnv) {
     super(ctx, env);
-    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS clients (id TEXT PRIMARY KEY, registered INTEGER NOT NULL)");
+    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS clients (id TEXT PRIMARY KEY, registered INTEGER NOT NULL, generation TEXT NOT NULL DEFAULT '')");
+    if (!ctx.storage.sql.exec<{ name: string }>("PRAGMA table_info(clients)").toArray().some(column => column.name === "generation"))
+      ctx.storage.sql.exec("ALTER TABLE clients ADD COLUMN generation TEXT NOT NULL DEFAULT ''");
   }
 
-  register(id: string): void {
-    this.ctx.storage.sql.exec("INSERT OR REPLACE INTO clients VALUES (?, ?)", id, Date.now());
+  register(id: string, generation = ""): void {
+    this.cache = undefined; this.revision++;
+    this.ctx.storage.sql.exec("INSERT OR REPLACE INTO clients VALUES (?, ?, ?)", id, Date.now(), generation);
     this.ctx.storage.sql.exec("DELETE FROM clients WHERE id NOT IN (SELECT id FROM clients ORDER BY registered DESC LIMIT 32)");
   }
 
+  unregister(id: string, generation: string): void {
+    this.ctx.storage.sql.exec("DELETE FROM clients WHERE id = ? AND generation = ?", id, generation);
+    this.cache = undefined; this.revision++;
+  }
+
   async list(scope: string): Promise<{ id: string; name: string; fingerprint?: string }[]> {
-    const rows = this.ctx.storage.sql.exec<{ id: string }>("SELECT id FROM clients").toArray();
-    const clients = await Promise.all(rows.map(async ({ id }) => {
+    if (this.cache?.scope === scope && Date.now() < this.cache.expires) return this.cache.clients;
+    const revision = this.revision;
+    const rows = this.ctx.storage.sql.exec<{ id: string; generation: string }>("SELECT id, generation FROM clients").toArray();
+    const clients = await Promise.all(rows.map(async ({ id, generation }) => {
       const peer = await this.env.SESSIONS.getByName(id).presence(scope);
+      if (peer === null) this.ctx.storage.sql.exec("DELETE FROM clients WHERE id = ? AND generation = ?", id, generation);
       return peer ? { id, ...peer } : null;
     }));
-    return clients.filter((client): client is { id: string; name: string; fingerprint?: string } => client !== null);
+    const result = clients.filter((client): client is { id: string; name: string; fingerprint?: string } => client !== null);
+    if (revision === this.revision) this.cache = { scope, expires: Date.now() + 5000, clients: result };
+    return result;
   }
 }
 
@@ -107,8 +123,9 @@ export class SupportSession extends DurableObject<RelayEnv> {
       if (!accepted) return unavailable();
       for (const socket of this.ctx.getWebSockets()) this.close(socket, "Agent reconnected");
       const [client, server] = Object.values(new WebSocketPair());
-      this.accept(server, "agent", "", crypto.randomUUID(), scope, name, fingerprint || undefined);
-      if (name) await this.env.DIRECTORY.getByName(scope === "legacy" ? "private-clients" : `private-clients-${scope}`).register(new URL(request.url).pathname.split("/")[3]);
+      const id = new URL(request.url).pathname.split("/")[3], generation = crypto.randomUUID();
+      this.accept(server, "agent", "", generation, scope, name, fingerprint || undefined, id);
+      if (name) await this.env.DIRECTORY.getByName(scope === "legacy" ? "private-clients" : `private-clients-${scope}`).register(id, generation);
       server.send(JSON.stringify({ type: "registered", publicIp: request.headers.get("CF-Connecting-IP") ?? "" }));
       return new Response(null, { status: 101, webSocket: client });
     }
@@ -139,19 +156,19 @@ export class SupportSession extends DurableObject<RelayEnv> {
     return unavailable();
   }
 
-  async presence(scope: string): Promise<{ name: string; fingerprint?: string } | null> {
-    if ((await this.ctx.storage.get<string>("scope") ?? "legacy") !== scope) return null;
+  async presence(scope: string): Promise<{ name: string; fingerprint?: string } | null | undefined> {
     const socket = this.ctx.getWebSockets("agent").find(s => s.readyState === WebSocket.OPEN);
     if (!socket) return null;
+    if ((await this.ctx.storage.get<string>("scope") ?? "legacy") !== scope) return undefined;
     const state = socket.deserializeAttachment() as SocketState;
     const lastSeen = this.ctx.getWebSocketAutoResponseTimestamp(socket)?.getTime() ?? state.created;
     return Date.now() - lastSeen < 60000 && state.name
-      ? { name: state.name, ...(state.fingerprint ? { fingerprint: state.fingerprint } : {}) } : null;
+      ? { name: state.name, ...(state.fingerprint ? { fingerprint: state.fingerprint } : {}) } : undefined;
   }
 
-  private accept(socket: WebSocket, role: SocketState["role"], channel: string, generation: string, scope: string, name?: string, fingerprint?: string): void {
+  private accept(socket: WebSocket, role: SocketState["role"], channel: string, generation: string, scope: string, name?: string, fingerprint?: string, id?: string): void {
     this.ctx.acceptWebSocket(socket, [role, `channel:${channel}`]);
-    socket.serializeAttachment({ role, channel, created: Date.now(), window: Date.now(), bytes: 0, generation, scope, name, fingerprint } satisfies SocketState);
+    socket.serializeAttachment({ role, channel, created: Date.now(), window: Date.now(), bytes: 0, generation, scope, name, fingerprint, id } satisfies SocketState);
   }
 
   webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): void {
@@ -181,6 +198,10 @@ export class SupportSession extends DurableObject<RelayEnv> {
     const peers = state.role === "agent" ? this.ctx.getWebSockets() : this.ctx.getWebSockets(`channel:${state.channel}`);
     for (const peer of peers)
       if (peer.deserializeAttachment()?.generation === state.generation) this.close(peer, reason);
+    if (state.role === "agent" && state.id) {
+      const scope = state.scope ?? "legacy";
+      this.ctx.waitUntil(this.env.DIRECTORY.getByName(scope === "legacy" ? "private-clients" : `private-clients-${scope}`).unregister(state.id, state.generation));
+    }
     this.ctx.waitUntil(this.scheduleCleanup());
   }
 

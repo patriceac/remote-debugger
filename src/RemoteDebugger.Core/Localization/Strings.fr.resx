@@ -895,4 +895,5 @@
   <data name="WanAddressHelp" xml:space="preserve"><value>LAN → WAN → relais. Port par défaut : 45832. Laisser vide pour ignorer le WAN.</value></data>
   <data name="InvalidWanAddress" xml:space="preserve"><value>Saisissez un nom d’hôte ou une adresse IPv4, suivi éventuellement de :port (1–65535), ou laissez vide.</value></data>
   <data name="WanAddressSaved" xml:space="preserve"><value>Préférence de connexion enregistrée pour cet appareil.</value></data>
+  <data name="RelayEconomy" xml:space="preserve"><value>Mode éco</value></data>
 </root>

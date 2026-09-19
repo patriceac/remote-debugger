@@ -139,6 +139,7 @@ public static partial class UiText
     public static string MonitorNumber => Get(nameof(MonitorNumber));
     public static string MouseKeyboardActive => Get(nameof(MouseKeyboardActive));
     public static string MouseKeyboardControl => Get(nameof(MouseKeyboardControl));
+    public static string RelayEconomy => Get(nameof(RelayEconomy));
     public static string Name => Get(nameof(Name));
     public static string NewCodeCountdown => Get(nameof(NewCodeCountdown));
     public static string NewConnection => Get(nameof(NewConnection));

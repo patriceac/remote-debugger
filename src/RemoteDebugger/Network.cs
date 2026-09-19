@@ -478,6 +478,8 @@ public sealed partial class AgentServer : IDisposable
         CancellationTokenRegistration persistentInputGrant = default;
         bool persistentUpdate = false;
         CancellationTokenRegistration persistentUpdateGrant = default;
+        bool persistentHeartbeat = false;
+        CancellationTokenRegistration heartbeatGrant = default;
         using (var tls = new SslStream(transport, true))
         using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(stop.Token))
         {
@@ -486,6 +488,7 @@ public sealed partial class AgentServer : IDisposable
             {
                 using var handshake = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token); handshake.CancelAfter(10000);
                 await tls.AuthenticateAsServerAsync(new SslServerAuthenticationOptions { ServerCertificate = certificate, EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13, ClientCertificateRequired = false }, handshake.Token);
+                if (transport is WebSocketStream relay) relay.EnableWriteBuffering();
                 var r = await Wire.ReadAsync<Request>(tls, handshake.Token);
                 while (true)
                 {
@@ -576,8 +579,13 @@ public sealed partial class AgentServer : IDisposable
                         }
                         else if (r.Operation == "session.heartbeat")
                         {
+                            if (!persistentHeartbeat && r.Args.TryGetProperty("keepAlive", out var keepAlive) && keepAlive.ValueKind == JsonValueKind.True)
+                            {
+                                persistentHeartbeat = true; heartbeatGrant = grant.Register(timeout.Cancel);
+                            }
+                            if (persistentHeartbeat) timeout.CancelAfter(SupportSession.HeartbeatTimeout);
                             session.Observe();
-                            reply = Reply.Success(r.Id, new { session = Session, agentBinarySha256 = ExecutableIdentity.Sha256, controllerBinarySha256 = controllerBinaryHash, binaryMatched = Session.BinaryMatched, processId = Environment.ProcessId, maintenance = Operations.Maintenance.Status });
+                            reply = Reply.Success(r.Id, new { session = Session, persistent = persistentHeartbeat, agentBinarySha256 = ExecutableIdentity.Sha256, controllerBinarySha256 = controllerBinaryHash, binaryMatched = Session.BinaryMatched, processId = Environment.ProcessId, maintenance = Operations.Maintenance.Status });
                         }
                         else if (r.Operation == "session.disconnect") { Native.ReleaseAllInput(); session.Disconnect(); reply = Reply.Success(r.Id, new { session = Session }); }
                         else if (r.Operation == "update.resume")
@@ -623,7 +631,7 @@ public sealed partial class AgentServer : IDisposable
                                 persistentUpdateGrant = grant.Register(timeout.Cancel);
                             }
                             timeout.CancelAfter(TimeSpan.FromHours(12));
-                            reply = Reply.Success(r.Id, new { ready = true });
+                            reply = Reply.Success(r.Id, new { ready = true, binaryChunks = true });
                         }
                         else if (updates.IsOperation(r.Operation))
                         {
@@ -635,7 +643,15 @@ public sealed partial class AgentServer : IDisposable
                                 {
                                     using var updateDeadline = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, grant);
                                     updateDeadline.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(r.TimeoutSeconds, 1, 120)));
-                                    reply = await updates.DispatchAsync(r, updateDeadline.Token);
+                                    byte[] binaryChunk = [];
+                                    if (r.Operation == "update.chunk.binary")
+                                    {
+                                        int count = r.Args.Int("count");
+                                        if (count is < 1 or > 512 * 1024) throw new InvalidDataException("Invalid update chunk length.");
+                                        binaryChunk = new byte[count];
+                                        await tls.ReadExactlyAsync(binaryChunk, updateDeadline.Token);
+                                    }
+                                    reply = await updates.DispatchAsync(r, updateDeadline.Token, binaryChunk);
                                     if (r.Operation == "update.confirm" && reply.Ok)
                                     {
                                         session.SetBinaryMatched(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
@@ -735,7 +751,7 @@ public sealed partial class AgentServer : IDisposable
                         }
                     }
                     await Wire.WriteAsync(tls, reply, timeout.Token);
-                    if (r.Operation == "session.disconnect" || (!persistentInput && !persistentUpdate)) return;
+                    if (r.Operation == "session.disconnect" || (!reply.Ok && persistentHeartbeat) || (!persistentInput && !persistentUpdate && !persistentHeartbeat)) return;
                     r = await Wire.ReadAsync<Request>(tls, timeout.Token);
                 }
             }
@@ -745,6 +761,7 @@ public sealed partial class AgentServer : IDisposable
             {
                 persistentInputGrant.Dispose();
                 persistentUpdateGrant.Dispose();
+                heartbeatGrant.Dispose();
                 if (persistentInput) { Operations.Maintenance.EndInput(); Native.ReleaseAllInput(); }
                 slots.Release();
             }
@@ -979,6 +996,10 @@ public sealed partial class RemoteClient
     private readonly SemaphoreSlim updateGate = new(1, 1);
     private PersistentChannel? inputChannel;
     private PersistentChannel? updateChannel;
+    private readonly SemaphoreSlim heartbeatGate = new(1, 1);
+    private PersistentChannel? heartbeatChannel;
+    private Connection? heartbeatRoute;
+    private bool legacyHeartbeats;
     private int legacyUpdateOperations;
     public Connection Connection { get; private set; }
     internal string AdminRoot { get; set; } = Vault.DefaultRoot;
@@ -998,6 +1019,7 @@ public sealed partial class RemoteClient
     public void Save(string? path = null) => Vault.Save(path ?? DefaultPath, JsonSerializer.SerializeToUtf8Bytes(Connection, Json.Options));
     public async Task PairAsync(string code, CancellationToken ct = default)
     {
+        await CloseHeartbeatChannelAsync().ConfigureAwait(false);
         await CloseInputChannelAsync().ConfigureAwait(false);
         await CloseUpdateChannelAsync().ConfigureAwait(false);
         if (await TryResumeSavedConnectionAsync(ct).ConfigureAwait(false)) return;
@@ -1061,9 +1083,45 @@ public sealed partial class RemoteClient
         }
         return false;
     }
-    public async Task<JsonElement> HeartbeatAsync(CancellationToken ct = default) => Require(await CallAsync("session.heartbeat", ct: ct, seconds: 5).ConfigureAwait(false));
+    public async Task<JsonElement> HeartbeatAsync(CancellationToken ct = default)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(20));
+        await heartbeatGate.WaitAsync(timeout.Token).ConfigureAwait(false);
+        try
+        {
+            if (legacyHeartbeats) return Require(await CallAsync("session.heartbeat", ct: timeout.Token, seconds: 5).ConfigureAwait(false));
+            if (discoverRoutes) await RefreshRoutesIfNeededAsync(timeout.Token).ConfigureAwait(false);
+            if (heartbeatChannel != null && heartbeatRoute != Connection)
+            {
+                await heartbeatChannel.DisposeAsync().ConfigureAwait(false); heartbeatChannel = null;
+            }
+            if (heartbeatChannel != null) return Require(await heartbeatChannel.CallAsync("session.heartbeat", null, timeout.Token, 5).ConfigureAwait(false));
+            heartbeatChannel = new PersistentChannel(await OpenTransportAsync(timeout.Token).ConfigureAwait(false), Connection.Token, controllerBinarySha256, "session.heartbeat");
+            heartbeatRoute = Connection;
+            var data = await heartbeatChannel.OpenAsync(timeout.Token, 5).ConfigureAwait(false);
+            if (!data.TryGetProperty("persistent", out var persistent) || persistent.ValueKind != JsonValueKind.True)
+            {
+                await heartbeatChannel.DisposeAsync().ConfigureAwait(false); heartbeatChannel = null; legacyHeartbeats = true;
+            }
+            return data;
+        }
+        catch
+        {
+            var failed = heartbeatChannel; heartbeatChannel = null;
+            if (failed != null) { try { await failed.DisposeAsync().ConfigureAwait(false); } catch { } }
+            throw;
+        }
+        finally { heartbeatGate.Release(); }
+    }
+    internal async Task CloseHeartbeatChannelAsync()
+    {
+        await heartbeatGate.WaitAsync().ConfigureAwait(false);
+        try { var channel = heartbeatChannel; heartbeatChannel = null; legacyHeartbeats = false; if (channel != null) await channel.DisposeAsync().ConfigureAwait(false); }
+        finally { heartbeatGate.Release(); }
+    }
     public async Task EndSessionAsync(CancellationToken ct = default)
     {
+        await CloseHeartbeatChannelAsync().ConfigureAwait(false);
         await CloseInputChannelAsync().ConfigureAwait(false);
         await CloseUpdateChannelAsync().ConfigureAwait(false);
         // A user can press End while the agent is between updater processes.
@@ -1081,6 +1139,7 @@ public sealed partial class RemoteClient
     }
     public async Task DisconnectAsync(CancellationToken ct = default)
     {
+        await CloseHeartbeatChannelAsync().ConfigureAwait(false);
         try { Require(await CallAsync("session.disconnect", ct: ct, seconds: 5).ConfigureAwait(false)); }
         finally
         {
@@ -1128,7 +1187,7 @@ public sealed partial class RemoteClient
     }
 
     /// <summary>Send update operations over one authenticated connection for the transfer lifetime.</summary>
-    internal async Task<Reply> SendUpdateAsync(string operation, object? args = null, CancellationToken ct = default, int seconds = 60)
+    internal async Task<Reply> SendUpdateAsync(string operation, object? args = null, CancellationToken ct = default, int seconds = 60, ReadOnlyMemory<byte> binaryChunk = default)
     {
         if (string.IsNullOrWhiteSpace(operation)) throw new ArgumentException("An update operation is required.", nameof(operation));
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -1136,8 +1195,15 @@ public sealed partial class RemoteClient
         await updateGate.WaitAsync(timeout.Token).ConfigureAwait(false);
         try
         {
+            object? LegacyArgs()
+            {
+                if (binaryChunk.IsEmpty) return args;
+                var metadata = args is JsonElement element ? element : Json.Element(args ?? new { });
+                return new { transactionId = metadata.Str("transactionId"), offset = metadata.Long("offset"), data = Convert.ToBase64String(binaryChunk.Span) };
+            }
+            string legacyOperation = binaryChunk.IsEmpty ? operation : "update.chunk";
             if (Volatile.Read(ref legacyUpdateOperations) != 0)
-                return await CallAsync(operation, args, timeout.Token, seconds: seconds).ConfigureAwait(false);
+                return await CallAsync(legacyOperation, LegacyArgs(), timeout.Token, seconds: seconds).ConfigureAwait(false);
 
             PersistentChannel? channel = updateChannel;
             try
@@ -1149,7 +1215,9 @@ public sealed partial class RemoteClient
                     await channel.OpenAsync(timeout.Token, seconds).ConfigureAwait(false);
                     updateChannel = channel;
                 }
-                return await channel.CallAsync(operation, args, timeout.Token, seconds).ConfigureAwait(false);
+                return channel.SupportsBinaryChunks || binaryChunk.IsEmpty
+                    ? await channel.CallAsync(operation, args, timeout.Token, seconds, binaryChunk).ConfigureAwait(false)
+                    : await channel.CallAsync(legacyOperation, LegacyArgs(), timeout.Token, seconds).ConfigureAwait(false);
             }
             catch (RemoteOperationException ex) when (IsLegacyUpdateChannelUnsupported(ex))
             {
@@ -1163,7 +1231,7 @@ public sealed partial class RemoteClient
                 // the transfer compatible without weakening authentication or the
                 // update transaction checks.
                 Volatile.Write(ref legacyUpdateOperations, 1);
-                return await CallAsync(operation, args, timeout.Token, seconds: seconds).ConfigureAwait(false);
+                return await CallAsync(legacyOperation, LegacyArgs(), timeout.Token, seconds: seconds).ConfigureAwait(false);
             }
             catch
             {
@@ -1227,6 +1295,7 @@ public sealed partial class RemoteClient
                 TargetHost = "RemoteDebugger",
                 EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13
             }, ct).ConfigureAwait(false);
+            if (transport is WebSocketStream relay) relay.EnableWriteBuffering();
             return tls;
         }
         catch
@@ -1243,18 +1312,22 @@ public sealed partial class RemoteClient
         private readonly string binarySha256 = binarySha256;
         private readonly string openOperation = openOperation;
         private int disposed;
-        public async Task OpenAsync(CancellationToken ct, int seconds)
+        public bool SupportsBinaryChunks { get; private set; }
+        public async Task<JsonElement> OpenAsync(CancellationToken ct, int seconds)
         {
-            Reply reply = await SendAsync(openOperation, Json.Element(new { }), ct, seconds).ConfigureAwait(false);
-            RemoteClient.Require(reply);
+            object args = openOperation == "session.heartbeat" ? new { keepAlive = true } : new { };
+            var data = RemoteClient.Require(await SendAsync(openOperation, args, ct, seconds).ConfigureAwait(false));
+            SupportsBinaryChunks = data.TryGetProperty("binaryChunks", out var supported) && supported.ValueKind == JsonValueKind.True;
+            return data;
         }
-        public async Task<Reply> CallAsync(string operation, object? args, CancellationToken ct, int seconds)
-            => await SendAsync(operation, args is JsonElement e ? e : Json.Element(args ?? new { }), ct, seconds).ConfigureAwait(false);
-        private async Task<Reply> SendAsync(string operation, object? args, CancellationToken ct, int seconds)
+        public async Task<Reply> CallAsync(string operation, object? args, CancellationToken ct, int seconds, ReadOnlyMemory<byte> binaryChunk = default)
+            => await SendAsync(operation, args is JsonElement e ? e : Json.Element(args ?? new { }), ct, seconds, binaryChunk).ConfigureAwait(false);
+        private async Task<Reply> SendAsync(string operation, object? args, CancellationToken ct, int seconds, ReadOnlyMemory<byte> binaryChunk = default)
         {
             ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
             var request = new Request(Guid.NewGuid().ToString(), token, operation, args is JsonElement e ? e : Json.Element(args ?? new { }), seconds, binarySha256);
             await Wire.WriteAsync(stream, request, ct).ConfigureAwait(false);
+            if (!binaryChunk.IsEmpty) { await stream.WriteAsync(binaryChunk, ct).ConfigureAwait(false); await stream.FlushAsync(ct).ConfigureAwait(false); }
             Reply reply = await Wire.ReadAsync<Reply>(stream, ct).ConfigureAwait(false);
             if (!string.Equals(reply.Id, request.Id, StringComparison.Ordinal))
                 throw new InvalidDataException("Reply did not match its request.");
@@ -1272,17 +1345,18 @@ public sealed partial class RemoteClient
             (publish, receiveToken) => ReceiveFramesAsync(publish, fps, monitor, seconds, receiveToken), present, ct);
     }
 
-    internal async Task StreamAdaptiveAsync(Func<DecodedStreamFrame, Task> present, Action<string, string?>? codecChanged, int fps = StreamPolicy.MaximumFps, int monitor = 0, int seconds = 300, CancellationToken ct = default)
+    internal async Task StreamAdaptiveAsync(Func<DecodedStreamFrame, Task> present, Action<string, string?>? codecChanged, int fps = StreamPolicy.MaximumFps, int monitor = 0, int seconds = 300, CancellationToken ct = default, bool relayEconomy = false)
     {
         await LatestFrameStream.RunAsync<DecodedStreamFrame>(
-            (publish, receiveToken) => ReceiveAdaptiveFramesAsync(publish, codecChanged, fps, monitor, seconds, receiveToken), present, ct);
+            (publish, receiveToken) => ReceiveAdaptiveFramesAsync(publish, codecChanged, fps, monitor, seconds, receiveToken, relayEconomy), present, ct);
     }
 
-    private async Task ReceiveAdaptiveFramesAsync(Action<DecodedStreamFrame> publish, Action<string, string?>? codecChanged, int fps, int monitor, int seconds, CancellationToken ct)
+    private async Task ReceiveAdaptiveFramesAsync(Action<DecodedStreamFrame> publish, Action<string, string?>? codecChanged, int fps, int monitor, int seconds, CancellationToken ct, bool relayEconomy)
     {
         using var connecting = CancellationTokenSource.CreateLinkedTokenSource(ct); connecting.CancelAfter(TimeSpan.FromSeconds(30));
         await using var tls = await OpenTransportAsync(connecting.Token);
-        await Wire.WriteAsync(tls, new Request(Guid.NewGuid().ToString(), Connection.Token, "screen.stream", Json.Element(new { codec = "auto", h264 = FfmpegRuntime.IsAvailable(), fps, monitor, maxWidth = 1920, quality = 65 }), seconds, controllerBinarySha256), ct);
+        var settings = StreamPolicy.ViewingSettings(relayEconomy && ActiveRoute == "Relay");
+        await Wire.WriteAsync(tls, new Request(Guid.NewGuid().ToString(), Connection.Token, "screen.stream", Json.Element(new { codec = "auto", h264 = FfmpegRuntime.IsAvailable(), fps = Math.Min(fps, settings.Fps), monitor, maxWidth = settings.MaxWidth, quality = settings.Quality }), seconds, controllerBinarySha256), ct);
         var start = await Wire.ReadAsync<Reply>(tls, ct); Require(start);
         if (start.Data.Str("type") != "stream_started") throw new InvalidDataException("Missing stream negotiation.");
         string codec = start.Data.Str("codec", "jpeg");
