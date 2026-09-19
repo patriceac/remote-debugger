@@ -18,12 +18,12 @@ public sealed class FleetVersionTests
     }
 
     [Fact]
-    public async Task SlowClientDoesNotBlockOtherChecksAndConcurrencyIsBounded()
+    public async Task SlowClientDoesNotBlockOtherOperationsAndConcurrencyIsBounded()
     {
         var started = new ConcurrentQueue<int>();
         var entered = Enumerable.Range(0, 6).Select(_ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).ToArray();
         var release = Enumerable.Range(0, 6).Select(_ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).ToArray();
-        var batch = MainForm.CheckFleetVersionsAsync(Enumerable.Range(0, 6), async i =>
+        var batch = MainForm.RunFleetOperationsAsync(Enumerable.Range(0, 6), async i =>
         {
             started.Enqueue(i); entered[i].SetResult();
             await release[i].Task;
@@ -47,11 +47,11 @@ public sealed class FleetVersionTests
     }
 
     [Fact]
-    public async Task CancellationStopsQueuedChecksAndReleasesTheBatch()
+    public async Task CancellationStopsQueuedOperationsAndReleasesTheBatch()
     {
         using var stop = new CancellationTokenSource();
         int started = 0;
-        var batch = MainForm.CheckFleetVersionsAsync(Enumerable.Range(0, 8), async _ =>
+        var batch = MainForm.RunFleetOperationsAsync(Enumerable.Range(0, 8), async _ =>
         {
             Interlocked.Increment(ref started);
             await Task.Delay(Timeout.Infinite, stop.Token);
@@ -60,5 +60,22 @@ public sealed class FleetVersionTests
         stop.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => batch.WaitAsync(TimeSpan.FromSeconds(5)));
         Assert.Equal(4, started);
+    }
+
+    [Fact]
+    public async Task FailedOperationDoesNotPreventRemainingDevicesFromRunning()
+    {
+        var completed = new ConcurrentQueue<int>();
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var batch = MainForm.RunFleetOperationsAsync(Enumerable.Range(0, 8), async i =>
+        {
+            await release.Task;
+            if (i == 0) throw new InvalidOperationException("Device update failed.");
+            completed.Enqueue(i);
+        }, CancellationToken.None);
+
+        release.SetResult();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => batch.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal(Enumerable.Range(1, 7), completed.Order());
     }
 }

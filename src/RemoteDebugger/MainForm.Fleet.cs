@@ -108,13 +108,13 @@ public sealed partial class MainForm
     private RemoteClient FleetClient(Peer peer) => new(InternetSettings.Target(peer, root)) { AdminRoot = root };
     private bool IsActiveDevice(Peer peer) => supportSession && client != null && Safety.Equal(client.Connection.Fingerprint, peer.Fingerprint);
 
-    internal static async Task CheckFleetVersionsAsync<T>(IEnumerable<T> devices, Func<T, Task> inspect, CancellationToken ct)
+    internal static async Task RunFleetOperationsAsync<T>(IEnumerable<T> devices, Func<T, Task> operation, CancellationToken ct)
     {
         using var slots = new SemaphoreSlim(4);
         await Task.WhenAll(devices.Select(async device =>
         {
             await slots.WaitAsync(ct);
-            try { ct.ThrowIfCancellationRequested(); await inspect(device); }
+            try { ct.ThrowIfCancellationRequested(); await operation(device); }
             finally { slots.Release(); }
         }));
     }
@@ -131,7 +131,7 @@ public sealed partial class MainForm
         try
         {
             var controller = await (controllerSnapshot ??= SupportPlatform.GetCurrentVersionAsync(CancellationToken.None)).WaitAsync(ct);
-            await CheckFleetVersionsAsync(fleet.Values.Where(d => d.Online).ToArray(), async device =>
+            await RunFleetOperationsAsync(fleet.Values.Where(d => d.Online).ToArray(), async device =>
             {
                 ct.ThrowIfCancellationRequested();
                 try
@@ -189,9 +189,9 @@ public sealed partial class MainForm
         RefreshControllerControls();
         try
         {
-            foreach (var initial in fleet.Values.Where(d => d.Online && d.State is "available" or "legacy" or "failed").ToArray())
+            await RunFleetOperationsAsync(fleet.Values.Where(d => d.Online && d.State is "available" or "legacy" or "failed").ToArray(), async initial =>
             {
-                if (lifetime.IsCancellationRequested) break;
+                if (NewerDeviceKnown) return;
                 var device = initial with { State = "queued", Detail = "" }; RecordDevice(device);
                 var target = FleetClient(device.Peer);
                 bool acquired = false;
@@ -211,7 +211,7 @@ public sealed partial class MainForm
                     var installed = snapshot.GetProperty("agent").Deserialize<ExecutableSnapshot>(Json.Options)!;
                     device = device with { Version = installed.FileVersion ?? "", Sha256 = installed.Sha256 }; RecordDevice(device);
                     if (UpdatePolicy.ReleaseVersion(installed.FileVersion) > UpdatePolicy.ReleaseVersion(controller.FileVersion))
-                    { RecordDevice(device with { State = "newer" }); break; }
+                    { RecordDevice(device with { State = "newer" }); return; }
                     var watch = System.Diagnostics.Stopwatch.StartNew();
                     long baseline = -1;
                     bool receiving = true;
@@ -242,8 +242,9 @@ public sealed partial class MainForm
                     }
                     SaveFleet();
                 }
-            }
+            }, lifetime.Token);
         }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         finally
         {
             fleetLifetime = null;
