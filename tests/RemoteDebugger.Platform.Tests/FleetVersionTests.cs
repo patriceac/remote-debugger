@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using RemoteDebugger;
 using RemoteDebugger.Core;
 using Xunit;
@@ -7,6 +9,36 @@ namespace RemoteDebugger.Platform.Tests;
 
 public sealed class FleetVersionTests
 {
+    [Theory]
+    [InlineData(true, "checking")]
+    [InlineData(false, "offline")]
+    public void DiscoveryDiscardsElapsedTimeFromThePreviousAttempt(bool online, string expectedState)
+    {
+        // Exercise discovery state without constructing a window or starting network services.
+        var form = (MainForm)RuntimeHelpers.GetUninitializedObject(typeof(MainForm));
+        GC.SuppressFinalize(form);
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        FieldInfo Field(string name) => typeof(MainForm).GetField(name, flags)!;
+        var devices = (System.Collections.IDictionary)Activator.CreateInstance(Field("fleet").FieldType)!;
+        var started = new Dictionary<string, DateTimeOffset>();
+        var peer = new Peer("Booting PC", "192.0.2.1", 45832, new string('a', 64));
+        var discovered = new List<Peer> { peer };
+        Field("fleet").SetValue(form, devices);
+        Field("fleetStageStarted").SetValue(form, started);
+        Field("discoveredPeers").SetValue(form, discovered);
+        Field("isUpdateAdmin").SetValue(form, true);
+        void Observe() => typeof(MainForm).GetMethod("ObserveFleet", flags)!.Invoke(form, null);
+
+        Observe();
+        started[peer.Fingerprint] = DateTimeOffset.UtcNow.AddMinutes(-6);
+        if (!online) discovered.Clear();
+        Observe();
+
+        Assert.Empty(started);
+        var device = devices[peer.Fingerprint]!;
+        Assert.Equal(expectedState, device.GetType().GetProperty("State")!.GetValue(device));
+    }
+
     [Theory]
     [InlineData(true, false)]
     [InlineData(false, true)]

@@ -13,7 +13,7 @@ internal sealed class AdminSetupForm : Forms.Form
         var layout = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, Padding = new(24), WrapContents = false };
         var explanation = new Forms.Label { Text = UiText.AdminSetupHelp, AutoSize = true, MaximumSize = new(470, 0), Margin = new(0, 0, 0, 16) };
         var password = new Forms.TextBox { Name = "adminPassword", UseSystemPasswordChar = true, Width = 470, MaxLength = 1024, AccessibleName = UiText.SecurityPassphrase };
-        var activate = new Forms.Button { Name = "activateAdmin", Text = UiText.ActivateAdmin, AutoSize = true, MinimumSize = new(150, 38), Margin = new(0, 16, 0, 10) };
+        var activate = new Forms.Button { Name = "activateAdmin", Text = UiText.ActivateAdmin, AutoSize = true, MinimumSize = new(150, 38), Margin = new(0, 16, 0, 10), Cursor = Forms.Cursors.Hand };
         var state = new Forms.Label { Name = "adminSetupState", AutoSize = true, MaximumSize = new(470, 0) };
         layout.Controls.AddRange([explanation, password, activate, state]); Controls.Add(layout); AcceptButton = activate;
         activate.Click += async (_, _) =>

@@ -69,7 +69,7 @@ public sealed class PageSwitcher : Forms.UserControl
             ArgumentNullException.ThrowIfNull(page);
             int index = owner.pages.Count;
             page.Dock = Forms.DockStyle.Fill; page.Visible = false; owner.pages.Add(page); owner.body.Controls.Add(page);
-            var button = new Forms.Button { Text = page.Text, AccessibleName = page.Text, UseMnemonic = false, Name = "navigate" + index, AutoSize = true, FlatStyle = Forms.FlatStyle.Flat, Height = 35, Padding = new Forms.Padding(9, 3, 9, 3), Margin = new Forms.Padding(2) }; button.FlatAppearance.BorderSize = 0; button.Click += (_, _) => owner.SelectedIndex = index; owner.buttons.Add(button); owner.navigation.Controls.Add(button);
+            var button = new Forms.Button { Text = page.Text, AccessibleName = page.Text, UseMnemonic = false, Name = "navigate" + index, AutoSize = true, FlatStyle = Forms.FlatStyle.Flat, Height = 35, Padding = new Forms.Padding(9, 3, 9, 3), Margin = new Forms.Padding(2), Cursor = Forms.Cursors.Hand }; button.FlatAppearance.BorderSize = 0; button.Click += (_, _) => owner.SelectedIndex = index; owner.buttons.Add(button); owner.navigation.Controls.Add(button);
             page.TextChanged += (_, _) => button.Text = button.AccessibleName = page.Text;
             if (owner.selected < 0) owner.SelectedIndex = 0;
         }

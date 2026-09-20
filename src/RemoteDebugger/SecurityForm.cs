@@ -9,8 +9,8 @@ internal sealed class SecurityForm : Forms.Form
     private readonly SecurityMigrationStore store;
     private readonly Forms.TextBox passphrase = new() { Name = "securityPassphrase", UseSystemPasswordChar = true, MaxLength = 1024, Dock = Forms.DockStyle.Top };
     private readonly Forms.TextBox confirmation = new() { Name = "securityConfirmation", UseSystemPasswordChar = true, MaxLength = 1024, Dock = Forms.DockStyle.Top };
-    private readonly Forms.Button create = new() { Name = "securityCreate", AutoSize = true, MinimumSize = new(180, 38) };
-    private readonly Forms.Button migrate = new() { Name = "securityMigrate", AutoSize = true, MinimumSize = new(180, 38) };
+    private readonly Forms.Button create = new() { Name = "securityCreate", AutoSize = true, MinimumSize = new(180, 38), Cursor = Forms.Cursors.Hand };
+    private readonly Forms.Button migrate = new() { Name = "securityMigrate", AutoSize = true, MinimumSize = new(180, 38), Cursor = Forms.Cursors.Hand };
     private readonly Forms.Label status = new() { Name = "securityStatus", AutoSize = true, MaximumSize = new(650, 0) };
     private readonly Forms.ListView devices = new() { Name = "securityDevices", View = Forms.View.Details, FullRowSelect = true, Dock = Forms.DockStyle.Fill, Height = 170 };
     private readonly Forms.TableLayoutPanel inputs = new() { AutoSize = true, Dock = Forms.DockStyle.Top, ColumnCount = 1 };

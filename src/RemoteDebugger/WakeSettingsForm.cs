@@ -37,8 +37,8 @@ internal sealed class WakeSettingsForm : Forms.Form
             Width = 120, AccessibleName = UiText.WakePort };
         var help = new Forms.Label { Name = "wakeHelp", Text = UiText.WakeHelp, AutoSize = true, Dock = Forms.DockStyle.Top, Margin = new(0, 12, 0, 8) };
         var state = new Forms.Label { Name = "wakeSettingsState", AutoSize = true, ForeColor = Color.Firebrick, Dock = Forms.DockStyle.Top };
-        var save = new Forms.Button { Name = "saveWakeSettings", Text = UiText.SaveWanAddress, AutoSize = true, MinimumSize = new(100, 34) };
-        var cancel = new Forms.Button { Name = "cancelWakeSettings", Text = UiText.Cancel, AutoSize = true, MinimumSize = new(100, 34), DialogResult = Forms.DialogResult.Cancel };
+        var save = new Forms.Button { Name = "saveWakeSettings", Text = UiText.SaveWanAddress, AutoSize = true, MinimumSize = new(100, 34), Cursor = Forms.Cursors.Hand };
+        var cancel = new Forms.Button { Name = "cancelWakeSettings", Text = UiText.Cancel, AutoSize = true, MinimumSize = new(100, 34), DialogResult = Forms.DialogResult.Cancel, Cursor = Forms.Cursors.Hand };
         var actions = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Top, AutoSize = true, Margin = new(0, 8, 0, 0) };
         actions.Controls.AddRange([save, cancel]);
         void Field(string text, Forms.Control control, int row)

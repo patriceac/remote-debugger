@@ -76,6 +76,7 @@ public sealed partial class MainForm
 
     private void ObserveFleet()
     {
+        fleetStageStarted.Clear();
         foreach (var key in fleet.Keys.ToArray()) fleet[key] = fleet[key] with { Online = false, State = "offline", Detail = "" };
         foreach (var peer in discoveredPeers)
         {
