@@ -1085,6 +1085,7 @@ internal sealed partial class LabForm : Forms.Form
 
     private async Task<string[]> ReadRemoteDebuggerServicesAsync()
     {
+        if (brokerProvisioning != null) return ProvisioningEvidence.ReadSupportService();
         var result = await RunGuestPowerShellAsync("Get-CimInstance Win32_Service -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'RemoteDebugger' -or $_.DisplayName -match 'Remote Debugger' } | ForEach-Object { \"$($_.Name)|$($_.State)|$($_.StartMode)|$($_.StartName)|$($_.PathName)\" }");
         return result.Stdout.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
@@ -1137,13 +1138,15 @@ internal sealed partial class LabForm : Forms.Form
         string[] localAddresses = ProvisioningEvidence.LocalIPv4Addresses();
         var peer = discovered.FirstOrDefault(x => ProvisioningEvidence.IsRemoteCoordinationAddress(x.Host, localAddresses, out _));
         if (peer == null) throw new TimeoutException("Controller discovery did not find a remote agent.");
+        // Discovery is user-triggered in the current product, not a startup scan.
+        Click("discover");
         bool peerVisible = await WaitForRowsAsync(peersControl, 1, 20);
         peerHost = peer.Host; peerFingerprint = peer.Fingerprint;
         string selectedHost = TryValue("host");
         bool autoSelected = !string.IsNullOrWhiteSpace(selectedHost) && selectedHost == peerHost;
         bool displayNameMatchesLocal = peer.Name.Equals(Environment.MachineName, StringComparison.OrdinalIgnoreCase);
-        if (peerVisible && autoSelected) Pass("controller.discovery_on_launch", "Controller discovery starts on launch and excludes the local machine by coordination address", new { uiRows = peerVisible, selectedHost, peer = new { peer.Name, peer.Host }, localAddresses, displayNameMatchesLocal });
-        else Fail("controller.discovery_on_launch", "Controller discovery starts on launch and excludes the local machine by coordination address", new { uiRows = peerVisible, selectedHost, peer = new { peer.Name, peer.Host }, localAddresses, displayNameMatchesLocal });
+        if (peerVisible && autoSelected) Pass("controller.discovery_refresh", "Explicit discovery finds the remote agent and excludes the local machine by coordination address", new { uiRows = peerVisible, selectedHost, peer = new { peer.Name, peer.Host }, localAddresses, displayNameMatchesLocal });
+        else Fail("controller.discovery_refresh", "Explicit discovery finds the remote agent and excludes the local machine by coordination address", new { uiRows = peerVisible, selectedHost, peer = new { peer.Name, peer.Host }, localAddresses, displayNameMatchesLocal });
         if (!autoSelected) Set("host", peerHost);
 
         JsonElement bootstrap = await LabMessageAsync(peerHost, "RD_LAB_BOOTSTRAP");

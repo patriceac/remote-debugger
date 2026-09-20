@@ -24,6 +24,7 @@
     "agentHeading": "agentHeading",
     "adminMaintenanceToggle": "adminMaintenanceToggle",
     "peers": "peers",
+    "discover": "discover",
     "host": "host",
     "pairCode": "pairCode",
     "pair": "pair",

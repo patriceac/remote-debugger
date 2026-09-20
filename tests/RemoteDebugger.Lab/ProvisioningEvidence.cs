@@ -224,6 +224,13 @@ internal static class ProvisioningEvidence
         return false;
     }
 
+    public static string[] ReadSupportService()
+    {
+        using var service = new ServiceController(SupportPlatformPaths.ServiceName);
+        using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\" + SupportPlatformPaths.ServiceName);
+        return [$"{service.ServiceName}|{service.Status}|{service.StartType}|{key?.GetValue("ObjectName")}|{key?.GetValue("ImagePath")}"];
+    }
+
     private static DateTimeOffset ValidateProductReceipt(string path, string managedPath, string servicePath, string publisher, string registeredSid)
     {
         JsonElement value = JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(path));

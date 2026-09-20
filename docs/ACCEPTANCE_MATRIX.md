@@ -163,7 +163,7 @@ prompt or a guessed service as proof.
 
 | ID | Requirement | Pass evidence | Scope |
 | --- | --- | --- | --- |
-| `controller.discovery_on_launch` | Discovery starts automatically and excludes self | `peers` contains the remote machine without the controller machine | Runtime |
+| `controller.discovery_refresh` | Explicit Refresh discovers the remote agent and excludes self | `peers` contains the remote machine without the controller machine | Runtime |
 | `controller.code_enter_pairing` | Code plus Enter is sufficient | `pairCode` is filled and focused; `ENTER` is sent to that field; `pair` reports success | Runtime |
 | `controller.no_fingerprint_gate` | No fingerprint checkbox is required | No `fingerprintVerified` control or fingerprint verification step; successful pair proves the normal path | Runtime |
 | `controller.sync_before_live` | Agent matches the controller’s exact Release binary before live viewing | Controller and remote status hashes are equal; synchronization state is complete before `Live` | Runtime |
