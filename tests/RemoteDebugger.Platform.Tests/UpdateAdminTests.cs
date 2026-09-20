@@ -10,6 +10,7 @@ public sealed class UpdateAdminTests
     [InlineData("update.begin", true)]
     [InlineData("update.confirm", true)]
     [InlineData("update.release", true)]
+    [InlineData("platform.ensureCurrent", true)]
     [InlineData("command", false)]
     [InlineData("file.upload", false)]
     [InlineData("ui.input", false)]

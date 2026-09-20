@@ -94,6 +94,7 @@ public sealed partial class Operations
             case "maintenance.elevated":
                 if (!Maintenance.Enabled) throw new InvalidOperationException(MaintenanceSession.DisabledMessage);
                 return await Maintenance.RunAsync(a.Str("file"), a.Strings("arguments"), ct);
+            case "platform.ensureCurrent": return await SupportPlatform.EnsureCurrentServiceAsync(Maintenance, ct);
             case "system": return await ResourceSampling.SystemAsync(ct);
             case "network": return await PowerShellAsync("[pscustomobject]@{Adapters=@(Get-NetIPConfiguration | Select-Object InterfaceAlias,IPv4Address,IPv4DefaultGateway,DNSServer);Statistics=@(Get-NetAdapterStatistics | Select-Object Name,ReceivedBytes,SentBytes)} | ConvertTo-Json -Depth 5 -Compress", ct);
             case "services": return await PowerShellAsync("Get-Service | Select-Object Name,DisplayName,Status,StartType | ConvertTo-Json -Compress", ct);

@@ -64,6 +64,13 @@ public static class SupportPlatform
 
     internal static bool RequiresAdministratorProvisioning(SupportPlatformStatus status) => !status.Provisioned;
 
+    internal static bool RequiresServiceRefresh(SupportPlatformStatus status, string currentVersion)
+    {
+        if (!status.Available || !status.InteractiveInputAvailable) return true;
+        try { return !UpdatePolicy.ReleaseVersion(status.ServiceVersion).Equals(UpdatePolicy.ReleaseVersion(currentVersion)); }
+        catch (InvalidOperationException) { return true; }
+    }
+
     /// <summary>
     /// Redirects a subsequently launched portable agent to the provisioned,
     /// protected Program Files copy. This path never elevates. Controller and
@@ -183,6 +190,42 @@ public static class SupportPlatform
         if (!status.Available || !requireFirewall || status.FirewallReady) return status;
         _ = await BrokerCallAsync("firewall.ensure", new { }, ct, SupportOperationTimeouts.FirewallEnsureRoundTripSeconds);
         return await GetStatusAsync(ct);
+    }
+
+    internal static async Task<SupportPlatformStatus> EnsureCurrentServiceAsync(MaintenanceSession maintenance, CancellationToken ct)
+    {
+        string currentVersion = typeof(Program).Assembly.GetName().Version?.ToString()
+            ?? throw new InvalidOperationException("Current application version is unavailable.");
+        var status = await GetStatusAsync(ct);
+        if (!status.Provisioned) return status;
+        if (!RequiresServiceRefresh(status, currentVersion)) return status;
+        if (!status.Available)
+            throw new InvalidOperationException("The protected support service cannot be refreshed automatically: " + status.Message);
+
+        string signalPath = await maintenance.QueueSupportRefreshAsync(ct);
+        maintenance.End();
+        await brokerConnections.ClearAsync();
+        await File.WriteAllTextAsync(signalPath, "ready", CancellationToken.None);
+
+        DateTimeOffset deadline = DateTimeOffset.UtcNow.AddSeconds(SupportOperationTimeouts.ServiceRefreshSeconds);
+        string resultPath = signalPath + ".result";
+        while (!File.Exists(resultPath) && DateTimeOffset.UtcNow < deadline)
+        {
+            ct.ThrowIfCancellationRequested();
+            await Task.Delay(100, ct);
+        }
+        if (!File.Exists(resultPath)) throw new TimeoutException("The protected support service refresh did not finish before its deadline.");
+        string resultText = await File.ReadAllTextAsync(resultPath, ct);
+        try { File.Delete(resultPath); } catch (IOException) { }
+        if (!int.TryParse(resultText, out int result) || result != 0)
+            throw new InvalidOperationException("The protected support service refresh failed.");
+
+        await brokerConnections.ClearAsync();
+        status = await GetStatusAsync(ct);
+        if (RequiresServiceRefresh(status, currentVersion))
+            throw new InvalidOperationException("The protected support service refresh did not enable the current elevated-input broker: " + status.Message);
+        await maintenance.StartAsync(ct);
+        return status;
     }
 
     public static async Task<SupportPlatformStatus> ProvisionAsync(CancellationToken ct = default, bool enableSupport = false)

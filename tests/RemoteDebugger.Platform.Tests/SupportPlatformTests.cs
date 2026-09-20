@@ -113,4 +113,29 @@ public sealed class SupportPlatformTests
 
         Assert.True(SupportPlatform.RequiresAdministratorProvisioning(status));
     }
+
+    [Theory]
+    [InlineData("0.4.33.0", true, true, false)]
+    [InlineData("0.4.32.0", true, true, true)]
+    [InlineData("0.4.33.0", true, false, true)]
+    [InlineData("unknown", true, true, true)]
+    [InlineData("0.4.33.0", false, true, true)]
+    public void ServiceRefreshRequiresCurrentAvailableInteractiveBroker(
+        string serviceVersion, bool available, bool interactiveInput, bool expected)
+    {
+        var status = new SupportPlatformStatus(
+            available ? SupportPlatformAvailability.Ready : SupportPlatformAvailability.ServiceStopped,
+            Provisioned: true,
+            Available: available,
+            IdentityVerified: available,
+            FirewallReady: true,
+            RequiresAdministratorConsent: false,
+            Message: "fixture",
+            RegisteredApplicationPath: "C:\\Program Files\\RemoteDebugger\\RemoteDebugger.exe",
+            PublisherThumbprint: "ABC",
+            ServiceVersion: serviceVersion,
+            InteractiveInputAvailable: interactiveInput);
+
+        Assert.Equal(expected, SupportPlatform.RequiresServiceRefresh(status, "0.4.33"));
+    }
 }

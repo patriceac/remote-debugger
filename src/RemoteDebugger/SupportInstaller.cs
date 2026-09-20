@@ -16,6 +16,90 @@ internal sealed record SupportProvisionRequest(
 
 internal static partial class SupportInstaller
 {
+    private static string RequireInstalledRefreshHost()
+    {
+        if (!Native.IsElevated()) throw new UnauthorizedAccessException("Support refresh requires the protected service identity.");
+        string source = Path.GetFullPath(Environment.ProcessPath ?? throw new InvalidOperationException("Current executable path is unavailable."));
+        if (!PathsEqual(source, SupportPlatformPaths.ApplicationExecutable))
+            throw new UnauthorizedAccessException("Support refresh must run from the Program Files installation.");
+        return source;
+    }
+
+    private static string ValidateRefreshSignalPath(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || !Path.IsPathFullyQualified(value) || value.Length > 1024)
+            throw new ArgumentException("Support refresh signal path is invalid.");
+        return Path.GetFullPath(value);
+    }
+
+    public static int LaunchServiceRefresh(string signalPath)
+    {
+        if (!Native.IsElevated()) return 3;
+        try
+        {
+            string source = RequireInstalledRefreshHost();
+            signalPath = ValidateRefreshSignalPath(signalPath);
+            if (File.Exists(signalPath)) throw new InvalidOperationException("Support refresh signal already exists.");
+            var start = new ProcessStartInfo(source)
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                WorkingDirectory = AppContext.BaseDirectory
+            };
+            start.ArgumentList.Add("--support-refresh-worker");
+            start.ArgumentList.Add(signalPath);
+            using var worker = Process.Start(start) ?? throw new IOException("Windows did not start the support refresh worker.");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            TryWriteMaintenanceError("support-refresh-launch-error.txt", ex);
+            return 2;
+        }
+    }
+
+    public static int RefreshServiceAfterSignal(string signalPath)
+    {
+        if (!Native.IsElevated()) return 3;
+        string? resultPath = null;
+        int result;
+        try
+        {
+            _ = RequireInstalledRefreshHost();
+            signalPath = ValidateRefreshSignalPath(signalPath);
+            resultPath = signalPath + ".result";
+            var deadline = Stopwatch.StartNew();
+            while (!File.Exists(signalPath))
+            {
+                if (deadline.Elapsed >= TimeSpan.FromMinutes(2))
+                    throw new System.TimeoutException("The agent did not release the existing support service for refresh.");
+                Thread.Sleep(100);
+            }
+            try { File.Delete(signalPath); } catch (IOException) { }
+            result = RefreshService();
+        }
+        catch (Exception ex)
+        {
+            TryWriteMaintenanceError("support-refresh-error.txt", ex);
+            result = 2;
+        }
+        if (resultPath != null) WriteRefreshResult(resultPath, result);
+        return result;
+    }
+
+    private static void WriteRefreshResult(string path, int result)
+    {
+        try
+        {
+            string temp = path + ".new";
+            File.WriteAllText(temp, result.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            File.Move(temp, path, true);
+        }
+        catch (Exception ex) { TryWriteMaintenanceError("support-refresh-result-error.txt", ex); }
+    }
+
     public static int StopForInstaller()
     {
         try
@@ -39,12 +123,10 @@ internal static partial class SupportInstaller
 
     public static int RefreshService()
     {
+        if (!Native.IsElevated()) return 3;
         try
         {
-            if (!Native.IsElevated()) return 3;
-            string source = Path.GetFullPath(Environment.ProcessPath ?? throw new InvalidOperationException("Current executable path is unavailable."));
-            if (!PathsEqual(source, SupportPlatformPaths.ApplicationExecutable))
-                throw new UnauthorizedAccessException("Support refresh must run from the Program Files installation.");
+            string source = RequireInstalledRefreshHost();
             if (!File.Exists(SupportPlatformPaths.ConfigurationPath)) return 0;
 
             var configuration = JsonSerializer.Deserialize<SupportConfiguration>(

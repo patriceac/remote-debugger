@@ -632,7 +632,9 @@ public sealed class InternetTransportTests
             Json.Element(new { agent = controller }), CancellationToken.None);
         Assert.True(result.AlreadyMatched);
         Assert.Same(controller, result.Controller);
-        Assert.Equal("update.confirm", Assert.Single(stream.Requests).Operation);
+        Assert.Collection(stream.Requests,
+            confirm => Assert.Equal("update.confirm", confirm.Operation),
+            refresh => Assert.Equal("platform.ensureCurrent", refresh.Operation));
     }
 
     [Fact]

@@ -39,6 +39,7 @@ internal static class SupportOperationTimeouts
     public const int PlatformStatusRoundTripSeconds = 75;
     public const int FirewallEnsureExecutionSeconds = 120;
     public const int FirewallEnsureRoundTripSeconds = 135;
+    public const int ServiceRefreshSeconds = 240;
     public const int PairingHandshakeSeconds = 120;
     public const int ControllerSynchronizationSeconds = 1200;
     public const int UpdateStageSeconds = 300;

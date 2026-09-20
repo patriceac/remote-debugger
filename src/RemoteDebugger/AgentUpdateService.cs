@@ -446,8 +446,10 @@ internal static class AgentUpdateClient
         if (IsExact(controller, agent))
         {
             RemoteClient.Require(await client.CallAsync("update.confirm", new { sha256 = controller.Sha256 }, ct, seconds: 30));
+            progress?.Report(new("verifying", controller.Size, controller.Size));
+            RemoteClient.Require(await client.CallAsync("platform.ensureCurrent", ct: ct, seconds: SupportOperationTimeouts.ServiceRefreshSeconds));
             progress?.Report(new("complete", controller.Size, controller.Size));
-            return new(true, false, controller, agent, null, "Agent already runs the controller's exact executable bytes.");
+            return new(true, false, controller, agent, null, "Agent executable is current and protected support was verified on the same release.");
         }
 
         UpdatePolicy.RequireNewerRelease(controller, agent);
@@ -538,9 +540,11 @@ internal static class AgentUpdateClient
             agent = finalSnapshot.GetProperty("agent").Deserialize<ExecutableSnapshot>(Json.Options) ?? throw new InvalidDataException("Updated agent did not return an executable snapshot.");
             UpdatePolicy.RequireExactControllerBinary(controller, agent);
             RemoteClient.Require(await client.CallAsync("update.confirm", new { sha256 = controller.Sha256, transactionId, ticket }, ct, seconds: 30));
+            progress?.Report(new("verifying", controller.Size, controller.Size));
+            RemoteClient.Require(await client.CallAsync("platform.ensureCurrent", ct: ct, seconds: SupportOperationTimeouts.ServiceRefreshSeconds));
             await client.CloseHeartbeatChannelAsync().ConfigureAwait(false);
             progress?.Report(new("complete", controller.Size, controller.Size));
-            return new(false, true, controller, agent, planned, "Agent replaced, relaunched, health-checked, and confirmed on the controller's exact executable bytes.");
+            return new(false, true, controller, agent, planned, "Agent and protected support replaced, relaunched, health-checked, and confirmed on the controller's current release.");
         }
         finally
         {

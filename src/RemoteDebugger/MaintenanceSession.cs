@@ -134,6 +134,31 @@ public sealed class MaintenanceSession(string root) : IDisposable
         finally { gate.Release(); }
     }
 
+    internal async Task<string> QueueSupportRefreshAsync(CancellationToken ct)
+    {
+        string signals = Path.Combine(dataRoot, "support-refresh");
+        Directory.CreateDirectory(signals);
+        string signalPath = Path.Combine(signals, Guid.NewGuid().ToString("N") + ".ready");
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct, lifetime.Token);
+        timeout.CancelAfter(TimeSpan.FromSeconds(30));
+        using var refreshPipe = await SupportPlatform.OpenBrokerPipeAsync(timeout.Token);
+        string openId = Guid.NewGuid().ToString();
+        await Wire.WriteAsync(refreshPipe, new Request(openId, "", "maintenance.open", Json.Element(new { dataRoot })), timeout.Token);
+        _ = RemoteClient.Require(await Wire.ReadAsync<Reply>(refreshPipe, timeout.Token));
+        string commandId = Guid.NewGuid().ToString();
+        var command = new Request(commandId, "", "maintenance.command", Json.Element(new
+        {
+            file = SupportPlatformPaths.ApplicationExecutable,
+            arguments = new[] { "--support-refresh-launch", signalPath }
+        }), 30);
+        MaintenanceLease.ValidateCommand(command);
+        await Wire.WriteAsync(refreshPipe, command, timeout.Token);
+        var result = RemoteClient.Require(await Wire.ReadAsync<Reply>(refreshPipe, timeout.Token));
+        if (result.Int("exitCode", -1) != 0)
+            throw new InvalidOperationException("The protected support refresh worker did not start.");
+        return signalPath;
+    }
+
     public void End() => DisposePipe();
     internal void EndInput() => input.End();
 

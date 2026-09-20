@@ -693,6 +693,14 @@ internal sealed partial class LabForm : Forms.Form
                 }
                 response = new { alive = product != null && !product.HasExited, ended = TryValue("agentHeading") == "Assistance terminée", paired, machine = Environment.MachineName, state, coordinationAlive = true, rollbackCandidateKilled };
             }
+            else if (request == "RD_LAB_PLATFORM")
+            {
+                JsonElement? platform = await TryPlatformStatusAsync();
+                string managedSha256 = File.Exists(application) ? await HashFileAsync(application) : "";
+                string serviceSha256 = brokerProvisioning != null && File.Exists(brokerProvisioning.ServiceExecutablePath)
+                    ? await HashFileAsync(brokerProvisioning.ServiceExecutablePath) : "";
+                response = new { platform, managedSha256, serviceSha256 };
+            }
             else if (request == "RD_LAB_DONE")
             {
                 response = new { completed = true, alive = product != null && !product.HasExited };
@@ -1356,6 +1364,19 @@ internal sealed partial class LabForm : Forms.Form
             var pairedAgent = await LabMessageAsync(peerHost, "RD_LAB_STATUS", retry: false);
             if (!pairedAgent.GetProperty("alive").GetBoolean() || !pairedAgent.GetProperty("paired").GetBoolean())
                 throw new InvalidOperationException("The replacement agent did not confirm its live paired state.");
+            if (updateVariant == "upgrade")
+            {
+                var platformEvidence = await LabMessageAsync(peerHost, "RD_LAB_PLATFORM", retry: false);
+                var platform = platformEvidence.GetProperty("platform").GetProperty("status");
+                string controllerVersion = FileVersionInfo.GetVersionInfo(application).FileVersion ?? "";
+                bool brokerCurrent = platform.TryGetProperty("available", out var available) && available.GetBoolean()
+                    && platform.TryGetProperty("interactiveInputAvailable", out var input) && input.GetBoolean()
+                    && UpdatePolicy.ReleaseVersion(platform.Str("serviceVersion")).Equals(UpdatePolicy.ReleaseVersion(controllerVersion))
+                    && platformEvidence.Str("managedSha256").Equals(controllerHash, StringComparison.OrdinalIgnoreCase)
+                    && platformEvidence.Str("serviceSha256").Equals(controllerHash, StringComparison.OrdinalIgnoreCase);
+                if (brokerCurrent) Pass("controller.support_refresh_after_update", "A live update replaces and verifies the protected broker before reporting completion", new { controllerHash, controllerVersion, platformEvidence });
+                else Fail("controller.support_refresh_after_update", "A live update replaces and verifies the protected broker before reporting completion", new { controllerHash, controllerVersion, platformEvidence });
+            }
             await ProbeVariantReconnectAsync(controllerHash);
             bool updateAgentExited = await ProbeTrayAndTerminateAsync();
             await LabMessageAsync(peerHost, "RD_LAB_DONE", retry: false);
