@@ -54,6 +54,18 @@ internal sealed partial class LabForm
             (Nav: "navDiagnostics", Name: "diagnostics", Controls: new[] { "execute", "arguments", "argumentsLabel", "resultLabel", "technicalIdentity", "output" })
         })
         {
+            bool navigationExpected = tab.Name == "connection" || connected;
+            bool navigationEnabled = Element(tab.Nav).Current.IsEnabled;
+            string id = $"ui.{phase}.{tab.Name}.{dpi}";
+            if (!navigationExpected)
+            {
+                bool onConnectionPage = TryValue("headerTitle") == TryValue("navConnection");
+                var unavailableEvidence = new { phase, navigationEnabled, onConnectionPage };
+                if (!navigationEnabled && onConnectionPage)
+                    Pass(id, "The operational tab is unavailable without an active support session", unavailableEvidence);
+                else Fail(id, "The operational tab is unavailable without an active support session", unavailableEvidence);
+                continue;
+            }
             Click(tab.Nav);
             await Task.Delay(500, stop.Token);
             if (connected && tab.Name == "screen") await WaitForLiveEvidenceAsync(30);
@@ -86,8 +98,7 @@ internal sealed partial class LabForm
             string footerStatus = TryValue("footerStatus");
             bool diagnosticState = tab.Name != "diagnostics" || (footerStatus == TryValue("diagnosticState") && (!connected || !footerStatus.StartsWith("Connectez-vous")));
             var evidence = new { phase, dpi, window.Width, window.Height, controls, actions, scopedFooter, identity, diagnosticState, footerStatus, footer = detail };
-            string id = $"ui.{phase}.{tab.Name}.{dpi}";
-            if (controls.All(control => control.contained) && actions && scopedFooter && identity && diagnosticState)
+            if (navigationEnabled && controls.All(control => control.contained) && actions && scopedFooter && identity && diagnosticState)
                 Pass(id, "The tab has visible controls, truthful availability, scoped status and current identity", evidence);
             else Fail(id, "The tab has visible controls, truthful availability, scoped status and current identity", evidence);
             CaptureDesktop($"ui-{phase}-{tab.Name}-{dpi}.png");

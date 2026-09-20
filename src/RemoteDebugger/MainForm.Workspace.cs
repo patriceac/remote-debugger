@@ -86,6 +86,7 @@ public sealed partial class MainForm
     {
         RefreshWanAddress();
         RefreshWakeControls();
+        navScreen.Enabled = navProcesses.Enabled = navFiles.Enabled = navDiagnostics.Enabled = CanUseControllerWorkspace(supportSession, terminating);
         if (executeButton == null) return;
         var state = WorkspaceAvailability.For(supportSession, heartbeatHealthy, pairingBusy || clientUpdateBusy || FleetBusy, terminating, action != null, selectedFilePath != null);
         pairButton.Enabled = host.Enabled = code.Enabled = state.CanPair;

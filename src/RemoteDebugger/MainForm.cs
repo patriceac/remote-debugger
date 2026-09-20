@@ -1142,6 +1142,7 @@ public sealed partial class MainForm : Forms.Form
 
     private void SelectControllerPage(int index)
     {
+        index = AvailableControllerPage(index, supportSession, terminating);
         if (liveStream != null && controllerPages.SelectedIndex == 1 && index != 1) StopStream(() => UiText.ViewingSuspended);
         controllerPages.SelectedIndex = index; UpdateHeader(); RefreshControllerControls(); RefreshFooter();
         if (index == 1 && supportSession && client != null && liveStream == null) _ = StartStreamAsync();
@@ -1535,7 +1536,7 @@ public sealed partial class MainForm : Forms.Form
             catch (RemoteOperationException ex) when (ex.Code is "access_denied" or "session_ended")
             {
                 if (!ct.IsCancellationRequested && ReferenceEquals(target, client))
-                    await TerminateControllerSessionAsync(selectControllerAfter: rolePages.SelectedIndex == 1);
+                    await TerminateControllerSessionAsync();
                 break;
             }
             catch (Exception ex)
@@ -2038,7 +2039,7 @@ public sealed partial class MainForm : Forms.Form
             return;
         }
         if (target == SessionTerminationTarget.Controller)
-            await TerminateControllerSessionAsync(selectControllerAfter: true);
+            await TerminateControllerSessionAsync();
     }
 
     private async Task TerminateAgentSessionAsync()
@@ -2062,7 +2063,7 @@ public sealed partial class MainForm : Forms.Form
         }
     }
 
-    private async Task TerminateControllerSessionAsync(bool selectControllerAfter)
+    private async Task TerminateControllerSessionAsync()
     {
         if (terminating || (client == null && !pairingBusy)) return;
         terminating = true; operationGeneration++; terminateSession.Enabled = false; roleAgent.Enabled = roleController.Enabled = false;
@@ -2071,6 +2072,8 @@ public sealed partial class MainForm : Forms.Form
         StopStream(() => UiText.SupportEnded); QueueInput(new { kind = "release" });
         RemoteClient? oldClient = client;
         sessionGeneration++; supportSession = false; heartbeatHealthy = false;
+        if (!quitting) { SelectRole(1); SelectControllerPage(0); }
+        else RefreshControllerControls();
         try
         {
             if (oldClient != null)
@@ -2083,10 +2086,7 @@ public sealed partial class MainForm : Forms.Form
         ClearControllerSession();
         roleAgent.Enabled = roleController.Enabled = true;
         terminateSession.Enabled = true; terminating = false;
-        if (selectControllerAfter && !quitting)
-        {
-            SelectRole(1); SelectControllerPage(0);
-        }
+        RefreshControllerControls();
         SetFooterMessage(() => UiText.SupportEnded); SetFooterDetail(() => UiText.SelectPcToRestart); RefreshFooter();
     }
 
@@ -2272,6 +2272,11 @@ public sealed partial class MainForm : Forms.Form
 
     internal static bool CanUpdateClient(bool supportSession, bool hasClient, bool pairingBusy, bool clientUpdateBusy, bool terminating, bool clientUpToDate = false) =>
         supportSession && hasClient && !pairingBusy && !clientUpdateBusy && !terminating && !clientUpToDate;
+
+    internal static bool CanUseControllerWorkspace(bool supportSession, bool terminating) => supportSession && !terminating;
+
+    internal static int AvailableControllerPage(int requestedPage, bool supportSession, bool terminating) =>
+        requestedPage == 0 || CanUseControllerWorkspace(supportSession, terminating) ? requestedPage : 0;
 
     internal static bool ShouldPreserveActiveSessionsOnRoleSwitch(
         int currentRole, int targetRole, bool agentRunning, bool controllerSessionActive) =>

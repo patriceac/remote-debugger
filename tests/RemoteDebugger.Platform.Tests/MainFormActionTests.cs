@@ -59,6 +59,21 @@ public sealed class MainFormActionTests
     public void MatchingClientBuildDisablesTheUpdateAction() =>
         Assert.False(MainForm.CanUpdateClient(true, true, false, false, false, clientUpToDate: true));
 
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, false)]
+    public void OperationalWorkspaceRequiresAnActiveNonTerminatingSession(bool supportSession, bool terminating, bool expected) =>
+        Assert.Equal(expected, MainForm.CanUseControllerWorkspace(supportSession, terminating));
+
+    [Theory]
+    [InlineData(0, false, false, 0)]
+    [InlineData(4, false, false, 0)]
+    [InlineData(3, true, false, 3)]
+    [InlineData(2, true, true, 0)]
+    public void DisconnectedControllerCanOnlyOpenConnection(int requestedPage, bool supportSession, bool terminating, int expected) =>
+        Assert.Equal(expected, MainForm.AvailableControllerPage(requestedPage, supportSession, terminating));
+
     [Fact]
     public void FleetProgressUsesOneCompactSharedUnit()
     {
