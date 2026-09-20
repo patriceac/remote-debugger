@@ -71,6 +71,14 @@ public sealed class SupportOperationTimeoutTests
 public sealed class FleetUpdateRecoveryTests
 {
     [Fact]
+    public void RollbackRelaunchRestoresTheBoundedSessionWithoutReplacementHealthReporting()
+    {
+        Assert.Equal(["--ui-language", "fr", "--agent", "--resume-update", "ticket"],
+            PrivilegedUpdateManager.RollbackArguments(["--ui-language", "fr"], "ticket"));
+        Assert.DoesNotContain("--update-transaction", PrivilegedUpdateManager.RollbackArguments([], "ticket"));
+    }
+
+    [Fact]
     public void OnlyDisconnectedUpdateOnlySessionsCanBeReclaimed()
     {
         var disconnected = new SupportSessionSnapshot(false, true, DateTimeOffset.UtcNow.AddMinutes(10),

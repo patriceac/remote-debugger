@@ -340,7 +340,7 @@ internal sealed class PrivilegedUpdateManager : IDisposable
         {
             if (relaunchPrevious && !IsOriginalProcessRunning(transaction))
                 _ = InteractiveProcessLauncher.Start(transaction.SessionId, transaction.UserSid, configuration.RegisteredApplicationPath,
-                    EnsureAgentArgument(transaction.OriginalArguments), transaction.WorkingDirectory);
+                    RollbackArguments(transaction.OriginalArguments, Unprotect(transaction.ProtectedReconnectTicket)), transaction.WorkingDirectory);
             ForceState(transaction.TransactionId, UpdateTransactionState.RolledBack, reason);
             return;
         }
@@ -355,7 +355,7 @@ internal sealed class PrivilegedUpdateManager : IDisposable
         UpdatePolicy.RequireExactControllerBinary(transaction.Previous, await SnapshotAsync(configuration.RegisteredApplicationPath, CancellationToken.None));
         if (relaunchPrevious && !IsOriginalProcessRunning(transaction))
             _ = InteractiveProcessLauncher.Start(transaction.SessionId, transaction.UserSid, configuration.RegisteredApplicationPath,
-                EnsureAgentArgument(transaction.OriginalArguments), transaction.WorkingDirectory);
+                RollbackArguments(transaction.OriginalArguments, Unprotect(transaction.ProtectedReconnectTicket)), transaction.WorkingDirectory);
         ForceState(transaction.TransactionId, UpdateTransactionState.RolledBack, reason);
     }
 
@@ -475,6 +475,9 @@ internal sealed class PrivilegedUpdateManager : IDisposable
 
     private static IReadOnlyList<string> EnsureAgentArgument(IReadOnlyList<string> arguments) =>
         arguments.Contains("--agent", StringComparer.OrdinalIgnoreCase) ? arguments : arguments.Concat(["--agent"]).ToArray();
+
+    internal static IReadOnlyList<string> RollbackArguments(IReadOnlyList<string> arguments, string ticket) =>
+        EnsureAgentArgument(arguments).Concat(["--resume-update", ticket]).ToArray();
 
     private static void ValidateArguments(string[] arguments)
     {
