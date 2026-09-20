@@ -27,7 +27,8 @@ internal sealed partial class LabForm
             product = loopbackController = LaunchLoopbackProduct(false, root);
             await WaitUiAsync(); WindowState = Forms.FormWindowState.Minimized;
             ResizeProductWindow(1060, 720);
-            await SelectDevice("WAN fixture A");
+            var firstDevice = await SelectDevice("WAN fixture A");
+            await CheckDoubleClickConnect(firstDevice);
             await Save("bedros.hd.free.fr");
             Check("default_port", "bedros.hd.free.fr:45832");
             await Save("bedros.hd.free.fr:65536");
@@ -56,13 +57,32 @@ internal sealed partial class LabForm
         finally { await CleanupLoopbackProcessesAsync(); }
         await FinishAsync();
 
-        async Task SelectDevice(string name)
+        async Task<AutomationElement> SelectDevice(string name)
         {
             await WaitForUiAsync(() => Find("peers", 100) != null, 10);
             var item = Find("peers")!.FindAll(TreeScope.Descendants, Condition.TrueCondition).Cast<AutomationElement>()
                 .First(element => element.Current.Name == name && element.TryGetCurrentPattern(SelectionItemPattern.Pattern, out _));
             ((SelectionItemPattern)item.GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
             await Task.Delay(250, stop.Token);
+            return item;
+        }
+
+        async Task CheckDoubleClickConnect(AutomationElement item)
+        {
+            await WaitForUiAsync(() => Find("pair")?.Current.IsEnabled == true, 10);
+            var bounds = item.Current.BoundingRectangle;
+            var point = new System.Drawing.Point((int)(bounds.Left + 16), (int)(bounds.Top + bounds.Height / 2));
+            Native.Mouse(product!.Id, point.X, point.Y);
+            await Task.Delay(100, stop.Token);
+            Native.Mouse(product.Id, point.X, point.Y);
+            bool started;
+            try { await WaitForUiAsync(() => Find("pair")?.Current.IsEnabled == false, 3); started = true; }
+            catch (TimeoutException) { started = false; }
+            var evidence = new { started, client = item.Current.Name };
+            const string requirement = "Double-clicking a client entry starts the same connection action as Connect";
+            if (started) Pass("connection.client_double_click", requirement, evidence);
+            else Fail("connection.client_double_click", requirement, evidence);
+            await WaitForUiAsync(() => Find("pair")?.Current.IsEnabled == true, 15);
         }
 
         async Task Save(string value)

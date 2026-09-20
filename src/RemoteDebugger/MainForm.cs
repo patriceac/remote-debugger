@@ -626,6 +626,7 @@ public sealed partial class MainForm : Forms.Form
         adminMaintenanceToggle.CheckedChanged += async (_, _) => await ApplyAdminMaintenancePreferenceAsync();
         discoverButton.Click += async (_, _) => await DiscoverAsync(true);
         peers.SelectedIndexChanged += (_, _) => SelectPeerFromList();
+        peers.MouseDoubleClick += async (_, e) => { if (peers.HitTest(e.Location).Item?.Tag is Peer) await PairSelectedAsync(); };
         host.TextChanged += (_, _) => { if (selectedPeer?.Host != host.Text.Trim()) { selectedPeer = null; selectedFingerprint = ""; selectedPeerName.SetText(() => UiText.EnterPc); selectedPeerAddress.SetText(() => UiText.IdentityBoundToCode); } };
         code.KeyPress += (_, e) => { if (!char.IsControl(e.KeyChar) && !char.IsAsciiDigit(e.KeyChar)) e.Handled = true; };
         code.KeyDown += async (_, e) => { if (e.KeyCode == Forms.Keys.Enter) { e.SuppressKeyPress = true; await PairSelectedAsync(); } };
