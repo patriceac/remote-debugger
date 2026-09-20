@@ -87,7 +87,7 @@ public static class DesktopCapture
         finally { SetThreadDpiAwarenessContext(old); }
     }
 
-    internal static EncodedJpeg EncodeJpeg(CapturedDesktop capture, int maxWidth, int quality, long sequence)
+    internal static EncodedJpeg EncodeJpeg(CapturedDesktop capture, int maxWidth, int quality, long sequence, bool includeBase64 = true)
     {
         var sw = Stopwatch.StartNew();
         int width = maxWidth <= 0 ? capture.Bitmap.Width : Math.Min(capture.Bitmap.Width, Math.Clamp(maxWidth, 320, 3840));
@@ -100,7 +100,7 @@ public static class DesktopCapture
         double jpegMs = sw.Elapsed.TotalMilliseconds - jpegStart;
         if (ms.Length > 2 * 1024 * 1024) throw new IOException("Encoded image exceeds 2 MiB; lower maxWidth or quality.");
         byte[] bytes = ms.ToArray();
-        return new EncodedJpeg(new ScreenFrame(sequence, capture.CapturedUtc, capture.Geometry, width, height, capture.CopyMs + sw.Elapsed.TotalMilliseconds, "image/jpeg", Convert.ToBase64String(bytes), capture.CopyMs, jpegMs), bytes);
+        return new EncodedJpeg(new ScreenFrame(sequence, capture.CapturedUtc, capture.Geometry, width, height, capture.CopyMs + sw.Elapsed.TotalMilliseconds, "image/jpeg", includeBase64 ? Convert.ToBase64String(bytes) : "", capture.CopyMs, jpegMs), bytes);
     }
 
     internal static unsafe string Fingerprint(Bitmap bitmap, Rectangle bounds, string layoutId)

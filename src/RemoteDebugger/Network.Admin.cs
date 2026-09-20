@@ -8,7 +8,7 @@ public sealed partial class AgentServer
 {
     internal static bool IsUpdateSessionOperation(string operation) => operation is
         "update.open" or "update.snapshot" or "update.challenge" or "update.begin" or "update.status" or
-        "update.chunk" or "update.chunk.binary" or "update.stage" or "update.commit" or "update.resume" or "update.health" or
+        "update.chunk" or "update.chunk.binary" or "update.transfer" or "update.stage" or "update.commit" or "update.resume" or "update.health" or
         "update.confirm" or "update.cancel" or "update.release" or "session.heartbeat" or "session.disconnect";
 
     private async Task ServeAdminAsync(Stream stream, Request request, CancellationToken ct)
@@ -110,6 +110,6 @@ public sealed partial class RemoteClient
     internal async Task ReleaseUpdateAsync(CancellationToken ct)
     {
         try { Require(await CallAsync("update.release", ct: ct, seconds: 35)); }
-        finally { await CloseUpdateChannelAsync(); }
+        finally { await CloseUpdateChannelAsync(); await commands.ClearAsync(); }
     }
 }

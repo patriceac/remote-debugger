@@ -137,46 +137,52 @@ internal sealed class SupportBrokerHost : IDisposable
             {
                 var caller = SupportPipeIdentity.VerifyClient(pipe, configuration);
                 using var requestTimeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
-                requestTimeout.CancelAfter(TimeSpan.FromSeconds(35));
-                var request = await Wire.ReadAsync<Request>(pipe, requestTimeout.Token);
-                requestId = request.Id;
-                if (!Guid.TryParse(request.Id, out _)) throw new ArgumentException("Broker request id must be a UUID.");
-                if (request.Operation == "input.open")
+                while (true)
                 {
-                    await InteractiveInputBroker.ServeAsync(pipe, caller, request, lifetime);
-                    return;
-                }
-                if (request.Operation == "maintenance.open")
-                {
-                    var lease = caller.CreateLease();
-                    lease.Validate();
-                    await Wire.WriteAsync(pipe, Reply.Success(request.Id, new { active = true, leaseId = lease.LeaseId, processId = lease.ProcessId, sessionId = lease.SessionId }), requestTimeout.Token);
-                    await ServeMaintenanceAsync(pipe, lease, lifetime);
-                    return;
-                }
+                    requestTimeout.CancelAfter(TimeSpan.FromSeconds(35));
+                    var request = await Wire.ReadAsync<Request>(pipe, requestTimeout.Token);
+                    requestId = request.Id;
+                    if (!Guid.TryParse(request.Id, out _)) throw new ArgumentException("Broker request id must be a UUID.");
+                    if (request.Operation == "input.open")
+                    {
+                        await InteractiveInputBroker.ServeAsync(pipe, caller, request, lifetime);
+                        return;
+                    }
+                    if (request.Operation == "maintenance.open")
+                    {
+                        var lease = caller.CreateLease();
+                        lease.Validate();
+                        await Wire.WriteAsync(pipe, Reply.Success(request.Id, new { active = true, leaseId = lease.LeaseId, processId = lease.ProcessId, sessionId = lease.SessionId }), requestTimeout.Token);
+                        await ServeMaintenanceAsync(pipe, lease, lifetime);
+                        return;
+                    }
 
-                requestTimeout.CancelAfter(request.Operation switch
-                {
-                    "update.stage" => TimeSpan.FromSeconds(SupportOperationTimeouts.UpdateStageSeconds),
-                    "update.arm" => TimeSpan.FromMinutes(1),
-                    "platform.status" => TimeSpan.FromSeconds(SupportOperationTimeouts.PlatformStatusExecutionSeconds),
-                    "firewall.ensure" => TimeSpan.FromSeconds(SupportOperationTimeouts.FirewallEnsureExecutionSeconds),
-                    _ => TimeSpan.FromSeconds(35)
-                });
+                    requestTimeout.CancelAfter(request.Operation switch
+                    {
+                        "update.stage" => TimeSpan.FromSeconds(SupportOperationTimeouts.UpdateStageSeconds),
+                        "update.arm" => TimeSpan.FromMinutes(1),
+                        "platform.status" => TimeSpan.FromSeconds(SupportOperationTimeouts.PlatformStatusExecutionSeconds),
+                        "firewall.ensure" => TimeSpan.FromSeconds(SupportOperationTimeouts.FirewallEnsureExecutionSeconds),
+                        _ => TimeSpan.FromSeconds(35)
+                    });
 
-                object result = request.Operation switch
-                {
-                    "platform.status" => await GetStatusAsync(caller, requestTimeout.Token),
-                    "firewall.ensure" => await FirewallManager.EnsureAsync(configuration.RegisteredApplicationPath, requestTimeout.Token),
-                    "update.stage" => await updates.StageAsync(caller, request.Args, requestTimeout.Token),
-                    "update.arm" => await updates.ArmAsync(caller, request.Args, requestTimeout.Token),
-                    "update.startupHealthy" => await updates.ReportStartupHealthyAsync(caller, request.Args, requestTimeout.Token),
-                    "update.remoteHealthy" => await updates.ReportRemoteHealthyAsync(caller, request.Args, requestTimeout.Token),
-                    "update.status" => updates.Status(request.Args),
-                    "update.cancel" => await updates.CancelAsync(request.Args, requestTimeout.Token),
-                    _ => throw new ArgumentException("Unsupported privileged broker operation.")
-                };
-                await Wire.WriteAsync(pipe, Reply.Success(request.Id, result), requestTimeout.Token);
+                    object result = request.Operation switch
+                    {
+                        "platform.status" => await GetStatusAsync(caller, requestTimeout.Token),
+                        "firewall.ensure" => await FirewallManager.EnsureAsync(configuration.RegisteredApplicationPath, requestTimeout.Token),
+                        "update.stage" => await updates.StageAsync(caller, request.Args, requestTimeout.Token),
+                        "update.arm" => await updates.ArmAsync(caller, request.Args, requestTimeout.Token),
+                        "update.startupHealthy" => await updates.ReportStartupHealthyAsync(caller, request.Args, requestTimeout.Token),
+                        "update.remoteHealthy" => await updates.ReportRemoteHealthyAsync(caller, request.Args, requestTimeout.Token),
+                        "update.status" => updates.Status(request.Args),
+                        "update.cancel" => await updates.CancelAsync(request.Args, requestTimeout.Token),
+                        _ => throw new ArgumentException("Unsupported privileged broker operation.")
+                    };
+                    bool keepAlive = request.KeepAlive && request.Operation != "update.arm";
+                    await Wire.WriteAsync(pipe, Reply.Success(request.Id, result) with { KeepAlive = keepAlive }, requestTimeout.Token);
+                    if (!keepAlive) return;
+                    Volatile.Write(ref lastActivity, DateTime.UtcNow.Ticks);
+                }
             }
             catch (Exception ex) when (ex is ArgumentException or InvalidDataException or InvalidOperationException or UnauthorizedAccessException or IOException or OperationCanceledException)
             {

@@ -174,7 +174,7 @@ public sealed class AgentUpdateService : IDisposable
             Volatile.Write(ref activeTransactionId, transactionId);
             long offset = new FileInfo(partial).Length;
             SetProgress("transferring", offset, candidate.Size);
-            return new { transactionId, offset, candidate.Size };
+            return new { transactionId, offset, candidate.Size, bulkTransfer = true };
         }
         string temp = meta + ".new";
         await File.WriteAllTextAsync(temp, JsonSerializer.Serialize(new AgentUpdateTransfer(candidate, DateTimeOffset.UtcNow), Json.Options), ct);
@@ -182,7 +182,7 @@ public sealed class AgentUpdateService : IDisposable
         using (File.Create(partial)) { }
         Volatile.Write(ref activeTransactionId, transactionId);
         SetProgress("transferring", 0, candidate.Size);
-        return new { transactionId, offset = 0L, candidate.Size };
+        return new { transactionId, offset = 0L, candidate.Size, bulkTransfer = true };
     }
 
     private async Task<object> TransferStatusAsync(JsonElement args, CancellationToken ct)
@@ -192,6 +192,25 @@ public sealed class AgentUpdateService : IDisposable
         long offset = new FileInfo(PartialPath(transactionId)).Length;
         SetProgress("transferring", offset, transfer.Candidate.Size);
         return new { transactionId, offset, transfer.Candidate.Size };
+    }
+
+    internal async Task ReceiveAsync(Stream channel, Request request, Action activity, CancellationToken ct)
+    {
+        await transferGate.WaitAsync(ct);
+        try
+        {
+            string transactionId = ValidateTransactionId(request.Args.Str("transactionId"));
+            var transfer = await LoadTransferAsync(transactionId, ct);
+            await using var file = new FileStream(PartialPath(transactionId), FileMode.Open, FileAccess.ReadWrite,
+                FileShare.None, BulkTransfer.ChunkSize, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            if (file.Length > transfer.Candidate.Size) throw new InvalidDataException("Update exceeds its declared size.");
+            file.Position = file.Length;
+            await Wire.WriteAsync(channel, Reply.Success(request.Id, new { offset = file.Length, size = transfer.Candidate.Size }), ct);
+            await BulkTransfer.ReceiveAsync(channel, file, file.Length, transfer.Candidate.Size,
+                bytes => { SetProgress("transferring", bytes, transfer.Candidate.Size); activity(); }, ct);
+            await Wire.WriteAsync(channel, Reply.Success(request.Id, new { offset = file.Length }), ct);
+        }
+        finally { transferGate.Release(); }
     }
 
     private async Task<object> ChunkAsync(JsonElement args, ReadOnlyMemory<byte> data, CancellationToken ct)
@@ -450,6 +469,11 @@ internal static class AgentUpdateClient
             await using (var input = File.Open(controller.Path, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
                 input.Position = offset;
+                if (begin.TryGetProperty("bulkTransfer", out var bulk) && bulk.ValueKind == JsonValueKind.True)
+                {
+                    await client.TransferUpdateAsync(transactionId, input, controller.Size, progress, ct);
+                    offset = controller.Size;
+                }
                 byte[] buffer = new byte[512 * 1024];
                 while (offset < input.Length)
                 {

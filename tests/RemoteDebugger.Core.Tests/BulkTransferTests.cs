@@ -28,18 +28,23 @@ public sealed class BulkTransferTests
     }
 
     [Fact]
-    public async Task SenderStopsAtOneWindowWhenAcknowledgementIsInvalid()
+    public async Task SenderPipelinesButStopsAtItsBoundWhenAcknowledgementIsInvalid()
     {
         using var acknowledgements = new MemoryStream();
         await Wire.WriteAsync(acknowledgements, 0L, CancellationToken.None); acknowledgements.Position = 0;
         using var transmitted = new MemoryStream();
-        using var channel = new DuplexStream(acknowledgements, transmitted);
-        using var source = new MemoryStream(new byte[BulkTransfer.WindowSize * 3]);
-        await Assert.ThrowsAsync<IOException>(() => BulkTransfer.SendAsync(source, channel, 0, source.Length, null, CancellationToken.None));
-        Assert.Equal(BulkTransfer.WindowSize, transmitted.Length);
+        var readGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var channel = new DuplexStream(acknowledgements, transmitted, readGate.Task);
+        using var source = new MemoryStream(new byte[BulkTransfer.WindowSize * (BulkTransfer.WindowsInFlight + 1)]);
+        var send = BulkTransfer.SendAsync(source, channel, 0, source.Length, null, CancellationToken.None);
+        Assert.False(send.IsCompleted);
+        Assert.Equal(BulkTransfer.WindowSize * BulkTransfer.WindowsInFlight, transmitted.Length);
+        readGate.SetResult();
+        await Assert.ThrowsAsync<IOException>(() => send.WaitAsync(TimeSpan.FromSeconds(2)));
+        Assert.Equal(BulkTransfer.WindowSize * BulkTransfer.WindowsInFlight, transmitted.Length);
     }
 
-    private sealed class DuplexStream(Stream input, Stream output) : Stream
+    private sealed class DuplexStream(Stream input, Stream output, Task? readGate = null) : Stream
     {
         public override bool CanRead => true;
         public override bool CanSeek => false;
@@ -48,7 +53,8 @@ public sealed class BulkTransferTests
         public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
         public override int Read(byte[] buffer, int offset, int count) => input.Read(buffer, offset, count);
         public override void Write(byte[] buffer, int offset, int count) => output.Write(buffer, offset, count);
-        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken ct = default) => input.ReadAsync(buffer, ct);
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken ct = default)
+        { if (readGate != null) await readGate.WaitAsync(ct); return await input.ReadAsync(buffer, ct); }
         public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken ct = default) => output.WriteAsync(buffer, ct);
         public override void Flush() { }
         public override Task FlushAsync(CancellationToken ct) => Task.CompletedTask;

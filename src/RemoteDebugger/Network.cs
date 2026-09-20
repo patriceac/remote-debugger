@@ -480,6 +480,8 @@ public sealed partial class AgentServer : IDisposable
         CancellationTokenRegistration persistentUpdateGrant = default;
         bool persistentHeartbeat = false;
         CancellationTokenRegistration heartbeatGrant = default;
+        bool persistentCommand = false;
+        CancellationTokenRegistration commandGrant = default;
         using (var tls = new SslStream(transport, true))
         using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(stop.Token))
         {
@@ -555,6 +557,11 @@ public sealed partial class AgentServer : IDisposable
                             finally { updateGate.Release(); }
                         }
                         bool resumePending = resumed != null && !Volatile.Read(ref resumeAccepted);
+                        if (authorized && r.KeepAlive && !persistentCommand)
+                        {
+                            persistentCommand = true; commandGrant = grant.Register(timeout.Cancel);
+                        }
+                        if (persistentCommand) timeout.CancelAfter(TimeSpan.FromMinutes(6));
                         if (resumePending && resumed!.ExpiresUtc <= DateTimeOffset.UtcNow) { session.End(); authorized = false; }
                         if (authorized && !resumePending && r.Operation != "session.disconnect") session.Observe();
                         if (!authorized || session.ShouldExit) reply = Reply.Failure(r.Id, "access_denied", "This support session is not authorized or has ended.");
@@ -633,6 +640,20 @@ public sealed partial class AgentServer : IDisposable
                             timeout.CancelAfter(TimeSpan.FromHours(12));
                             reply = Reply.Success(r.Id, new { ready = true, binaryChunks = true });
                         }
+                        else if (r.Operation == "update.transfer")
+                        {
+                            await updateGate.WaitAsync(timeout.Token);
+                            try
+                            {
+                                timeout.CancelAfter(TimeSpan.FromHours(12));
+                                using var transferGrant = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, grant);
+                                running[r.Id] = transferGrant;
+                                try { await updates.ReceiveAsync(tls, r, session.Observe, transferGrant.Token); }
+                                finally { running.TryRemove(r.Id, out _); }
+                            }
+                            finally { updateGate.Release(); }
+                            return;
+                        }
                         else if (updates.IsOperation(r.Operation))
                         {
                             await updateGate.WaitAsync(timeout.Token);
@@ -662,7 +683,7 @@ public sealed partial class AgentServer : IDisposable
                                 }
                                 try
                                 {
-                                    await Wire.WriteAsync(tls, reply, timeout.Token);
+                                    await Wire.WriteAsync(tls, reply with { KeepAlive = persistentCommand && reply.Ok }, timeout.Token);
                                 }
                                 catch when (r.Operation == "update.commit" && reply.Ok)
                                 {
@@ -679,7 +700,7 @@ public sealed partial class AgentServer : IDisposable
                                 updates.NotifyReplySent(r, reply);
                             }
                             finally { updateGate.Release(); }
-                            if (persistentUpdate) { r = await Wire.ReadAsync<Request>(tls, timeout.Token); continue; }
+                            if (persistentUpdate || (persistentCommand && reply.Ok)) { r = await Wire.ReadAsync<Request>(tls, timeout.Token); continue; }
                             return;
                         }
                         else if (r.Operation == "connection.candidates")
@@ -751,8 +772,8 @@ public sealed partial class AgentServer : IDisposable
                             reply = entry.Signature == signature ? await entry.Job.Value : Reply.Failure(r.Id, "id_conflict", "Request id already used with different arguments.");
                         }
                     }
-                    await Wire.WriteAsync(tls, reply, timeout.Token);
-                    if (r.Operation == "session.disconnect" || (!reply.Ok && persistentHeartbeat) || (!persistentInput && !persistentUpdate && !persistentHeartbeat)) return;
+                    await Wire.WriteAsync(tls, reply with { KeepAlive = persistentCommand && reply.Ok && r.Operation != "session.disconnect" }, timeout.Token);
+                    if (r.Operation == "session.disconnect" || (!reply.Ok && (persistentHeartbeat || persistentCommand)) || (!persistentInput && !persistentUpdate && !persistentHeartbeat && !persistentCommand)) return;
                     r = await Wire.ReadAsync<Request>(tls, timeout.Token);
                 }
             }
@@ -763,6 +784,7 @@ public sealed partial class AgentServer : IDisposable
                 persistentInputGrant.Dispose();
                 persistentUpdateGrant.Dispose();
                 heartbeatGrant.Dispose();
+                commandGrant.Dispose();
                 if (persistentInput) { Operations.Maintenance.EndInput(); Native.ReleaseAllInput(); }
                 slots.Release();
             }
@@ -772,6 +794,7 @@ public sealed partial class AgentServer : IDisposable
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct); cts.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(request.TimeoutSeconds, 1, 300))); running[request.Id] = cts;
         if (request.Args.Str("codec") == "auto") { await StreamAdaptiveAsync(tls, request, cts.Token); return; }
+        await using var acknowledgements = new StreamAcknowledgements(tls, cts.Token, session.Observe);
         int fps = StreamPolicy.ClampFps(request.Args.Int("fps", StreamPolicy.MaximumFps)); long sequence = 0; string? previousFingerprint = null;
         using var captureBuffer = new CaptureBuffer();
         long epoch = Volatile.Read(ref captureEpoch); int unchanged = 0;
@@ -780,6 +803,7 @@ public sealed partial class AgentServer : IDisposable
         {
             while (!cts.IsCancellationRequested)
             {
+                await acknowledgements.ObserveAsync();
                 var started = System.Diagnostics.Stopwatch.StartNew();
                 long currentEpoch = Volatile.Read(ref captureEpoch);
                 if (currentEpoch != epoch) { previousFingerprint = null; epoch = currentEpoch; unchanged = 0; }
@@ -792,12 +816,7 @@ public sealed partial class AgentServer : IDisposable
                 }
                 unchanged = 0;
                 await Wire.WriteAsync(tls, Reply.Success(request.Id, frame), cts.Token);
-                // One frame in flight; the next capture starts only after receipt.
-                // The controller independently replaces any unrendered older frame.
-                using var ackTimeout = CancellationTokenSource.CreateLinkedTokenSource(cts.Token); ackTimeout.CancelAfter(5000);
-                var ack = await Wire.ReadAsync<System.Text.Json.JsonElement>(tls, ackTimeout.Token);
-                if (ack.Long("sequence", -1) != frame.Sequence) throw new InvalidDataException("Invalid stream acknowledgement.");
-                session.Observe();
+                await acknowledgements.AddAsync(frame.Sequence);
                 sequence++;
                 double wait = 1000.0 / fps - started.Elapsed.TotalMilliseconds; if (wait > 0) await Task.Delay(TimeSpan.FromMilliseconds(wait), cts.Token);
             }
@@ -810,7 +829,8 @@ public sealed partial class AgentServer : IDisposable
         int fps = StreamPolicy.ClampFps(request.Args.Int("fps", StreamPolicy.MaximumFps));
         int monitor = request.Args.Int("monitor"); int maxWidth = request.Args.Int("maxWidth", 1920); int quality = request.Args.Int("quality", 65);
         bool controllerCanH264 = !request.Args.TryGetProperty("h264", out var h264Support) || h264Support.ValueKind != JsonValueKind.False;
-        long sequence = 0; string? previousFingerprint = null; var state = new AdaptiveStreamState();
+        await using var acknowledgements = new StreamAcknowledgements(tls, ct, session.Observe);
+        long sequence = 0; string? previousFingerprint = null; var state = new AdaptiveStreamState(acknowledgements);
         using var captureBuffer = new CaptureBuffer();
         long epoch = Volatile.Read(ref captureEpoch); int unchanged = 0;
         try
@@ -845,6 +865,7 @@ public sealed partial class AgentServer : IDisposable
 
             while (!ct.IsCancellationRequested)
             {
+                await acknowledgements.ObserveAsync();
                 var started = System.Diagnostics.Stopwatch.StartNew();
                 long currentEpoch = Volatile.Read(ref captureEpoch);
                 if (currentEpoch != epoch) { previousFingerprint = null; epoch = currentEpoch; unchanged = 0; }
@@ -879,8 +900,9 @@ public sealed partial class AgentServer : IDisposable
         }
     }
 
-    private sealed class AdaptiveStreamState
+    private sealed class AdaptiveStreamState(StreamAcknowledgements acknowledgements)
     {
+        public StreamAcknowledgements Acknowledgements { get; } = acknowledgements;
         public H264Encoder? Encoder;
         public string Codec = "jpeg";
         public string? FallbackReason;
@@ -904,7 +926,7 @@ public sealed partial class AgentServer : IDisposable
                 {
                     state.FallbackReason = $"x264 encode exceeded {StreamPolicy.H264EncodeBudgetMs(fps):F0} ms for {StreamPolicy.H264SlowFrameCount} frames";
                     state.Encoder.Dispose(); state.Encoder = null; state.Codec = "jpeg"; state.SlowFrames = 0;
-                    await SendCodecChangeAsync(tls, state.Codec, state.FallbackReason, ct);
+                    await SendCodecChangeAsync(tls, state, ct);
                 }
                 else { kind = StreamPacketKind.H264; bytes = encoded.Data; }
             }
@@ -912,24 +934,22 @@ public sealed partial class AgentServer : IDisposable
             {
                 state.FallbackReason = "x264 encode failed: " + ex.Message;
                 state.Encoder?.Dispose(); state.Encoder = null; state.Codec = "jpeg"; state.SlowFrames = 0;
-                await SendCodecChangeAsync(tls, state.Codec, state.FallbackReason, ct);
+                await SendCodecChangeAsync(tls, state, ct);
             }
         }
         if (state.Codec == "jpeg")
         {
-            var encoded = DesktopCapture.EncodeJpeg(capture, maxWidth, quality, sequence); bytes = encoded.Bytes; encodeMs = encoded.Frame.CaptureEncodeMs; kind = StreamPacketKind.Jpeg;
+            var encoded = DesktopCapture.EncodeJpeg(capture, maxWidth, quality, sequence, includeBase64: false); bytes = encoded.Bytes; encodeMs = encoded.Frame.CaptureEncodeMs; kind = StreamPacketKind.Jpeg;
         }
         if (bytes is null) throw new InvalidOperationException("Adaptive stream produced no frame.");
         await Wire.WriteStreamPacketAsync(tls, new StreamPacket(kind, sequence, capture.CapturedUtc, encodeMs, bytes), ct);
-        using var ackTimeout = CancellationTokenSource.CreateLinkedTokenSource(ct); ackTimeout.CancelAfter(5000);
-        var ack = await Wire.ReadAsync<JsonElement>(tls, ackTimeout.Token);
-        if (ack.Long("sequence", -1) != sequence) throw new InvalidDataException("Invalid stream acknowledgement.");
-        session.Observe();
+        await state.Acknowledgements.AddAsync(sequence);
     }
 
-    private async Task SendCodecChangeAsync(SslStream tls, string codec, string reason, CancellationToken ct)
+    private async Task SendCodecChangeAsync(SslStream tls, AdaptiveStreamState state, CancellationToken ct)
     {
-        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(new { type = "codec_changed", codec, reason }, Json.Options);
+        await state.Acknowledgements.DrainAsync();
+        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(new { type = "codec_changed", codec = state.Codec, reason = state.FallbackReason }, Json.Options);
         await Wire.WriteStreamPacketAsync(tls, new StreamPacket(StreamPacketKind.Control, -1, DateTimeOffset.UtcNow, 0, payload), ct);
         using var ackTimeout = CancellationTokenSource.CreateLinkedTokenSource(ct); ackTimeout.CancelAfter(5000);
         var ack = await Wire.ReadAsync<JsonElement>(tls, ackTimeout.Token);
@@ -993,6 +1013,7 @@ public sealed partial class RemoteClient
 {
     private readonly string controllerBinarySha256 = ExecutableIdentity.Sha256;
     private readonly Func<Connection, CancellationToken, Task<Stream>> transportFactory;
+    private readonly RpcConnectionPool commands;
     private readonly SemaphoreSlim inputGate = new(1, 1);
     private readonly SemaphoreSlim updateGate = new(1, 1);
     private PersistentChannel? inputChannel;
@@ -1015,6 +1036,7 @@ public sealed partial class RemoteClient
     {
         Connection = connection ?? throw new ArgumentNullException(nameof(connection));
         this.transportFactory = transportFactory ?? throw new ArgumentNullException(nameof(transportFactory));
+        commands = new(OpenTransportAsync);
     }
     public static RemoteClient Load(string? path = null) => new(JsonSerializer.Deserialize<Connection>(Vault.Read(path ?? DefaultPath), Json.Options)!);
     public void Save(string? path = null) => Vault.Save(path ?? DefaultPath, JsonSerializer.SerializeToUtf8Bytes(Connection, Json.Options));
@@ -1116,6 +1138,7 @@ public sealed partial class RemoteClient
     }
     internal async Task CloseHeartbeatChannelAsync()
     {
+        await commands.ClearAsync().ConfigureAwait(false);
         await heartbeatGate.WaitAsync().ConfigureAwait(false);
         try { var channel = heartbeatChannel; heartbeatChannel = null; legacyHeartbeats = false; if (channel != null) await channel.DisposeAsync().ConfigureAwait(false); }
         finally { heartbeatGate.Release(); }
@@ -1151,9 +1174,9 @@ public sealed partial class RemoteClient
     public async Task<Reply> CallAsync(string operation, object? args = null, CancellationToken ct = default, string? id = null, int seconds = 60)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(seconds, 1, 300) + 15));
-        await using var tls = await OpenTransportAsync(timeout.Token).ConfigureAwait(false);
+        if (discoverRoutes) await RefreshRoutesIfNeededAsync(timeout.Token).ConfigureAwait(false);
         var request = new Request(id ?? Guid.NewGuid().ToString(), Connection.Token, operation, args is JsonElement e ? e : Json.Element(args ?? new { }), seconds, controllerBinarySha256);
-        await Wire.WriteAsync(tls, request, timeout.Token); return await Wire.ReadAsync<Reply>(tls, timeout.Token);
+        return await commands.CallAsync(request, timeout.Token, Connection).ConfigureAwait(false);
     }
     public async Task<Reply> SendInputAsync(object? args = null, CancellationToken ct = default, int seconds = 3)
     {

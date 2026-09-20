@@ -54,6 +54,7 @@ public sealed record UpdateExitPlan(string TransactionId, DateTimeOffset Deadlin
 
 public static class SupportPlatform
 {
+    private static readonly RpcConnectionPool brokerConnections = new(async ct => await OpenBrokerPipeAsync(ct), capacity: 1);
     public static event Action? ManagedRelaunchRequested;
     // Running agent identity. Candidate and installed bytes are verified again
     // at the privileged staging / installation boundary.
@@ -263,16 +264,13 @@ public static class SupportPlatform
         timeout.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
         try
         {
-            using var pipe = await OpenBrokerPipeAsync(timeout.Token);
             string id = Guid.NewGuid().ToString();
-            await Wire.WriteAsync(pipe, new Request(id, "", operation, args is JsonElement element ? element : Json.Element(args)), timeout.Token);
-            var reply = await Wire.ReadAsync<Reply>(pipe, timeout.Token);
+            var reply = await brokerConnections.CallAsync(new Request(id, "", operation, args is JsonElement element ? element : Json.Element(args)), timeout.Token);
             if (!reply.Ok)
             {
                 if (reply.Error == "broker_identity_rejected") throw new UnauthorizedAccessException(reply.Message);
                 throw new InvalidOperationException($"{reply.Error}: {reply.Message}");
             }
-            if (!string.Equals(reply.Id, id, StringComparison.Ordinal)) throw new InvalidDataException("The privileged broker reply id did not match the request.");
             return reply.Data;
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)

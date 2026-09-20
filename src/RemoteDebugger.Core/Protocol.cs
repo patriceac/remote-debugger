@@ -15,8 +15,8 @@ public static class Json
     public static long Long(this JsonElement e, string key, long fallback = 0) => e.ValueKind == JsonValueKind.Object && e.TryGetProperty(key, out var v) ? v.GetInt64() : fallback;
     public static string[] Strings(this JsonElement e, string key) => e.ValueKind == JsonValueKind.Object && e.TryGetProperty(key, out var v) ? v.EnumerateArray().Select(x => x.GetString() ?? "").ToArray() : [];
 }
-public sealed record Request(string Id, string Token, string Operation, JsonElement Args, int TimeoutSeconds = 60, string? BinarySha256 = null);
-public sealed record Reply(string Id, bool Ok, JsonElement Data, string? Error = null, string? Message = null)
+public sealed record Request(string Id, string Token, string Operation, JsonElement Args, int TimeoutSeconds = 60, string? BinarySha256 = null, bool KeepAlive = false);
+public sealed record Reply(string Id, bool Ok, JsonElement Data, string? Error = null, string? Message = null, bool KeepAlive = false)
 {
     public static Reply Success(string id, object? data) => new(id, true, Json.Element(data));
     public static Reply Failure(string id, string error, string message) => new(id, false, Json.Element(null), error, message);
@@ -50,13 +50,19 @@ public static class Wire
     public static async Task WriteStreamPacketAsync(Stream stream, StreamPacket packet, CancellationToken ct)
     {
         if (packet.Payload.Length > MaxFrame - StreamPacketHeaderLength) throw new InvalidDataException("Stream packet exceeds 4 MiB.");
-        byte[] body = new byte[StreamPacketHeaderLength + packet.Payload.Length];
+        byte[] body = new byte[4 + StreamPacketHeaderLength + packet.Payload.Length];
+        BinaryPrimitives.WriteInt32BigEndian(body, StreamPacketHeaderLength + packet.Payload.Length);
+        WriteStreamHeader(body.AsSpan(4), packet);
+        packet.Payload.CopyTo(body, 4 + StreamPacketHeaderLength);
+        await stream.WriteAsync(body, ct); await stream.FlushAsync(ct);
+    }
+
+    private static void WriteStreamHeader(Span<byte> body, StreamPacket packet)
+    {
         body[0] = (byte)packet.Kind;
-        BinaryPrimitives.WriteInt64BigEndian(body.AsSpan(1, 8), packet.Sequence);
-        BinaryPrimitives.WriteInt64BigEndian(body.AsSpan(9, 8), packet.CapturedUtc.ToUnixTimeMilliseconds());
-        BinaryPrimitives.WriteInt64BigEndian(body.AsSpan(17, 8), BitConverter.DoubleToInt64Bits(packet.CaptureEncodeMs));
-        packet.Payload.CopyTo(body, StreamPacketHeaderLength);
-        await WriteBodyAsync(stream, body, ct);
+        BinaryPrimitives.WriteInt64BigEndian(body.Slice(1, 8), packet.Sequence);
+        BinaryPrimitives.WriteInt64BigEndian(body.Slice(9, 8), packet.CapturedUtc.ToUnixTimeMilliseconds());
+        BinaryPrimitives.WriteInt64BigEndian(body.Slice(17, 8), BitConverter.DoubleToInt64Bits(packet.CaptureEncodeMs));
     }
 
     public static async Task<StreamPacket> ReadStreamPacketAsync(Stream stream, CancellationToken ct)
@@ -64,12 +70,13 @@ public static class Wire
         byte[] length = new byte[4]; await stream.ReadExactlyAsync(length, ct);
         int size = BinaryPrimitives.ReadInt32BigEndian(length);
         if (size is < StreamPacketHeaderLength or > MaxFrame) throw new InvalidDataException("Invalid stream packet length.");
-        byte[] body = new byte[size]; await stream.ReadExactlyAsync(body, ct);
+        byte[] body = new byte[StreamPacketHeaderLength]; await stream.ReadExactlyAsync(body, ct);
         if (!Enum.IsDefined((StreamPacketKind)body[0])) throw new InvalidDataException("Unknown stream packet kind.");
         long sequence = BinaryPrimitives.ReadInt64BigEndian(body.AsSpan(1, 8));
         long capturedMs = BinaryPrimitives.ReadInt64BigEndian(body.AsSpan(9, 8));
         double captureEncodeMs = BitConverter.Int64BitsToDouble(BinaryPrimitives.ReadInt64BigEndian(body.AsSpan(17, 8)));
-        return new StreamPacket((StreamPacketKind)body[0], sequence, DateTimeOffset.FromUnixTimeMilliseconds(capturedMs), captureEncodeMs, body[StreamPacketHeaderLength..]);
+        byte[] payload = new byte[size - StreamPacketHeaderLength]; await stream.ReadExactlyAsync(payload, ct);
+        return new StreamPacket((StreamPacketKind)body[0], sequence, DateTimeOffset.FromUnixTimeMilliseconds(capturedMs), captureEncodeMs, payload);
     }
 
     private static async Task WriteBodyAsync(Stream stream, byte[] body, CancellationToken ct)
