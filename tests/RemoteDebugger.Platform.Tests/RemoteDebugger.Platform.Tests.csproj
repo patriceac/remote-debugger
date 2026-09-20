@@ -12,5 +12,6 @@
     </PackageReference>
     <ProjectReference Include="../../src/RemoteDebugger/RemoteDebugger.csproj" />
     <Compile Include="../RemoteDebugger.Lab/ProvisioningEvidence.cs" Link="ProvisioningEvidence.cs" />
+    <Compile Include="../UpdateAcceptanceAuthority.cs" Link="UpdateAcceptanceAuthority.cs" />
   </ItemGroup>
 </Project>

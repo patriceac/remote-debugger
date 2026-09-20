@@ -84,6 +84,12 @@ pair; `SameVersion` uses the signed same-version/different-build fixture; and
 candidate process before its startup health acknowledgement, then checks the
 authenticated rollback snapshot. The fixture manifest records every hash.
 
+Only `Build-UpdateFixtures.ps1` enables `REMOTEDEBUGGER_UPDATE_ACCEPTANCE`.
+Those binaries trust the disposable public test authority; the Lab enrolls
+its matching public test credential in the guest controller's temporary data
+root for Upgrade/Rollback. Normal releases reject that credential. No real
+administrator key is exported, and these fixtures must not be distributed as releases.
+
 `Both` starts one broker request for the agent and one for the controller. The
 requests must be submitted through the SYSTEM broker; this script does not
 launch the product on the physical host or manage a VM, switch, adapter, or
@@ -94,10 +100,11 @@ claims come from the product under test.
 `-Scope Runtime` covers the two-machine support session and records the
 provisioning state. `-Scope Provisioned` additionally requires the one-time
 administrator provisioning receipt and the installed private firewall rules.
-The first-provisioning UAC desktop is a separate gate: the executable-testing
-contract does not provide a secure-desktop consent driver, so a missing
-provisioning receipt is recorded as `blocked` with that exact capability gap.
-No Lab step clicks through or simulates UAC.
+Generic `GuestSetupV1` runs the fixture's supported provisioner before the
+medium-integrity Lab. The Agent Lab also requests identity-bound Private
+firewall-prompt acceptance for its coordination listener; the Controller does
+not require that prompt. First-provisioning UAC remains a separate gate, not
+something this post-setup scenario claims to observe or simulate.
 
 ## Stable UI contract
 

@@ -2,10 +2,28 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using RemoteDebugger;
 using RemoteDebugger.Core;
+using RemoteDebugger.Testing;
 using Xunit;
 
 public sealed class UpdateAdminTests
 {
+    [Fact]
+    public void DisposableFixtureAuthorityCannotAuthorizeAProductionRelease()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "rd-test-authority-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            UpdateAcceptanceAuthority.Enroll(root);
+            var fixture = new UpdateAdminStore(root, UpdateAcceptanceAuthority.PublicKey);
+            Assert.True(fixture.IsAdmin);
+            Assert.False(new UpdateAdminStore(root).IsAdmin);
+            string proof = fixture.Sign(new('A', 64), new('B', 64), "update.begin", new('C', 64));
+            UpdateAdminProof.Verify(proof, new('A', 64), new('B', 64), "update.begin", new('C', 64), UpdateAcceptanceAuthority.PublicKey);
+            Assert.Throws<UnauthorizedAccessException>(() => UpdateAdminProof.Verify(proof, new('A', 64), new('B', 64), "update.begin", new('C', 64)));
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
     [Theory]
     [InlineData("update.begin", true)]
     [InlineData("update.confirm", true)]

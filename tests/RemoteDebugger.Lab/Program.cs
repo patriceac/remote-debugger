@@ -1124,6 +1124,11 @@ internal sealed partial class LabForm : Forms.Form
 
     private async Task ControllerAsync()
     {
+        if (updateVariant is "upgrade" or "rollback")
+        {
+            Testing.UpdateAcceptanceAuthority.Enroll(productData);
+            Pass("controller.test_update_authority", "The controller uses only the disposable fixture update authority", new { testOnly = true, publicKey = Testing.UpdateAcceptanceAuthority.PublicKey });
+        }
         product = LaunchProduct(false);
         await WaitUiAsync();
         ProbeProductIdentity("controller.managed_process_identity", "The controller runs as the registered interactive user at medium integrity");

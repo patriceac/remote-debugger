@@ -29,7 +29,7 @@ if ($Role -eq 'Input' -and ($Scope -ne 'Provisioned' -or $UpdateVariant -ne 'Non
 if ($Role -in @('Loopback', 'LoopbackEconomy', 'LoopbackTray', 'LoopbackLifetime', 'LoopbackUi', 'LoopbackExit', 'LoopbackScale', 'LoopbackColumns', 'LoopbackWan', 'LoopbackWake', 'LoopbackVersions', 'LoopbackTransport', 'LoopbackNavigation', 'Localization', 'LanguageSelection', 'SingleInstance') -and ($Scope -ne 'Runtime' -or $UpdateVariant -ne 'None')) { throw 'Loopback roles require Runtime scope and None update variant.' }
 if ($Scope -in @('Provisioned', 'Full')) {
     $runnerCommand = Get-Command -Name $runner -ErrorAction Stop
-    foreach ($parameterName in @('GuestSetupExecutableRelativePath', 'GuestSetupExecutableSha256', 'GuestSetupArguments', 'GuestSetupTimeoutSeconds')) {
+    foreach ($parameterName in @('GuestSetupExecutableRelativePath', 'GuestSetupExecutableSha256', 'GuestSetupArguments', 'GuestSetupTimeoutSeconds', 'AcceptWindowsFirewallPrompt', 'WindowsFirewallProfiles', 'SystemPromptTimeoutSeconds')) {
         if (-not $runnerCommand.Parameters.ContainsKey($parameterName)) { throw "Runner does not support -$parameterName; install the generic GuestSetupV1 harness capability: $runner" }
     }
 }
@@ -77,6 +77,12 @@ function New-RoleRequest([string]$roleName) {
         $request.GuestSetupExecutableSha256 = $setupHash
         $request.GuestSetupArguments = @('cli', 'platform-provision')
         $request.GuestSetupTimeoutSeconds = 300
+        # Only the Agent Lab opens an unsolicited inbound coordination listener.
+        if ($roleName -eq 'Agent') {
+            $request.AcceptWindowsFirewallPrompt = $true
+            $request.WindowsFirewallProfiles = @('Private')
+            $request.SystemPromptTimeoutSeconds = 300
+        }
     }
     if ($roleName -notin @('Local', 'Input', 'Loopback', 'LoopbackEconomy', 'LoopbackTray', 'LoopbackLifetime', 'LoopbackUi', 'LoopbackExit', 'LoopbackScale', 'LoopbackColumns', 'LoopbackWan', 'LoopbackWake', 'LoopbackVersions', 'LoopbackTransport', 'LoopbackNavigation', 'Localization', 'LanguageSelection', 'SingleInstance')) {
         $request.NetworkProfile = 'IsolatedTestNet'
