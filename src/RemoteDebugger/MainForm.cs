@@ -2097,8 +2097,9 @@ public sealed partial class MainForm : Forms.Form
         clientUpdateLifetime?.Cancel();
         clientUpdateBusy = false; clientUpToDate = false;
         updateProgressArea.Visible = false;
-        client = null; selectedPeer = null; selectedFingerprint = ""; selectedFilePath = null;
-        selectedPeerName.SetText(() => UiText.NewConnection); selectedPeerAddress.SetText(() => PrivateInternet ? UiText.PrivateConnectInstructions : UiText.EnterRemoteCode);
+        // Retain the selected PC identity so reconnect refreshes its invitation.
+        client = null; selectedFilePath = null;
+        selectedPeerName.SetText(() => selectedPeer?.Name ?? UiText.NewConnection); selectedPeerAddress.SetText(() => PrivateInternet ? UiText.PrivateConnectInstructions : UiText.EnterRemoteCode);
         geometry = null; inputState.Released(); inputRecoveryTimer.Stop(); code.SetText("");
         processRows.Clear(); fileRows.Clear(); processList.Items.Clear(); fileList.Items.Clear();
         screen.Image?.Dispose(); screen.Image = null; currentDirectory = ""; fileDirectory.Clear(); remotePath.SetText("");

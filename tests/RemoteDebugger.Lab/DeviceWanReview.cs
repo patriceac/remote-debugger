@@ -1,4 +1,5 @@
 using System.IO;
+using System.Reflection;
 using System.Text.Json;
 using System.Windows.Automation;
 using RemoteDebugger.Core;
@@ -21,6 +22,8 @@ internal sealed partial class LabForm
         Vault.Save(Path.Combine(root, "devices.dpapi"), JsonSerializer.SerializeToUtf8Bytes(devices, Json.Options));
         try
         {
+            foreach (string address in new[] { "127.0.0.1", devices[0].Peer.Host })
+                ProbeReconnectSelection(root, devices[0].Peer with { Host = address });
             product = loopbackController = LaunchLoopbackProduct(false, root);
             await WaitUiAsync(); WindowState = Forms.FormWindowState.Minimized;
             ResizeProductWindow(1060, 720);
@@ -80,5 +83,34 @@ internal sealed partial class LabForm
             if (connectBounds.Top - addressBounds.Bottom > saveBounds.Height * 4) throw new IOException("The WAN editor pushes Connect away from the connection fields.");
             Pass("wan." + stage, "The shipped per-device WAN editor saves, restores and clears an optional address", new { actual, saved, connectGap = connectBounds.Top - addressBounds.Bottom });
         }
+    }
+
+    private void ProbeReconnectSelection(string root, Peer peer)
+    {
+        // Exercise the real teardown without starting a listener or contacting the relay.
+        using var form = new MainForm(startAgent: false, dataRoot: root, loopbackOnly: true);
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        FieldInfo Field(string name) => typeof(MainForm).GetField(name, flags)!;
+        try
+        {
+            ((Forms.TextBox)Field("host").GetValue(form)!).Text = peer.Host;
+            Field("selectedPeer").SetValue(form, peer);
+            Field("selectedFingerprint").SetValue(form, peer.Fingerprint);
+            Field("client").SetValue(form, new RemoteClient(new Connection(peer.Host, peer.Port, peer.Fingerprint, new string('e', 64))));
+            typeof(MainForm).GetMethod("ClearControllerSession", flags)!.Invoke(form, null);
+            var retained = (Peer?)Field("selectedPeer").GetValue(form);
+            bool selectionRetained = retained == peer && (string?)Field("selectedFingerprint").GetValue(form) == peer.Fingerprint;
+            bool grantCleared = Field("client").GetValue(form) == null;
+            string invitation = "RD-FEDC-BA98-7654-3210";
+            bool wan = InternetSettings.IsSupportId(peer.Host);
+            var fresh = peer with { SupportId = invitation, Host = wan ? invitation : peer.Host };
+            bool rebound = retained != null && PeerDiscovery.Rebind(retained, [fresh]) == fresh;
+            string id = "reconnect.selection_" + (wan ? "wan" : "lan");
+            const string requirement = "End support clears the grant but retains the selected PC identity for a fresh invitation on reconnect";
+            var evidence = new { selectionRetained, grantCleared, rebound };
+            if (selectionRetained && grantCleared && rebound) Pass(id, requirement, evidence);
+            else Fail(id, requirement, evidence);
+        }
+        finally { typeof(MainForm).GetMethod("DisposeResources", flags)!.Invoke(form, null); }
     }
 }
