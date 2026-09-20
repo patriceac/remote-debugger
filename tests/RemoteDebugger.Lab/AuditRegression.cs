@@ -70,6 +70,7 @@ internal sealed partial class LabForm
             var first = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var refreshed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             int frames = 0;
+            string codec = "negotiating";
             var stream = remote.StreamAdaptiveAsync(frame =>
             {
                 using (frame)
@@ -78,9 +79,11 @@ internal sealed partial class LabForm
                     else refreshed.TrySetResult();
                 }
                 return Task.CompletedTask;
-            }, null, ct: streamStop.Token);
+            }, (value, reason) => codec = value + ": " + reason, ct: streamStop.Token);
             try
             {
+                await Task.WhenAny(first.Task, stream).WaitAsync(streamStop.Token);
+                if (stream.IsCompleted) await stream;
                 await first.Task.WaitAsync(streamStop.Token);
                 await Task.Delay(1500, streamStop.Token);
                 int idleFrames = Volatile.Read(ref frames);
@@ -89,7 +92,7 @@ internal sealed partial class LabForm
                 if (idleFrames != 1) throw new IOException($"Static desktop produced {idleFrames} frames before the refresh request.");
                 Pass("audit.static_refresh", "An unchanged adaptive stream suppresses duplicate images and responds to an explicit fresh-frame request", new { idleFrames, refreshedFrames = frames });
             }
-            catch (Exception ex) { Fail("audit.static_refresh", "An unchanged adaptive stream recovers without a pixel change", new { error = ex.ToString() }); }
+            catch (Exception ex) { Fail("audit.static_refresh", "An unchanged adaptive stream recovers without a pixel change", new { frames, codec, streamState = stream.Status.ToString(), error = stream.Exception?.ToString() ?? ex.ToString() }); }
             finally
             {
                 streamStop.Cancel();

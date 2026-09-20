@@ -201,14 +201,16 @@ public sealed class AgentUpdateService : IDisposable
         {
             string transactionId = ValidateTransactionId(request.Args.Str("transactionId"));
             var transfer = await LoadTransferAsync(transactionId, ct);
-            await using var file = new FileStream(PartialPath(transactionId), FileMode.Open, FileAccess.ReadWrite,
-                FileShare.None, BulkTransfer.ChunkSize, FileOptions.Asynchronous | FileOptions.SequentialScan);
-            if (file.Length > transfer.Candidate.Size) throw new InvalidDataException("Update exceeds its declared size.");
-            file.Position = file.Length;
-            await Wire.WriteAsync(channel, Reply.Success(request.Id, new { offset = file.Length, size = transfer.Candidate.Size }), ct);
-            await BulkTransfer.ReceiveAsync(channel, file, file.Length, transfer.Candidate.Size,
-                bytes => { SetProgress("transferring", bytes, transfer.Candidate.Size); activity(); }, ct);
-            await Wire.WriteAsync(channel, Reply.Success(request.Id, new { offset = file.Length }), ct);
+            await using (var file = new FileStream(PartialPath(transactionId), FileMode.Open, FileAccess.ReadWrite,
+                FileShare.None, BulkTransfer.ChunkSize, FileOptions.Asynchronous | FileOptions.SequentialScan))
+            {
+                if (file.Length > transfer.Candidate.Size) throw new InvalidDataException("Update exceeds its declared size.");
+                file.Position = file.Length;
+                await Wire.WriteAsync(channel, Reply.Success(request.Id, new { offset = file.Length, size = transfer.Candidate.Size }), ct);
+                await BulkTransfer.ReceiveAsync(channel, file, file.Length, transfer.Candidate.Size,
+                    bytes => { SetProgress("transferring", bytes, transfer.Candidate.Size); activity(); }, ct);
+            }
+            await Wire.WriteAsync(channel, Reply.Success(request.Id, new { offset = transfer.Candidate.Size }), ct);
         }
         finally { transferGate.Release(); }
     }
