@@ -19,6 +19,7 @@ public static partial class UiText
     public static string DeviceInUse => Get(nameof(DeviceInUse));
     public static string UpdateIncomplete => Get(nameof(UpdateIncomplete));
     public static string UpdateQueued => Get(nameof(UpdateQueued));
+    public static string PreparingUpdate => Get(nameof(PreparingUpdate));
     public static string UpdatingDevice => Get(nameof(UpdatingDevice));
     public static string CheckingVersion => Get(nameof(CheckingVersion));
     public static string AdminPcRequired => Get(nameof(AdminPcRequired));

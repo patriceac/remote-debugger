@@ -882,6 +882,7 @@
   <data name="DeviceInUse" xml:space="preserve"><value>In use · retry later</value></data>
   <data name="UpdateIncomplete" xml:space="preserve"><value>Update incomplete</value></data>
   <data name="UpdateQueued" xml:space="preserve"><value>Queued</value></data>
+  <data name="PreparingUpdate" xml:space="preserve"><value>Preparing update…</value></data>
   <data name="UpdatingDevice" xml:space="preserve"><value>Updating…</value></data>
   <data name="CheckingVersion" xml:space="preserve"><value>Checking version…</value></data>
   <data name="AdminPcRequired" xml:space="preserve"><value>Admin PC required</value></data>

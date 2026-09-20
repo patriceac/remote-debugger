@@ -55,7 +55,8 @@ public sealed record UpdateExitPlan(string TransactionId, DateTimeOffset Deadlin
 public static class SupportPlatform
 {
     public static event Action? ManagedRelaunchRequested;
-    // Version-list display only. Update authorization still captures fresh bytes.
+    // Running agent identity. Candidate and installed bytes are verified again
+    // at the privileged staging / installation boundary.
     private static readonly Lazy<Task<ExecutableSnapshot>> versionSnapshot = new(() =>
         Task.Run(() => CaptureCurrentExecutableAsync(CancellationToken.None)));
     internal static Task<ExecutableSnapshot> GetCurrentVersionAsync(CancellationToken ct) => versionSnapshot.Value.WaitAsync(ct);
@@ -246,8 +247,15 @@ public static class SupportPlatform
     public static async Task<AgentSynchronizationResult> SynchronizeAgentAsync(
         RemoteClient client,
         CancellationToken ct = default,
-        IProgress<AgentUpdateProgress>? progress = null) =>
-        await AgentUpdateClient.SynchronizeAgentAsync(client, ct, progress);
+        IProgress<AgentUpdateProgress>? progress = null)
+    {
+        progress?.Report(new("preparing", 0, 0));
+        // Keep the verified payload unchanged until transfer completes.
+        using var payload = File.Open(Environment.ProcessPath!, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var controller = await Task.Run(() => CaptureCurrentExecutableAsync(ct), ct);
+        var snapshot = RemoteClient.Require(await client.CallAsync("update.snapshot", ct: ct, seconds: 30));
+        return await AgentUpdateClient.SynchronizeAgentAsync(client, controller, snapshot, ct, progress);
+    }
 
     internal static async Task<JsonElement> BrokerCallAsync(string operation, object args, CancellationToken ct, int timeoutSeconds = 30)
     {

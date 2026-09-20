@@ -623,6 +623,19 @@ public sealed class InternetTransportTests
     }
 
     [Fact]
+    public async Task SynchronizationReusesPreparedSnapshotInsteadOfInspectingAgain()
+    {
+        var stream = new ScriptedInputStream();
+        var client = new RemoteClient(new Connection("127.0.0.1", 45832, new string('a', 64), "token"), (_, _) => Task.FromResult<Stream>(stream));
+        var controller = new ExecutableSnapshot(Path.GetFullPath("prepared-update.exe"), 128, new string('b', 64), "0.4.31", new string('c', 64));
+        var result = await AgentUpdateClient.SynchronizeAgentAsync(client, controller,
+            Json.Element(new { agent = controller }), CancellationToken.None);
+        Assert.True(result.AlreadyMatched);
+        Assert.Same(controller, result.Controller);
+        Assert.Equal("update.confirm", Assert.Single(stream.Requests).Operation);
+    }
+
+    [Fact]
     public async Task BinaryUpdateChunkUsesNegotiatedRawBytesAndCount()
     {
         var stream = new ScriptedInputStream { SupportsBinaryChunks = true };

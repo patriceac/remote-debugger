@@ -7,6 +7,43 @@ namespace RemoteDebugger.Platform.Tests;
 
 public sealed class FleetVersionTests
 {
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    public async Task UpdateSnapshotUsesCachedIdentityAndOnlyChecksUpdateReadiness(bool versionOnly, bool serviceReady)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "RemoteDebugger-preflight-" + Guid.NewGuid().ToString("N"));
+        var identity = new ExecutableSnapshot(Path.Combine(root, "agent.exe"), 128, new string('a', 64), "0.4.30", new string('b', 64));
+        var operations = new List<string>();
+        try
+        {
+            using var service = new AgentUpdateService(root, (_, _) => throw new InvalidOperationException("No installation expected."), null,
+                _ => Task.FromResult(identity), (operation, _, _) =>
+                {
+                    operations.Add(operation);
+                    return serviceReady ? Task.FromResult(Json.Element(new { active = false })) :
+                        Task.FromException<System.Text.Json.JsonElement>(new IOException("Update service unavailable."));
+                });
+            var snapshot = Json.Element(await service.SnapshotAsync(CancellationToken.None, versionOnly));
+            Assert.Equal(identity.Sha256, snapshot.GetProperty("agent").Str("sha256"));
+            if (versionOnly)
+            {
+                Assert.Empty(operations);
+                Assert.False(snapshot.TryGetProperty("platform", out _));
+            }
+            else
+            {
+                Assert.Equal(new[] { "update.status" }, operations);
+                Assert.Equal(serviceReady, snapshot.GetProperty("platform").GetProperty("available").GetBoolean());
+                if (!serviceReady)
+                    Assert.Equal("Update service unavailable.", Assert.Throws<InvalidOperationException>(() =>
+                        AgentUpdateClient.RequireUpdatePlatform(snapshot)).Message);
+            }
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
+    }
+
     [Fact]
     public void UpdatePreflightRejectsUnavailablePlatformAndAcceptsLegacySnapshots()
     {

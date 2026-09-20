@@ -486,6 +486,7 @@ public sealed partial class MainForm : Forms.Form
 
     private static string UpdateProgressDescription(AgentUpdateProgress progress) => progress.Stage switch
     {
+        "preparing" => UiText.PreparingUpdate,
         "transferring" => UiText.Format(UiText.TransferProgress, progress.TransferPercent, progress.TransferredBytes / 1048576d, progress.TotalBytes / 1048576d),
         "verifying" => UiText.TransferVerifying,
         "restarting" => UiText.TransferRestarting,
@@ -1153,7 +1154,6 @@ public sealed partial class MainForm : Forms.Form
     private async Task DiscoverAsync(bool explicitRefresh)
     {
         if (pairingBusy || supportSession || FleetBusy || fleetRefreshing || rolePages.SelectedIndex != 1 || quitting) return;
-        fleetCheckedAt = default;
         discoveryState.SetText(() => explicitRefresh ? UiText.SearchingPcs : UiText.SearchingAtStartup); discoverButton.Enabled = false;
         discoveryLifetime?.Cancel(); discoveryLifetime = new CancellationTokenSource();
         try

@@ -37,13 +37,23 @@ public sealed class AgentUpdateService : IDisposable
     private UpdateExitPlan? pendingExitPlan;
     private AgentUpdateProgress progress = new("idle", 0, 0);
     private readonly Func<string> targetFingerprint;
+    private readonly Func<CancellationToken, Task<ExecutableSnapshot>> currentVersion;
+    private readonly Func<string, object, CancellationToken, Task<JsonElement>> callBroker;
     private string updateChallenge = "";
     private DateTimeOffset challengeExpires;
 
     public event Action? UpdateRestartRequested;
 
     public AgentUpdateService(string root, UpdateReconnectGrantFactory reconnectGrantFactory, Func<string>? targetFingerprint = null)
+        : this(root, reconnectGrantFactory, targetFingerprint, SupportPlatform.GetCurrentVersionAsync,
+            (operation, args, ct) => SupportPlatform.BrokerCallAsync(operation, args, ct)) { }
+
+    internal AgentUpdateService(string root, UpdateReconnectGrantFactory reconnectGrantFactory, Func<string>? targetFingerprint,
+        Func<CancellationToken, Task<ExecutableSnapshot>> currentVersion,
+        Func<string, object, CancellationToken, Task<JsonElement>> callBroker)
     {
+        this.currentVersion = currentVersion;
+        this.callBroker = callBroker;
         this.targetFingerprint = targetFingerprint ?? (() => "");
         transferRoot = Path.Combine(Path.GetFullPath(root), "updates");
         this.reconnectGrantFactory = reconnectGrantFactory ?? throw new ArgumentNullException(nameof(reconnectGrantFactory));
@@ -118,16 +128,22 @@ public sealed class AgentUpdateService : IDisposable
 
     internal async Task<object> SnapshotAsync(CancellationToken ct, bool versionOnly = false)
     {
+        var agent = await currentVersion(ct);
         if (versionOnly)
-            return new { agent = await SupportPlatform.GetCurrentVersionAsync(ct), wakeAdapters = WakeOnLan.GetAdapters() };
-        var agent = await SupportPlatform.CaptureCurrentExecutableAsync(ct);
-        var platform = await SupportPlatform.GetStatusAsync(ct);
-        object? transaction = null;
-        if (platform.Available)
-        {
-            try { transaction = await SupportPlatform.BrokerCallAsync("update.status", new { }, ct); }
-            catch (InvalidOperationException) { }
-        }
+            return new { agent, wakeAdapters = WakeOnLan.GetAdapters() };
+        // This authenticated update RPC also checks readiness on older brokers,
+        // without invoking their general status / PowerShell firewall inventory.
+        JsonElement? transaction = null;
+        string message = "Privileged update service is ready.";
+        try { transaction = await callBroker("update.status", new { }, ct); }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException or
+                                       System.ComponentModel.Win32Exception or TimeoutException)
+        { message = ex.Message; }
+        bool available = transaction.HasValue;
+        bool provisioned = available || File.Exists(SupportPlatformPaths.ConfigurationPath);
+        var platform = new SupportPlatformStatus(available ? SupportPlatformAvailability.Ready : SupportPlatformAvailability.Unavailable,
+            provisioned, available, available, false, !provisioned, message,
+            available ? agent.Path : null, available ? agent.SignerThumbprint : null, null);
         return new { agent, platform, transaction, requiresUpdateAdmin = true, controllerSynchronized = ControllerSynchronized, actualRunningSha256 = agent.Sha256, wakeAdapters = WakeOnLan.GetAdapters() };
     }
 
@@ -147,7 +163,7 @@ public sealed class AgentUpdateService : IDisposable
             throw new UnauthorizedAccessException("Request a fresh administrator challenge before updating.");
         string nonce = updateChallenge; updateChallenge = "";
         UpdateAdminProof.Verify(args.Str("authorization"), nonce, targetFingerprint(), "update.begin", candidate.Sha256);
-        UpdatePolicy.RequireNewerRelease(candidate, await SupportPlatform.CaptureCurrentExecutableAsync(ct));
+        UpdatePolicy.RequireNewerRelease(candidate, await currentVersion(ct));
         string meta = MetaPath(transactionId), partial = PartialPath(transactionId);
         if (File.Exists(meta))
         {
@@ -398,11 +414,12 @@ internal static class AgentUpdateClient
 {
     public static async Task<AgentSynchronizationResult> SynchronizeAgentAsync(
         RemoteClient client,
+        ExecutableSnapshot controller,
+        JsonElement snapshot,
         CancellationToken ct,
         IProgress<AgentUpdateProgress>? progress = null)
     {
-        var controller = await SupportPlatform.CaptureCurrentExecutableAsync(ct);
-        var snapshot = RemoteClient.Require(await client.CallAsync("update.snapshot", ct: ct, seconds: 30));
+        controller.Validate();
         var agent = snapshot.GetProperty("agent").Deserialize<ExecutableSnapshot>(Json.Options) ?? throw new InvalidDataException("Agent did not return an executable snapshot.");
         agent.Validate();
         if (IsExact(controller, agent))

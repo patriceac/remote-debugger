@@ -15,7 +15,6 @@ public sealed partial class MainForm
     private bool fleetRefreshing;
     private bool isUpdateAdmin;
     private Task<ExecutableSnapshot>? controllerSnapshot;
-    private DateTimeOffset fleetCheckedAt;
     private bool FleetBusy => fleetLifetime != null;
     private static string DeviceKey(Peer peer) => peer.Fingerprint.Length > 0 ? peer.Fingerprint : peer.Host;
     private bool NewerDeviceKnown => controllerSnapshot is { IsCompletedSuccessfully: true } &&
@@ -42,7 +41,7 @@ public sealed partial class MainForm
         peers.DrawSubItem += (_, e) =>
         {
             if (e.ColumnIndex != 3 || e.Item?.Tag is not Peer peer || !fleet.TryGetValue(DeviceKey(peer), out var device) ||
-                device.State is not ("transferring" or "checking" or "verifying" or "restarting"))
+                device.State is not ("transferring" or "checking" or "preparing" or "verifying" or "restarting"))
             { e.DrawDefault = true; return; }
             using var background = new SolidBrush(e.Item.Selected ? SystemColors.Highlight : peers.BackColor);
             e.Graphics.FillRectangle(background, e.Bounds);
@@ -88,7 +87,7 @@ public sealed partial class MainForm
         string key = DeviceKey(device.Peer);
         bool redrawOnly = fleet.TryGetValue(key, out var previous) && previous.State == device.State &&
             previous.Version == device.Version && previous.Peer.Name == device.Peer.Name &&
-            device.State is "transferring" or "checking" or "verifying" or "restarting";
+            device.State is "transferring" or "checking" or "preparing" or "verifying" or "restarting";
         if (previous == null || previous.State != device.State || !fleetStageStarted.ContainsKey(key))
             fleetStageStarted[key] = DateTimeOffset.UtcNow;
         fleet[key] = device;
@@ -107,6 +106,7 @@ public sealed partial class MainForm
         "available" => UiText.UpdateAvailable, "offline" => UiText.DeviceOffline,
         "legacy" => UiText.InitialUpdateRequired, "busy" => UiText.DeviceInUse,
         "failed" => UiText.UpdateIncomplete, "queued" => UiText.UpdateQueued,
+        "preparing" => UiText.PreparingUpdate,
         "transferring" => UiText.UpdatingDevice, "verifying" => UiText.TransferVerifying,
         "restarting" => UiText.TransferRestarting, "checking" => UiText.CheckingVersion,
         _ => UiText.AdminPcRequired
@@ -126,11 +126,9 @@ public sealed partial class MainForm
         }));
     }
 
-    private async Task RefreshFleetVersionsAsync(CancellationToken ct, bool reuseRecent = false)
+    private async Task RefreshFleetVersionsAsync(CancellationToken ct)
     {
         if (!PrivateInternet || !isUpdateAdmin || FleetBusy || fleetRefreshing) return;
-        if (reuseRecent && DateTimeOffset.UtcNow - fleetCheckedAt < TimeSpan.FromSeconds(30)) return;
-        fleetCheckedAt = default;
         fleetRefreshing = true;
         foreach (var device in fleet.Values.Where(device => device.Online).ToArray())
             RecordDevice(device with { State = "checking", Percent = 0, Detail = "" });
@@ -172,7 +170,6 @@ public sealed partial class MainForm
                 catch (Exception ex) { RecordDevice(device with { State = "failed", Detail = FleetFailureDetail(ex) }); }
             }, ct);
             SaveFleet();
-            fleetCheckedAt = DateTimeOffset.UtcNow;
         }
         finally
         {
@@ -185,22 +182,25 @@ public sealed partial class MainForm
     private async Task UpdateAllDevicesAsync()
     {
         if (!PrivateInternet || !isUpdateAdmin || FleetBusy || fleetRefreshing || pairingBusy || clientUpdateBusy || terminating || action != null) return;
-        // Reuse a just-completed discovery pass; each target is validated again before transfer.
-        using var preparation = new CancellationTokenSource(TimeSpan.FromMinutes(3));
-        await RefreshFleetVersionsAsync(preparation.Token, reuseRecent: true);
-        var controller = await (controllerSnapshot ??= SupportPlatform.GetCurrentVersionAsync(CancellationToken.None));
         if (NewerDeviceKnown)
         { discoveryState.SetText(() => UiText.UpdateControllerFirst); return; }
-        fleetCheckedAt = default;
         using var lifetime = new CancellationTokenSource(); fleetLifetime = lifetime;
+        var targets = fleet.Values.Where(d => d.Online && d.State is "available" or "legacy" or "failed").ToArray();
+        foreach (var device in targets) RecordDevice(device with { State = "queued", Detail = "", Percent = 0 });
+        discoveryState.SetText(() => UiText.PreparingUpdate);
         RefreshControllerControls();
         try
         {
-            await RunFleetOperationsAsync(fleet.Values.Where(d => d.Online && d.State is "available" or "legacy" or "failed").ToArray(), async initial =>
+            // Hash once for the batch, holding the payload against replacement.
+            using var payload = File.Open(Environment.ProcessPath!, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var controller = await Task.Run(() => SupportPlatform.CaptureCurrentExecutableAsync(lifetime.Token), lifetime.Token);
+            controllerSnapshot = Task.FromResult(controller);
+            discoveryState.SetText(() => UiText.UpdatingDevice);
+            await RunFleetOperationsAsync(targets, async initial =>
             {
                 if (NewerDeviceKnown) return;
-                var device = initial with { State = "queued", Detail = "" }; RecordDevice(device);
-                var target = FleetClient(device.Peer);
+                var device = initial with { State = "preparing", Detail = "", Percent = 0 }; RecordDevice(device);
+                var target = RemoteClient.ForDiscoveredPeer(device.Peer, root);
                 bool acquired = false;
                 try
                 {
@@ -234,7 +234,7 @@ public sealed partial class MainForm
                                 : FormatBytes(value.TotalBytes) };
                         RecordDevice(device);
                     });
-                    try { await SupportPlatform.SynchronizeAgentAsync(target, timeout.Token, progress); }
+                    try { await AgentUpdateClient.SynchronizeAgentAsync(target, controller, snapshot, timeout.Token, progress); }
                     finally { receiving = false; }
                     RecordDevice(device with { Version = controller.FileVersion ?? "", Sha256 = controller.Sha256, State = "current", Percent = 100, Detail = "" });
                 }
@@ -254,6 +254,9 @@ public sealed partial class MainForm
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         finally
         {
+            foreach (var device in fleet.Values.Where(d => d.State == "queued").ToArray())
+                RecordDevice(device with { State = "failed", Detail = lifetime.IsCancellationRequested ? UiText.TransferPaused :
+                    NewerDeviceKnown ? UiText.UpdateControllerFirst : UiText.UpdateIncomplete });
             fleetLifetime = null;
             if (!IsDisposed) { RefreshControllerControls(); discoveryState.SetText(() => UiText.UpdateBatchFinished); }
         }
