@@ -683,6 +683,15 @@ internal sealed partial class LabForm : Forms.Form
             else if (request == "RD_LAB_STATUS")
             {
                 RefreshTrackedProduct();
+                // Update handoff resumes in the tray; restore the existing
+                // agent before reading its UI, without starting another agent.
+                if (IsUpdateVariant && product is { HasExited: false } && product.MainWindowHandle == IntPtr.Zero)
+                {
+                    var tray = await OpenTrayContextAsync();
+                    if (tray.OpenItem == null) throw new InvalidOperationException("The replacement agent tray Open action is unavailable.");
+                    InvokeElement(tray.OpenItem);
+                    await WaitUiAsync();
+                }
                 string state = TryValue("agentState");
                 bool paired = IsConnected(string.Join(" ", UiTexts())) || state.Contains("appair", StringComparison.OrdinalIgnoreCase) || state.Contains("pair", StringComparison.OrdinalIgnoreCase);
                 if (paired && !sawPairing)
@@ -796,7 +805,7 @@ internal sealed partial class LabForm : Forms.Form
             {
                 if (candidate.Id == previousPid || candidate.Id == Environment.ProcessId || candidate.HasExited) { candidate.Dispose(); continue; }
                 string path = candidate.MainModule?.FileName ?? "";
-                if (!PathsEqual(path, application) || candidate.MainWindowHandle == IntPtr.Zero) { candidate.Dispose(); continue; }
+                if (!PathsEqual(path, application) || candidate.SessionId != Process.GetCurrentProcess().SessionId) { candidate.Dispose(); continue; }
                 product?.Dispose();
                 product = candidate;
                 return;

@@ -538,7 +538,7 @@ internal sealed partial class LabForm
             poll++;
             string expectedRole = role is "localization" or "singleinstance" or "languageselection"
                 ? product == loopbackAgent ? UiText.TrayAssistedPc : UiText.TrayController
-                : product == loopbackAgent ? "PC assisté" : "Contrôleur";
+                : role is "agent" or "agent-local" || product == loopbackAgent ? "PC assisté" : "Contrôleur";
             AutomationElement[] icons = FindSystemTrayIcons().Where(icon =>
             {
                 try { return icon.Current.Name.Contains(expectedRole, StringComparison.Ordinal); }
