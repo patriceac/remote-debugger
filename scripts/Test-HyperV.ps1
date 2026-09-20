@@ -28,12 +28,9 @@ if ($UpdateVariant -ne 'None' -and $Scope -notin @('Provisioned', 'Full')) { thr
 if ($Role -eq 'Input' -and ($Scope -ne 'Provisioned' -or $UpdateVariant -ne 'None')) { throw 'Input requires Provisioned scope and None update variant.' }
 if ($Role -in @('Loopback', 'LoopbackEconomy', 'LoopbackTray', 'LoopbackLifetime', 'LoopbackUi', 'LoopbackExit', 'LoopbackScale', 'LoopbackColumns', 'LoopbackWan', 'LoopbackWake', 'LoopbackVersions', 'LoopbackTransport', 'LoopbackNavigation', 'Localization', 'LanguageSelection', 'SingleInstance') -and ($Scope -ne 'Runtime' -or $UpdateVariant -ne 'None')) { throw 'Loopback roles require Runtime scope and None update variant.' }
 if ($Scope -in @('Provisioned', 'Full')) {
-    if ([string]::IsNullOrWhiteSpace($BrokerRoot)) { throw 'Provisioned and Full scopes require -BrokerRoot for the dedicated SYSTEM broker.' }
-    if ([string]::IsNullOrWhiteSpace($RunnerPath)) { throw 'Provisioned and Full scopes require -RunnerPath for the dedicated runner that supports RemoteDebuggerProvisionV1.' }
-    if (-not (Test-Path -LiteralPath $BrokerRoot -PathType Container)) { throw "Dedicated broker root not found: $BrokerRoot" }
     $runnerCommand = Get-Command -Name $runner -ErrorAction Stop
-    foreach ($parameterName in @('GuestSetupProfile', 'GuestSetupExecutableRelativePath', 'GuestSetupExecutableSha256')) {
-        if (-not $runnerCommand.Parameters.ContainsKey($parameterName)) { throw "Runner does not support -$parameterName; pass the dedicated provisioned Hyper-V runner with the RemoteDebuggerProvisionV1 contract: $runner" }
+    foreach ($parameterName in @('GuestSetupExecutableRelativePath', 'GuestSetupExecutableSha256', 'GuestSetupArguments', 'GuestSetupTimeoutSeconds')) {
+        if (-not $runnerCommand.Parameters.ContainsKey($parameterName)) { throw "Runner does not support -$parameterName; install the generic GuestSetupV1 harness capability: $runner" }
     }
 }
 if ($UpdateVariant -ne 'None') {
@@ -65,7 +62,7 @@ function New-RoleRequest([string]$roleName) {
         $request.ReadOnlyHostInput = @(@{ Name = 'release'; Path = (Join-Path $artifact 'release'); Mode = 'Vhdx' })
         $request.Arguments += ' "{HOSTINPUT:release}\RemoteDebugger.exe"'
     }
-    if ($Scope -in @('Provisioned', 'Full') -and -not [string]::IsNullOrWhiteSpace($BrokerRoot)) {
+    if ($Scope -in @('Provisioned', 'Full')) {
         $setupRelativePath = switch ($UpdateVariant.ToLowerInvariant()) {
             'upgrade' { if ($roleName -eq 'Agent') { 'update-fixtures\older\RemoteDebugger.exe' } else { 'update-fixtures\newer\RemoteDebugger.exe' } }
             'downgrade' { if ($roleName -eq 'Agent') { 'update-fixtures\newer\RemoteDebugger.exe' } else { 'update-fixtures\older\RemoteDebugger.exe' } }
@@ -76,9 +73,10 @@ function New-RoleRequest([string]$roleName) {
         $setupPath = Join-Path $artifact $setupRelativePath
         if (-not (Test-Path -LiteralPath $setupPath -PathType Leaf)) { throw "Guest setup fixture is missing: $setupRelativePath" }
         $setupHash = (Get-FileHash -LiteralPath $setupPath -Algorithm SHA256).Hash.ToUpperInvariant()
-        $request.GuestSetupProfile = 'RemoteDebuggerProvisionV1'
         $request.GuestSetupExecutableRelativePath = $setupRelativePath
         $request.GuestSetupExecutableSha256 = $setupHash
+        $request.GuestSetupArguments = @('cli', 'platform-provision')
+        $request.GuestSetupTimeoutSeconds = 300
     }
     if ($roleName -notin @('Local', 'Input', 'Loopback', 'LoopbackEconomy', 'LoopbackTray', 'LoopbackLifetime', 'LoopbackUi', 'LoopbackExit', 'LoopbackScale', 'LoopbackColumns', 'LoopbackWan', 'LoopbackWake', 'LoopbackVersions', 'LoopbackTransport', 'LoopbackNavigation', 'Localization', 'LanguageSelection', 'SingleInstance')) {
         $request.NetworkProfile = 'IsolatedTestNet'

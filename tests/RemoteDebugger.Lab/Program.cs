@@ -506,10 +506,10 @@ internal sealed partial class LabForm : Forms.Form
         {
             // An actually elevated guest may still use the product's supported
             // interactive provisioner below.  A medium guest cannot simulate
-            // secure-desktop consent, so a dedicated Provisioned/Full run needs
+            // secure-desktop consent, so a Provisioned/Full run needs
             // the broker receipt before it launches the product.
             if (!guestElevated)
-                Block(role + ".provisioning_bootstrap", "The SYSTEM broker provisioning evidence identifies this Lab request", "The broker did not supply a validated RemoteDebuggerProvisionV1 receipt, and the Lab is running with a medium-integrity token so it cannot perform or simulate UAC.", new { sourcePath, collectedPath = evidencePath, elevated = false }, required: true);
+                Block(role + ".provisioning_bootstrap", "The SYSTEM broker provisioning evidence identifies this Lab request", "The broker did not supply validated GuestSetupV1 evidence, and the Lab is running with a medium-integrity token so it cannot perform or simulate UAC.", new { sourcePath, collectedPath = evidencePath, elevated = false }, required: true);
             return;
         }
 
@@ -871,39 +871,37 @@ internal sealed partial class LabForm : Forms.Form
 
     private async Task ProbeFirewallAndProvisioningAsync()
     {
-        (int ExitCode, string Stdout, string Stderr) firewall;
-        ProvisioningEvidence.GuestObservation? observation = null;
-        string? observerError = null;
-        double firewallWaitedSeconds = 0;
-        if (brokerProvisioning != null)
+        var elapsed = Stopwatch.StartNew();
+        var firewall = await ReadFirewallAsync();
+        bool privateRule = firewall.ExitCode == 0 && HasPrivateFirewallRule(firewall.Stdout);
+        JsonElement? platformStatus = null;
+        while (!privateRule && elapsed.Elapsed < TimeSpan.FromSeconds(brokerProvisioning != null ? 150 : 10))
         {
-            var observed = await WaitForBrokerFirewallReadyAsync();
-            observation = observed.Observation;
-            observerError = observed.Error;
-            firewallWaitedSeconds = observed.WaitedSeconds;
-            firewall = observation == null
-                ? (1, "", observerError ?? "The broker observation was unavailable.")
-                : (observation.Firewall.ExitCode, observation.Firewall.Stdout, observation.Firewall.Stderr);
-        }
-        else firewall = await ReadFirewallAsync();
-        for (int attempt = 0; brokerProvisioning == null && attempt < 20 && !HasPrivateFirewallRule(firewall.Stdout); attempt++)
-        {
+            if (brokerProvisioning != null)
+            {
+                // The ordinary user may not be able to query NetSecurity. The
+                // product's read-only status asks its own service to validate
+                // both exact Private/LocalSubnet rules; record that provenance.
+                platformStatus = await TryPlatformStatusAsync();
+                privateRule = platformStatus.HasValue && platformStatus.Value.TryGetProperty("status", out var status)
+                    && status.TryGetProperty("available", out var available) && available.ValueKind == JsonValueKind.True
+                    && status.TryGetProperty("firewallReady", out var ready) && ready.ValueKind == JsonValueKind.True;
+                if (privateRule) break;
+            }
             await Task.Delay(500, stop.Token);
             firewall = await ReadFirewallAsync();
+            privateRule = firewall.ExitCode == 0 && HasPrivateFirewallRule(firewall.Stdout);
         }
-        bool privateRule = firewall.ExitCode == 0 && HasPrivateFirewallRule(firewall.Stdout);
-        if (privateRule) Pass("agent.private_firewall", "Private/local-subnet firewall access is prepared automatically", new { stdout = firewall.Stdout, observer = observation?.EvidencePath, observerError, waitedSeconds = firewallWaitedSeconds });
-        else if (brokerProvisioning != null) Block("agent.private_firewall", "Private/local-subnet firewall access is prepared automatically", "The broker's fresh read-only observer did not show the product's Private/local-subnet firewall rule before the bounded setup wait expired.", new { elevated = guestElevated, exitCode = firewall.ExitCode, stdout = firewall.Stdout, stderr = firewall.Stderr, observer = observation?.EvidencePath, observerError, waitedSeconds = firewallWaitedSeconds }, required: RequiresProvisioning);
+        var firewallEvidence = new { firewall.ExitCode, firewall.Stdout, firewall.Stderr, platformStatus, waitedSeconds = elapsed.Elapsed.TotalSeconds };
+        if (privateRule) Pass("agent.private_firewall", "Private/local-subnet firewall access is prepared automatically", firewallEvidence);
+        else if (brokerProvisioning != null) Block("agent.private_firewall", "Private/local-subnet firewall access is prepared automatically", "Neither the read-only guest query nor the product's platform status confirmed firewall readiness before the bounded wait expired.", firewallEvidence, required: RequiresProvisioning);
         else if (RequiresProvisioning) Block("agent.private_firewall", "Private/local-subnet firewall access is prepared automatically", guestElevated ? "The guest is elevated, but no supported product provisioning operation has been provided to this Lab." : "The executable-testing contract does not provide secure-desktop UAC interaction for first provisioning.", new { elevated = guestElevated, exitCode = firewall.ExitCode, stdout = firewall.Stdout, stderr = firewall.Stderr });
         else Block("agent.private_firewall", "Private/local-subnet firewall access is prepared automatically", "Provisioned firewall evidence is outside the Runtime scope.", new { exitCode = firewall.ExitCode, stdout = firewall.Stdout, stderr = firewall.Stderr }, required: false);
 
-        string[] service = brokerProvisioning != null
-            ? observation == null ? [] : ProvisioningEvidence.FormatServices(observation.Services)
-            : await ReadRemoteDebuggerServicesAsync();
-        string[] serviceErrors = observation?.ServiceErrors ?? [];
+        string[] service = await ReadRemoteDebuggerServicesAsync();
         bool localSystemService = brokerProvisioning != null && ProvisioningEvidence.HasLocalSystemService(service, brokerProvisioning.ServiceExecutablePath);
-        if (brokerProvisioning != null && localSystemService) Pass("agent.provisioning_receipt", "The guest has a one-time administrator broker installation", new { service = service.Take(8).ToArray(), serviceErrors, observer = observation?.EvidencePath, serviceAccount = "LocalSystem", servicePath = brokerProvisioning.ServiceExecutablePath });
-        else if (brokerProvisioning != null) Block("agent.provisioning_receipt", "The guest has a one-time administrator broker installation", "The broker's fresh service observer did not attest the protected RemoteDebuggerSupport service as LocalSystem.", new { service = service.Take(8).ToArray(), serviceErrors, observer = observation?.EvidencePath, observerError, expectedServicePath = brokerProvisioning.ServiceExecutablePath }, required: RequiresProvisioning);
+        if (brokerProvisioning != null && localSystemService) Pass("agent.provisioning_receipt", "The guest has a one-time administrator broker installation", new { service = service.Take(8).ToArray(), serviceAccount = "LocalSystem", servicePath = brokerProvisioning.ServiceExecutablePath });
+        else if (brokerProvisioning != null) Block("agent.provisioning_receipt", "The guest has a one-time administrator broker installation", "The read-only guest service query did not attest the protected RemoteDebuggerSupport service as LocalSystem.", new { service = service.Take(8).ToArray(), expectedServicePath = brokerProvisioning.ServiceExecutablePath }, required: RequiresProvisioning);
         else if (service.Length == 0 && RequiresProvisioning) Block("agent.provisioning_receipt", "The guest has a one-time administrator broker installation", guestElevated ? "The guest is elevated, but no supported product provisioning operation has been provided to this Lab." : "No RemoteDebugger service was visible and the Hyper-V contract cannot drive the UAC secure desktop.", new { elevated = guestElevated, firewall = firewall.Stdout });
         else if (service.Length > 0) Pass("agent.provisioning_receipt", "The guest has a one-time administrator broker installation", new { service = service.Take(8).ToArray() }, required: RequiresProvisioning);
         else Block("agent.provisioning_receipt", "The guest has a one-time administrator broker installation", "The Runtime guest was not pre-provisioned.", new { service }, required: false);
@@ -1085,50 +1083,10 @@ internal sealed partial class LabForm : Forms.Form
         return (p.ExitCode, stdout, stderr);
     }
 
-    private async Task<(ProvisioningEvidence.GuestObservation? Observation, string Error)> WaitForBrokerObservationAsync(DateTimeOffset? capturedAfterUtc = null)
-    {
-        if (brokerProvisioning == null) return (null, "No verified broker provisioning receipt is active.");
-        var deadline = Stopwatch.StartNew();
-        string error = "The broker observation was not available.";
-        while (deadline.Elapsed < TimeSpan.FromSeconds(15) && !stop.IsCancellationRequested)
-        {
-            if (ProvisioningEvidence.TryReadObservation(output, out var observation, out error, capturedAfterUtc)) return (observation, "");
-            await Task.Delay(500, stop.Token);
-        }
-        return (null, error);
-    }
-
-    private async Task<(ProvisioningEvidence.GuestObservation? Observation, string Error, double WaitedSeconds)> WaitForBrokerFirewallReadyAsync()
-    {
-        if (brokerProvisioning == null) return (null, "No verified broker provisioning receipt is active.", 0);
-        var elapsed = Stopwatch.StartNew();
-        ProvisioningEvidence.GuestObservation? latest = null;
-        string error = "The broker firewall rule was not ready before the bounded setup wait expired.";
-        while (elapsed.Elapsed < TimeSpan.FromSeconds(150) && !stop.IsCancellationRequested)
-        {
-            var observed = await WaitForBrokerObservationAsync();
-            if (observed.Observation != null)
-            {
-                latest = observed.Observation;
-                bool ready = latest.Firewall.ExitCode == 0 && HasPrivateFirewallRule(latest.Firewall.Stdout);
-                if (ready) return (latest, "", elapsed.Elapsed.TotalSeconds);
-                error = observed.Error.Length == 0 ? error : observed.Error;
-            }
-            else if (observed.Error.Length > 0) error = observed.Error;
-            await Task.Delay(2000, stop.Token);
-        }
-        return (latest, error, elapsed.Elapsed.TotalSeconds);
-    }
-
     private async Task<string[]> ReadRemoteDebuggerServicesAsync()
     {
-        if (brokerProvisioning != null)
-        {
-            var observed = await WaitForBrokerObservationAsync();
-            return observed.Observation == null ? [] : ProvisioningEvidence.FormatServices(observed.Observation.Services);
-        }
         var result = await RunGuestPowerShellAsync("Get-CimInstance Win32_Service -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'RemoteDebugger' -or $_.DisplayName -match 'Remote Debugger' } | ForEach-Object { \"$($_.Name)|$($_.State)|$($_.StartMode)|$($_.StartName)|$($_.PathName)\" }");
-        return result.Stdout.Split(["`r`n", "`n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return result.Stdout.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 
     private static bool ContainsSleepHeld(string value)
@@ -1137,25 +1095,13 @@ internal sealed partial class LabForm : Forms.Form
     private async Task ProbeSleepRequestAsync(bool expectedHeld = true, string checkId = "agent.sleep_request", string requirement = "The agent holds a Windows system power request during authenticated support")
     {
         string[] texts = UiTexts();
-        (int ExitCode, string Stdout, string Stderr) request;
-        ProvisioningEvidence.GuestObservation? observation = null;
-        string? observerError = null;
-        if (brokerProvisioning != null)
-        {
-            var observed = await WaitForBrokerObservationAsync();
-            observation = observed.Observation;
-            observerError = observed.Error;
-            request = observation == null
-                ? (1, "", observerError ?? "The broker observation was unavailable.")
-                : (observation.PowerRequests.ExitCode, observation.PowerRequests.Stdout, observation.PowerRequests.Stderr);
-        }
-        else request = await RunGuestPowerShellAsync("powercfg /requests");
+        var request = await RunGuestPowerShellAsync("powercfg /requests; exit $LASTEXITCODE");
         bool osHeld = request.ExitCode == 0 && (request.Stdout.Contains("RemoteDebugger", StringComparison.OrdinalIgnoreCase) || request.Stdout.Contains("Remote Debugger", StringComparison.OrdinalIgnoreCase));
         bool visible = texts.Any(ContainsSleepHeld);
         sleepRequestObserved = expectedHeld && osHeld;
-        var evidence = new { expectedHeld, observedHeld = osHeld, osEvidence = request.Stdout, observer = observation?.EvidencePath, visible = texts.Where(ContainsSleepHeld).Take(4).ToArray() };
+        var evidence = new { expectedHeld, observedHeld = osHeld, osEvidence = request.Stdout, visible = texts.Where(ContainsSleepHeld).Take(4).ToArray() };
         if (request.ExitCode != 0)
-            Block(checkId, requirement, brokerProvisioning == null ? "The read-only powercfg query was unavailable." : "The broker's fresh read-only observer was unavailable.", new { commandExitCode = request.ExitCode, stderr = request.Stderr, observerError, visible }, required: false);
+            Block(checkId, requirement, "The read-only powercfg query was unavailable to the guest user; the generic harness supplies no product-specific privileged observer.", new { commandExitCode = request.ExitCode, stderr = request.Stderr, visible }, required: false);
         else if (osHeld == expectedHeld)
             Pass(checkId, requirement, evidence);
         else
@@ -1169,23 +1115,9 @@ internal sealed partial class LabForm : Forms.Form
             Block("agent.sleep_release", "The Windows power request is released after support ends", "The pre-exit power request was not observable, so release cannot be claimed.", required: false);
             return;
         }
-        if (brokerProvisioning != null)
-        {
-            var observed = await WaitForBrokerObservationAsync(productExitObservedUtc);
-            if (observed.Observation == null)
-            {
-                Block("agent.sleep_release", "The Windows power request is released after support ends", "The broker did not provide a fresh observer snapshot captured after the product exit.", new { observerError = observed.Error, exitedUtc = productExitObservedUtc }, required: false);
-                return;
-            }
-            var brokerRequest = observed.Observation.PowerRequests;
-            bool brokerReleased = brokerRequest.ExitCode == 0 && !brokerRequest.Stdout.Contains("RemoteDebugger", StringComparison.OrdinalIgnoreCase) && !brokerRequest.Stdout.Contains("Remote Debugger", StringComparison.OrdinalIgnoreCase);
-            if (brokerReleased) Pass("agent.sleep_release", "The Windows power request is released after support ends", new { osEvidence = brokerRequest.Stdout, observer = observed.Observation.EvidencePath, capturedUtc = observed.Observation.CapturedUtc, exitedUtc = productExitObservedUtc });
-            else Fail("agent.sleep_release", "The Windows power request is released after support ends", new { commandExitCode = brokerRequest.ExitCode, osEvidence = brokerRequest.Stdout, stderr = brokerRequest.Stderr, observer = observed.Observation.EvidencePath, capturedUtc = observed.Observation.CapturedUtc, exitedUtc = productExitObservedUtc });
-            return;
-        }
-        var request = await RunGuestPowerShellAsync("powercfg /requests");
+        var request = await RunGuestPowerShellAsync("powercfg /requests; exit $LASTEXITCODE");
         bool released = request.ExitCode == 0 && !request.Stdout.Contains("RemoteDebugger", StringComparison.OrdinalIgnoreCase) && !request.Stdout.Contains("Remote Debugger", StringComparison.OrdinalIgnoreCase);
-        if (released) Pass("agent.sleep_release", "The Windows power request is released after support ends", new { osEvidence = request.Stdout });
+        if (released) Pass("agent.sleep_release", "The Windows power request is released after support ends", new { osEvidence = request.Stdout, exitedUtc = productExitObservedUtc });
         else Fail("agent.sleep_release", "The Windows power request is released after support ends", new { commandExitCode = request.ExitCode, osEvidence = request.Stdout, stderr = request.Stderr });
     }
 

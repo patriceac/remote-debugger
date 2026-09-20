@@ -11,5 +11,6 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <ProjectReference Include="../../src/RemoteDebugger/RemoteDebugger.csproj" />
+    <Compile Include="../RemoteDebugger.Lab/ProvisioningEvidence.cs" Link="ProvisioningEvidence.cs" />
   </ItemGroup>
 </Project>

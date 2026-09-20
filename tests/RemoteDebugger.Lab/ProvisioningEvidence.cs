@@ -4,20 +4,22 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
+using System.ServiceProcess;
 using System.Text.Json;
+using Microsoft.Win32;
 using Microsoft.Win32.SafeHandles;
 
 namespace RemoteDebugger.Lab;
 
 /// <summary>
-/// Reads the receipt produced by the SYSTEM broker's RemoteDebuggerProvisionV1
-/// guest setup.  The Lab never provisions, elevates, or trusts a path supplied
-/// by the receipt without checking the bytes and protected installation roots.
+/// Binds generic GuestSetupV1 evidence to this product's fixture, then independently
+/// checks the installed receipt, bytes, publisher and service configuration.
+/// Product-specific provisioning policy belongs here, not in the shared harness.
 /// </summary>
 internal static class ProvisioningEvidence
 {
-    public const string EvidenceFileName = "remote-debugger-provisioning.json";
-    public const string ProfileName = "RemoteDebuggerProvisionV1";
+    public const string EvidenceFileName = "broker-guest-setup.json";
+    public const string ContractName = "GuestSetupV1";
     private const int ExpectedFormatVersion = 1;
     private const uint TokenQuery = 0x0008;
     private const int ErrorInsufficientBuffer = 122;
@@ -30,7 +32,7 @@ internal static class ProvisioningEvidence
 
     internal sealed record BrokerReceipt(
         int FormatVersion,
-        string Profile,
+        string Contract,
         string RequestId,
         string FixtureSha256,
         string ManagedExecutablePath,
@@ -63,34 +65,17 @@ internal static class ProvisioningEvidence
         public bool Accepted => MediumIntegrity && NonFullElevation && InteractiveSession && RegisteredUserMatches && PathMatches;
     }
 
-    internal sealed record GuestCommandObservation(int ExitCode, string Stdout, string Stderr);
-
-    internal sealed record GuestServiceObservation(string Name, string State, string StartMode, string StartName, string PathName, string Error = "")
-    {
-        public bool HasError => !string.IsNullOrWhiteSpace(Error);
-    }
-
-    internal sealed record GuestObservation(
-        int FormatVersion,
-        string RequestId,
-        DateTimeOffset CapturedUtc,
-        GuestCommandObservation PowerRequests,
-        GuestCommandObservation Firewall,
-        GuestServiceObservation[] Services,
-        string EvidencePath)
-    {
-        public bool Fresh => DateTimeOffset.UtcNow - CapturedUtc >= TimeSpan.Zero && DateTimeOffset.UtcNow - CapturedUtc <= TimeSpan.FromSeconds(10);
-        public string[] ServiceErrors => Services.Where(service => service.HasError).Select(service => service.Error).ToArray();
-    }
+    internal sealed record SetupReceipt(string UserSid, string StagedExecutablePath, DateTimeOffset CompletedUtc);
 
     public static string EvidencePath(string output) => Path.Combine(output, EvidenceFileName);
+    private static string SetupRoot(string requestId) => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "CodexHarness", "GuestSetup", requestId);
 
     public static string SourceEvidencePath(string output)
     {
         string requestId = Path.GetFileName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(output)));
         if (requestId.Length == 0 || requestId.Length > 128 || requestId.Any(c => !(char.IsLetterOrDigit(c) || c is '.' or '_' or '-')))
             throw new InvalidDataException("The Lab output directory does not identify a valid broker request.");
-        return Path.Combine(@"C:\CodexGuest\Provisioning", requestId, EvidenceFileName);
+        return Path.Combine(SetupRoot(requestId), "guest-setup.json");
     }
 
     public static bool TryValidate(string expectedFixturePath, string output, out BrokerReceipt receipt, out string error)
@@ -102,74 +87,48 @@ internal static class ProvisioningEvidence
             string evidencePath = SourceEvidencePath(output);
             if (!File.Exists(evidencePath))
             {
-                error = "The SYSTEM broker did not publish the RemoteDebuggerProvisionV1 evidence file.";
+                error = "The SYSTEM broker did not publish the GuestSetupV1 evidence file.";
                 return false;
             }
             var evidenceInfo = new FileInfo(evidencePath);
             if (evidenceInfo.Length <= 0 || evidenceInfo.Length > 128 * 1024)
                 throw new InvalidDataException("The provisioning evidence file is outside the bounded size limit.");
 
-            JsonElement value = JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(evidencePath));
-            int formatVersion = RequiredInt(value, "FormatVersion");
-            string profile = RequiredString(value, "Profile");
-            string requestId = RequiredString(value, "RequestId");
-            string fixtureHash = NormalizeHash(RequiredString(value, "FixtureSha256"), "FixtureSha256");
-            string managedPath = RequiredString(value, "ManagedExecutablePath");
-            string managedHash = NormalizeHash(RequiredString(value, "ManagedExecutableSha256"), "ManagedExecutableSha256");
-            string servicePath = RequiredString(value, "ServiceExecutablePath");
-            string serviceHash = NormalizeHash(RequiredString(value, "ServiceExecutableSha256"), "ServiceExecutableSha256");
-            string serviceName = RequiredString(value, "ServiceName");
-            string serviceStatus = RequiredString(value, "ServiceStatus");
-            string serviceStartMode = RequiredString(value, "ServiceStartMode");
-            string publisher = NormalizeHash(RequiredString(value, "PublisherThumbprint"), "PublisherThumbprint");
-            string registeredSid = RequiredString(value, "RegisteredUserSid");
-            string receiptPath = RequiredString(value, "ReceiptPath");
-            string provisionedUtcText = RequiredString(value, "ProvisionedUtc");
-            if (!DateTimeOffset.TryParse(provisionedUtcText, out DateTimeOffset provisionedUtc))
-                throw new InvalidDataException("ProvisionedUtc is not a round-trip timestamp.");
-
-            if (formatVersion != ExpectedFormatVersion) throw new InvalidDataException($"Unsupported provisioning evidence format {formatVersion}.");
-            if (!string.Equals(profile, ProfileName, StringComparison.Ordinal)) throw new InvalidDataException("The provisioning profile is not RemoteDebuggerProvisionV1.");
-            if (requestId.Length == 0) throw new InvalidDataException("RequestId is empty.");
-            if (!string.Equals(serviceName, "RemoteDebuggerSupport", StringComparison.Ordinal)) throw new InvalidDataException("The provisioning service name is not RemoteDebuggerSupport.");
-            if (!string.Equals(serviceStatus, "Running", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The provisioning receipt does not attest a running support service.");
-            if (!string.Equals(serviceStartMode, "demand", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The support service is not demand-started.");
-            _ = new SecurityIdentifier(registeredSid);
-
             string expectedFixture = RequireRegularFile(expectedFixturePath, "expected fixture");
-            string actualFixtureHash = HashFile(expectedFixture);
-            if (!string.Equals(fixtureHash, actualFixtureHash, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException($"FixtureSha256 does not match the expected fixture ({actualFixtureHash}).");
+            string fixtureHash = HashFile(expectedFixture);
+            string payloadRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, ".."));
+            string fixtureRelativePath = Path.GetRelativePath(payloadRoot, expectedFixture);
+            string requestId = Path.GetFileName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(output)));
+            JsonElement value = JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(evidencePath));
+            SetupReceipt setup = ValidateSetupReceipt(value, requestId, fixtureRelativePath, fixtureHash);
+            string registeredSid = setup.UserSid;
+            if (!string.Equals(registeredSid, WindowsIdentity.GetCurrent().User?.Value, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("The setup account does not match the interactive Lab user.");
 
-            string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-            string productRoot = Path.Combine(programFiles, "RemoteDebugger");
-            string expectedManagedPath = Path.Combine(productRoot, "RemoteDebugger.exe");
-            string expectedServicePath = Path.Combine(productRoot, "Support", "RemoteDebugger.Support.exe");
-            managedPath = RequireProtectedFile(managedPath, productRoot, "managed application");
-            servicePath = RequireProtectedFile(servicePath, Path.Combine(productRoot, "Support"), "support service");
-            if (!PathsEqual(managedPath, expectedManagedPath)) throw new InvalidDataException("ManagedExecutablePath is not the protected Program Files application.");
-            if (!PathsEqual(servicePath, expectedServicePath)) throw new InvalidDataException("ServiceExecutablePath is not the protected Program Files support service.");
+            string stagedPath = RequireProtectedFile(setup.StagedExecutablePath, SetupRoot(requestId), "staged setup executable");
+            if (!string.Equals(HashFile(stagedPath), fixtureHash, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("The staged setup executable bytes do not match the requested fixture.");
+            string managedPath = RequireProtectedFile(SupportPlatformPaths.ApplicationExecutable, SupportPlatformPaths.ProductDirectory, "managed application");
+            string servicePath = RequireProtectedFile(SupportPlatformPaths.ServiceExecutable, SupportPlatformPaths.InstallDirectory, "support service");
+            string managedHash = HashFile(managedPath);
+            string serviceHash = HashFile(servicePath);
+            if (!string.Equals(managedHash, fixtureHash, StringComparison.OrdinalIgnoreCase) || !string.Equals(serviceHash, fixtureHash, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("The managed application and support service must both match the requested fixture bytes.");
 
-            string actualManagedHash = HashFile(managedPath);
-            if (!string.Equals(managedHash, actualManagedHash, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException($"ManagedExecutableSha256 does not match the managed executable ({actualManagedHash}).");
-            if (!string.Equals(managedHash, actualFixtureHash, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException("The managed executable bytes do not match the requested fixture.");
+            string publisher = AuthenticodeVerifier.InspectForEnrollment(expectedFixture).SignerThumbprint;
+            string receiptPath = RequireProtectedFile(SupportPlatformPaths.ProvisioningReceiptPath, SupportPlatformPaths.StateDirectory, "product provisioning receipt");
+            DateTimeOffset provisionedUtc = ValidateProductReceipt(receiptPath, managedPath, servicePath, publisher, registeredSid);
+            using var service = new ServiceController(SupportPlatformPaths.ServiceName);
+            using var serviceKey = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\" + SupportPlatformPaths.ServiceName);
+            if (service.Status != ServiceControllerStatus.Running || service.StartType != ServiceStartMode.Manual
+                || !string.Equals(serviceKey?.GetValue("ObjectName") as string, "LocalSystem", StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(serviceKey?.GetValue("ImagePath") as string, $"\"{servicePath}\" --platform-service", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("The installed support service is not the running, demand-started LocalSystem fixture.");
 
-            string actualServiceHash = HashFile(servicePath);
-            if (!string.Equals(serviceHash, actualServiceHash, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException($"ServiceExecutableSha256 does not match the support service ({actualServiceHash}).");
-
-            receiptPath = RequireRegularFile(receiptPath, "product provisioning receipt");
-            string expectedReceiptPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "RemoteDebugger", "Support", "provisioning-receipt.json");
-            if (!PathsEqual(receiptPath, expectedReceiptPath)) throw new InvalidDataException("ReceiptPath is outside the protected product state directory.");
-            ValidateProductReceipt(receiptPath, managedPath, servicePath, publisher, registeredSid);
-
-            string expectedRequestId = Path.GetFileName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(output)));
-            if (!string.Equals(requestId, expectedRequestId, StringComparison.Ordinal)) throw new InvalidDataException("The provisioning evidence request does not match the Lab output directory.");
             string collectedEvidencePath = EvidencePath(output);
             File.Copy(evidencePath, collectedEvidencePath, true);
-            receipt = new BrokerReceipt(formatVersion, profile, requestId, fixtureHash, managedPath, managedHash, servicePath, serviceHash, serviceName, serviceStatus, serviceStartMode, publisher, registeredSid, receiptPath, provisionedUtc, collectedEvidencePath);
+            receipt = new BrokerReceipt(ExpectedFormatVersion, ContractName, requestId, fixtureHash, managedPath, managedHash, servicePath, serviceHash,
+                SupportPlatformPaths.ServiceName, service.Status.ToString(), "demand", publisher, registeredSid, receiptPath, provisionedUtc, collectedEvidencePath);
             return true;
         }
         catch (Exception ex)
@@ -180,50 +139,33 @@ internal static class ProvisioningEvidence
         }
     }
 
-    public static bool TryReadObservation(string output, out GuestObservation observation, out string error, DateTimeOffset? capturedAfterUtc = null)
+    internal static SetupReceipt ValidateSetupReceipt(JsonElement value, string requestId, string fixtureRelativePath, string fixtureHash)
     {
-        observation = null!;
-        error = "";
-        try
-        {
-            string sourcePath = SourceObservationPath(output);
-            if (!File.Exists(sourcePath))
-            {
-                error = "The SYSTEM broker did not publish the read-only guest observation file.";
-                return false;
-            }
-            var info = new FileInfo(sourcePath);
-            if (info.Length <= 0 || info.Length > 256 * 1024) throw new InvalidDataException("The guest observation file is outside the bounded size limit.");
-            // Preserve the raw snapshot before parsing. A service query can
-            // fail independently of power/firewall collection, and its raw
-            // error object must remain reviewable in the guest evidence.
-            string collectedPath = Path.Combine(output, "remote-debugger-observation.json");
-            File.Copy(sourcePath, collectedPath, true);
-            JsonElement value = JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(sourcePath));
-            int formatVersion = RequiredInt(value, "FormatVersion");
-            string requestId = RequiredString(value, "RequestId");
-            string capturedText = RequiredString(value, "CapturedUtc");
-            if (formatVersion != ExpectedFormatVersion) throw new InvalidDataException($"Unsupported guest observation format {formatVersion}.");
-            string expectedRequestId = Path.GetFileName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(output)));
-            if (!string.Equals(requestId, expectedRequestId, StringComparison.Ordinal)) throw new InvalidDataException("The guest observation request does not match the Lab output directory.");
-            if (!DateTimeOffset.TryParse(capturedText, out DateTimeOffset capturedUtc)) throw new InvalidDataException("CapturedUtc is not a round-trip timestamp.");
-
-            GuestCommandObservation power = ParseCommand(RequiredObject(value, "PowerRequests"));
-            GuestCommandObservation firewall = ParseCommand(RequiredObject(value, "Firewall"));
-            var services = ParseServices(RequiredArray(value, "Services"));
-            if (DateTimeOffset.UtcNow - capturedUtc < TimeSpan.Zero || DateTimeOffset.UtcNow - capturedUtc > TimeSpan.FromSeconds(10))
-                throw new InvalidDataException("The guest observation is older than the ten-second freshness bound.");
-            if (capturedAfterUtc.HasValue && capturedUtc <= capturedAfterUtc.Value)
-                throw new InvalidDataException("The guest observation predates the observed product exit.");
-            observation = new GuestObservation(formatVersion, requestId, capturedUtc, power, firewall, services, collectedPath);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            error = ex.Message;
-            observation = null!;
-            return false;
-        }
+        if (RequiredInt(value, "FormatVersion") != ExpectedFormatVersion || RequiredString(value, "Contract") != ContractName)
+            throw new InvalidDataException("The setup evidence is not GuestSetupV1 format 1.");
+        if (RequiredString(value, "RequestId") != requestId) throw new InvalidDataException("The setup evidence belongs to another request.");
+        string relative = RequiredString(value, "ExecutableRelativePath").Replace('/', '\\');
+        if (!string.Equals(relative, fixtureRelativePath.Replace('/', '\\'), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("The setup executable path does not match the requested fixture.");
+        foreach (string key in new[] { "ExecutableSha256", "StagedExecutableSha256" })
+            if (!string.Equals(NormalizeHash(RequiredString(value, key), key), fixtureHash, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException($"{key} does not match the requested fixture.");
+        if (!RequiredArray(value, "Arguments").EnumerateArray().Select(argument => argument.GetString()).SequenceEqual(new[] { "cli", "platform-provision" }))
+            throw new InvalidDataException("The setup arguments do not match the supported provisioner.");
+        if (!TryGetBoolean(value, "Succeeded", out bool succeeded) || !succeeded || RequiredInt(value, "ExitCode") != 0)
+            throw new InvalidDataException("The setup process did not exit successfully.");
+        JsonElement identity = RequiredObject(value, "Identity");
+        if (!TryGetBoolean(identity, "IsAdministrator", out bool administrator) || !administrator)
+            throw new InvalidDataException("The setup process did not run as administrator.");
+        string sid = RequiredString(identity, "UserSid");
+        _ = new SecurityIdentifier(sid);
+        if (!DateTimeOffset.TryParse(RequiredString(value, "StartedUtc"), out var started)
+            || !DateTimeOffset.TryParse(RequiredString(value, "CompletedUtc"), out var completed) || completed < started)
+            throw new InvalidDataException("The setup evidence has invalid timestamps.");
+        string stagedPath = RequiredString(value, "StagedExecutablePath");
+        if (!PathsEqual(stagedPath, Path.Combine(SetupRoot(requestId), "stage", Path.GetFileName(relative))))
+            throw new InvalidDataException("The setup executable is outside the request's protected staging path.");
+        return new SetupReceipt(sid, stagedPath, completed);
     }
 
     public static ProductIdentity InspectProduct(Process process, string expectedPath, string registeredSid)
@@ -280,58 +222,17 @@ internal static class ProvisioningEvidence
         return false;
     }
 
-    public static string[] FormatServices(IEnumerable<GuestServiceObservation> services)
-        => services.Select(service => service.HasError
-            ? "[observer service error] " + service.Error
-            : string.Join('|', service.Name, service.State, service.StartMode, service.StartName, service.PathName)).ToArray();
-
-    private static void ValidateProductReceipt(string path, string managedPath, string servicePath, string publisher, string registeredSid)
+    private static DateTimeOffset ValidateProductReceipt(string path, string managedPath, string servicePath, string publisher, string registeredSid)
     {
         JsonElement value = JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(path));
         if (!TryGetBoolean(value, "Provisioned", out bool provisioned) || !provisioned) throw new InvalidDataException("The product provisioning receipt is not marked Provisioned.");
         if (!PathsEqual(RequiredString(value, "ManagedApplicationPath"), managedPath)) throw new InvalidDataException("The product receipt names a different managed application.");
         if (!PathsEqual(RequiredString(value, "ServiceExecutablePath"), servicePath)) throw new InvalidDataException("The product receipt names a different support service.");
-        if (!string.Equals(RequiredString(value, "PublisherThumbprint"), publisher, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The product receipt publisher does not match the broker evidence.");
-        if (!string.Equals(RequiredString(value, "RegisteredUserSid"), registeredSid, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The product receipt interactive SID does not match the broker evidence.");
+        if (!string.Equals(RequiredString(value, "PublisherThumbprint"), publisher, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The product receipt publisher does not match the signed fixture.");
+        if (!string.Equals(RequiredString(value, "RegisteredUserSid"), registeredSid, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The product receipt interactive SID does not match the setup account.");
         if (!string.Equals(RequiredString(value, "ServiceStartMode"), "demand", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The product receipt is not demand-started.");
-    }
-
-    private static string SourceObservationPath(string output)
-    {
-        string requestId = Path.GetFileName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(output)));
-        if (requestId.Length == 0 || requestId.Length > 128 || requestId.Any(c => !(char.IsLetterOrDigit(c) || c is '.' or '_' or '-')))
-            throw new InvalidDataException("The Lab output directory does not identify a valid broker request.");
-        return Path.Combine(@"C:\CodexGuest\Provisioning", requestId, "remote-debugger-observation.json");
-    }
-
-    private static GuestCommandObservation ParseCommand(JsonElement value)
-    {
-        int exitCode = RequiredInt(value, "ExitCode");
-        string stdout = RequiredText(value, "Stdout");
-        string stderr = RequiredText(value, "Stderr");
-        return new GuestCommandObservation(exitCode, stdout, stderr);
-    }
-
-    private static GuestServiceObservation[] ParseServices(JsonElement value)
-    {
-        var services = new List<GuestServiceObservation>();
-        foreach (var item in value.EnumerateArray())
-        {
-            if (item.ValueKind != JsonValueKind.Object) throw new InvalidDataException("Services contains a non-object value.");
-            if (TryGetBoolean(item, "HasError", out bool hasError) && hasError)
-            {
-                string error = TryGetString(item, "Error", out var detail) && detail.Length > 0 ? detail : "The guest observer reported a service query error.";
-                services.Add(new GuestServiceObservation("", "", "", "", "", error));
-                continue;
-            }
-            if (TryGetString(item, "Error", out var serviceError) && serviceError.Length > 0 && !TryGetProperty(item, "Name", out _))
-            {
-                services.Add(new GuestServiceObservation("", "", "", "", "", serviceError));
-                continue;
-            }
-            services.Add(new GuestServiceObservation(RequiredString(item, "Name"), RequiredString(item, "State"), RequiredString(item, "StartMode"), RequiredString(item, "StartName"), RequiredString(item, "PathName")));
-        }
-        return services.ToArray();
+        if (!DateTimeOffset.TryParse(RequiredString(value, "ProvisionedUtc"), out var provisionedUtc)) throw new InvalidDataException("The product receipt has no valid provisioning timestamp.");
+        return provisionedUtc;
     }
 
     private static string RequireRegularFile(string path, string description)
@@ -377,12 +278,6 @@ internal static class ProvisioningEvidence
         throw new InvalidDataException($"Provisioning evidence is missing {key}.");
     }
 
-    private static string RequiredText(JsonElement value, string key)
-    {
-        if (TryGetString(value, key, out string result)) return result;
-        throw new InvalidDataException($"Provisioning evidence is missing {key}.");
-    }
-
     private static int RequiredInt(JsonElement value, string key)
     {
         if (TryGetProperty(value, key, out var result) && result.ValueKind == JsonValueKind.Number && result.TryGetInt32(out int number)) return number;
@@ -392,13 +287,13 @@ internal static class ProvisioningEvidence
     private static JsonElement RequiredObject(JsonElement value, string key)
     {
         if (TryGetProperty(value, key, out var result) && result.ValueKind == JsonValueKind.Object) return result;
-        throw new InvalidDataException($"Guest observation is missing {key}.");
+        throw new InvalidDataException($"Setup evidence is missing {key}.");
     }
 
     private static JsonElement RequiredArray(JsonElement value, string key)
     {
         if (TryGetProperty(value, key, out var result) && result.ValueKind == JsonValueKind.Array) return result;
-        throw new InvalidDataException($"Guest observation is missing {key}.");
+        throw new InvalidDataException($"Setup evidence is missing {key}.");
     }
 
     private static bool TryGetString(JsonElement value, string key, out string result)
