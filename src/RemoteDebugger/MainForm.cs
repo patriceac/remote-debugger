@@ -1263,9 +1263,9 @@ public sealed partial class MainForm : Forms.Form
         updateProgressArea.Visible = false;
         try
         {
-            // A discovered LAN endpoint is already identity-pinned. Re-running the
-            // full LAN/relay discovery here adds a fixed delay before pairing.
-            if (selectedPeer is { } previous && !RemoteClient.IsLanAddress(previous.Host))
+            // Ending support rotates the private invitation, including for a LAN peer.
+            // Rebind before pairing so its authentication secret is never stale.
+            if (PrivateInternet && selectedPeer is { } previous)
             {
                 var fresh = await PeerDiscovery.FindAsync(PrivateInternet, token => Discovery.FindAsync(1500, token),
                     token => InternetSettings.Load(root)!.FindAsync(token), pairingCts.Token);
