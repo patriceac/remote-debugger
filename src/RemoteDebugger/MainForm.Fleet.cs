@@ -205,6 +205,7 @@ public sealed partial class MainForm
                 var device = initial with { State = "preparing", Detail = "", Percent = 0 }; RecordDevice(device);
                 var target = RemoteClient.ForDiscoveredPeer(device.Peer, root);
                 bool acquired = false;
+                bool updated = false;
                 try
                 {
                     using var timeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
@@ -225,7 +226,7 @@ public sealed partial class MainForm
                     bool receiving = true;
                     var progress = new Progress<AgentUpdateProgress>(value =>
                     {
-                        if (!receiving || IsDisposed) return;
+                        if (!receiving || IsDisposed || value.Stage == "complete") return;
                         device = device with { State = value.Stage, Percent = value.TransferPercent,
                             Detail = value.Stage == "transferring"
                                 ? FormatFleetBytes(value.TransferredBytes, value.TotalBytes) : "" };
@@ -233,7 +234,8 @@ public sealed partial class MainForm
                     });
                     try { await AgentUpdateClient.SynchronizeAgentAsync(target, controller, snapshot, timeout.Token, progress); }
                     finally { receiving = false; }
-                    RecordDevice(device with { Version = controller.FileVersion ?? "", Sha256 = controller.Sha256, State = "current", Percent = 100, Detail = "" });
+                    updated = true;
+                    RecordDevice(device with { State = "finalizing", Percent = 0, Detail = "" });
                 }
                 catch (Exception ex) { RecordDevice(device with { State = "failed", Detail = lifetime.IsCancellationRequested ? UiText.TransferPaused : FleetFailureDetail(ex) }); }
                 finally
@@ -244,6 +246,7 @@ public sealed partial class MainForm
                         try { await target.ReleaseUpdateAsync(release.Token); }
                         catch { try { await target.DisconnectAsync(release.Token); } catch { } }
                     }
+                    if (updated) RecordDevice(device with { Version = controller.FileVersion ?? "", Sha256 = controller.Sha256, State = "current", Percent = 100, Detail = "" });
                     SaveFleet();
                 }
             }, lifetime.Token);
