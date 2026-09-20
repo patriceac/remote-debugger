@@ -6,7 +6,7 @@ The command path is **Codex → local controller CLI → encrypted connection �
 
 ## Get started
 
-For your personal internet-enabled installation, use `RemoteDebugger-<version>-Private-Setup.exe` on each PC. Enter your setup passphrase once at first launch; this Windows account then remembers access. The installer starts the app in the system tray when you sign in to Windows. Open it from the tray and click **Enable support** on the receiving PC. On your support PC, select its computer name and click **Connect**. To create a protected setup or remotely migrate existing computers, quit any running Remote Debugger instance (including the tray instance), then launch `RemoteDebugger.exe --security` on the controlling PC. See [security setup and migration](docs/SECURITY_SETUP.md).
+For your personal internet-enabled installation, use `RemoteDebugger-<version>-Private-Setup.exe` on each PC. Enter your setup passphrase once at first launch; this Windows account then remembers access. Remote Debugger starts in the system tray after sign-in and on a normal launch. Open it from the tray, or launch it again, and click **Enable support** on the receiving PC. On your support PC, select its computer name and click **Connect**. To create a protected setup or remotely migrate existing computers, quit any running Remote Debugger instance (including the tray instance), then launch `RemoteDebugger.exe --security` on the controlling PC. See [security setup and migration](docs/SECURITY_SETUP.md).
 
 Build with .NET SDK 8 on Windows:
 

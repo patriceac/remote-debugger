@@ -32,6 +32,17 @@ public sealed class InstallerDefinitionTests
     }
 
     [Fact]
+    public void GuiExecutableAttachesToAConsoleOnlyForCliCommands()
+    {
+        string project = File.ReadAllText(ProjectFile("src", "RemoteDebugger", "RemoteDebugger.csproj"));
+        string program = File.ReadAllText(ProjectFile("src", "RemoteDebugger", "Program.cs"));
+
+        Assert.Contains("<OutputType>WinExe</OutputType>", project, StringComparison.Ordinal);
+        Assert.Contains("Native.AttachConsole(uint.MaxValue); return CliAsync", program, StringComparison.Ordinal);
+        Assert.DoesNotContain("Native.FreeConsole()", program, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void InstallerPackagesTheReleaseExecutableAndCanLaunchItNormally()
     {
         string definition = File.ReadAllText(ProjectFile("installer", "RemoteDebugger.iss"));

@@ -21,13 +21,13 @@ public static class Program
         if (args.Length == 2 && args[0] == "--support-refresh-worker") return SupportInstaller.RefreshServiceAfterSignal(args[1]);
         if (args.Length == 2 && args[0] == "--elevated-job") return ElevatedJob.ExecuteAsync(args[1]).GetAwaiter().GetResult();
         if (args.Length == 2 && args[0] == "--ui-job") { Forms.Application.SetHighDpiMode(Forms.HighDpiMode.PerMonitorV2); return UiAutomationJob.Execute(args[1]); }
-        if (args.Length > 0 && args[0] == "cli") return CliAsync(args.Skip(1).ToArray()).GetAwaiter().GetResult();
+        if (args.Length > 0 && args[0] == "cli") { Native.AttachConsole(uint.MaxValue); return CliAsync(args.Skip(1).ToArray()).GetAwaiter().GetResult(); }
         int languageIndex = Array.IndexOf(args, "--ui-language");
         string? languageOverride = languageIndex >= 0 && languageIndex + 1 < args.Length ? args[languageIndex + 1] : null;
         int rootIndex = Array.IndexOf(args, "--data-root");
         string? dataRoot = rootIndex >= 0 && rootIndex + 1 < args.Length ? args[rootIndex + 1] : null;
         UiCulture.Initialize(languageOverride ?? LanguagePreference.Load(dataRoot ?? Vault.DefaultRoot));
-        Native.FreeConsole(); ApplicationConfiguration.Initialize();
+        ApplicationConfiguration.Initialize();
         if (args.Contains("--admin-setup") || !args.Contains("--startup") && !args.Contains("--resume-update") &&
             File.Exists(new UpdateAdminStore(dataRoot ?? Vault.DefaultRoot).PendingPath))
         {
@@ -52,12 +52,13 @@ public static class Program
             catch (Exception ex) { startupPreparationError = ex.Message; }
         }
         bool loopbackOnly = args.Contains("--loopback-only");
-        bool startInTray = args.Contains("--startup") || args.Contains("--resume-update");
+        bool silentStartup = args.Contains("--startup") || args.Contains("--resume-update");
+        bool startInTray = WindowLifetime.StartInTray(args);
         using var instance = SingleInstance.ForCurrentSession(loopbackOnly, dataRoot);
         if (!instance.TryAcquire())
         {
             // Windows startup must not surface an already-running workspace.
-            if (startInTray) return 0;
+            if (silentStartup) return 0;
             if (instance.ActivateExistingAsync().GetAwaiter().GetResult()) return 0;
             // Recover if the owner exited or crashed while activation was attempted.
             if (!instance.TryAcquire()) return 1;

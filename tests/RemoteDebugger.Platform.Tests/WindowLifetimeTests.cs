@@ -6,6 +6,16 @@ namespace RemoteDebugger.Platform.Tests;
 
 public sealed class WindowLifetimeTests
 {
+    [Fact]
+    public void NormalAndAutomaticLaunchesStartInTheTray()
+    {
+        Assert.True(WindowLifetime.StartInTray([]));
+        Assert.True(WindowLifetime.StartInTray(["--startup"]));
+        Assert.True(WindowLifetime.StartInTray(["--resume-update"]));
+        Assert.False(WindowLifetime.StartInTray(["--controller"]));
+        Assert.False(WindowLifetime.StartInTray(["--security"]));
+    }
+
     [Theory]
     [InlineData(AgentStopReason.SupportEnded, false)]
     [InlineData(AgentStopReason.UpdateReplacement, true)]
