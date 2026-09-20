@@ -1360,6 +1360,7 @@ public sealed partial class MainForm : Forms.Form
         try
         {
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await target.CloseHeartbeatChannelAsync();
             JsonElement heartbeat = await target.HeartbeatAsync(deadline.Token);
             if (!CanRetainFailedSynchronization(heartbeat) || generation != operationGeneration || !ReferenceEquals(target, client)) return false;
             clientUpToDate = heartbeat.GetProperty("binaryMatched").GetBoolean();
