@@ -10,6 +10,19 @@ namespace RemoteDebugger.Platform.Tests;
 public sealed class FleetVersionTests
 {
     [Theory]
+    [InlineData("checking", true)]
+    [InlineData("preparing", true)]
+    [InlineData("verifying", true)]
+    [InlineData("restarting", true)]
+    [InlineData("transferring", false)]
+    [InlineData("queued", false)]
+    [InlineData("current", false)]
+    [InlineData("failed", false)]
+    [InlineData("offline", false)]
+    public void WaitingUpdateStagesKeepTheirElapsedTimeAndActivityBarRefreshing(string stage, bool expected) =>
+        Assert.Equal(expected, MainForm.NeedsFleetProgressAnimation(stage));
+
+    [Theory]
     [InlineData(true, "checking")]
     [InlineData(false, "offline")]
     public void DiscoveryDiscardsElapsedTimeFromThePreviousAttempt(bool online, string expectedState)

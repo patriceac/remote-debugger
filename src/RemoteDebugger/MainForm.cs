@@ -967,7 +967,7 @@ public sealed partial class MainForm : Forms.Form
         if (IsDisposed) return;
         RefreshPowerHold();
         UpdateAgentState(); if (PrivateInternet) UpdatePrivateAgentState(); UpdateInternetState(); UpdateHeader(); RefreshControllerControls(); RefreshFooter(); RefreshInputStatus();
-        if (fleetRefreshing || fleet.Values.Any(device => device.State is "checking" or "verifying" or "restarting")) peers.Invalidate();
+        if (fleetRefreshing || fleet.Values.Any(device => NeedsFleetProgressAnimation(device.State))) peers.Invalidate();
         if (!agentIdle && agent?.Operations.Maintenance is { } maintenance)
         {
             var state = Json.Element(maintenance.Status); bool active = state.TryGetProperty("active", out var a) && a.GetBoolean(); bool brokerAvailable = !state.TryGetProperty("brokerAvailable", out var broker) || broker.GetBoolean(); bool requiresProvisioning = state.TryGetProperty("requiresProvisioning", out var provisioning) && provisioning.GetBoolean(); bool paired = agent?.Session.HasPaired == true;

@@ -268,6 +268,8 @@ public sealed partial class MainForm
         }
     }
 
+    internal static bool NeedsFleetProgressAnimation(string state) => state is "checking" or "preparing" or "verifying" or "restarting";
+
     internal static string FormatFleetBytes(long transferred, long total) => total >= 1024 * 1024
         ? $"{transferred / 1048576d:F1}/{total / 1048576d:F1} MiB"
         : $"{transferred / 1024d:F0}/{total / 1024d:F0} KiB";
