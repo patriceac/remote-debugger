@@ -120,10 +120,12 @@ internal static class ProvisioningEvidence
             DateTimeOffset provisionedUtc = ValidateProductReceipt(receiptPath, managedPath, servicePath, publisher, registeredSid);
             using var service = new ServiceController(SupportPlatformPaths.ServiceName);
             using var serviceKey = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\" + SupportPlatformPaths.ServiceName);
-            if (service.Status != ServiceControllerStatus.Running || service.StartType != ServiceStartMode.Manual
+            // The demand-started service deliberately stops after one idle minute.
+            // Its liveness is asserted through the managed CLI after app launch.
+            if (service.StartType != ServiceStartMode.Manual
                 || !string.Equals(serviceKey?.GetValue("ObjectName") as string, "LocalSystem", StringComparison.OrdinalIgnoreCase)
                 || !string.Equals(serviceKey?.GetValue("ImagePath") as string, $"\"{servicePath}\" --platform-service", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException("The installed support service is not the running, demand-started LocalSystem fixture.");
+                throw new InvalidDataException("The installed support service is not the demand-started LocalSystem fixture.");
 
             string collectedEvidencePath = EvidencePath(output);
             File.Copy(evidencePath, collectedEvidencePath, true);
