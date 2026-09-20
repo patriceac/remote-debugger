@@ -19,6 +19,7 @@ evidence/
 .vs/
 .idea/
 relay/node_modules/
+mcp/node_modules/
 relay/.wrangler/
 relay/dist/
 relay/.dev.vars*

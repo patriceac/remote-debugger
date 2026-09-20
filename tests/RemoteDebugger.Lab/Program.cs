@@ -23,7 +23,7 @@ internal static class Program
         if (args.Length < 2) throw new ArgumentException("The Lab needs a role and an output directory.");
         Forms.Application.SetHighDpiMode(Forms.HighDpiMode.PerMonitorV2);
         Forms.Application.EnableVisualStyles();
-        Forms.Application.Run(new LabForm(args[0], args[1], args.Length > 2 ? args[2] : "runtime", args.Length > 3 ? args[3] : "none", args.Length > 4 ? args[4] : null));
+        Forms.Application.Run(new LabForm(args[0], args[1], args.Length > 2 ? args[2] : "runtime", args.Length > 3 ? args[3] : "none", args.Length > 4 ? args[4] : null, args.Length > 5 ? args[5] : null));
     }
 }
 
@@ -94,7 +94,7 @@ internal sealed partial class LabForm : Forms.Form
 
     private sealed record CheckRecord(string Id, string Requirement, string Status, bool Required, DateTimeOffset Utc, object? Evidence);
 
-    public LabForm(string role, string output, string scope, string updateVariant, string? applicationPath = null)
+    public LabForm(string role, string output, string scope, string updateVariant, string? applicationPath = null, string? mcpPackage = null)
     {
         this.role = role.Trim().ToLowerInvariant();
         this.output = Path.GetFullPath(output);
@@ -126,6 +126,7 @@ internal sealed partial class LabForm : Forms.Form
             try
             {
                 guestElevated = Native.IsElevated();
+                if (role == "loopbackmcp") { await McpReviewAsync(mcpPackage ?? throw new ArgumentException("MCP package path is required.")); return; }
                 if (role == "internetinstaller") { await InternetInstallerReviewAsync(); return; }
                 if (role == "internet") { await InternetReviewAsync(); return; }
                 if (role == "security") { await SecurityReviewAsync(); return; }

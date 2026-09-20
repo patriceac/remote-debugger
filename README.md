@@ -37,6 +37,10 @@ on a remote LAN. See [Wake-on-LAN](docs/WAKE_ON_LAN.md) for setup and network re
 
 ## Development
 
+Codex can use nine typed [local MCP tools](docs/MCP.md) for the connected computer.
+The stdio adapter wraps the signed CLI with target binding, bounded requests,
+structured errors and image results. Build it with `./scripts/Build-Mcp.ps1`.
+
 ```powershell
 ./scripts/Test-Unit.ps1
 ./scripts/Build.ps1 -IncludeLab -Sign

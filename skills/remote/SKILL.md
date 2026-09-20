@@ -1,6 +1,6 @@
 ---
 name: remote
-description: "Use Remote Debugger's authenticated CLI to support or diagnose the authorized Windows PC already connected to the current remote session."
+description: "Use Remote Debugger's local MCP tools or authenticated CLI to support the authorized Windows PC already connected to the current session."
 ---
 
 # Remote
@@ -14,6 +14,17 @@ Use this skill for an existing Remote Debugger support session: inspecting, diag
 - Use the CLI's current authenticated connection. Do not discover, establish, synchronize, or switch sessions from this skill.
 
 ## Diagnose before changing
+
+Prefer the `remote-debugger` MCP tools when available. Start with `remote_status`,
+confirm its computer name, and pass the returned `targetId` to subsequent tools.
+Use the typed diagnostics, `remote_run`, `remote_screenshot`, and file-transfer
+tools within the authorized task. Preserve the returned request `id`; reuse it as
+`requestId` only for an uncertain command retry in the same session. A target change
+requires fresh inspection. A binary mismatch requires operator synchronization in
+the app; do not bypass it with an ordinary CLI call that might auto-update.
+
+For these operations without MCP, prefer `cli connected --request` with the same
+`targetId` workflow. Use the ordinary CLI below for capabilities MCP does not expose.
 
 Start with `status` to verify the connected machine, then use `system`, `processes`, and, when visual evidence helps, a fresh `cli screenshot`. For an application, use `process.info` to record its actual path, hash, and version before acting. If `status` cannot confirm the connected machine, stop instead of choosing or connecting to another target.
 

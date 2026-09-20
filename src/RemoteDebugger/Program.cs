@@ -200,7 +200,19 @@ public static class Program
             }
             if (verb == "help")
             {
+                Console.WriteLine("RemoteDebugger cli connected --request FILE_OR_- [--connection FILE] [--cancel-on-stdin-close]\nGuarded current-session operations for MCP; see docs/MCP.md.");
                 Console.WriteLine("RemoteDebugger cli wake --mac MAC [--address HOST] [--port PORT] | discover | internet-import --file SETUP.rdrelay | pair --host IP_OR_SUPPORT_ID [--fingerprint SHA256] (code on stdin) | sync | platform-status | platform-provision | call --request FILE | upload --file FILE --path RELATIVE | download --path REMOTE --file LOCAL | screenshot --file IMAGE | stream --seconds 10 --fps 5\nOptional: --connection FILE; --data-root DIRECTORY for internet-import and pair. Request JSON: {\"operation\":\"status\",\"args\":{},\"timeoutSeconds\":60,\"id\":\"UUID\"}. Exit 0=success, 1=operation failure, 2=transport/input failure. See docs/CLI.md."); return 0;
+            }
+            if (verb == "connected")
+            {
+                string path = Option("--request");
+                bool monitorInput = path == "-" && args.Contains("--cancel-on-stdin-close");
+                string input = path != "-" ? await File.ReadAllTextAsync(path, ct.Token) : monitorInput
+                    ? await Console.In.ReadLineAsync(ct.Token) ?? "" : await Console.In.ReadToEndAsync(ct.Token);
+                var connectedRequest = JsonSerializer.Deserialize<JsonElement>(input);
+                if (monitorInput) _ = Task.Run(() => CancelWhenInputClosesAsync(ct));
+                var result = await ConnectedCli.ExecuteAsync(connectedRequest, () => new ConnectedRemote(RemoteClient.Load(config)), ct.Token);
+                Console.WriteLine(Json.Text(result)); return result.Ok ? 0 : 1;
             }
             var remote = RemoteClient.Load(config);
             if (verb == "sync")
@@ -253,6 +265,13 @@ public static class Program
             Console.WriteLine(Json.Text(reply)); return reply.Ok ? 0 : 1;
         }
         catch (Exception ex) { Console.WriteLine(Json.Text(new { ok = false, error = ex is OperationCanceledException ? "cancelled" : "transport_or_input", message = ex.Message })); return 2; }
+    }
+
+    private static async Task CancelWhenInputClosesAsync(CancellationTokenSource cancellation)
+    {
+        try { await Console.In.ReadToEndAsync(cancellation.Token); cancellation.Cancel(); }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
     }
 
     internal static Task<PeerDiscoveryResult> DiscoverPeersAsync(
