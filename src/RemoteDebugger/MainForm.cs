@@ -735,6 +735,7 @@ public sealed partial class MainForm : Forms.Form
         }
         catch (Exception ex)
         {
+            _ = await TryRetainFailedSynchronizationAsync(target, generation);
             if (generation == operationGeneration && ReferenceEquals(target, client))
             {
                 connectionState.SetText(() => UiText.FailurePrefix + ex.Message);
@@ -1311,7 +1312,12 @@ public sealed partial class MainForm : Forms.Form
             if (generation != operationGeneration) return; synchronizingAgent = false; updateProgressArea.Visible = false; supportSession = true; heartbeatHealthy = false; powerHold ??= PowerHold.Acquire(); StartHeartbeat(); SelectRole(1); SelectControllerPage(1); code.SetText(""); connectionState.SetText(() => UiText.SessionEstablished); SetFooterMessage(() => UiText.ActiveVersionsSynchronized); SetFooterDetail(() => UiText.LoadingMeasurements); RefreshFooter(); _ = LoadInitialRemoteStateAsync(generation);
         }
         catch (OperationCanceledException) { if (pairedClient != null) _ = EndSessionBestEffortAsync(pairedClient); if (generation == operationGeneration) { connectionState.SetText(() => UiText.ConnectionCancelledPeriod); SetFooterMessage(() => UiText.ConnectionCancelled); SetFooterDetail(() => UiText.RetryDisplayedCode); } }
-        catch (Exception ex) { if (pairedClient != null) _ = EndSessionBestEffortAsync(pairedClient); if (generation == operationGeneration) { connectionState.SetText(() => UiText.FailurePrefix + ex.Message); SetFooterMessage(() => UiText.ConnectionFailed); footerDetail = ex.Message; RefreshFooter(); } }
+        catch (Exception ex)
+        {
+            bool retained = pairedClient != null && await TryRetainFailedSynchronizationAsync(pairedClient, generation);
+            if (pairedClient != null && !retained) _ = EndSessionBestEffortAsync(pairedClient);
+            if (generation == operationGeneration) { connectionState.SetText(() => UiText.FailurePrefix + ex.Message); SetFooterMessage(() => UiText.ConnectionFailed); footerDetail = ex.Message; RefreshFooter(); }
+        }
         finally
         {
             bool ownsPairing = ReferenceEquals(pairingLifetime, pairingCts);
@@ -1348,6 +1354,26 @@ public sealed partial class MainForm : Forms.Form
         await SupportPlatform.SynchronizeAgentAsync(target, ct, progress);
         if (generation == operationGeneration && ReferenceEquals(target, client)) clientUpToDate = true;
     }
+
+    private async Task<bool> TryRetainFailedSynchronizationAsync(RemoteClient target, int generation)
+    {
+        try
+        {
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            JsonElement heartbeat = await target.HeartbeatAsync(deadline.Token);
+            if (!CanRetainFailedSynchronization(heartbeat) || generation != operationGeneration || !ReferenceEquals(target, client)) return false;
+            clientUpToDate = heartbeat.GetProperty("binaryMatched").GetBoolean();
+            supportSession = true; heartbeatHealthy = clientUpToDate; powerHold ??= PowerHold.Acquire();
+            SelectRole(1); SelectControllerPage(0); code.SetText(""); StartHeartbeat();
+            return true;
+        }
+        catch { return false; }
+    }
+
+    internal static bool CanRetainFailedSynchronization(JsonElement heartbeat) =>
+        heartbeat.TryGetProperty("session", out var session) &&
+        session.TryGetProperty("connected", out var connected) && connected.ValueKind == JsonValueKind.True &&
+        heartbeat.TryGetProperty("binaryMatched", out var matched) && matched.ValueKind is JsonValueKind.True or JsonValueKind.False;
 
     private async Task UpdateConnectedClientAsync()
     {

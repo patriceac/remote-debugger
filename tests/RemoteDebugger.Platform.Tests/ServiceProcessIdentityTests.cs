@@ -100,6 +100,14 @@ public sealed class FleetUpdateRecoveryTests
         Assert.False(AgentUpdateClient.IsRetryableStageFailure(new RemoteOperationException("update_failed", "Hash mismatch")));
     }
 
+    [Fact]
+    public void HealthReconnectRetriesTransportLossButNotBrokerRollback()
+    {
+        Assert.True(AgentUpdateClient.IsTransientReconnectFailure(new IOException("process handoff"), CancellationToken.None));
+        Assert.False(AgentUpdateClient.IsTransientReconnectFailure(
+            new RemoteOperationException("update_failed", "Previous executable restored"), CancellationToken.None));
+    }
+
 }
 
 public sealed class AgentUpdateHealthTests

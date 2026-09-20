@@ -1,4 +1,5 @@
 using RemoteDebugger;
+using RemoteDebugger.Core;
 using Xunit;
 
 namespace RemoteDebugger.Platform.Tests;
@@ -58,6 +59,17 @@ public sealed class MainFormActionTests
     [Fact]
     public void MatchingClientBuildDisablesTheUpdateAction() =>
         Assert.False(MainForm.CanUpdateClient(true, true, false, false, false, clientUpToDate: true));
+
+    [Theory]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, true)]
+    [InlineData(false, false, false)]
+    public void FailedSynchronizationRetainsAnAuthenticatedSession(bool connected, bool binaryMatched, bool expected) =>
+        Assert.Equal(expected, MainForm.CanRetainFailedSynchronization(Json.Element(new
+        {
+            session = new { connected },
+            binaryMatched
+        })));
 
     [Theory]
     [InlineData(false, false, false)]

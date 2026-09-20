@@ -521,19 +521,28 @@ internal static class AgentUpdateClient
                 throw new IOException("Updated agent did not reconnect before the authenticated ticket expired.", lastError);
 
             JsonElement health = default;
+            Exception? healthReconnectError = null;
             while (DateTimeOffset.UtcNow < expires)
             {
                 ct.ThrowIfCancellationRequested();
-                var candidateHealth = RemoteClient.Require(await client.CallAsync("update.health", new { transactionId, ticket }, ct, seconds: 45));
-                if (candidateHealth.TryGetProperty("ready", out var ready) && ready.GetBoolean())
+                try
                 {
-                    health = candidateHealth;
-                    break;
+                    // The startup-health process can disappear and be replaced by the
+                    // restored executable. Present the same bounded ticket to whichever
+                    // verified process is currently listening before asking for health.
+                    RemoteClient.Require(await client.CallAsync("update.resume", new { transactionId, ticket }, ct, seconds: 10));
+                    var candidateHealth = RemoteClient.Require(await client.CallAsync("update.health", new { transactionId, ticket }, ct, seconds: 45));
+                    if (candidateHealth.TryGetProperty("ready", out var ready) && ready.GetBoolean())
+                    {
+                        health = candidateHealth;
+                        break;
+                    }
                 }
+                catch (Exception ex) when (IsTransientReconnectFailure(ex, ct)) { healthReconnectError = ex; }
                 await Task.Delay(500, ct);
             }
             if (health.ValueKind == JsonValueKind.Undefined)
-                throw new IOException("Updated agent did not complete startup health before the authenticated reconnect ticket expired.");
+                throw new IOException("Updated agent did not complete startup health before the authenticated reconnect ticket expired.", healthReconnectError);
             if (!UpdatePolicy.FixedHexEquals(health.Str("actualRunningSha256"), controller.Sha256))
                 throw new InvalidOperationException("Agent rolled back or relaunched bytes that differ from the controller executable.");
             var finalSnapshot = RemoteClient.Require(await client.CallAsync("update.snapshot", ct: ct, seconds: 30));
@@ -554,6 +563,10 @@ internal static class AgentUpdateClient
 
     private static bool IsExact(ExecutableSnapshot left, ExecutableSnapshot right) =>
         left.Size == right.Size && UpdatePolicy.FixedHexEquals(left.Sha256, right.Sha256);
+
+    internal static bool IsTransientReconnectFailure(Exception error, CancellationToken caller) =>
+        error is IOException or System.Net.Sockets.SocketException or System.Security.Authentication.AuthenticationException ||
+        error is OperationCanceledException && !caller.IsCancellationRequested;
 
     internal static void RequireUpdatePlatform(JsonElement snapshot)
     {
