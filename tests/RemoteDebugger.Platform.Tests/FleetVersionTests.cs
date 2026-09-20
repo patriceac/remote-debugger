@@ -11,10 +11,12 @@ public sealed class FleetVersionTests
 {
     [Theory]
     [InlineData("checking", true)]
+    [InlineData("hashing", true)]
     [InlineData("preparing", true)]
     [InlineData("verifying", true)]
     [InlineData("restarting", true)]
-    [InlineData("transferring", false)]
+    [InlineData("finalizing", true)]
+    [InlineData("transferring", true)]
     [InlineData("queued", false)]
     [InlineData("current", false)]
     [InlineData("failed", false)]
@@ -33,21 +35,22 @@ public sealed class FleetVersionTests
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
         FieldInfo Field(string name) => typeof(MainForm).GetField(name, flags)!;
         var devices = (System.Collections.IDictionary)Activator.CreateInstance(Field("fleet").FieldType)!;
-        var started = new Dictionary<string, DateTimeOffset>();
+        var progress = new Dictionary<string, UpdateProgressTracker>();
         var peer = new Peer("Booting PC", "192.0.2.1", 45832, new string('a', 64));
         var discovered = new List<Peer> { peer };
         Field("fleet").SetValue(form, devices);
-        Field("fleetStageStarted").SetValue(form, started);
+        Field("fleetProgress").SetValue(form, progress);
         Field("discoveredPeers").SetValue(form, discovered);
         Field("isUpdateAdmin").SetValue(form, true);
         void Observe() => typeof(MainForm).GetMethod("ObserveFleet", flags)!.Invoke(form, null);
 
         Observe();
-        started[peer.Fingerprint] = DateTimeOffset.UtcNow.AddMinutes(-6);
+        progress[peer.Fingerprint] = new(new Dictionary<string, double>());
+        progress[peer.Fingerprint].Report("preparing");
         if (!online) discovered.Clear();
         Observe();
 
-        Assert.Empty(started);
+        Assert.Empty(progress);
         var device = devices[peer.Fingerprint]!;
         Assert.Equal(expectedState, device.GetType().GetProperty("State")!.GetValue(device));
     }

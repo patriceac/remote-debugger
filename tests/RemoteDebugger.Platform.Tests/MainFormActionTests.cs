@@ -27,6 +27,7 @@ public sealed class MainFormActionTests
     [InlineData("transferring", true)]
     [InlineData("verifying", true)]
     [InlineData("staging", true)]
+    [InlineData("finalizing", true)]
     [InlineData("restarting", true)]
     [InlineData("complete", false)]
     public void UpdateProgressIsShownOnlyWhileSynchronizationIsOngoing(string stage, bool expected)
@@ -100,4 +101,12 @@ public sealed class MainFormActionTests
     public void FleetFailureShowsTheActualRemoteReason() =>
         Assert.Equal("update_failed: Publisher mismatch", MainForm.FleetFailureDetail(
             new RemoteOperationException("update_failed", "Publisher mismatch")));
+
+    [Fact]
+    public void EstimatedStepProgressCannotBeMistakenForMeasuredProgress()
+    {
+        Assert.StartsWith("≈ 25%", MainForm.UpdateStepNumbers(new(25, TimeSpan.FromSeconds(15), true)));
+        Assert.StartsWith("25%", MainForm.UpdateStepNumbers(new(25, TimeSpan.FromSeconds(15), false)));
+        Assert.DoesNotContain("0:00", MainForm.UpdateStepNumbers(new(95, null, true, true)));
+    }
 }

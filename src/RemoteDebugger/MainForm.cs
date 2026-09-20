@@ -501,6 +501,8 @@ public sealed partial class MainForm : Forms.Form
     private static string UpdateProgressDescription(AgentUpdateProgress progress) => progress.Stage switch
     {
         "preparing" => UiText.PreparingUpdate,
+        "hashing" => UiText.PreparingUpdatePackage,
+        "finalizing" => UiText.FinalizingUpdate,
         "transferring" => UiText.Format(UiText.TransferProgress, progress.TransferPercent, progress.TransferredBytes / 1048576d, progress.TotalBytes / 1048576d),
         "verifying" => UiText.TransferVerifying,
         "restarting" => UiText.TransferRestarting,
@@ -511,12 +513,14 @@ public sealed partial class MainForm : Forms.Form
     private void ShowUpdateProgress(AgentUpdateProgress progress)
     {
         updateProgressArea.Visible = true;
-        updateTransferPercent = progress.TransferPercent;
-        updateProgressFill.Width = updateProgressTrack.ClientSize.Width * updateTransferPercent / 100;
+        if (connectedUpdateProgress == null || progress.Stage == "idle")
+            connectedUpdateProgress = CreateUpdateProgress(client?.Connection.Fingerprint ?? "connected");
+        connectedUpdateReport = progress;
+        connectedUpdateProgress.Report(progress.Stage == "idle" ? "preparing" : progress.Stage, progress.TransferredBytes, progress.TotalBytes);
         updateProgressFill.BackColor = Teal;
         updateProgressText.ForeColor = SecondaryText;
-        updateProgressText.SetText(() => UpdateProgressDescription(progress));
-        updateProgressTrack.AccessibleName = updateProgressText.Text;
+        RefreshUpdateProgress();
+        if (progress.Stage == "complete") SaveUpdateTimings();
     }
 
     private PagePanel BuildScreenPage()
@@ -968,6 +972,7 @@ public sealed partial class MainForm : Forms.Form
         RefreshPowerHold();
         UpdateAgentState(); if (PrivateInternet) UpdatePrivateAgentState(); UpdateInternetState(); UpdateHeader(); RefreshControllerControls(); RefreshFooter(); RefreshInputStatus();
         if (fleetRefreshing || fleet.Values.Any(device => NeedsFleetProgressAnimation(device.State))) peers.Invalidate();
+        if (updateProgressArea.Visible && updateProgressFill.BackColor == Teal) RefreshUpdateProgress();
         if (!agentIdle && agent?.Operations.Maintenance is { } maintenance)
         {
             var state = Json.Element(maintenance.Status); bool active = state.TryGetProperty("active", out var a) && a.GetBoolean(); bool brokerAvailable = !state.TryGetProperty("brokerAvailable", out var broker) || broker.GetBoolean(); bool requiresProvisioning = state.TryGetProperty("requiresProvisioning", out var provisioning) && provisioning.GetBoolean(); bool paired = agent?.Session.HasPaired == true;

@@ -9,7 +9,7 @@ public sealed partial class MainForm
     private sealed record FleetDevice(Peer Peer, string Version = "", string Sha256 = "", bool Online = false,
         string State = "unknown", int Percent = 0, string Detail = "");
     private readonly Dictionary<string, FleetDevice> fleet = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, DateTimeOffset> fleetStageStarted = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, UpdateProgressTracker> fleetProgress = new(StringComparer.OrdinalIgnoreCase);
     private readonly Forms.Button updateAllDevices = Button(() => UiText.UpdateAllDevices, "updateAllDevices", 178, primary: true);
     private CancellationTokenSource? fleetLifetime;
     private bool fleetRefreshing;
@@ -31,6 +31,7 @@ public sealed partial class MainForm
                     fleet[DeviceKey(device.Peer)] = device with { Online = false, State = "offline", Percent = 0, Detail = "" };
         }
         catch (Exception ex) when (ex is IOException or System.Security.Cryptography.CryptographicException or JsonException) { }
+        LoadUpdateTimings();
         updateAllDevices.Click += async (_, _) =>
         {
             try { if (FleetBusy) fleetLifetime?.Cancel(); else await UpdateAllDevicesAsync(); }
@@ -41,7 +42,7 @@ public sealed partial class MainForm
         peers.DrawSubItem += (_, e) =>
         {
             if (e.ColumnIndex != 3 || e.Item?.Tag is not Peer peer || !fleet.TryGetValue(DeviceKey(peer), out var device) ||
-                device.State is not ("transferring" or "checking" or "preparing" or "verifying" or "restarting"))
+                !UpdateProgressTracker.IsActiveStage(device.State) || !fleetProgress.TryGetValue(DeviceKey(peer), out var tracker))
             { e.DrawDefault = true; return; }
             using var background = new SolidBrush(e.Item.Selected ? SystemColors.Highlight : peers.BackColor);
             e.Graphics.FillRectangle(background, e.Bounds);
@@ -52,20 +53,10 @@ public sealed partial class MainForm
                 Math.Max(0, e.Bounds.Width - horizontalInset * 2), trackHeight);
             using var back = new SolidBrush(Divider); using var fill = new SolidBrush(Teal);
             e.Graphics.FillRectangle(back, track);
-            if (device.State == "transferring") e.Graphics.FillRectangle(fill, track with { Width = track.Width * device.Percent / 100 });
-            else if (track.Width > 0)
-            {
-                int pulseWidth = Math.Min(track.Width, Math.Max(18, track.Width / 3));
-                int pulseLeft = (int)(Environment.TickCount64 / 12 % (track.Width + pulseWidth)) - pulseWidth;
-                var pulse = Rectangle.Intersect(track, new Rectangle(track.X + pulseLeft, track.Y, pulseWidth, track.Height));
-                if (pulse.Width > 0) e.Graphics.FillRectangle(fill, pulse);
-            }
-            string detail = device.Detail;
-            if (device.State != "transferring" && fleetStageStarted.TryGetValue(DeviceKey(peer), out var started))
-            {
-                string elapsed = UiText.Format(UiText.ElapsedTime, FormatTransferEta(DateTimeOffset.UtcNow - started));
-                detail = detail.Length == 0 ? elapsed : detail + " · " + elapsed;
-            }
+            var progress = tracker.Snapshot();
+            e.Graphics.FillRectangle(fill, track with { Width = track.Width * progress.Percent / 100 });
+            string detail = UpdateStepNumbers(progress);
+            if (device.State == "transferring" && device.Detail.Length > 0) detail += " · " + device.Detail;
             Forms.TextRenderer.DrawText(e.Graphics, detail, peers.Font,
                 new Rectangle(e.Bounds.X + horizontalInset, e.Bounds.Y + 2,
                     Math.Max(0, e.Bounds.Width - horizontalInset * 2), Math.Max(0, track.Top - e.Bounds.Y - 5)),
@@ -76,7 +67,7 @@ public sealed partial class MainForm
 
     private void ObserveFleet()
     {
-        fleetStageStarted.Clear();
+        fleetProgress.Clear();
         foreach (var key in fleet.Keys.ToArray()) fleet[key] = fleet[key] with { Online = false, State = "offline", Detail = "" };
         foreach (var peer in discoveredPeers)
         {
@@ -88,14 +79,14 @@ public sealed partial class MainForm
         }
     }
 
-    private void RecordDevice(FleetDevice device)
+    private void RecordDevice(FleetDevice device, AgentUpdateProgress? update = null)
     {
         string key = DeviceKey(device.Peer);
         bool redrawOnly = fleet.TryGetValue(key, out var previous) && previous.State == device.State &&
             previous.Version == device.Version && previous.Peer.Name == device.Peer.Name &&
-            device.State is "transferring" or "checking" or "preparing" or "verifying" or "restarting";
-        if (previous == null || previous.State != device.State || !fleetStageStarted.ContainsKey(key))
-            fleetStageStarted[key] = DateTimeOffset.UtcNow;
+            UpdateProgressTracker.IsActiveStage(device.State);
+        if (!fleetProgress.TryGetValue(key, out var progress)) fleetProgress[key] = progress = CreateUpdateProgress(key);
+        progress.Report(device.State, update?.TransferredBytes ?? 0, update?.TotalBytes ?? 0);
         fleet[key] = device;
         if (!IsDisposed)
         {
@@ -104,7 +95,11 @@ public sealed partial class MainForm
         }
     }
 
-    private void SaveFleet() => Vault.Save(Path.Combine(root, "devices.dpapi"), JsonSerializer.SerializeToUtf8Bytes(fleet.Values, Json.Options));
+    private void SaveFleet()
+    {
+        Vault.Save(Path.Combine(root, "devices.dpapi"), JsonSerializer.SerializeToUtf8Bytes(fleet.Values, Json.Options));
+        SaveUpdateTimings();
+    }
 
     private string FleetState(FleetDevice device) => device.State switch
     {
@@ -113,6 +108,7 @@ public sealed partial class MainForm
         "legacy" => UiText.InitialUpdateRequired, "busy" => UiText.DeviceInUse,
         "failed" => UiText.UpdateIncomplete, "queued" => UiText.UpdateQueued,
         "preparing" => UiText.PreparingUpdate,
+        "hashing" => UiText.PreparingUpdatePackage, "finalizing" => UiText.FinalizingUpdate,
         "transferring" => UiText.UpdatingDevice, "verifying" => UiText.TransferVerifying,
         "restarting" => UiText.TransferRestarting, "checking" => UiText.CheckingVersion,
         _ => UiText.AdminPcRequired
@@ -192,7 +188,7 @@ public sealed partial class MainForm
         { discoveryState.SetText(() => UiText.UpdateControllerFirst); return; }
         using var lifetime = new CancellationTokenSource(); fleetLifetime = lifetime;
         var targets = fleet.Values.Where(d => d.Online && d.State is "available" or "legacy" or "failed").ToArray();
-        foreach (var device in targets) RecordDevice(device with { State = "queued", Detail = "", Percent = 0 });
+        foreach (var device in targets) RecordDevice(device with { State = "hashing", Detail = "", Percent = 0 });
         discoveryState.SetText(() => UiText.PreparingUpdate);
         RefreshControllerControls();
         try
@@ -201,6 +197,7 @@ public sealed partial class MainForm
             using var payload = File.Open(Environment.ProcessPath!, FileMode.Open, FileAccess.Read, FileShare.Read);
             var controller = await Task.Run(() => SupportPlatform.CaptureCurrentExecutableAsync(lifetime.Token), lifetime.Token);
             controllerSnapshot = Task.FromResult(controller);
+            foreach (var device in targets) RecordDevice(device with { State = "queued", Detail = "", Percent = 0 });
             discoveryState.SetText(() => UiText.UpdatingDevice);
             await RunFleetOperationsAsync(targets, async initial =>
             {
@@ -225,20 +222,14 @@ public sealed partial class MainForm
                     device = device with { Version = installed.FileVersion ?? "", Sha256 = installed.Sha256 }; RecordDevice(device);
                     if (UpdatePolicy.ReleaseVersion(installed.FileVersion) > UpdatePolicy.ReleaseVersion(controller.FileVersion))
                     { RecordDevice(device with { State = "newer" }); return; }
-                    var watch = System.Diagnostics.Stopwatch.StartNew();
-                    long baseline = -1;
                     bool receiving = true;
                     var progress = new Progress<AgentUpdateProgress>(value =>
                     {
                         if (!receiving || IsDisposed) return;
-                        if (baseline < 0) baseline = value.TransferredBytes;
-                        var metrics = FileTransferMetrics.Calculate(value.TransferredBytes, value.TotalBytes, value.TransferredBytes - baseline, watch.Elapsed);
                         device = device with { State = value.Stage, Percent = value.TransferPercent,
                             Detail = value.Stage == "transferring"
-                                ? $"{value.TransferPercent}% · {FormatFleetBytes(value.TransferredBytes, value.TotalBytes)}" +
-                                    (metrics.Remaining is { } eta ? " · " + FormatTransferEta(eta) : "")
-                                : FormatBytes(value.TotalBytes) };
-                        RecordDevice(device);
+                                ? FormatFleetBytes(value.TransferredBytes, value.TotalBytes) : "" };
+                        RecordDevice(device, value);
                     });
                     try { await AgentUpdateClient.SynchronizeAgentAsync(target, controller, snapshot, timeout.Token, progress); }
                     finally { receiving = false; }
@@ -260,7 +251,7 @@ public sealed partial class MainForm
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         finally
         {
-            foreach (var device in fleet.Values.Where(d => d.State == "queued").ToArray())
+            foreach (var device in fleet.Values.Where(d => d.State is "queued" or "hashing").ToArray())
                 RecordDevice(device with { State = "failed", Detail = lifetime.IsCancellationRequested ? UiText.TransferPaused :
                     NewerDeviceKnown ? UiText.UpdateControllerFirst : UiText.UpdateIncomplete });
             fleetLifetime = null;
@@ -268,7 +259,7 @@ public sealed partial class MainForm
         }
     }
 
-    internal static bool NeedsFleetProgressAnimation(string state) => state is "checking" or "preparing" or "verifying" or "restarting";
+    internal static bool NeedsFleetProgressAnimation(string state) => UpdateProgressTracker.IsActiveStage(state);
 
     internal static string FormatFleetBytes(long transferred, long total) => total >= 1024 * 1024
         ? $"{transferred / 1048576d:F1}/{total / 1048576d:F1} MiB"
