@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Cryptography;
 using System.Security.Principal;
@@ -40,6 +41,14 @@ internal static partial class SupportInstaller
             string source = RequireInstalledRefreshHost();
             signalPath = ValidateRefreshSignalPath(signalPath);
             if (File.Exists(signalPath)) throw new InvalidOperationException("Support refresh signal already exists.");
+            // Redirecting the worker's streams does not stop .NET 8 from also
+            // inheriting these pipes, which would keep the maintenance reply open.
+            foreach (int standardHandle in new[] { -10, -11, -12 })
+            {
+                nint handle = GetStdHandle(standardHandle);
+                if (handle != 0 && handle != -1 && !SetHandleInformation(handle, 1, 0))
+                    throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+            }
             var start = new ProcessStartInfo(source)
             {
                 UseShellExecute = false,
@@ -59,6 +68,13 @@ internal static partial class SupportInstaller
             return 2;
         }
     }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern nint GetStdHandle(int standardHandle);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetHandleInformation(nint handle, uint mask, uint flags);
 
     public static int RefreshServiceAfterSignal(string signalPath)
     {
