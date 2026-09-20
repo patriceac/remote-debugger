@@ -13,7 +13,7 @@ A calm technical workspace: porcelain surfaces, a deep navy navigation rail, a s
 - Canvas #F7F9FA; working surfaces #FFFFFF; rail #18212B; rail secondary #A8BAC2; primary text #183039; secondary text #637780; divider #DFE6EA; selected navigation #273C46.
 - Primary action #087F83 with white text; hover #076C70. Connected background #E3F3E9 and text #206B45. Warning background #FFF2DB and text #8B5E12. Destructive text #B83D49, pale background #FFF0F1, solid destructive button only in its active hover/pressed state.
 - Segoe UI throughout: title 22 semibold, section 15 semibold, body/control 10.5-11, metadata 9.5. Pairing code Consolas 42 bold. Table headers 10 semibold; rows 10.5. Do not substitute typography with rendered images.
-- Buttons 38 px high, 14 px horizontal padding, subtle 5-6 px corners; icon buttons minimum 34 x 34. Inputs 40 px high, 1 px border, visible teal focus. Tables 36 px header and 34 px rows; alternate backgrounds only if needed for scanning.
+- Buttons 38 px high, 14 px horizontal padding, subtle 5-6 px corners; icon buttons minimum 34 x 34. Inputs 40 px high, 1 px border, visible teal focus. Tables use a 36 px header and 34 px rows; fleet-update rows are 44 px so progress text and its bar remain distinct. Alternate backgrounds only if needed for scanning.
 - Use simple consistent line icons (16-18 px) with accessible text. No emoji, decorative gradients, oversized shadows, nested cards or marketing slogans. A single thin divider separates each working region.
 
 ## Shared shell
@@ -22,7 +22,7 @@ Rail: small RD square mark and Remote Debugger wordmark; separator; role buttons
 
 Header: left current screen title and one line of context, right one rounded status pill and the Terminer l'assistance button during a session. Termination is always reachable, including while requests are pending. The status pill includes text and a small dot; color alone never communicates state. Default disconnected state must not be green. Never derive connected status from a saved token.
 
-Footer: concise actual task/status on left, measurement timestamp or frame statistics on right. Progress and errors use this strip or a compact inline banner; no modal for routine loading or retries.
+Footer: concise actual task/status on left, measurement timestamp or frame statistics on right. On the remote-screen page, input guidance uses the left side and the active route plus stream telemetry use the right (for example, `Direct LAN · H.264 · 5 fps · 1.1 Mbit/s`); do not repeat either below the text-entry row or put the route in the header. Progress and errors use this strip or a compact inline banner; no modal for routine loading or retries.
 
 Header and agent text share the same left content edge. Text rendering must not add font-size-dependent indentation. Heading and subtitle rows use measured text height, including wrapped lines, rather than fixed heights that clip ascenders or descenders.
 

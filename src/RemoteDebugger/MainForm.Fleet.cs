@@ -45,7 +45,11 @@ public sealed partial class MainForm
             { e.DrawDefault = true; return; }
             using var background = new SolidBrush(e.Item.Selected ? SystemColors.Highlight : peers.BackColor);
             e.Graphics.FillRectangle(background, e.Bounds);
-            var track = new Rectangle(e.Bounds.X + 5, e.Bounds.Bottom - 5, Math.Max(0, e.Bounds.Width - 10), 3);
+            int horizontalInset = Math.Max(6, e.Bounds.Height / 6);
+            int trackHeight = Math.Max(3, e.Bounds.Height / 11);
+            int trackBottomInset = Math.Max(5, e.Bounds.Height / 9);
+            var track = new Rectangle(e.Bounds.X + horizontalInset, e.Bounds.Bottom - trackBottomInset - trackHeight,
+                Math.Max(0, e.Bounds.Width - horizontalInset * 2), trackHeight);
             using var back = new SolidBrush(Divider); using var fill = new SolidBrush(Teal);
             e.Graphics.FillRectangle(back, track);
             if (device.State == "transferring") e.Graphics.FillRectangle(fill, track with { Width = track.Width * device.Percent / 100 });
@@ -63,7 +67,8 @@ public sealed partial class MainForm
                 detail = detail.Length == 0 ? elapsed : detail + " · " + elapsed;
             }
             Forms.TextRenderer.DrawText(e.Graphics, detail, peers.Font,
-                new Rectangle(e.Bounds.X + 5, e.Bounds.Y, e.Bounds.Width - 10, e.Bounds.Height - 5),
+                new Rectangle(e.Bounds.X + horizontalInset, e.Bounds.Y + 2,
+                    Math.Max(0, e.Bounds.Width - horizontalInset * 2), Math.Max(0, track.Top - e.Bounds.Y - 5)),
                 e.Item.Selected ? SystemColors.HighlightText : PrimaryText, Forms.TextFormatFlags.EndEllipsis | Forms.TextFormatFlags.VerticalCenter);
         };
         RenderPeers();

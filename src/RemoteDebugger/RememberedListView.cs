@@ -6,11 +6,24 @@ namespace RemoteDebugger;
 /// <summary>Persist completed header gestures, never programmatic DPI/layout changes.</summary>
 internal sealed class RememberedListView : Forms.ListView
 {
+    private readonly Forms.ImageList rowHeightImages = new();
     private string? layoutRoot;
     private TableColumnLayout[] layout = [];
     private bool applying;
+    private int logicalRowHeight;
 
     public RememberedListView() => DoubleBuffered = true;
+
+    public int LogicalRowHeight
+    {
+        get => logicalRowHeight;
+        set
+        {
+            if (value < 0) throw new ArgumentOutOfRangeException(nameof(value));
+            logicalRowHeight = value;
+            ApplyRowHeight();
+        }
+    }
 
     public void RememberLayout(string root, params string[] columnIds)
     {
@@ -26,13 +39,31 @@ internal sealed class RememberedListView : Forms.ListView
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
+        ApplyRowHeight();
         ApplyLayout();
     }
 
     protected override void OnDpiChangedAfterParent(EventArgs e)
     {
         base.OnDpiChangedAfterParent(e);
+        ApplyRowHeight();
         ApplyLayout();
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) rowHeightImages.Dispose();
+        base.Dispose(disposing);
+    }
+
+    private void ApplyRowHeight()
+    {
+        if (logicalRowHeight == 0 || IsDisposed) return;
+        var size = new Size(1, Math.Max(1, (int)Math.Round(logicalRowHeight * DeviceDpi / 96d)));
+        if (rowHeightImages.ImageSize == size && ReferenceEquals(SmallImageList, rowHeightImages)) return;
+        SmallImageList = null;
+        rowHeightImages.ImageSize = size;
+        SmallImageList = rowHeightImages;
     }
 
     private void ApplyLayout()

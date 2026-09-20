@@ -34,6 +34,7 @@ public sealed partial class MainForm : Forms.Form
     private readonly Forms.Panel rail = new() { Dock = Forms.DockStyle.Fill, BackColor = Rail };
     private readonly Forms.Panel header = new() { Dock = Forms.DockStyle.Fill, BackColor = Surface };
     private readonly Forms.Panel footer = new() { Dock = Forms.DockStyle.Fill, BackColor = Surface };
+    private readonly Forms.TableLayoutPanel footerContent = new() { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 1, Padding = new Forms.Padding(24, 0, 24, 0) };
     private readonly Forms.Label headerTitle = new WorkspaceLabel() { Name = "headerTitle", AutoSize = true, ForeColor = PrimaryText };
     private readonly Forms.Label headerSubtitle = new WorkspaceLabel() { Name = "headerSubtitle", AutoSize = true, ForeColor = SecondaryText };
     private readonly Forms.Panel statusPill = new() { Name = "connectionStatus", Height = 32, Width = 184 };
@@ -79,7 +80,7 @@ public sealed partial class MainForm : Forms.Form
     private readonly Forms.Label agentLog = new() { Name = "agentLog", AutoSize = true, ForeColor = SecondaryText, MaximumSize = new Size(720, 0) };
 
     // Connection screen.
-    private readonly RememberedListView peers = new() { Name = "peers", Dock = Forms.DockStyle.Fill, View = Forms.View.Details, FullRowSelect = true, HideSelection = false, MultiSelect = false, BorderStyle = Forms.BorderStyle.None, BackColor = Surface };
+    private readonly RememberedListView peers = new() { Name = "peers", Dock = Forms.DockStyle.Fill, View = Forms.View.Details, FullRowSelect = true, HideSelection = false, MultiSelect = false, BorderStyle = Forms.BorderStyle.None, BackColor = Surface, LogicalRowHeight = 44 };
     private readonly Forms.TextBox host = TextBox("host");
     private readonly Forms.TextBox code = TextBox("pairCode");
     private readonly Forms.Button pairButton = Button(() => UiText.Connect, "pair", 110, primary: true);
@@ -109,8 +110,8 @@ public sealed partial class MainForm : Forms.Form
     private readonly Forms.CheckBox mouseEnabled = new Forms.CheckBox { Name = "mouseKeyboard", Checked = true, AutoSize = true, ForeColor = PrimaryText, Margin = new Forms.Padding(12, 10, 0, 0) }.WithText(() => UiText.MouseKeyboardControl);
     private readonly Forms.CheckBox relayEconomy = new Forms.CheckBox { Name = "relayEconomy", Checked = true, AutoSize = true, ForeColor = PrimaryText, Margin = new Forms.Padding(12, 10, 0, 0) }.WithText(() => UiText.RelayEconomy);
     private bool resumeViewingAfterMinimize;
-    private readonly Forms.Label streamStatus = new() { Name = "streamStatus", AutoSize = true, ForeColor = SecondaryText };
-    private readonly Forms.Label inputStatus = new() { Name = "inputStatus", AutoSize = false, Dock = Forms.DockStyle.Fill, ForeColor = SecondaryText, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleRight };
+    private readonly Forms.Label streamStatus = new() { Name = "streamStatus", AutoSize = false, Dock = Forms.DockStyle.Fill, Margin = Forms.Padding.Empty, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F), AutoEllipsis = true, TextAlign = ContentAlignment.MiddleRight };
+    private readonly Forms.Label inputStatus = new() { Name = "inputStatus", AutoSize = false, Dock = Forms.DockStyle.Fill, Margin = Forms.Padding.Empty, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F), AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft };
     private readonly RemoteInputState inputState = new();
     private readonly Forms.TextBox remoteText = TextBox("remoteText");
     private readonly Forms.Button typeText = Button(() => UiText.TypeText, "typeText", 76);
@@ -334,10 +335,20 @@ public sealed partial class MainForm : Forms.Form
     private void BuildFooter()
     {
         var line = new Forms.Panel { Dock = Forms.DockStyle.Top, Height = 1, BackColor = Divider }; footer.Controls.Add(line);
-        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 1, Padding = new Forms.Padding(24, 0, 24, 0) };
-        layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 58)); layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 42));
+        footerContent.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 58)); footerContent.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 42));
         footerLeft.Margin = Forms.Padding.Empty; footerRight.Margin = Forms.Padding.Empty;
-        layout.Controls.Add(footerLeft, 0, 0); layout.Controls.Add(footerRight, 1, 0); footer.Controls.Add(layout);
+        SetScreenFooter(false);
+        footer.Controls.Add(footerContent);
+    }
+
+    private bool screenFooterVisible;
+    private void SetScreenFooter(bool visible)
+    {
+        if (screenFooterVisible == visible && footerContent.Controls.Count == 2) return;
+        footerContent.Controls.Clear();
+        footerContent.Controls.Add(visible ? inputStatus : footerLeft, 0, 0);
+        footerContent.Controls.Add(visible ? streamStatus : footerRight, 1, 0);
+        screenFooterVisible = visible;
     }
 
     private void BuildAgentPage()
@@ -436,17 +447,20 @@ public sealed partial class MainForm : Forms.Form
 
     private Forms.Control BuildPeerList()
     {
-        var panel = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Forms.Padding(0, 0, 24, 0) };
-        panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 32)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 42)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 28)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
-        panel.Controls.Add(new WorkspaceLabel { AutoSize = true, Font = new Font("Segoe UI", 15, FontStyle.Bold), ForeColor = PrimaryText, Anchor = Forms.AnchorStyles.Left }.WithText(() => UiText.AvailablePcs), 0, 0);
+        var panel = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Forms.Padding(0, 4, 24, 0) };
+        panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 42)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 54)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 40)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
+        panel.Controls.Add(new WorkspaceLabel { AutoSize = true, Font = new Font("Segoe UI", 15, FontStyle.Bold), ForeColor = PrimaryText, Anchor = Forms.AnchorStyles.Left, Margin = new Forms.Padding(0, 0, 0, 8) }.WithText(() => UiText.AvailablePcs), 0, 0);
         discoverButton.Anchor = Forms.AnchorStyles.Left;
-        panel.Controls.Add(PrivateInternet ? ControlRow(discoverButton, updateAllDevices) : discoverButton, 0, 1); panel.Controls.Add(discoveryState, 0, 2);
+        panel.Controls.Add(PrivateInternet ? ControlRow(discoverButton, updateAllDevices) : discoverButton, 0, 1);
+        discoveryState.Dock = Forms.DockStyle.Fill; discoveryState.Margin = new Forms.Padding(0, 0, 0, 8); discoveryState.TextAlign = ContentAlignment.MiddleLeft;
+        panel.Controls.Add(discoveryState, 0, 2);
         peers.Columns.Add("", 110).WithText(() => UiText.Name);
         if (!PrivateInternet) peers.Columns.Add("", 125).WithText(() => UiText.Address);
         if (PrivateInternet) peers.Columns.Add("", 62).WithText(() => UiText.DeviceVersion);
         peers.Columns.Add("", PrivateInternet ? 150 : 90).WithText(() => UiText.State);
         if (PrivateInternet) peers.Columns.Add("", 180).WithText(() => UiText.DeviceProgress);
         InitializeFleet();
+        peers.Margin = Forms.Padding.Empty;
         peers.RememberLayout(root, PrivateInternet ? ["name", "version", "state", "progress"] : ["name", "address", "state"]); panel.Controls.Add(peers, 0, 3);
         return panel;
     }
@@ -518,17 +532,13 @@ public sealed partial class MainForm : Forms.Form
         // changes. Keep both the viewer and its input row inside the workspace.
         view.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
         view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100)); view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize)); view.Controls.Add(screenSurface, 0, 0);
-        var bottom = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 3, RowCount = 2, Padding = new Forms.Padding(0, 6, 0, 0), Margin = Forms.Padding.Empty };
+        var bottom = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 3, RowCount = 1, Padding = new Forms.Padding(0, 6, 0, 0), Margin = Forms.Padding.Empty };
         bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100)); bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
-        bottom.AutoSize = true; bottom.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize)); bottom.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 28));
+        bottom.AutoSize = true; bottom.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         remoteText.Anchor = Forms.AnchorStyles.Left | Forms.AnchorStyles.Right; remoteText.PlaceholderText = UiText.RemoteTextPlaceholder;
         typeText.Anchor = enterKey.Anchor = Forms.AnchorStyles.Left;
-        streamStatus.Margin = Forms.Padding.Empty; streamStatus.Dock = Forms.DockStyle.Fill; streamStatus.AutoSize = false; streamStatus.AutoEllipsis = true; streamStatus.TextAlign = ContentAlignment.MiddleLeft;
         bottom.Controls.Add(remoteText, 0, 0); bottom.Controls.Add(typeText, 1, 0); bottom.Controls.Add(enterKey, 2, 0);
-        var details = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Forms.Padding.Empty };
-        details.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 48)); details.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 52));
-        details.Controls.Add(streamStatus, 0, 0); details.Controls.Add(inputStatus, 1, 0);
-        bottom.Controls.Add(details, 0, 1); bottom.SetColumnSpan(details, 3); view.Controls.Add(bottom, 0, 1);
+        view.Controls.Add(bottom, 0, 1);
         page.Controls.Add(view); page.Controls.Add(top); return page;
     }
 
@@ -1083,7 +1093,6 @@ public sealed partial class MainForm : Forms.Form
                 headerSubtitle.SetText(selectedPeer.Name + " · " + selectedPeer.Host);
             else
                 headerSubtitle.SetText(PrivateInternet && controllerPages.SelectedIndex == 0 ? UiText.PrivateConnectInstructions : presentation.Subtitle);
-            if (supportSession && client?.ActiveRoute is { Length: > 0 } route) headerSubtitle.SetText(headerSubtitle.Text + " · " + route);
         }
 
         bool updateOngoing = onAgent && agent != null && IsOngoingUpdate(agent.UpdateProgress);
@@ -1105,7 +1114,10 @@ public sealed partial class MainForm : Forms.Form
 
     private void RefreshFooter()
     {
+        bool screenFooter = rolePages.SelectedIndex == 1 && !terminating && controllerPages.SelectedIndex == 1;
+        SetScreenFooter(screenFooter);
         if (rolePages.SelectedIndex != 1 || terminating) { footerLeft.SetText(footerMessage); footerRight.SetText(footerDetail); return; }
+        if (screenFooter) return;
         var text = WorkspacePresentation.Footer(controllerPages.SelectedIndex, connectionState.Text, streamStatus.Text,
             resourceState.Text, fileState.Text, diagnosticState.Text, PrivateInternet ? selectedPeer?.Name ?? "" : host.Text,
             lastMeasurementUtc is { } measured ? UiText.Format(UiText.ProcessMeasurement, processRows.Count, measured.ToLocalTime()) : UiText.NoMeasurement,
@@ -1577,7 +1589,7 @@ public sealed partial class MainForm : Forms.Form
 
     private async Task RefreshScreenAsync()
     {
-        RequireClient(); var watch = Stopwatch.StartNew(); var data = RemoteClient.Require(await client!.CallAsync("screenshot", new { monitor = MonitorValue() }, seconds: 30)); Present(data.Deserialize<ScreenFrame>(Json.Options)!); streamStatus.SetText(() => UiText.Format(UiText.FreshFrameTime, watch.Elapsed.TotalMilliseconds)); SetFooterDetail(() => streamStatus.Text); RefreshFooter();
+        RequireClient(); var watch = Stopwatch.StartNew(); var data = RemoteClient.Require(await client!.CallAsync("screenshot", new { monitor = MonitorValue() }, seconds: 30)); Present(data.Deserialize<ScreenFrame>(Json.Options)!); streamStatus.SetText(() => StreamStatusWithRoute(UiText.Format(UiText.FreshFrameTime, watch.Elapsed.TotalMilliseconds))); SetFooterDetail(() => streamStatus.Text); RefreshFooter();
     }
 
     private async Task StartStreamAsync()
@@ -1661,7 +1673,7 @@ public sealed partial class MainForm : Forms.Form
         geometry = frame.Geometry; using var ms = new MemoryStream(Convert.FromBase64String(frame.Data)); using var image = Image.FromStream(ms); var previous = screen.Image; screen.Image = new Bitmap(image); previous?.Dispose(); screen.Refresh(); liveFrameFresh = true; liveBadge.Visible = true; streamOverlay.Visible = false; RefreshInputStatus();
         if (liveStream != null && streamStartedUtc is { } started)
         {
-            streamFrames++; streamBytes += frame.Data.Length; double seconds = Math.Max(0.001, (DateTimeOffset.UtcNow - started).TotalSeconds); double fps = streamFrames / seconds; double mbps = streamBytes * 8 / seconds / 1_000_000d; streamStatus.SetText(() => UiText.Format(UiText.StreamMetrics, fps, mbps, frame.CaptureEncodeMs)); SetFooterDetail(() => streamStatus.Text); RefreshFooter();
+            streamFrames++; streamBytes += frame.Data.Length; double seconds = Math.Max(0.001, (DateTimeOffset.UtcNow - started).TotalSeconds); double fps = streamFrames / seconds; double mbps = streamBytes * 8 / seconds / 1_000_000d; streamStatus.SetText(() => StreamStatusWithRoute(UiText.Format(UiText.StreamMetrics, fps, mbps, frame.CaptureEncodeMs))); SetFooterDetail(() => streamStatus.Text); RefreshFooter();
         }
         else streamStatus.SetText(() => UiText.Format(UiText.CaptureMetrics, frame.CapturedUtc.ToLocalTime(), frame.CaptureEncodeMs));
     }
@@ -1693,7 +1705,7 @@ public sealed partial class MainForm : Forms.Form
             if (string.IsNullOrEmpty(streamCodec)) streamCodec = frame.Codec.Equals("h264", StringComparison.OrdinalIgnoreCase) ? "H.264" : "JPEG";
             if (liveStream != null && streamStartedUtc is { } started)
             {
-                streamFrames++; streamBytes += frame.Bytes; double seconds = Math.Max(0.001, (DateTimeOffset.UtcNow - started).TotalSeconds); double fps = streamFrames / seconds; double mbps = streamBytes * 8 / seconds / 1_000_000d; streamStatus.SetText(() => UiText.Format(UiText.StreamMetrics, streamCodec, fps, mbps, frame.CaptureEncodeMs)); SetFooterDetail(() => streamStatus.Text); RefreshFooter();
+                streamFrames++; streamBytes += frame.Bytes; double seconds = Math.Max(0.001, (DateTimeOffset.UtcNow - started).TotalSeconds); double fps = streamFrames / seconds; double mbps = streamBytes * 8 / seconds / 1_000_000d; streamStatus.SetText(() => StreamStatusWithRoute(UiText.Format(UiText.StreamMetrics, streamCodec, fps, mbps, frame.CaptureEncodeMs))); SetFooterDetail(() => streamStatus.Text); RefreshFooter();
             }
         }
         finally { frame.Dispose(); }
@@ -1740,6 +1752,10 @@ public sealed partial class MainForm : Forms.Form
     {
         inputStatus.SetText(() => !supportSession ? UiText.ConnectToControl : clientUpdateBusy ? UiText.Synchronizing : !inputState.Enabled ? UiText.ViewOnly : !heartbeatHealthy ? UiText.ControlAwaitingConnection : inputBlockMessage ?? (inputState.Suspended ? UiText.RestoringControl : !liveFrameFresh ? UiText.WaitingFreshFrame : screen.ContainsFocus && ContainsFocus ? UiText.MouseKeyboardActive : UiText.ClickScreenToControl));
     }
+
+    private string StreamStatusWithRoute(string status) => client?.ActiveRoute is { Length: > 0 } route
+        ? route + " · " + status
+        : status;
 
     private void QueueInput(object value)
     {
