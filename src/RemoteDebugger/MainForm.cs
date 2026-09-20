@@ -982,6 +982,7 @@ public sealed partial class MainForm : Forms.Form
         agentSleepState.SetText(() => powerHold != null ? UiText.Suspended : UiText.Active);
         agentSleepState.ForeColor = powerHold != null ? PrimaryText : SecondaryText;
         bool paired = agent?.Session.HasPaired == true;
+        if (PrivateInternet && agent != null && !agentIdle && !paired && !updateOngoing) return;
         agentEyebrow.SetText(() => paired ? UiText.SupportSessionCaption : UiText.PairingCodeCaption);
         agentHeading.SetText(() => agent?.Session.State == "reconnecting" ? UiText.ConnectionInterruptedHeading : paired ? UiText.PcBeingAssisted : UiText.ShareCode);
         agentSubtitle.SetText(() => paired ? UiText.ConnectionStaysVisible : internetConfigured && !loopbackOnly ? UiText.InternetInstructions : UiText.EnterCodeOnController);
