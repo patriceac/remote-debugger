@@ -700,7 +700,7 @@ internal sealed partial class LabForm : Forms.Form
                     await ProbeMaintenanceAfterPairingAsync();
                     await ProbeSleepRequestAsync();
                 }
-                response = new { alive = product != null && !product.HasExited, ended = TryValue("agentHeading") == "Assistance terminée", paired, machine = Environment.MachineName, state, coordinationAlive = true, rollbackCandidateKilled };
+                response = new { alive = product != null && !product.HasExited, ended = sawPairing && !paired && TryPairingCode() is { Length: 6 } nextCode && nextCode != currentCode, paired, machine = Environment.MachineName, state, coordinationAlive = true, rollbackCandidateKilled };
             }
             else if (request == "RD_LAB_PLATFORM")
             {
@@ -715,7 +715,8 @@ internal sealed partial class LabForm : Forms.Form
                 response = new { completed = true, alive = product != null && !product.HasExited };
                 await SendUdpAsync(udp, response, received.RemoteEndPoint);
                 retainCoordinationAfterProductExit = false;
-                bool idle = product is { HasExited: false } && await WaitForTextAsync("agentHeading", text => text == "Assistance terminée", 20);
+                // Ending support revokes the old grant and offers a fresh code.
+                bool idle = product is { HasExited: false } && await WaitForTextAsync("agentPairCode", text => NormalizePairingCode(text) is { Length: 6 } nextCode && SixDigits.IsMatch(nextCode) && nextCode != currentCode, 20);
                 if (product?.HasExited == true) productExitObservedUtc ??= DateTimeOffset.UtcNow;
                 if (rollbackCandidateHash != null && !rollbackCandidateKilled) Fail("agent.rollback_candidate_killed", "The rollback run kills the verified replacement before its startup health acknowledgement", new { candidateHash = rollbackCandidateHash, killed = false });
                 if (sawPairing && !sawTermination) { if (idle) { productExitObservedUtc = DateTimeOffset.UtcNow; Pass("agent.termination", "Ending support leaves the agent open with access revoked", new { idle }); } else Fail("agent.termination", "Ending support leaves the agent open with access revoked", new { idle }); }
