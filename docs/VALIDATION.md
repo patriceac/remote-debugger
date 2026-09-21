@@ -118,11 +118,18 @@ harvest. Neither account demotion nor OUTDIR reset was found in the harness.
 
 The real-hour Expiry pair is running on C457/Lab 33E8 as requests
 `executable-test-20260921T213626249Z-b4c4269d` and
-`executable-test-20260921T213626348Z-b6365550`. Shutdown is independently submitted
-as `executable-test-20260921T215801617Z-d98c5b76` and
-`executable-test-20260921T215803298Z-c42a8851`, using C457 and Lab
+`executable-test-20260921T213626348Z-b6365550`. The Shutdown target
+`executable-test-20260921T215803298Z-c42a8851` failed elevated setup before the
+product ran: the expected-power-off path passed literal `{PAYLOAD}` tokens to
+the setup executable. Its dependent controller
+`executable-test-20260921T215801617Z-d98c5b76` was canonically cancelled. Both
+workers ended Off with payload deletion and successful network cleanup, without
+evidence warnings. The harness owner is fixing argument expansion. These
+requests used C457 and Lab
 `B3B93B963F39C8FFF5A004DF556CDE3CD622138C824FC5666DDFC63546008415`.
-Submission is not acceptance. See
+The separate Cancel scenario uses the same bytes and is queued as controller
+`executable-test-20260921T220625028Z-edbd402b` and target
+`executable-test-20260921T220625128Z-90fe691a`. Submission is not acceptance. See
 [support workflow](SUPPORT_WORKFLOW.md). Raw evidence is retained
 under `D:\Disk\VMs\Codex-Harness\Live\Broker\Results\<request-id>`.
 
