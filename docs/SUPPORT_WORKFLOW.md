@@ -1,6 +1,8 @@
 # Remote Debugger 0.5.0 support workflow
 
-Agreed scope, 21 September 2026. Implementation and acceptance remain in progress.
+Agreed scope, 21 September 2026. The 0.5.0 implementation is built; native power
+qualification remains incomplete. See [validation record](VALIDATION.md) for the
+checks performed, exact artifacts and remaining limits.
 
 ## Requirements
 

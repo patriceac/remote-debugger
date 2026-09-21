@@ -1,5 +1,77 @@
 # Validation record
 
+## 0.5.0 — support workflow (power qualification incomplete)
+
+September 21, 2026: Luna Max ran focused Core/platform regression checks during
+implementation. The latest merged-source subset passed **78 platform tests and
+6 MCP tests**. The primary agent owns application and test code.
+
+Signed Release `B0892B06C4B39F98BF39583E53EF294863FEA9F7E87F2AA49C89EACFA63C2FD7`
+passed clipboard sharing/pause/end, all four Explorer drag-and-drop paths with
+nested/empty folders and exact contents, 32 MiB transfer cancellation/resume,
+restart preflight, and controller shutdown confirmation/cancellation. The H.264
+probe measured 11.06 FPS with a maximum frame age of 175 ms in the isolated VM;
+this is not a physical-hardware 30 FPS benchmark. Request IDs:
+`executable-test-20260921T174411144Z-54a86e36` (agent) and
+`executable-test-20260921T174411217Z-3f6a9c06` (controller).
+
+The controller's overall assertion failed at the final local-report lookup:
+the CLI ignored `--data-root`. Commit `2cf3119` fixes that wiring. Separate native
+request `executable-test-20260921T180241282Z-f532c410` passed on the final candidate:
+an actual unexpected process exit creates an automatic report, readable without
+a remote profile, with clipboard payloads excluded. Its screenshot was reviewed;
+application, guest/broker, process/payload cleanup and network isolation passed,
+and the worker ended Off. Both workflow
+VMs ended Off with successful process/payload/network cleanup and no skipped
+evidence. The Files completion state and shutdown countdown screenshots were
+visually reviewed.
+
+The final application candidate is signed Release **0.5.0**, built from clean
+source `2cf3119ce03b36f42e92c35e49caeafd2fb7d051`, with SHA-256
+`C613F0895B8877A268F2782A468E146EE01EC6AC46C414DD5D716C4FCA1FD1B6`.
+Both installers contain that executable:
+
+| Package | SHA-256 | Qualification |
+| --- | --- | --- |
+| Private setup | `DC2D9413DDC838413403294F215E03FB53D7C4EF1BC25AE0914EB7D259F385E5` | Five isolated installation/locked first-launch checks passed |
+| Standard setup | `FD048B204A0AB716AD3AE50AF81C3183EBD526EF226A1584EC4C0944B77721D2` | Built and signed; no separate install run |
+
+The private package contains protected connection profiles and is kept local.
+The publisher fingerprint is
+`772169E21DEBE5D4E39D74BE04F168038C539552844CA06F86766A5FAEAD36EC`;
+the local signer reports `UnknownError` trust status, so signing is not a claim of
+public certificate trust.
+
+Installer request `executable-test-20260921T180221363Z-eb2e7fbd` passed fresh
+credential state, silent installation, build identity and original-user shell
+integration, protected profile staging, and the first-launch passphrase prompt.
+The installed executable matched the final candidate hash. The passphrase
+screenshot was visually reviewed. This disconnected check does not qualify an
+Internet connection, a custom install directory, or uninstallation.
+Guest/broker execution and cleanup succeeded: the VM ended Off, no processes
+survived, the payload was deleted, all seven evidence items were copied, and no
+network adapter remained connected.
+
+| Requirement | Evidence and remaining limit |
+| --- | --- |
+| Session clipboard | Focused session/clipboard tests and native bidirectional, pause/baseline and session-end checks passed. Actual reboot remains part of the power qualification gap. |
+| Automatic reports | Retention/deduplication checks passed; the final native candidate created an unexpected-exit incident and read it offline without clipboard payloads. |
+| Restart and one-use logon | Resume/deadline/credential-state unit checks and native preflight passed. Actual first/second boot, manual return and the full controller wait remain unqualified. |
+| Shutdown | Native named-PC confirmation, countdown and cancellation passed. Issued shutdown remains unqualified. |
+| Update progress | Ten focused progress tests passed, covering measured/stalled/resumed rates, opaque stages and actual completion; the existing binary/health verification gate is preserved. |
+| Smoother viewer | Sixteen stream/frame/acknowledgement checks passed; native H.264 viewing exceeded the former 5 FPS ceiling without a stale-frame backlog. |
+| Explorer transfer | Tree/descriptor/destination checks and all four native copy paths passed, including Unicode/nested/empty folders, source preservation and bulk cancellation/resume with exact hashes. |
+
+Earlier attempts exposed an OLE extraction deadlock and Explorer test-timing
+issues, corrected before the B089 run. One 0.5.0 provisioning failure did not
+reproduce; the CLI now forwards the provisioner's current error, and isolated
+request `executable-test-20260921T173912962Z-6cd8e67e` provisioned successfully.
+
+Actual reboot recovery, one-use sign-in/second boot, and issued shutdown remain
+unqualified because the shared harness lacks the necessary continuation/setup
+contracts. See [support workflow](SUPPORT_WORKFLOW.md). Raw evidence is retained
+under `D:\Disk\VMs\Codex-Harness\Live\Broker\Results\<request-id>`.
+
 ## 0.4.13 — audit fixes
 
 September 19, 2026: Luna Max executed **172 Core tests, 141 Windows platform tests
