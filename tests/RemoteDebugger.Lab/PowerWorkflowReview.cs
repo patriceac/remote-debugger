@@ -59,7 +59,9 @@ internal sealed partial class LabForm
         using var udp = new UdpClient(new IPEndPoint(IPAddress.Any, CoordinationPort));
         while (!stop.IsCancellationRequested)
         {
-            var received = await udp.ReceiveAsync(stop.Token);
+            using var receive = CancellationTokenSource.CreateLinkedTokenSource(stop.Token);
+            receive.CancelAfter(TimeSpan.FromMinutes(10));
+            var received = await udp.ReceiveAsync(receive.Token);
             string request = Encoding.UTF8.GetString(received.Buffer);
             object response;
             try
@@ -196,7 +198,9 @@ internal sealed partial class LabForm
                 await WaitWorkflowAsync(() => Task.FromResult(UiTexts().Any(x => x.Contains(UiText.RestartWaitStopped, StringComparison.Ordinal))), scenario == "expiry" ? 3700 : 30);
                 if (scenario == "expiry" && elapsed.Elapsed.TotalSeconds < 3500) throw new IOException("The reconnect wait expired before one hour.");
                 if (File.Exists(RemoteClient.DefaultPath)) throw new IOException("The stopped controller retained its reconnect profile.");
-                var returned = await PowerMessageAsync("POWER_STATUS", 240);
+                // Cold boot, manual sign-in and broker continuation startup are
+                // outside the controller's already-cancelled/expired wait.
+                var returned = await PowerMessageAsync("POWER_STATUS", 600);
                 if (returned.Str("bootId") == priorBoot) throw new IOException("The issued restart did not change the Windows boot.");
                 await Task.Delay(10000, stop.Token);
                 if (File.Exists(RemoteClient.DefaultPath) || IsConnected(TryValue("connectionStatus"))) throw new IOException("The stopped controller reconnected after sign-in.");
