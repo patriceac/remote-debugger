@@ -223,7 +223,8 @@ public static class Program
                     ? await Console.In.ReadLineAsync(ct.Token) ?? "" : await Console.In.ReadToEndAsync(ct.Token);
                 var connectedRequest = JsonSerializer.Deserialize<JsonElement>(input);
                 if (monitorInput) _ = Task.Run(() => CancelWhenInputClosesAsync(ct));
-                var result = await ConnectedCli.ExecuteAsync(connectedRequest, () => new ConnectedRemote(RemoteClient.Load(config)), ct.Token);
+                var result = await ConnectedCli.ExecuteAsync(connectedRequest, () => new ConnectedRemote(RemoteClient.Load(config)), ct.Token,
+                    () => new IncidentLog(Option("--data-root", Vault.DefaultRoot)));
                 Console.WriteLine(Json.Text(result)); return result.Ok ? 0 : 1;
             }
             var remote = RemoteClient.Load(config);

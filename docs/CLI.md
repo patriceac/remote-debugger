@@ -37,6 +37,8 @@ The pairing token is never printed. GUI and CLI share `%LOCALAPPDATA%\RemoteDebu
 
 `cli platform-status` reports installed broker readiness and the provisioning receipt path. `cli platform-provision` performs the one-time administrator setup and may require local Windows consent.
 
+`cli connected --request FILE` with `{"operation":"reports"}` reads local incident summaries without a connected PC. `--data-root DIRECTORY` selects the controller's report/settings folder; add `"args":{"reportId":"ID"}` for a report's details.
+
 `cli security-status` reports migration progress without exposing credentials.
 After creating a protected setup in the GUI, `cli security-migrate` updates
 reachable existing computers; `--host RD-...` restricts it to one observed route.

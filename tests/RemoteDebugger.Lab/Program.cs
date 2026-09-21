@@ -130,6 +130,7 @@ internal sealed partial class LabForm : Forms.Form
                 if (role == "internetinstaller") { await InternetInstallerReviewAsync(); return; }
                 if (role == "internet") { await InternetReviewAsync(); return; }
                 if (role == "security") { await SecurityReviewAsync(); return; }
+                if (role == "localreports") { product = LaunchProduct(false); await WaitUiAsync(); await ProbeWorkflowReportsAsync(); await FinishAsync(); return; }
                 if (!IsLoopback)
                     await PrepareBrokerProvisioningAsync();
                 if (role == "workflowagent") await WorkflowAgentAsync();

@@ -23,3 +23,5 @@ Agreed scope, 21 September 2026. Implementation and acceptance remain in progres
 - Real Explorer drag/drop works for files and nested folders, both directions and both app surfaces, including conflicts, interruption/resume and matching hashes.
 
 Application tests use the Hyper-V SYSTEM broker. Luna Max runs focused tests; the primary agent owns application and test code. Final deliverables use signed Release builds and installers, committed and pushed source, and a requirement-by-requirement evidence record.
+
+The current harness has no reboot-continuation contract and cannot combine privileged guest setup with its expected-power-off contract. Consequently actual reboot recovery, one-use sign-in followed by a second boot, the full one-hour wait, and issued shutdown remain unqualified at runtime. Unit checks and non-reboot workflows do not establish those native results.

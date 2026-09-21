@@ -40,7 +40,7 @@ Codex settings after configuration changes. See the
 
 ## Workflow
 
-Call `remote_status` first and pass its opaque `targetId` to subsequent tools.
+For remote actions, call `remote_status` first and pass its opaque `targetId` to subsequent tools. Local `remote_reports` works independently.
 This binds the certificate/credential and agent process/session start. The CLI
 loads the profile once, rejects another computer before contacting it, and
 rejects a changed session before dispatch. Status also reports binary mismatches;
