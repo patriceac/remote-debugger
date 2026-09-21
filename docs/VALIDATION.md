@@ -68,8 +68,14 @@ reproduce; the CLI now forwards the provisioner's current error, and isolated
 request `executable-test-20260921T173912962Z-6cd8e67e` provisioned successfully.
 
 Actual reboot recovery, one-use sign-in/second boot, and issued shutdown remain
-unqualified because the shared harness lacks the necessary continuation/setup
-contracts. See [support workflow](SUPPORT_WORKFLOW.md). Raw evidence is retained
+unqualified pending the Hyper-V Harness project's authorized Astra Max extension
+and native execution. The test-only power adapter binds the elevated setup to
+the exact Lab and Release hashes, retains independent installed-product/service
+verification, and checks the target's account/SID/pool-baseline binding before
+using the request-private DPAPI credential. Its continuations observe the
+product's registered RunOnce launch; its expiry scenario uses the real hour.
+The adapter builds without changing the C613 Release artifact. See
+[support workflow](SUPPORT_WORKFLOW.md). Raw evidence is retained
 under `D:\Disk\VMs\Codex-Harness\Live\Broker\Results\<request-id>`.
 
 ## 0.4.13 — audit fixes

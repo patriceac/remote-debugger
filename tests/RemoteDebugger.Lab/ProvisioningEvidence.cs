@@ -78,7 +78,7 @@ internal static class ProvisioningEvidence
         return Path.Combine(SetupRoot(requestId), "guest-setup.json");
     }
 
-    public static bool TryValidate(string expectedFixturePath, string output, out BrokerReceipt receipt, out string error)
+    public static bool TryValidate(string expectedFixturePath, string output, out BrokerReceipt receipt, out string error, bool allowPowerSetup = false)
     {
         receipt = null!;
         error = "";
@@ -100,13 +100,23 @@ internal static class ProvisioningEvidence
             string fixtureRelativePath = Path.GetRelativePath(payloadRoot, expectedFixture);
             string requestId = Path.GetFileName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(output)));
             JsonElement value = JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(evidencePath));
-            SetupReceipt setup = ValidateSetupReceipt(value, requestId, fixtureRelativePath, fixtureHash);
+            string setupHash = fixtureHash;
+            SetupReceipt setup;
+            if (allowPowerSetup && string.Equals(RequiredString(value, "ExecutableRelativePath").Replace('/', '\\'), @"lab\RemoteDebugger.Lab.exe", StringComparison.OrdinalIgnoreCase))
+            {
+                string labPath = RequireRegularFile(Path.Combine(payloadRoot, "lab", "RemoteDebugger.Lab.exe"), "power setup Lab");
+                setupHash = HashFile(labPath);
+                if (!string.Equals(setupHash, HashFile(Environment.ProcessPath!), StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("The power setup Lab differs from the running test driver.");
+                setup = ValidatePowerSetupReceipt(value, requestId, setupHash, expectedFixture, labPath, fixtureHash);
+            }
+            else setup = ValidateSetupReceipt(value, requestId, fixtureRelativePath, fixtureHash);
             string registeredSid = setup.UserSid;
             if (!string.Equals(registeredSid, WindowsIdentity.GetCurrent().User?.Value, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("The setup account does not match the interactive Lab user.");
 
             string stagedPath = RequireProtectedFile(setup.StagedExecutablePath, SetupRoot(requestId), "staged setup executable");
-            if (!string.Equals(HashFile(stagedPath), fixtureHash, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(HashFile(stagedPath), setupHash, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("The staged setup executable bytes do not match the requested fixture.");
             string managedPath = RequireProtectedFile(SupportPlatformPaths.ApplicationExecutable, SupportPlatformPaths.ProductDirectory, "managed application");
             string servicePath = RequireProtectedFile(SupportPlatformPaths.ServiceExecutable, SupportPlatformPaths.InstallDirectory, "support service");
@@ -142,6 +152,12 @@ internal static class ProvisioningEvidence
     }
 
     internal static SetupReceipt ValidateSetupReceipt(JsonElement value, string requestId, string fixtureRelativePath, string fixtureHash)
+        => ValidateSetupReceipt(value, requestId, fixtureRelativePath, fixtureHash, ["cli", "platform-provision"]);
+
+    internal static SetupReceipt ValidatePowerSetupReceipt(JsonElement value, string requestId, string labHash, string fixturePath, string labPath, string fixtureHash)
+        => ValidateSetupReceipt(value, requestId, @"lab\RemoteDebugger.Lab.exe", labHash, ["powersetup", fixturePath, labPath, fixtureHash]);
+
+    private static SetupReceipt ValidateSetupReceipt(JsonElement value, string requestId, string fixtureRelativePath, string fixtureHash, string[] expectedArguments)
     {
         if (RequiredInt(value, "FormatVersion") != ExpectedFormatVersion || RequiredString(value, "Contract") != ContractName)
             throw new InvalidDataException("The setup evidence is not GuestSetupV1 format 1.");
@@ -152,7 +168,7 @@ internal static class ProvisioningEvidence
         foreach (string key in new[] { "ExecutableSha256", "StagedExecutableSha256" })
             if (!string.Equals(NormalizeHash(RequiredString(value, key), key), fixtureHash, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException($"{key} does not match the requested fixture.");
-        if (!RequiredArray(value, "Arguments").EnumerateArray().Select(argument => argument.GetString()).SequenceEqual(new[] { "cli", "platform-provision" }))
+        if (!RequiredArray(value, "Arguments").EnumerateArray().Select(argument => argument.GetString()).SequenceEqual(expectedArguments))
             throw new InvalidDataException("The setup arguments do not match the supported provisioner.");
         if (!TryGetBoolean(value, "Succeeded", out bool succeeded) || !succeeded || RequiredInt(value, "ExitCode") != 0)
             throw new InvalidDataException("The setup process did not exit successfully.");

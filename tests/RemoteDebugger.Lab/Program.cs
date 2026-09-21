@@ -20,6 +20,11 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        if (args.FirstOrDefault() == "powersetup")
+        {
+            Environment.ExitCode = PowerGuestSetup.RunAsync(args).GetAwaiter().GetResult();
+            return;
+        }
         if (args.Length < 2) throw new ArgumentException("The Lab needs a role and an output directory.");
         Forms.Application.SetHighDpiMode(Forms.HighDpiMode.PerMonitorV2);
         Forms.Application.EnableVisualStyles();
@@ -94,7 +99,7 @@ internal sealed partial class LabForm : Forms.Form
 
     private sealed record CheckRecord(string Id, string Requirement, string Status, bool Required, DateTimeOffset Utc, object? Evidence);
 
-    public LabForm(string role, string output, string scope, string updateVariant, string? applicationPath = null, string? mcpPackage = null)
+    public LabForm(string role, string output, string scope, string updateVariant, string? applicationPath = null, string? auxiliaryPath = null)
     {
         this.role = role.Trim().ToLowerInvariant();
         this.output = Path.GetFullPath(output);
@@ -127,7 +132,7 @@ internal sealed partial class LabForm : Forms.Form
             try
             {
                 guestElevated = Native.IsElevated();
-                if (role == "loopbackmcp") { await McpReviewAsync(mcpPackage ?? throw new ArgumentException("MCP package path is required.")); return; }
+                if (role == "loopbackmcp") { await McpReviewAsync(auxiliaryPath ?? throw new ArgumentException("MCP package path is required.")); return; }
                 if (role == "internetinstaller") { await InternetInstallerReviewAsync(); return; }
                 if (role == "internet") { await InternetReviewAsync(); return; }
                 if (role == "security") { await SecurityReviewAsync(); return; }
@@ -136,9 +141,10 @@ internal sealed partial class LabForm : Forms.Form
                     await PrepareBrokerProvisioningAsync();
                 if (role == "workflowagent") await WorkflowAgentAsync();
                 else if (role == "workflowcontroller") await WorkflowControllerAsync();
-                else if (role == "poweragent") await PowerAgentAsync(0);
-                else if (role == "powerafterfirst") await PowerAgentAsync(1);
-                else if (role == "poweraftersecond") await PowerAgentAsync(2);
+                else if (role == "poweragent") await PowerAgentAsync(0, auxiliaryPath);
+                else if (role == "powerafterfirst") await PowerAgentAsync(1, auxiliaryPath);
+                else if (role == "poweraftersecond") await PowerAgentAsync(2, auxiliaryPath);
+                else if (role == "powercontroller-once") await PowerControllerAsync("once", PowerCredentialFixture.Read(auxiliaryPath));
                 else if (role == "powercontroller-cancel") await PowerControllerAsync("cancel");
                 else if (role == "powercontroller-expiry") await PowerControllerAsync("expiry");
                 else if (role == "powercontroller-shutdown") await PowerControllerAsync("shutdown");
@@ -528,7 +534,20 @@ internal sealed partial class LabForm : Forms.Form
             return;
         }
 
-        if (ProvisioningEvidence.TryValidate(application, output, out var receipt, out string error))
+        bool powerRole = role.StartsWith("power", StringComparison.Ordinal);
+        var validationTime = Stopwatch.StartNew();
+        bool validated;
+        ProvisioningEvidence.BrokerReceipt receipt;
+        string error;
+        do
+        {
+            validated = ProvisioningEvidence.TryValidate(application, output, out receipt, out error, allowPowerSetup: powerRole);
+            if (validated || !role.StartsWith("powerafter", StringComparison.Ordinal) || validationTime.Elapsed.TotalSeconds >= 30) break;
+            // The product's one-use sign-in watcher restores demand start just
+            // after Windows signs in. Retain the normal receipt/service checks.
+            await Task.Delay(500, stop.Token);
+        } while (true);
+        if (validated)
         {
             brokerProvisioning = receipt;
             application = receipt.ManagedExecutablePath;

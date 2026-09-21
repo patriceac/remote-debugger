@@ -19,9 +19,10 @@ internal sealed partial class LabForm
 {
     // Only the initial phase launches the product. A declared harness continuation
     // must find the process started by the product's own Windows RunOnce entry.
-    private async Task PowerAgentAsync(int boot)
+    private async Task PowerAgentAsync(int boot, string? credentialPath)
     {
         if (brokerProvisioning == null) throw new IOException("Power acceptance requires verified guest provisioning.");
+        var credentialBinding = credentialPath == null ? null : PowerCredentialFixture.Read(credentialPath).Identity;
         string code = "";
         if (boot == 0)
         {
@@ -64,7 +65,7 @@ internal sealed partial class LabForm
             try
             {
                 if (request is "RD_LAB_BOOTSTRAP" or "POWER_STATUS")
-                    response = new { code, boot, bootId, userSid, account = WindowsIdentity.GetCurrent().Name,
+                    response = new { code, boot, bootId, userSid, account = WindowsIdentity.GetCurrent().Name, credentialBinding,
                         binarySha256 = await HashFileAsync(application), productStartedUtc = product!.StartTime.ToUniversalTime(),
                         utc = DateTimeOffset.UtcNow, reports = new IncidentLog(productData).Read().Select(x => x.Failure.Name).ToArray() };
                 else if (request == "POWER_INPUT_CLEAR")
@@ -131,9 +132,7 @@ internal sealed partial class LabForm
         }
     }
 
-    // The credential reader is supplied by the harness-contract adapter. It must
-    // validate the peer binding and decrypt only the request-private fixture.
-    private async Task PowerControllerAsync(string scenario, Func<JsonElement, Task<string>>? readPassword = null)
+    private async Task PowerControllerAsync(string scenario, PowerCredentialFixture? credential = null)
     {
         if (scenario is not ("once" or "cancel" or "expiry" or "shutdown")) throw new ArgumentException("Unknown power scenario.");
         product = LaunchProduct(false); await WaitUiAsync(); WindowState = Forms.FormWindowState.Minimized;
@@ -142,6 +141,7 @@ internal sealed partial class LabForm
             ?? throw new IOException("Power-test target was not discovered.");
         peerHost = peer.Host;
         var initial = await PowerMessageAsync("RD_LAB_BOOTSTRAP");
+        Action? enterPassword = credential == null ? null : () => credential.EnterPassword(initial.GetProperty("credentialBinding"));
         Set("host", peerHost); Set("pairCode", initial.Str("code")); FocusAndEnter("pairCode");
         if (!await WaitForTextAsync("connectionStatus", IsConnected, 60)) throw new IOException("Power-test pairing failed.");
         var connection = RemoteClient.Load().Connection;
@@ -165,8 +165,8 @@ internal sealed partial class LabForm
 
         if (scenario == "once")
         {
-            if (readPassword == null) throw new IOException("The protected target-credential reader is unavailable.");
-            var countdown = await AcceptPowerFromControllerAsync(true, true, machine, await readPassword(initial));
+            if (enterPassword == null) throw new IOException("The protected target-credential reader is unavailable.");
+            var countdown = await AcceptPowerFromControllerAsync(true, true, machine, enterPassword);
             InvokeElement(PowerControl(countdown, "cancelPowerWait"));
             await WaitWorkflowAsync(() => Task.FromResult(UiTexts().Any(x => x.Contains(UiText.PowerCountdownCancelled, StringComparison.Ordinal))), 30);
             await Task.Delay(11000, stop.Token);
@@ -180,8 +180,7 @@ internal sealed partial class LabForm
         for (int boot = 1; boot <= boots; boot++)
         {
             bool once = scenario == "once" && boot == 1;
-            string? password = once ? await readPassword!(initial) : null;
-            var progress = await AcceptPowerFromControllerAsync(true, once, machine, password); password = null;
+            var progress = await AcceptPowerFromControllerAsync(true, once, machine, once ? enterPassword : null);
             _ = await PowerMessageAsync("POWER_BEFORE_RESTART", 4);
             var elapsed = Stopwatch.StartNew();
             Forms.Clipboard.SetText("controller-during-reboot-" + boot);
@@ -248,7 +247,7 @@ internal sealed partial class LabForm
         return preflight;
     }
 
-    private async Task<AutomationElement> AcceptPowerFromControllerAsync(bool restart, bool once, string machine, string? password = null)
+    private async Task<AutomationElement> AcceptPowerFromControllerAsync(bool restart, bool once, string machine, Action? enterPassword = null)
     {
         string buttonId = restart ? "restartRemotePc" : "shutdownRemotePc";
         await WaitWorkflowAsync(() => Task.FromResult(Find(buttonId, 100)?.Current.IsEnabled == true));
@@ -261,10 +260,10 @@ internal sealed partial class LabForm
             CaptureDesktop(once ? "power-once-options.png" : "power-manual-options.png");
             if (once)
             {
-                if (string.IsNullOrEmpty(password)) throw new IOException("The protected guest password fixture is unavailable.");
+                if (enterPassword == null) throw new IOException("The protected guest password fixture is unavailable.");
                 ((TogglePattern)choice.GetCurrentPattern(TogglePattern.Pattern)).Toggle();
                 PowerControl(options, "oneTimePassword").SetFocus();
-                Native.TypeText(0, password); password = null;
+                enterPassword();
             }
             InvokeElement(PowerControl(options, "continueRestart"));
         }
