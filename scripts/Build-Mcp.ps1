@@ -10,7 +10,10 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'MCP dependency installation failed.' }
 } finally { Pop-Location }
 New-Item -ItemType Directory -Path $app,(Join-Path $app 'test') -Force | Out-Null
-Copy-Item -LiteralPath $NodePath -Destination (Join-Path $package 'node.exe') -Force
+$nodeTarget = Join-Path $package 'node.exe'
+if (!(Test-Path -LiteralPath $nodeTarget) -or (Get-FileHash -LiteralPath $NodePath).Hash -ne (Get-FileHash -LiteralPath $nodeTarget).Hash) {
+    Copy-Item -LiteralPath $NodePath -Destination $nodeTarget -Force
+}
 foreach ($name in @('package.json','package-lock.json','server.mjs','tools.mjs','cli.mjs')) {
     Copy-Item -LiteralPath (Join-Path $source $name) -Destination $app -Force
 }
