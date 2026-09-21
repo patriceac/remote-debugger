@@ -17,7 +17,7 @@ this is not a physical-hardware 30 FPS benchmark. Request IDs:
 
 The controller's overall assertion failed at the final local-report lookup:
 the CLI ignored `--data-root`. Commit `2cf3119` fixes that wiring. Separate native
-request `executable-test-20260921T180241282Z-f532c410` passed on the final candidate:
+request `executable-test-20260921T180241282Z-f532c410` passed on candidate C613:
 an actual unexpected process exit creates an automatic report, readable without
 a remote profile, with clipboard payloads excluded. Its screenshot was reviewed;
 application, guest/broker, process/payload cleanup and network isolation passed,
@@ -26,15 +26,17 @@ VMs ended Off with successful process/payload/network cleanup and no skipped
 evidence. The Files completion state and shutdown countdown screenshots were
 visually reviewed.
 
-The final application candidate is signed Release **0.5.0**, built from clean
-source `2cf3119ce03b36f42e92c35e49caeafd2fb7d051`, with SHA-256
-`C613F0895B8877A268F2782A468E146EE01EC6AC46C414DD5D716C4FCA1FD1B6`.
+The current application candidate is signed Release **0.5.0**, built from clean
+source `20634aaf6c03573a3b6e3a520128f879b0c1163e`, with SHA-256
+`2BBD33B5F481AA5284913BE3D1B39CC9B0AF6A54FE1FA01D3831068E62F5D1FC`.
+It additionally treats NUL-only logon notices as empty while retaining real
+interactive banners; Luna's four focused preflight cases passed.
 Both installers contain that executable:
 
 | Package | SHA-256 | Qualification |
 | --- | --- | --- |
-| Private setup | `DC2D9413DDC838413403294F215E03FB53D7C4EF1BC25AE0914EB7D259F385E5` | Five isolated installation/locked first-launch checks passed |
-| Standard setup | `FD048B204A0AB716AD3AE50AF81C3183EBD526EF226A1584EC4C0944B77721D2` | Built and signed; no separate install run |
+| Private setup | `8C80A6AE83A7EBB723951F9C06F3A64B4BCF8055DC4EAD909EFE2D459F66FBFD` | Rebuilt and signed; exact-package verification pending |
+| Standard setup | `62FFD9E9FC7A7100A7CFAE0D3FE2410E4462840A4FC79B989A1952EBBD83A0F0` | Built and signed without embedded connection or administrator profiles; no separate install run |
 
 The private package contains protected connection profiles and is kept local.
 The publisher fingerprint is
@@ -42,10 +44,12 @@ The publisher fingerprint is
 the local signer reports `UnknownError` trust status, so signing is not a claim of
 public certificate trust.
 
-Installer request `executable-test-20260921T180221363Z-eb2e7fbd` passed fresh
+Earlier installer request `executable-test-20260921T180221363Z-eb2e7fbd` passed fresh
 credential state, silent installation, build identity and original-user shell
 integration, protected profile staging, and the first-launch passphrase prompt.
-The installed executable matched the final candidate hash. The passphrase
+It tested private setup `DC2D9413DDC838413403294F215E03FB53D7C4EF1BC25AE0914EB7D259F385E5`
+and installed candidate `C613F0895B8877A268F2782A468E146EE01EC6AC46C414DD5D716C4FCA1FD1B6`
+from source `2cf3119ce03b36f42e92c35e49caeafd2fb7d051`. The passphrase
 screenshot was visually reviewed. This disconnected check does not qualify an
 Internet connection, a custom install directory, or uninstallation.
 Guest/broker execution and cleanup succeeded: the VM ended Off, no processes
@@ -55,7 +59,7 @@ network adapter remained connected.
 | Requirement | Evidence and remaining limit |
 | --- | --- |
 | Session clipboard | Focused session/clipboard tests and native bidirectional, pause/baseline and session-end checks passed. Actual reboot remains part of the power qualification gap. |
-| Automatic reports | Retention/deduplication checks passed; the final native candidate created an unexpected-exit incident and read it offline without clipboard payloads. |
+| Automatic reports | Retention/deduplication checks passed; candidate C613 created an unexpected-exit incident and read it offline without clipboard payloads. |
 | Restart and one-use logon | Resume/deadline/credential-state unit checks and native preflight passed. Actual first/second boot, manual return and the full controller wait remain unqualified. |
 | Shutdown | Native named-PC confirmation, countdown and cancellation passed. Issued shutdown remains unqualified. |
 | Update progress | Ten focused progress tests passed, covering measured/stalled/resumed rates, opaque stages and actual completion; the existing binary/health verification gate is preserved. |
@@ -74,15 +78,17 @@ the exact Lab and Release hashes, retains independent installed-product/service
 verification, and checks the target's account/SID/pool-baseline binding before
 using the request-private DPAPI credential. Its continuations observe the
 product's registered RunOnce launch; its expiry scenario uses the real hour.
-The adapter builds without changing the C613 Release artifact. Luna's ten
+Luna's ten
 focused provisioning/binding checks, a Windows PowerShell UTF-8 BOM fixture
 regression, and the submission script's syntax check passed. All four
-`-PrepareOnly` scenarios also passed request/plan assertions against Lab SHA-256
-`B4D518F8D5476F469C8028BCC42D194F1FFE6901738F93C397A6522D5B904357`:
+`-PrepareOnly` scenarios were regenerated and passed request/plan assertions
+against the current Release and Lab SHA-256
+`7380CF3F2C26BBF4CFB69605C9724A2DED0BB19311E1077FBC16E7475D97EA0E`:
 exact artifact hashes and setup arguments, shared isolated cohorts, credential
 fixtures limited to the one-use-login scenario (Manual sign-in uses the broker's
 own credential), Automatic/Manual boot ordering, and the
-real-hour observation interval. This generated requests only; no native power
+real-hour observation interval. Shutdown explicitly allows 300 seconds for the
+qualified harness evidence-recovery path. This generated requests only; no native power
 scenario was submitted. See
 [support workflow](SUPPORT_WORKFLOW.md). Raw evidence is retained
 under `D:\Disk\VMs\Codex-Harness\Live\Broker\Results\<request-id>`.
