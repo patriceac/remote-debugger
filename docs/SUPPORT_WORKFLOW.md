@@ -1,8 +1,7 @@
 # Remote Debugger 0.5.0 support workflow
 
-Agreed scope, 21 September 2026. The 0.5.0 implementation is built; native power
-qualification remains incomplete. See [validation record](VALIDATION.md) for the
-checks performed, exact artifacts and remaining limits.
+Agreed scope, 21 September 2026. See [validation record](VALIDATION.md) for
+implementation status, checks performed, exact artifacts and remaining limits.
 
 ## Requirements
 
@@ -26,4 +25,4 @@ checks performed, exact artifacts and remaining limits.
 
 Application tests use the Hyper-V SYSTEM broker. Luna Max runs focused tests; the primary agent owns application and test code. Final deliverables use signed Release builds and installers, committed and pushed source, and a requirement-by-requirement evidence record.
 
-Native power qualification is waiting for the Hyper-V Harness project's authorized Astra Max extension: reboot continuations, a clean sign-in fixture, protected baseline credentials, and privileged setup with expected power-off. Remote Debugger's `Test-PowerWorkflow.ps1` prepares separate Once, Cancel, Expiry and Shutdown requests. Continuations observe the product's own Windows restart launch; they do not launch it again. The Expiry case waits the real hour. Until the shared contract is qualified and these scenarios pass, actual reboot recovery, one-use sign-in followed by a second boot, the full wait, and issued shutdown remain unqualified. Unit checks and non-reboot workflows do not establish those native results.
+Native power qualification uses the Hyper-V Harness reboot continuations, clean sign-in fixture, protected baseline credentials, and privileged setup with expected power-off. Remote Debugger's `Test-PowerWorkflow.ps1` prepares separate Once, Cancel, Expiry and Shutdown requests. Continuations observe the product's own Windows restart launch; they do not launch it again. The Expiry case waits the real hour. Each scenario requires passing application assertions, independent boot or power-off evidence, and complete process, payload and network cleanup.
