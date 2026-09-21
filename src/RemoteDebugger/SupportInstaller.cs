@@ -281,6 +281,38 @@ internal static partial class SupportInstaller
             throw new InvalidOperationException($"Support service provisioning failed (exit code {process.ExitCode}). No privileged capability was reported as ready.");
     }
 
+    public static int WriteInstallerProvisionRequest(string path)
+    {
+        try
+        {
+            string source = Path.GetFullPath(Environment.ProcessPath ?? throw new InvalidOperationException("Current executable path is unavailable."));
+            if (!PathsEqual(source, SupportPlatformPaths.ApplicationExecutable))
+                throw new UnauthorizedAccessException("Installer provisioning request must run from the Program Files installation.");
+            string sid = WindowsIdentity.GetCurrent().User?.Value ?? throw new InvalidOperationException("Current Windows user SID is unavailable.");
+            using var current = Process.GetCurrentProcess();
+            using var sourceStream = File.OpenRead(source);
+            string hash = Convert.ToHexString(SHA256.HashData(sourceStream));
+            string encoded = Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(
+                new SupportProvisionRequest(hash, sid, current.Id, current.StartTime.ToUniversalTime().Ticks), Json.Options));
+            using (var file = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            using (var writer = new StreamWriter(file)) writer.Write(encoded);
+            for (int attempt = 0; attempt < 3000 && File.Exists(path); attempt++) Thread.Sleep(100);
+            return 0;
+        }
+        catch (Exception ex) { Trace.WriteLine(ex); return 2; }
+    }
+
+    public static int EnsureSupportFromInstaller(string encodedRequest)
+    {
+        try
+        {
+            _ = RequireInstalledRefreshHost();
+            return File.Exists(SupportPlatformPaths.ConfigurationPath)
+                ? RefreshService() : ExecuteElevated(encodedRequest);
+        }
+        catch (Exception ex) { TryWriteMaintenanceError("installer-support-error.txt", ex); return 2; }
+    }
+
     public static int ExecuteElevated(string encodedRequest)
     {
         try

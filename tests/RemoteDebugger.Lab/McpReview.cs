@@ -35,7 +35,26 @@ internal sealed partial class LabForm
             await WaitUiAsync();
             await CliAsync(["pair", "--host", "127.0.0.1", "--data-root", root, "--connection", connection], await WaitPairingCodeAsync());
             string installed = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "RemoteDebugger", "RemoteDebugger.exe");
-            await Probe(string.Equals(application, installed, StringComparison.OrdinalIgnoreCase) ? "connected-admin" : "connected");
+            bool provisioned = string.Equals(application, installed, StringComparison.OrdinalIgnoreCase);
+            if (provisioned)
+            {
+                JsonElement maintenance = default;
+                DateTimeOffset deadline = DateTimeOffset.UtcNow.AddSeconds(30);
+                do
+                {
+                    var reply = await CliAsync(["call", "--request", "-", "--connection", connection],
+                        Json.Text(new { operation = "maintenance.status", args = new { } }), requireSuccess: false);
+                    if (!reply.GetProperty("ok").GetBoolean())
+                        throw new IOException("Administrator maintenance status failed: " + reply.GetRawText());
+                    maintenance = reply.GetProperty("data");
+                    if (maintenance.GetProperty("active").GetBoolean()) break;
+                    await Task.Delay(500, stop.Token);
+                } while (DateTimeOffset.UtcNow < deadline);
+                if (!maintenance.GetProperty("active").GetBoolean())
+                    throw new IOException("Administrator maintenance did not become active: " + maintenance.GetRawText());
+                Pass("mcp.admin_ready", "The installed agent opened its administrator maintenance lease", maintenance);
+            }
+            await Probe(provisioned ? "connected-admin" : "connected");
         }
         finally { await CleanupLoopbackProcessesAsync(); }
         await FinishAsync();

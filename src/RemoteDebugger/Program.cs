@@ -12,6 +12,8 @@ public static class Program
         if (args.Length == 1 && args[0] == "--platform-service") return SupportService.Run();
         if (args.Length == 2 && args[0] == "--input-helper") return InteractiveInputBroker.RunHelperAsync(args[1]).GetAwaiter().GetResult();
         if (args.Length == 2 && args[0] == "--support-provision") return SupportInstaller.ExecuteElevated(args[1]);
+        if (args.Length == 2 && args[0] == "--installer-provision-request") return SupportInstaller.WriteInstallerProvisionRequest(args[1]);
+        if (args.Length == 2 && args[0] == "--installer-ensure-support") return SupportInstaller.EnsureSupportFromInstaller(args[1]);
         if (args.Length == 1 && args[0] == "--installer-shutdown") return SupportInstaller.StopForInstaller();
         if (args.Length == 1 && args[0] == "--installer-user-cleanup") return SupportInstaller.PrepareOriginalUser();
         if (args.Length == 1 && args[0] == "--installer-user-startup") return SupportInstaller.CreateOriginalUserStartup();

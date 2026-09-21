@@ -89,9 +89,9 @@ spanish.InstallerShutdownFailed=No se pudo cerrar Remote Debugger antes de la in
 english.LegacyUninstallFailed=The previous per-user Remote Debugger installation could not be removed.
 french.LegacyUninstallFailed=L’ancienne installation utilisateur de Remote Debugger n’a pas pu être supprimée.
 spanish.LegacyUninstallFailed=No se pudo eliminar la instalación de usuario anterior de Remote Debugger.
-english.SupportRefreshFailed=The protected Remote Debugger support service could not be refreshed.
-french.SupportRefreshFailed=Le service d’assistance protégé de Remote Debugger n’a pas pu être actualisé.
-spanish.SupportRefreshFailed=No se pudo actualizar el servicio de asistencia protegido de Remote Debugger.
+english.SupportSetupFailed=The protected Remote Debugger support service could not be installed or refreshed.
+french.SupportSetupFailed=Le service d’assistance protégé de Remote Debugger n’a pas pu être installé ou actualisé.
+spanish.SupportSetupFailed=No se pudo instalar o actualizar el servicio de asistencia protegido de Remote Debugger.
 #ifdef RelayProfilePath
 english.InternetSetupFailed=Internet setup could not be saved. Run this installer again before using internet support.
 french.InternetSetupFailed=La configuration Internet n'a pas pu être enregistrée. Relancez l'installation avant d'utiliser l'assistance Internet.
@@ -196,6 +196,9 @@ end;
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   ProfilePath: String;
+  RequestPath: String;
+  EncodedRequest: AnsiString;
+  Attempt: Integer;
   ResultCode: Integer;
 begin
   if CurStep = ssPostInstall then
@@ -239,12 +242,38 @@ begin
       '--installer-user-startup', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
       RaiseException('Unable to create the original user startup shortcut.');
     if ResultCode <> 0 then RaiseException('Unable to create the original user startup shortcut.');
-    if not Exec(ExpandConstant('{app}\{#AppExeName}'),
-      '--support-refresh', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-      RaiseException(CustomMessage('SupportRefreshFailed'));
-    if ResultCode <> 0 then
-      RaiseException(CustomMessage('SupportRefreshFailed'));
-    Log('Program Files installation and protected support service refresh completed.');
+    if FileExists(ExpandConstant('{commonappdata}\RemoteDebugger\Support\platform.json')) then
+    begin
+      if not Exec(ExpandConstant('{app}\{#AppExeName}'),
+        '--support-refresh', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+        RaiseException(CustomMessage('SupportSetupFailed'));
+      if ResultCode <> 0 then RaiseException(CustomMessage('SupportSetupFailed'));
+    end
+    else
+    begin
+      RequestPath := ExpandConstant('{tmp}\RemoteDebugger-ProvisionRequest.txt');
+      if not ExecAsOriginalUser(ExpandConstant('{app}\{#AppExeName}'),
+        '--installer-provision-request "' + RequestPath + '"', ExpandConstant('{app}'),
+        SW_HIDE, ewNoWait, ResultCode) then
+        RaiseException(CustomMessage('SupportSetupFailed'));
+      EncodedRequest := '';
+      try
+        for Attempt := 1 to 600 do
+        begin
+          if LoadStringFromFile(RequestPath, EncodedRequest) and (Length(EncodedRequest) > 0) then Break;
+          Sleep(100);
+        end;
+        if Length(EncodedRequest) = 0 then RaiseException(CustomMessage('SupportSetupFailed'));
+        if not Exec(ExpandConstant('{app}\{#AppExeName}'),
+          '--installer-ensure-support "' + String(EncodedRequest) + '"',
+          ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+          RaiseException(CustomMessage('SupportSetupFailed'));
+        if ResultCode <> 0 then RaiseException(CustomMessage('SupportSetupFailed'));
+      finally
+        DeleteFile(RequestPath);
+      end;
+    end;
+    Log('Program Files installation and protected support service setup completed.');
   end;
 end;
 

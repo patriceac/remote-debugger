@@ -54,7 +54,7 @@ public sealed class InstallerDefinitionTests
     }
 
     [Fact]
-    public void InstallerStopsLegacyCopiesAndRefreshesTheProtectedService()
+    public void InstallerStopsLegacyCopiesAndSetsUpTheProtectedService()
     {
         string definition = File.ReadAllText(ProjectFile("installer", "RemoteDebugger.iss"));
 
@@ -67,8 +67,10 @@ public sealed class InstallerDefinitionTests
         Assert.Contains("RemoveBackslashUnlessRoot(WizardDirValue)", definition, StringComparison.Ordinal);
         Assert.Contains("--support-uninstall", definition, StringComparison.Ordinal);
         Assert.Contains("--support-refresh", definition, StringComparison.Ordinal);
+        Assert.Contains("--installer-provision-request", definition, StringComparison.Ordinal);
+        Assert.Contains("--installer-ensure-support", definition, StringComparison.Ordinal);
         Assert.Contains("ewWaitUntilTerminated, ResultCode", definition, StringComparison.Ordinal);
-        Assert.Contains("CustomMessage('SupportRefreshFailed')", definition, StringComparison.Ordinal);
+        Assert.Contains("CustomMessage('SupportSetupFailed')", definition, StringComparison.Ordinal);
         Assert.Contains("cli admin-status", definition, StringComparison.Ordinal);
         Assert.Contains("WizardSelectTasks('adminpc')", definition, StringComparison.Ordinal);
         Assert.Contains("CurPageID = wpSelectTasks", definition, StringComparison.Ordinal);

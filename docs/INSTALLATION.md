@@ -9,7 +9,9 @@ registers a machine uninstaller. It removes the legacy per-user installation
 from `%LOCALAPPDATA%\Programs\Remote Debugger` if one is present. It also
 creates a shortcut in the initiating user's Windows Startup folder, so the app
 starts in the system tray when that user signs in after boot. Use the tray icon
-to open its window; private support still waits for **Enable support**. The Start
+to open its window; private support still waits for **Enable support**. Setup
+provisions the protected local broker using the installer's administrator approval.
+The Start
 menu shortcut opens the window normally. The installed app launches at medium
 integrity after the administrator-owned setup completes. The portable single
 executable remains supported and behaves the same way.
@@ -35,13 +37,11 @@ that user's existing admin credential. Preserve this personal installer for reco
 after reinstalling Windows.
 
 The desktop installer owns the Program Files application. Choosing **Enable
-support** still requests one explicit Windows administrator approval so the
-application can provision the local broker and Private/LocalSubnet firewall
-rules. There is no second installed application to redirect to. Re-running the
-installer closes the running agent, removes any legacy per-user package, updates
-the Program Files application, and refreshes the protected broker when one is
-already provisioned. Remote signed updates through the broker remain silent
-after the initial setup.
+support** after installation uses the provisioned broker for Private/LocalSubnet
+firewall rules without another UAC prompt. Re-running the installer closes the
+running agent, removes any legacy per-user package, updates the Program Files
+application, and refreshes the protected broker. Remote signed updates and
+administrator maintenance through the broker remain silent after setup.
 
 Build the installer after producing a signed Release:
 
@@ -74,9 +74,10 @@ to enable the new capability. Normal desktop input remains available meanwhile.
 
 Remote Debugger runs the visible support agent in the signed-in user's desktop.
 Silent administrator maintenance and protected executable replacement use a
-local privileged broker that must be provisioned once with Windows administrator
-approval (or deployed by an administrator). A fresh unelevated portable copy
-cannot grant itself administrator rights without that prior setup.
+local privileged broker provisioned by the machine installer with its initial
+Windows administrator approval (or deployed by an administrator). A fresh
+unelevated portable copy cannot grant itself administrator rights without that
+prior setup.
 
 ## Publisher identity
 
