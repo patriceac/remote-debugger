@@ -35,8 +35,8 @@ Both installers contain that executable:
 
 | Package | SHA-256 | Qualification |
 | --- | --- | --- |
-| Private setup | `8C80A6AE83A7EBB723951F9C06F3A64B4BCF8055DC4EAD909EFE2D459F66FBFD` | Rebuilt and signed; exact-package verification pending |
-| Standard setup | `62FFD9E9FC7A7100A7CFAE0D3FE2410E4462840A4FC79B989A1952EBBD83A0F0` | Built and signed without embedded connection or administrator profiles; no separate install run |
+| Private setup | `6F0E1DB8730159421380AD26C37CEEB98E1E05D0DE23339107A3022D06076361` | Rebuilt and signed; exact-package verification pending |
+| Standard setup | `5BC2C7F416D39775E6DA83CC6AF149FCBE5DB08FA47255511B0DEFE28BEB4FC0` | Built and signed without embedded connection or administrator profiles; no separate install run |
 
 The private package contains protected connection profiles and is kept local.
 The publisher fingerprint is
@@ -72,8 +72,10 @@ reproduce; the CLI now forwards the provisioner's current error, and isolated
 request `executable-test-20260921T173912962Z-6cd8e67e` provisioned successfully.
 
 Actual reboot recovery, one-use sign-in/second boot, and issued shutdown remain
-unqualified pending the Hyper-V Harness project's authorized Astra Max extension
-and native execution. The test-only power adapter binds the elevated setup to
+unqualified pending native execution. The Hyper-V Harness project's authorized
+Astra Max extension is deployed and Ready: commit `7e6cec567305fb819780a81e2e899c88eda097f5`,
+deployment `deploy-17e5af7867d07efa`. Its Ready receipt was independently read.
+The test-only power adapter binds the elevated setup to
 the exact Lab and Release hashes, retains independent installed-product/service
 verification, and checks the target's account/SID/pool-baseline binding before
 using the request-private DPAPI credential. Its continuations observe the
@@ -88,8 +90,10 @@ exact artifact hashes and setup arguments, shared isolated cohorts, credential
 fixtures limited to the one-use-login scenario (Manual sign-in uses the broker's
 own credential), Automatic/Manual boot ordering, and the
 real-hour observation interval. Shutdown explicitly allows 300 seconds for the
-qualified harness evidence-recovery path. This generated requests only; no native power
-scenario was submitted. See
+qualified harness evidence-recovery path. Prepare-only checks did not run the
+application. The native Once pair is now submitted as
+`executable-test-20260921T211717759Z-e7dca8a1` and
+`executable-test-20260921T211717962Z-2b0d3b17`; results remain pending. See
 [support workflow](SUPPORT_WORKFLOW.md). Raw evidence is retained
 under `D:\Disk\VMs\Codex-Harness\Live\Broker\Results\<request-id>`.
 
