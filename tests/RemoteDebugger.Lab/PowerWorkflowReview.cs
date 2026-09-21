@@ -198,6 +198,9 @@ internal sealed partial class LabForm
                 await WaitWorkflowAsync(() => Task.FromResult(UiTexts().Any(x => x.Contains(UiText.RestartWaitStopped, StringComparison.Ordinal))), scenario == "expiry" ? 3700 : 30);
                 if (scenario == "expiry" && elapsed.Elapsed.TotalSeconds < 3500) throw new IOException("The reconnect wait expired before one hour.");
                 if (File.Exists(RemoteClient.DefaultPath)) throw new IOException("The stopped controller retained its reconnect profile.");
+                CaptureDesktop("power-wait-" + scenario + "-stopped.png");
+                Pass("power.wait_stopped_" + scenario, "The controller visibly stopped waiting and removed its reconnect profile",
+                    new { elapsedSeconds = elapsed.Elapsed.TotalSeconds });
                 // Cold boot, manual sign-in and broker continuation startup are
                 // outside the controller's already-cancelled/expired wait.
                 var returned = await PowerMessageAsync("POWER_STATUS", 600);

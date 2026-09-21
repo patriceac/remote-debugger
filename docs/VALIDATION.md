@@ -37,7 +37,7 @@ its two sentences with a period. Both installers contain current candidate 69DF:
 
 | Package | SHA-256 | Qualification |
 | --- | --- | --- |
-| Private setup | `7B1502C81488AFF349968557FD83352150994BE750C39FD0B5984CD67C8E9E32` | Rebuilt and signed; exact-package verification pending |
+| Private setup | `7B1502C81488AFF349968557FD83352150994BE750C39FD0B5984CD67C8E9E32` | Five disconnected installer checks passed; installed executable matched 69DF |
 | Standard setup | `6F04795AB5C7C3B43C2ED15CD64C267FDA50F7EB54C46D954AA5E288B2DDCF16` | Built and signed without embedded connection or administrator profiles; no separate install run |
 
 The private package contains protected connection profiles and is kept local.
@@ -45,6 +45,17 @@ The publisher fingerprint is
 `772169E21DEBE5D4E39D74BE04F168038C539552844CA06F86766A5FAEAD36EC`;
 the local signer reports `UnknownError` trust status, so signing is not a claim of
 public certificate trust.
+
+Current private-installer request
+`executable-test-20260921T223831389Z-a420d956` passed all five checks: fresh
+credential state, installation, original-user integration, protected setup and
+the first-launch passphrase requirement. The installed executable at
+`C:\Program Files\RemoteDebugger\RemoteDebugger.exe` matched the current 69DF
+hash above, and setup exited zero. Its first-launch screenshot was visually
+reviewed. Guest/broker assertions, process cleanup, payload deletion, disconnected
+network cleanup and worker recycle passed without warnings; the VM ended Off.
+This silent disconnected check does not qualify Internet connection, a custom
+install directory or uninstallation.
 
 Earlier installer request `executable-test-20260921T180221363Z-eb2e7fbd` passed fresh
 credential state, silent installation, build identity and original-user shell
@@ -115,9 +126,20 @@ about 55 minutes left. The deployed harness discarded guest-only continuation
 evidence on early failure/cancellation; its owner is adding a bounded failure
 harvest. Neither account demotion nor OUTDIR reset was found in the harness.
 
-The real-hour Expiry pair is running on C457/Lab 33E8 as requests
+The real-hour Expiry pair ran on C457/Lab 33E8 as requests
 `executable-test-20260921T213626249Z-b4c4269d` and
-`executable-test-20260921T213626348Z-b6365550`. The Shutdown target
+`executable-test-20260921T213626348Z-b6365550`. Broker captures showed the initial
+59:49 countdown at 21:42:47 UTC, 38:55 remaining at 22:03:41 UTC, and the stopped
+wait with the old desktop removed at 22:43:19 UTC. These screens were visually
+reviewed. The controller then failed its four-minute target-response probe at
+22:46:51 UTC. The broker observed a distinct manual boot at 21:43:04 UTC,
+3700.55 seconds signed out, one managed sign-in, one original launch and no
+action replay. The dependent target was canonically cancelled after that failure;
+both VMs ended Off with payload deletion and successful network cleanup. This
+establishes the visible real-hour timeout, but does not pass the complete
+post-sign-in no-reconnect scenario.
+
+The Shutdown target
 `executable-test-20260921T215803298Z-c42a8851` failed elevated setup before the
 product ran: the expected-power-off path passed literal `{PAYLOAD}` tokens to
 the setup executable. Its dependent controller
@@ -132,13 +154,20 @@ forgot its connection, then exceeded the Lab's four-minute target-response wait
 at 22:17:32 UTC. Target `executable-test-20260921T220625128Z-90fe691a` completed an
 actual manual boot at 22:14:09 UTC, with 62.90 seconds signed out, one broker
 sign-in and no action replay. Its continuation was only submitted at 22:16:14 UTC
-and remains under observation. The controller returned complete evidence and
-cleaned up successfully; its overall application assertion failed.
+and later reached the request's 30-minute timeout during continuation. Both
+requests cleaned up successfully; the controller's overall application assertion
+failed and the old harness did not export the target's guest-only diagnostics.
+A separately supplied user screenshot showed the target Lab's `power.boot_1`
+pass beside a Remote Debugger firewall prompt. That check follows exact-process
+identity verification, supporting that the product's RunOnce launch occurred;
+the screenshot is user observation, not broker-attested request evidence.
 
 The next Lab allows ten minutes for the post-cancel/expiry target reply and
 bounds abandoned target coordination to ten minutes. Neither change alters the
-product's one-hour timer. Current Lab SHA-256 is
-`D5C5773103DD2558D6ADDC90DC81781CF76E1B4C082E22ECC0A7934CB3635A67`.
+product's one-hour timer. It records the visible stopped wait and removed profile
+before probing the returning target, preserving those results on later failure.
+Current Lab SHA-256 is
+`776A2FFDEA4174F28DF0600A0EEC3224009687F8040E9305398B57FEC282696A`.
 The harness owner also identified a missing post-boot guest-network gate and is
 adding exact before/after network attestation before continuation. Actual
 network-category drift has not been established. See
