@@ -102,6 +102,7 @@ spanish.InternetSetupFailed=No se pudo guardar la configuración de Internet. Ej
 var
   AdminPcInitiallySelected: Boolean;
   AdminPcTaskInitialized: Boolean;
+  PostInstallIncomplete: Boolean;
 
 function InstallerHelperPath(): String;
 begin
@@ -203,6 +204,7 @@ var
 begin
   if CurStep = ssPostInstall then
   begin
+    PostInstallIncomplete := True;
 #ifdef AdminCredentialPath
     ProfilePath := ExpandConstant('{app}\RemoteDebugger-Admin.rdadmin');
     try
@@ -213,7 +215,7 @@ begin
           RaiseException(CustomMessage('AdminSetupFailed'));
         if ResultCode <> 0 then RaiseException(CustomMessage('AdminSetupFailed'));
       end;
-      if not WizardIsTaskSelected('adminpc') then
+      if AdminPcInitiallySelected and not WizardIsTaskSelected('adminpc') then
       begin
         if not ExecAsOriginalUser(ExpandConstant('{app}\{#AppExeName}'),
           'cli admin-disable', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
@@ -274,7 +276,13 @@ begin
       end;
     end;
     Log('Program Files installation and protected support service setup completed.');
+    PostInstallIncomplete := False;
   end;
+end;
+
+function GetCustomSetupExitCode: Integer;
+begin
+  if PostInstallIncomplete then Result := 9 else Result := 0;
 end;
 
 function InitializeUninstall(): Boolean;

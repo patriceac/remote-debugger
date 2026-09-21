@@ -75,6 +75,9 @@ public sealed class InstallerDefinitionTests
         Assert.Contains("WizardSelectTasks('adminpc')", definition, StringComparison.Ordinal);
         Assert.Contains("CurPageID = wpSelectTasks", definition, StringComparison.Ordinal);
         Assert.Contains("cli admin-disable", definition, StringComparison.Ordinal);
+        Assert.Contains("AdminPcInitiallySelected and not WizardIsTaskSelected('adminpc')", definition, StringComparison.Ordinal);
+        Assert.Contains("PostInstallIncomplete := True", definition, StringComparison.Ordinal);
+        Assert.Contains("if PostInstallIncomplete then Result := 9", definition, StringComparison.Ordinal);
     }
 
     private static string ProjectFile(params string[] segments)
