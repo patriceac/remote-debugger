@@ -89,8 +89,8 @@ internal sealed class PrivilegedPowerManager(SupportConfiguration configuration,
         using var policy = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System");
         bool existingAuto = Convert.ToString(key?.GetValue("AutoAdminLogon")) == "1";
         bool existingSecret = key?.GetValue("DefaultPassword") != null || LogonSecret.Exists();
-        bool interactive = !string.IsNullOrWhiteSpace(Convert.ToString(policy?.GetValue("legalnoticetext"))) ||
-            !string.IsNullOrWhiteSpace(Convert.ToString(policy?.GetValue("legalnoticecaption"))) || Convert.ToInt32(policy?.GetValue("scforceoption", 0)) != 0;
+        bool interactive = HasLogonNotice(Convert.ToString(policy?.GetValue("legalnoticetext"))) ||
+            HasLogonNotice(Convert.ToString(policy?.GetValue("legalnoticecaption"))) || Convert.ToInt32(policy?.GetValue("scforceoption", 0)) != 0;
         if (!account.StartsWith(Environment.MachineName + "\\", StringComparison.OrdinalIgnoreCase)) constraint = "local_account_required";
         else if (journal != null || existingAuto || existingSecret) constraint = "existing_logon_configuration";
         else if (interactive) constraint = "interactive_sign_in_policy";
@@ -101,6 +101,8 @@ internal sealed class PrivilegedPowerManager(SupportConfiguration configuration,
             Convert.ToInt32(key?.GetValue("AutoLogonCount", 1)) > 0 && UnattendedBootAvailable();
         return new(Environment.MachineName, account, constraint.Length == 0, constraint, existingReturn ? "existing_automatic_desktop" : "manual_sign_in");
     }
+
+    internal static bool HasLogonNotice(string? text) => text?.Any(c => c != '\0' && !char.IsWhiteSpace(c)) == true;
 
     private static bool UnattendedBootAvailable()
     {

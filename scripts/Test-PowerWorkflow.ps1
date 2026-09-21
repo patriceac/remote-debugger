@@ -35,7 +35,10 @@ $requests = foreach ($roleName in @('poweragent', ('powercontroller-' + $Scenari
         $request.GuestSetupExecutableRelativePath = 'lab\RemoteDebugger.Lab.exe'
         $request.GuestSetupExecutableSha256 = $labHash
         $request.GuestSetupArguments = @('powersetup', '{PAYLOAD}\release\RemoteDebugger.exe', '{PAYLOAD}\lab\RemoteDebugger.Lab.exe', $releaseHash)
-        if ($Scenario -eq 'Shutdown') { $request.ExpectGuestPowerOff = $true }
+        if ($Scenario -eq 'Shutdown') {
+            $request.ExpectGuestPowerOff = $true
+            $request.GuestPowerOffRecoveryTimeoutSeconds = 300
+        }
         else {
             $bootCount = if ($Scenario -eq 'Once') { 2 } else { 1 }
             $boots = @(for ($boot = 1; $boot -le $bootCount; $boot++) {
