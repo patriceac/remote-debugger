@@ -17,7 +17,7 @@ if (-not (Test-Path -LiteralPath $work)) { New-Item -ItemType Directory -Path $w
 
 function Get-LabArguments([string]$RoleName) {
     $value = "$RoleName `"{OUTDIR}`" provisioned none `"{PAYLOAD}\release\RemoteDebugger.exe`""
-    if ($Scenario -eq 'Once') { $value += ' "{GUEST_CREDENTIAL_FILE}"' }
+    if ($Scenario -eq 'Once' -or ($Scenario -ne 'Shutdown' -and $RoleName -notlike 'powercontroller-*')) { $value += ' "{GUEST_CREDENTIAL_FILE}"' }
     return $value
 }
 
@@ -30,7 +30,7 @@ $requests = foreach ($roleName in @('poweragent', ('powercontroller-' + $Scenari
         GuestSetupArguments = @('cli', 'platform-provision'); GuestSetupTimeoutSeconds = 300
         NetworkProfile = 'IsolatedTestNet'; NetworkCohort = $Cohort; ExecutionTimeoutSeconds = $executionSeconds; ThrowOnFailure = $true
     }
-    if ($Scenario -eq 'Once') { $request.GuestCredentialFixture = $true }
+    if ($Scenario -eq 'Once' -or ($Scenario -ne 'Shutdown' -and $roleName -eq 'poweragent')) { $request.GuestCredentialFixture = $true }
     if ($roleName -eq 'poweragent') {
         $request.GuestSetupExecutableRelativePath = 'lab\RemoteDebugger.Lab.exe'
         $request.GuestSetupExecutableSha256 = $labHash

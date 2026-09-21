@@ -74,7 +74,9 @@ the exact Lab and Release hashes, retains independent installed-product/service
 verification, and checks the target's account/SID/pool-baseline binding before
 using the request-private DPAPI credential. Its continuations observe the
 product's registered RunOnce launch; its expiry scenario uses the real hour.
-The adapter builds without changing the C613 Release artifact. See
+The adapter builds without changing the C613 Release artifact. Luna's ten
+focused provisioning/binding checks and the submission script's syntax check
+passed. See
 [support workflow](SUPPORT_WORKFLOW.md). Raw evidence is retained
 under `D:\Disk\VMs\Codex-Harness\Live\Broker\Results\<request-id>`.
 
