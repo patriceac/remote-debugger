@@ -19,6 +19,7 @@ public static partial class UiText
     public static string ActiveVersionsSynchronized => Get(nameof(ActiveVersionsSynchronized));
     public static string Address => Get(nameof(Address));
     public static string AdjustArguments => Get(nameof(AdjustArguments));
+    public static string AdminMode => Get(nameof(AdminMode));
     public static string AdminMaintenance => Get(nameof(AdminMaintenance));
     public static string AdminMaintenanceChangeFailedPrefix => Get(nameof(AdminMaintenanceChangeFailedPrefix));
     public static string AdminMaintenanceDisabled => Get(nameof(AdminMaintenanceDisabled));

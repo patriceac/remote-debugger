@@ -291,7 +291,7 @@ public sealed partial class MainForm : Forms.Form
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 112));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 72));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, isUpdateAdmin ? 82 : 72));
 
         var roles = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false, Margin = Forms.Padding.Empty, Padding = new Forms.Padding(0), BackColor = Rail };
         roles.Controls.Add(roleAgent); roles.Controls.Add(roleController);
@@ -306,9 +306,12 @@ public sealed partial class MainForm : Forms.Form
 
         var local = new Forms.Panel { Dock = Forms.DockStyle.Fill };
         var machine = new Forms.Label { Text = Environment.MachineName, AutoSize = false, Width = 180, Height = 20, ForeColor = RailSecondary, Font = new Font("Segoe UI", 9.5F), Location = new Point(12, 8), AutoEllipsis = true };
-        var version = new Forms.Label { Text = "Remote Debugger · " + (typeof(MainForm).Assembly.GetName().Version?.ToString(3) ?? "0.2"), AutoSize = false, Width = 180, Height = 20, ForeColor = Color.FromArgb(116, 143, 154), Font = new Font("Segoe UI", 8.5F), Location = new Point(12, 32), AutoEllipsis = true };
+        var version = new Forms.Label { Text = "Remote Debugger · " + (typeof(MainForm).Assembly.GetName().Version?.ToString(3) ?? "0.2"), AutoSize = false, Width = 180, Height = 20, ForeColor = Color.FromArgb(116, 143, 154), Font = new Font("Segoe UI", 8.5F), Location = new Point(12, isUpdateAdmin ? 56 : 32), AutoEllipsis = true };
         layout.Controls.Add(BuildLanguageSelector(languageOverride), 0, 3);
-        local.Controls.Add(machine); local.Controls.Add(version); layout.Controls.Add(local, 0, 4);
+        local.Controls.Add(machine);
+        if (isUpdateAdmin)
+            local.Controls.Add(new Forms.Label { Name = "adminMode", AutoSize = false, Width = 180, Height = 20, ForeColor = Color.FromArgb(121, 200, 182), Font = new Font("Segoe UI", 9F), Location = new Point(12, 32) }.WithText(() => UiText.AdminMode));
+        local.Controls.Add(version); layout.Controls.Add(local, 0, 4);
         rail.Controls.Add(layout);
     }
 
@@ -707,8 +710,13 @@ public sealed partial class MainForm : Forms.Form
         // normal launch without requiring a second button click.
         privateSupportEnabled = WindowLifetime.EnableSupportAtStartup(
             PrivateInternet, HasConfiguredPrivateSupport(), privateSupportEnabled);
-        SelectRole(startAgentOnLaunch ? 0 : 1);
-        if (!startAgentOnLaunch && client != null) _ = ResumeSavedSupportAsync();
+        int initialRole = startAgentOnLaunch && !isUpdateAdmin ? 0 : 1;
+        SelectRole(initialRole);
+        if (initialRole == 1)
+        {
+            if (startAgentOnLaunch && (!PrivateInternet || privateSupportEnabled)) { StartAgent(); _ = PrepareAgentAsync(); }
+            if (client != null) _ = ResumeSavedSupportAsync();
+        }
         await Task.Yield();
     }
 

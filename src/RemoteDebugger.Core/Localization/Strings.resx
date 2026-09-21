@@ -42,6 +42,9 @@
   <data name="AdjustArguments" xml:space="preserve">
     <value>Adjust the parameters before running the action.</value>
   </data>
+  <data name="AdminMode" xml:space="preserve">
+    <value>Admin mode</value>
+  </data>
   <data name="AdminMaintenance" xml:space="preserve">
     <value>Admin maintenance</value>
   </data>
