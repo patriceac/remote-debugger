@@ -1,11 +1,11 @@
 # Local MCP tools
 
 The adapter runs on the controlling PC over stdio and invokes the signed Release
-CLI's `connected` verb. It uses the existing authenticated client and verified
-transfers. It adds no listener, remote component, credentials, pairing, automatic
-synchronization, or administrative operation.
+CLI's `connected` verb. It uses the existing authenticated client, verified
+transfers, and provisioned administrator broker. It adds no listener, remote
+component, credentials, pairing, or automatic synchronization.
 
-Requires Node 20+ to build and Remote Debugger 0.4.37+ on the controller. The normal
+Requires Node 20+ to build and Remote Debugger 0.4.47+ on the controller. The normal
 exact-binary requirement still applies to the receiving agent. Connect and
 synchronize through the Remote Debugger application before using action tools.
 
@@ -53,7 +53,7 @@ other operations fail until the binaries match, without attempting an update.
 | `remote_process_info` | Actual executable path, hash and version for a PID |
 | `remote_file_info` | Remote size, hash and version |
 | `remote_screenshot` | Fresh JPEG image content and capture geometry |
-| `remote_run` | Named executable and argument array |
+| `remote_run` | Named executable and argument array run by the provisioned administrator broker |
 | `remote_upload` | Resumable upload with SHA-256 verification |
 | `remote_download` | Verified download before replacing the local destination |
 
@@ -71,9 +71,11 @@ agent replay cache prevents repeated execution; the adapter never automatically
 retries commands. Transfers use existing hash-bound resume state.
 
 Read-only annotations help clients present permissions but do not enforce the
-operator's intent. Explicitly naming PowerShell or cmd still launches a shell;
-commands must stay within the authorized support task. Maintenance, desktop
-input and session-ending operations remain in the existing CLI workflow.
+operator's intent. `remote_run` uses `maintenance.session` and fails if Admin
+maintenance or the protected broker is unavailable; it never starts provisioning
+or requests UAC. Explicitly naming PowerShell or cmd still launches a shell;
+commands must stay within the authorized support task. Desktop input and
+session-ending operations remain in the existing CLI workflow.
 
 ## Guarded CLI and tests
 
@@ -81,10 +83,13 @@ input and session-ending operations remain in the existing CLI workflow.
 plus `targetId` for every operation except `status`. Use `--request -` for stdin.
 The MCP adapter adds `--cancel-on-stdin-close`: it sends one JSON line, holds stdin
 open during execution, and closes it to cancel. Supported operation names match
-the table, with `command` for `remote_run` and `localPath`/`remotePath` for transfers.
+the table, with `maintenance.session` for `remote_run` and
+`localPath`/`remotePath` for transfers.
 
 The Node unit tests use the SDK's in-memory transport and fake CLI responses.
 `ConnectedCliTests` test guards, arguments, cancellation and success rules without
 launching an application. `./scripts/Test-Mcp.ps1` uses the Hyper-V SYSTEM broker
-in a disconnected VM: real stdio handshake, no-session behavior, all nine tools
-against a signed loopback agent, verified transfers and same-ID command replay.
+in a disconnected VM: real stdio handshake, no-session behavior, confirmed
+diagnostics and transfers, and fail-closed `remote_run` when the agent lacks a
+provisioned administrator broker. A provisioned VM run also verifies that
+`remote_run` executes as LocalSystem.

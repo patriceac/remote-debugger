@@ -14,16 +14,19 @@ public sealed class ConnectedCliTests
         public bool Matched { get; set; } = true;
         public int ExitCode { get; set; }
         public bool CancelCommand { get; set; }
+        public bool MaintenanceAvailable { get; set; } = true;
         public List<(string Operation, string Id, JsonElement Args)> Calls { get; } = [];
         public Task<Reply> CallAsync(string op, object args, CancellationToken ct, string id, int seconds)
         {
             Calls.Add((op, id, Json.Element(args)));
-            if (op == "command" && CancelCommand) throw new OperationCanceledException();
+            if (op == "maintenance.session" && CancelCommand) throw new OperationCanceledException();
+            if (op == "maintenance.session" && !MaintenanceAvailable)
+                return Task.FromResult(Reply.Failure(id, "maintenance_unavailable", "Administrator maintenance is unavailable."));
             object data = op switch
             {
                 "session.heartbeat" => new { session = new { connected = Connected, startedUtc = "2026-09-20T12:00:00Z" }, binaryMatched = Matched, processId = Pid },
                 "status" => new { machine = "TEST-PC", processId = Pid },
-                "command" => new { exitCode = ExitCode, stdout = "result", stderr = "" },
+                "maintenance.session" => new { exitCode = ExitCode, stdout = "result", stderr = "" },
                 _ => new { }
             };
             return Task.FromResult(Reply.Success(id, data));
@@ -56,10 +59,10 @@ public sealed class ConnectedCliTests
         string target = (await Call(remote)).TargetId!;
         remote.Calls.Clear();
         if (changeProcess) remote.Pid++; else remote.ConnectionId = new('B', 64);
-        var reply = await Call(remote, "command", target, new { file = "whoami.exe", arguments = Array.Empty<string>() });
+        var reply = await Call(remote, "maintenance.session", target, new { file = "whoami.exe", arguments = Array.Empty<string>() });
         Assert.False(reply.Ok);
         Assert.Equal("target_changed", reply.Error);
-        Assert.DoesNotContain(remote.Calls, c => c.Operation == "command");
+        Assert.DoesNotContain(remote.Calls, c => c.Operation == "maintenance.session");
         if (!changeProcess) Assert.Empty(remote.Calls);
     }
 
@@ -87,34 +90,45 @@ public sealed class ConnectedCliTests
         var remote = new Remote();
         string target = (await Call(remote)).TargetId!;
         remote.Calls.Clear(); remote.Connected = connected; remote.Matched = matched;
-        var reply = await Call(remote, "command", target, new { file = "whoami.exe", arguments = Array.Empty<string>() });
+        var reply = await Call(remote, "maintenance.session", target, new { file = "whoami.exe", arguments = Array.Empty<string>() });
         Assert.False(reply.Ok);
         Assert.Equal(error, reply.Error);
-        Assert.DoesNotContain(remote.Calls, c => c.Operation is "command" or "update.open");
+        Assert.DoesNotContain(remote.Calls, c => c.Operation is "maintenance.session" or "update.open");
     }
 
     [Fact]
-    public async Task CommandKeepsExactArgumentsAndRetryIdAndReportsExitFailure()
+    public async Task MaintenanceCommandKeepsExactArgumentsAndRetryIdAndReportsExitFailure()
     {
         var remote = new Remote { ExitCode = 7 };
         string target = (await Call(remote)).TargetId!, id = Guid.NewGuid().ToString();
         string[] arguments = ["a b", "\"quoted\"", "$env:USERNAME", "é"];
-        var reply = await Call(remote, "command", target, new { file = "tool.exe", arguments }, id);
+        var reply = await Call(remote, "maintenance.session", target, new { file = "tool.exe", arguments }, id);
         Assert.False(reply.Ok); Assert.True(reply.RpcOk); Assert.Equal(7, reply.ExitCode);
-        await Call(remote, "command", target, new { file = "tool.exe", arguments }, id);
-        var commands = remote.Calls.Where(c => c.Operation == "command").ToArray();
+        await Call(remote, "maintenance.session", target, new { file = "tool.exe", arguments }, id);
+        var commands = remote.Calls.Where(c => c.Operation == "maintenance.session").ToArray();
         Assert.Equal(2, commands.Length);
         Assert.All(commands, call => { Assert.Equal(id, call.Id); Assert.Equal(arguments, call.Args.Strings("arguments")); });
     }
 
     [Fact]
-    public async Task CancellationRequestsCancellationOfTheOriginalCommand()
+    public async Task CancellationRequestsCancellationOfTheOriginalMaintenanceCommand()
     {
         var remote = new Remote { CancelCommand = true };
         string target = (await Call(remote)).TargetId!, id = Guid.NewGuid().ToString();
-        var reply = await Call(remote, "command", target, new { file = "tool.exe", arguments = Array.Empty<string>() }, id);
+        var reply = await Call(remote, "maintenance.session", target, new { file = "tool.exe", arguments = Array.Empty<string>() }, id);
         Assert.Equal("cancelled_or_timeout", reply.Error);
         Assert.Equal(id, Assert.Single(remote.Calls, c => c.Operation == "cancel").Args.Str("id"));
+    }
+
+    [Fact]
+    public async Task UnavailableMaintenanceDoesNotFallBackToUserCommand()
+    {
+        var remote = new Remote { MaintenanceAvailable = false };
+        string target = (await Call(remote)).TargetId!;
+        var reply = await Call(remote, "maintenance.session", target, new { file = "whoami.exe", arguments = Array.Empty<string>() });
+        Assert.False(reply.Ok);
+        Assert.Equal("maintenance_unavailable", reply.Error);
+        Assert.DoesNotContain(remote.Calls, c => c.Operation == "command");
     }
 
     [Fact]

@@ -86,14 +86,14 @@ internal static class ConnectedCli
             }
             var reply = await remote.CallAsync(operation, args, budget.Token, id, seconds);
             int? exit = reply.Data.ValueKind == JsonValueKind.Object && reply.Data.TryGetProperty("exitCode", out var code) ? code.GetInt32() : null;
-            bool succeeded = reply.Ok && (operation != "command" || exit == 0);
+            bool succeeded = reply.Ok && (operation != "maintenance.session" || exit == 0);
             return new(id, succeeded, target, machine, reply.Data,
                 reply.Error ?? (succeeded ? null : "command_failed"),
                 reply.Message ?? (succeeded ? null : "The remote command did not exit successfully."), reply.Ok, exit);
         }
         catch (Exception ex)
         {
-            if (ex is OperationCanceledException && dispatched && remote != null && operation == "command")
+            if (ex is OperationCanceledException && dispatched && remote != null && operation == "maintenance.session")
             {
                 try { using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(5)); await remote.CallAsync("cancel", new { id }, cancel.Token, Guid.NewGuid().ToString(), 5); }
                 catch (Exception) { /* Keep the original failure and request ID for inspection. */ }
@@ -120,7 +120,7 @@ internal static class ConnectedCli
             "process.info" => ["pid"],
             "file.info" => ["path"],
             "screenshot" => ["monitor", "maxWidth", "quality"],
-            "command" => ["file", "arguments"],
+            "maintenance.session" => ["file", "arguments"],
             "upload" or "download" => ["localPath", "remotePath"],
             _ => throw new ArgumentException("This operation is not exposed by the connected-session interface.")
         };
@@ -128,12 +128,12 @@ internal static class ConnectedCli
         void Text(string key) { if (string.IsNullOrWhiteSpace(args.Str(key)) || args.Str(key).Contains('\0')) throw new ArgumentException(key + " must be nonempty text without NUL."); }
         if (operation == "process.info" && args.Int("pid") <= 0) throw new ArgumentException("pid must be positive.");
         if (operation == "file.info") Text("path");
-        if (operation == "command")
+        if (operation == "maintenance.session")
         {
             Text("file");
-            if (!args.TryGetProperty("arguments", out var list) || list.ValueKind != JsonValueKind.Array || list.GetArrayLength() > 256 ||
+            if (!args.TryGetProperty("arguments", out var list) || list.ValueKind != JsonValueKind.Array || list.GetArrayLength() > 128 ||
                 list.EnumerateArray().Any(v => v.ValueKind != JsonValueKind.String || v.GetString()!.Contains('\0')))
-                throw new ArgumentException("arguments must be an array of at most 256 strings without NUL.");
+                throw new ArgumentException("arguments must be an array of at most 128 strings without NUL.");
         }
         if (operation is "upload" or "download")
         {

@@ -34,7 +34,8 @@ internal sealed partial class LabForm
             product = loopbackAgent = LaunchLoopbackProduct(true, root);
             await WaitUiAsync();
             await CliAsync(["pair", "--host", "127.0.0.1", "--data-root", root, "--connection", connection], await WaitPairingCodeAsync());
-            await Probe("connected");
+            string installed = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "RemoteDebugger", "RemoteDebugger.exe");
+            await Probe(string.Equals(application, installed, StringComparison.OrdinalIgnoreCase) ? "connected-admin" : "connected");
         }
         finally { await CleanupLoopbackProcessesAsync(); }
         await FinishAsync();

@@ -47,7 +47,9 @@ Both accept `--data-root`. Offline work stays pending and can be retried. See
 
 The local [MCP adapter](MCP.md) uses `cli connected --request`: a guarded interface
 that binds requests to the confirmed session and never automatically synchronizes
-the agent. The ordinary `cli call` behavior below is unchanged.
+the agent. Its `remote_run` tool requests `maintenance.session` through the
+provisioned administrator broker and fails without it. The ordinary `cli call`
+behavior below is unchanged.
 
 Write an ordinary UTF-8 JSON request, for example `status.json`:
 

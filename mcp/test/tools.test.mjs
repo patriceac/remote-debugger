@@ -32,6 +32,7 @@ test('command IDs, target and arguments survive mapping; nonzero and absent exit
   for (const exitCode of [0, 7, undefined]) {
     const result = await invokeTool(definition('remote_run'), { targetId, requestId, file: 'tool.exe', arguments: ['a b', '"q"', '$var', 'é'] }, async request => {
       assert.equal(request.id, requestId); assert.equal(request.targetId, targetId);
+      assert.equal(request.operation, 'maintenance.session');
       assert.deepEqual(request.args.arguments, ['a b', '"q"', '$var', 'é']);
       return { ...success(request), exitCode };
     });
