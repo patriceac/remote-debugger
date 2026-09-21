@@ -132,7 +132,9 @@ internal sealed partial class LabForm : Forms.Form
                 if (role == "security") { await SecurityReviewAsync(); return; }
                 if (!IsLoopback)
                     await PrepareBrokerProvisioningAsync();
-                if (role == "localization") await LocalizationReviewAsync();
+                if (role == "workflowagent") await WorkflowAgentAsync();
+                else if (role == "workflowcontroller") await WorkflowControllerAsync();
+                else if (role == "localization") await LocalizationReviewAsync();
                 else if (role == "input") await PrivilegedInputReviewAsync();
                 else if (role == "languageselection") await LanguageSelectionReviewAsync();
                 else if (role == "singleinstance") await SingleInstanceReviewAsync();

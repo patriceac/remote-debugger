@@ -196,6 +196,7 @@ public sealed partial class AgentServer : IDisposable
     {
         securityRoot = root;
         resumeStore = new(root);
+        restartStore = new(root);
         Directory.CreateDirectory(root); Port = port; authPath = Path.Combine(root, "agent.auth");
         string certPath = Path.Combine(root, "identity.pfx.dpapi");
         if (File.Exists(certPath)) certificate = new X509Certificate2(Vault.Read(certPath), (string?)null, X509KeyStorageFlags.UserKeySet);
@@ -214,14 +215,23 @@ public sealed partial class AgentServer : IDisposable
         string[] launchArguments = Environment.GetCommandLineArgs(); int resumeIndex = Array.IndexOf(launchArguments, "--resume-update");
         if (resumeIndex >= 0 && resumeIndex + 1 < launchArguments.Length)
             resumed = resumeStore.Restore(launchArguments[resumeIndex + 1]);
+        if (launchArguments.Contains("--resume-restart") || launchArguments.Contains("--startup"))
+            restartAuthorization = restartStore.Restore(ExecutableIdentity.Sha256);
         if (resumed != null)
         {
             tokenHash = resumed.GrantHash; controllerBinaryHash = resumed.ControllerHash;
             updateOnly = resumed.UpdateOnly;
             session.Pair(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
         }
-        else resumeStore.Clear();
+        else if (restartAuthorization is { } restart)
+        {
+            tokenHash = restart.GrantHash; controllerBinaryHash = restart.ControllerHash;
+            session.Pair(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
+            session.AwaitRestart(restart.ExpiresUtc); session.Disconnect();
+        }
+        else { resumeStore.Clear(); restartStore.Clear(); }
         Operations = new Operations(root);
+        Operations.Clipboard = new DesktopClipboard(() => Session.Connected && Session.BinaryMatched && !stop.IsCancellationRequested);
         Operations.Maintenance.SetEnabled(enableAdminMaintenance);
         updates = new AgentUpdateService(root, (context, ct) =>
         {
@@ -240,7 +250,7 @@ public sealed partial class AgentServer : IDisposable
         listener = new TcpListener(loopbackOnly ? IPAddress.Loopback : IPAddress.Any, port);
         discovery = new UdpClient(new IPEndPoint(loopbackOnly ? IPAddress.Loopback : IPAddress.Any, Discovery.Port));
         if (enableInternet && InternetSettings.Load(root) is { } internetSettings)
-            Internet = new InternetAgent(root, internetSettings, resumed != null, AcceptInternetAsync, Fingerprint);
+            Internet = new InternetAgent(root, internetSettings, resumed != null || restartAuthorization != null, AcceptInternetAsync, Fingerprint);
     }
     public void Start()
     {
@@ -371,7 +381,7 @@ public sealed partial class AgentServer : IDisposable
                         await Task.Delay(TimeSpan.FromSeconds(5), stop.Token);
                     }
                 }
-                if (!Session.Connected && Session.HasPaired) Native.ReleaseAllInput();
+                if (!Session.Connected && Session.HasPaired) { Native.ReleaseAllInput(); Operations.Clipboard?.Pause(); }
             }
         }
         catch (OperationCanceledException) { }
@@ -389,6 +399,7 @@ public sealed partial class AgentServer : IDisposable
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
             deadline.CancelAfter(TimeSpan.FromSeconds(35));
             await updates.CancelActiveAsync(deadline.Token);
+            await CancelPlannedPowerAsync(deadline.Token);
             // Retain the listener in an unauthorized idle state so the
             // controller can distinguish termination from a temporary outage.
             Revoke(); Volatile.Write(ref terminating, 2); TerminationRequested?.Invoke(AgentStopReason.SupportEnded);
@@ -397,8 +408,10 @@ public sealed partial class AgentServer : IDisposable
     }
     public void Revoke()
     {
+        Operations.Clipboard?.Pause();
         if (securityCandidate is { Promoted: false } staged) staged.Agent.Dispose();
         resumeStore.Clear(); resumed = null; resumeAccepted = false;
+        restartStore.Clear(); restartAuthorization = null;
         lock (authLock) { tokenHash = ""; grantLifetime.Cancel(); grantLifetime = new(); Vault.Save(authPath, []); Pairing.Close(); }
         foreach (var job in running.Values) job.Cancel();
         Native.ReleaseAllInput();
@@ -556,13 +569,13 @@ public sealed partial class AgentServer : IDisposable
                             }
                             finally { updateGate.Release(); }
                         }
-                        bool resumePending = resumed != null && !Volatile.Read(ref resumeAccepted);
+                        bool resumePending = (resumed != null || restartAuthorization != null) && !Volatile.Read(ref resumeAccepted);
                         if (authorized && r.KeepAlive && !persistentCommand)
                         {
                             persistentCommand = true; commandGrant = grant.Register(timeout.Cancel);
                         }
                         if (persistentCommand) timeout.CancelAfter(TimeSpan.FromMinutes(6));
-                        if (resumePending && resumed!.ExpiresUtc <= DateTimeOffset.UtcNow) { session.End(); authorized = false; }
+                        if (resumePending && (resumed?.ExpiresUtc ?? restartAuthorization!.ExpiresUtc) <= DateTimeOffset.UtcNow) { session.End(); authorized = false; }
                         if (authorized && !resumePending && r.Operation != "session.disconnect") session.Observe();
                         if (!authorized || session.ShouldExit) reply = Reply.Failure(r.Id, "access_denied", "This support session is not authorized or has ended.");
                         else if (updateOnly && !IsUpdateSessionOperation(r.Operation))
@@ -578,8 +591,8 @@ public sealed partial class AgentServer : IDisposable
                             }
                             finally { updateGate.Release(); }
                         }
-                        else if (resumePending && r.Operation is not ("update.open" or "update.resume" or "update.cancel" or "update.status" or "session.end" or "revoke"))
-                            reply = Reply.Failure(r.Id, "resume_required", "Present the bounded update reconnect ticket before resuming support.");
+                        else if (resumePending && r.Operation is not ("update.open" or "update.resume" or "update.cancel" or "update.status" or "power.resume" or "power.cancelWait" or "session.end" or "revoke"))
+                            reply = Reply.Failure(r.Id, "resume_required", "Present the bounded reconnect ticket before resuming support.");
                         else if (r.Operation == "screen.refresh")
                         {
                             WakeCapture(); reply = Reply.Success(r.Id, new { requested = true });
@@ -594,7 +607,7 @@ public sealed partial class AgentServer : IDisposable
                             session.Observe();
                             reply = Reply.Success(r.Id, new { session = Session, persistent = persistentHeartbeat, agentBinarySha256 = ExecutableIdentity.Sha256, controllerBinarySha256 = controllerBinaryHash, binaryMatched = Session.BinaryMatched, processId = Environment.ProcessId, maintenance = Operations.Maintenance.Status });
                         }
-                        else if (r.Operation == "session.disconnect") { Native.ReleaseAllInput(); session.Disconnect(); reply = Reply.Success(r.Id, new { session = Session }); }
+                        else if (r.Operation == "session.disconnect") { Native.ReleaseAllInput(); Operations.Clipboard?.Pause(); session.Disconnect(); reply = Reply.Success(r.Id, new { session = Session }); }
                         else if (r.Operation == "update.resume")
                         {
                             if (resumed == null || resumed.ExpiresUtc <= DateTimeOffset.UtcNow ||
@@ -618,6 +631,7 @@ public sealed partial class AgentServer : IDisposable
                             {
                                 using var endDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(35));
                                 await updates.CancelActiveAsync(endDeadline.Token);
+                                await CancelPlannedPowerAsync(endDeadline.Token);
                                 await Wire.WriteAsync(tls, Reply.Success(r.Id, new { ended = true }), timeout.Token);
                                 Revoke(); Volatile.Write(ref terminating, 2); TerminationRequested?.Invoke(AgentStopReason.SupportEnded);
                             }
@@ -707,6 +721,11 @@ public sealed partial class AgentServer : IDisposable
                             reply = Reply.Success(r.Id, new { candidates = DirectEndpoints() });
                         else if (!Session.BinaryMatched && r.Operation is not ("status" or "maintenance.status" or "cancel"))
                             reply = Reply.Failure(r.Id, "binary_mismatch", "Synchronize the agent with the controller executable before starting support.");
+                        else if (r.Operation.StartsWith("power.", StringComparison.Ordinal))
+                        {
+                            using var powerLifetime = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, grant);
+                            reply = await HandlePowerAsync(r, powerLifetime.Token);
+                        }
                         else if (r.Operation == "ui.input.open" && !Guid.TryParse(r.Id, out _))
                             reply = Reply.Failure(r.Id, "invalid_id", "Request id must be a UUID.");
                         else if (r.Operation == "ui.input.open")
@@ -763,7 +782,7 @@ public sealed partial class AgentServer : IDisposable
                         else if ((r.Operation is "maintenance.session" or "maintenance.elevated") && !Operations.Maintenance.Enabled)
                             reply = Reply.Failure(r.Id, "maintenance_disabled", MaintenanceSession.DisabledMessage);
                         else if (!Guid.TryParse(r.Id, out _)) reply = Reply.Failure(r.Id, "invalid_id", "Request id must be a UUID.");
-                        else if (r.Operation is "wake.info" or "screenshot" or "monitors" or "status" or "file.info" or "file.read" or "files" or "processes" or "process.info" or "system" or "network" or "services" or "events" or "history" or "windows" or "ui.inspect" or "upload.chunk" or "upload.status" or "ui.input") reply = await ExecuteAsync(r, grant);
+                        else if (r.Operation is "clipboard.begin" or "clipboard.read" or "clipboard.write" or "shell.dropTarget" or "shell.selection" or "files.manifest" or "files.conflicts" or "files.createDirectories" or "upload.begin" or "wake.info" or "screenshot" or "monitors" or "status" or "file.info" or "file.read" or "files" or "processes" or "process.info" or "system" or "network" or "services" or "events" or "history" or "windows" or "ui.inspect" or "upload.chunk" or "upload.status" or "ui.input") reply = await ExecuteAsync(r, grant);
                         else if (requests.Count >= 2048 && !requests.ContainsKey(r.Id)) reply = Reply.Failure(r.Id, "session_limit", "Restart the agent to clear its 2048-mutation retry cache.");
                         else
                         {
@@ -828,6 +847,7 @@ public sealed partial class AgentServer : IDisposable
     {
         int fps = StreamPolicy.ClampFps(request.Args.Int("fps", StreamPolicy.MaximumFps));
         int monitor = request.Args.Int("monitor"); int maxWidth = request.Args.Int("maxWidth", 1920); int quality = request.Args.Int("quality", 65);
+        var pacing = new AdaptiveFrameRate(fps);
         bool controllerCanH264 = !request.Args.TryGetProperty("h264", out var h264Support) || h264Support.ValueKind != JsonValueKind.False;
         await using var acknowledgements = new StreamAcknowledgements(tls, ct, session.Observe);
         long sequence = 0; string? previousFingerprint = null; var state = new AdaptiveStreamState(acknowledgements);
@@ -865,24 +885,26 @@ public sealed partial class AgentServer : IDisposable
 
             while (!ct.IsCancellationRequested)
             {
-                await acknowledgements.ObserveAsync();
                 var started = System.Diagnostics.Stopwatch.StartNew();
+                await acknowledgements.ObserveAsync();
                 long currentEpoch = Volatile.Read(ref captureEpoch);
                 if (currentEpoch != epoch) { previousFingerprint = null; epoch = currentEpoch; unchanged = 0; }
                 var capture = DesktopCapture.CaptureBitmap(monitor, previousFingerprint, captureBuffer);
                 previousFingerprint = capture.Fingerprint;
                 if (capture.Capture is not { } current)
                 {
-                    await captureWake.WaitAsync(Math.Min(1000, 1000 / fps * (1 + ++unchanged / 5)), ct);
+                    await captureWake.WaitAsync(Math.Min(1000, 1000 / pacing.FramesPerSecond * (1 + ++unchanged / 5)), ct);
                     continue;
                 }
                 unchanged = 0;
                 using (current)
                 {
-                    await SendAdaptiveFrameAsync(tls, current, state, sequence, fps, maxWidth, quality, ct);
+                    await SendAdaptiveFrameAsync(tls, current, state, sequence, pacing.FramesPerSecond, maxWidth, quality, ct);
                     sequence++;
                 }
-                double wait = 1000.0 / fps - started.Elapsed.TotalMilliseconds; if (wait > 0) await Task.Delay(TimeSpan.FromMilliseconds(wait), ct);
+                pacing.Observe(started.Elapsed);
+                TimeSpan wait = pacing.DelayAfter(started.Elapsed);
+                if (wait > TimeSpan.Zero) await Task.Delay(wait, ct);
             }
         }
         catch (Exception ex) when (ex is not (IOException or OperationCanceledException))
@@ -969,7 +991,7 @@ public sealed partial class AgentServer : IDisposable
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(stop.Token, grant); cts.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(r.TimeoutSeconds, 1, 300)));
         running[r.Id] = cts; var begin = DateTimeOffset.UtcNow; Reply reply;
-        bool noisy = r.Operation is "ui.input" or "upload.chunk" or "file.read";
+        bool noisy = r.Operation is "ui.input" or "upload.chunk" or "file.read" || r.Operation.StartsWith("clipboard.", StringComparison.Ordinal);
         if (!noisy) Status?.Invoke($"{begin:HH:mm:ss}  {r.Operation}  {r.Id[..8]}");
         try { cts.Token.ThrowIfCancellationRequested(); reply = Reply.Success(r.Id, await Operations.ExecuteAsync(r.Operation, r.Args, cts.Token)); if (r.Operation.StartsWith("ui.", StringComparison.Ordinal)) WakeCapture(false); }
         catch (OperationCanceledException) { reply = Reply.Failure(r.Id, "cancelled_or_timeout", "Operation cancelled or its deadline expired. Inspect state before retrying a mutation."); }
@@ -1006,6 +1028,7 @@ public sealed partial class AgentServer : IDisposable
         try { activeListener.Stop(); } catch { }
         try { activeDiscovery.Dispose(); } catch { }
         updates.Dispose();
+        Operations.Clipboard?.Dispose();
     }
 }
 
@@ -1445,7 +1468,7 @@ public sealed partial class RemoteClient
     }
     public static JsonElement Require(Reply reply) => reply.Ok ? reply.Data : throw new RemoteOperationException(reply.Error ?? "operation_failed", reply.Message ?? "Remote operation failed.");
     private sealed record UploadState(string Transfer, string Sha256, long Size, string Path);
-    public async Task<JsonElement> UploadAsync(string file, string relativePath, CancellationToken ct = default, IProgress<FileTransferProgress>? progress = null)
+    public async Task<JsonElement> UploadAsync(string file, string relativePath, CancellationToken ct = default, IProgress<FileTransferProgress>? progress = null, bool overwrite = true)
     {
         await using var input = File.OpenRead(file); string hash = Convert.ToHexString(await SHA256.HashDataAsync(input, ct)); input.Position = 0;
         string resume = Path.Combine(Vault.DefaultRoot, "uploads", Safety.Hash(Connection.Fingerprint + "|" + relativePath) + ".state");
@@ -1465,7 +1488,7 @@ public sealed partial class RemoteClient
         if (state == null)
         {
             state = new UploadState(Guid.NewGuid().ToString("N"), hash, input.Length, relativePath); Vault.Save(resume, JsonSerializer.SerializeToUtf8Bytes(state, Json.Options));
-            Require(await CallAsync("upload.begin", new { transfer = state.Transfer, path = relativePath, size = input.Length, sha256 = hash }, ct));
+            Require(await CallAsync("upload.begin", new { transfer = state.Transfer, path = relativePath, size = input.Length, sha256 = hash, overwrite }, ct));
         }
         await using var channel = await OpenTransportAsync(ct);
         var request = new Request(Guid.NewGuid().ToString(), Connection.Token, "file.upload", Json.Element(new { transfer = state.Transfer }), 300, controllerBinarySha256);

@@ -890,7 +890,7 @@
   <data name="DeviceVersion" xml:space="preserve"><value>Versión</value></data>
   <data name="DeviceProgress" xml:space="preserve"><value>Progreso / tiempo</value></data>
   <data name="ElapsedTime" xml:space="preserve"><value>transcurrido {0}</value></data>
-  <data name="EstimatedUpdateProgress" xml:space="preserve"><value>{0}% · resta {1}</value></data>
+  <data name="EstimatedUpdateProgress" xml:space="preserve"><value>tiempo restante estimado ≈ {0}</value></data>
   <data name="MeasuredUpdateProgress" xml:space="preserve"><value>{0}% · resta {1}</value></data>
   <data name="PreparingUpdatePackage" xml:space="preserve"><value>Preparando el paquete…</value></data>
   <data name="FinalizingUpdate" xml:space="preserve"><value>Finalizando la instalación…</value></data>
@@ -934,4 +934,49 @@
   <data name="InvalidWakeDestination" xml:space="preserve"><value>Introduzca una dirección IPv4 o nombre de host sin puerto y un puerto UDP entre 1 y 65535.</value></data>
   <data name="WakeNoNetwork" xml:space="preserve"><value>No hay una red IPv4 disponible para enviar paquetes de activación.</value></data>
   <data name="WakeSendFailed" xml:space="preserve"><value>No se pudieron enviar los paquetes de activación.</value></data>
+  <data name="ShareClipboard" xml:space="preserve"><value>Compartir portapapeles</value></data>
+  <data name="RestartRemotePc" xml:space="preserve"><value>Reiniciar PC remoto</value></data>
+  <data name="ShutdownRemotePc" xml:space="preserve"><value>Apagar PC remoto</value></data>
+  <data name="ManualSignInExpected" xml:space="preserve"><value>Se requiere iniciar sesión manualmente en Windows. El usuario deberá iniciar sesión en el PC remoto; la asistencia se reconectará después.</value></data>
+  <data name="AutomaticDesktopExpected" xml:space="preserve"><value>Se espera el inicio de sesión y el regreso al escritorio automáticos solo para este reinicio. Después se restaurará la configuración de inicio de sesión.</value></data>
+  <data name="ConfirmRemoteRestart" xml:space="preserve"><value>¿Reiniciar {0}?
+
+Puede cancelar durante la cuenta atrás de 10 segundos. No se forzará el cierre de aplicaciones con trabajo sin guardar. El controlador esperará hasta una hora; puede detener la espera en cualquier momento.</value></data>
+  <data name="ConfirmRemoteShutdown" xml:space="preserve"><value>¿Apagar {0}?
+
+Puede cancelar durante la cuenta atrás de 10 segundos. No se forzará el cierre de aplicaciones con trabajo sin guardar. Se detendrá la reconexión automática.</value></data>
+  <data name="ShutdownAccepted" xml:space="preserve"><value>Windows aceptó la solicitud de apagado.</value></data>
+  <data name="PowerOffNotConfirmed" xml:space="preserve"><value>Desconectado. No se ha confirmado el apagado físico del PC.</value></data>
+  <data name="PreparingPowerOperation" xml:space="preserve"><value>Preparando</value></data>
+  <data name="RestartingRemotePc" xml:space="preserve"><value>Reiniciando</value></data>
+  <data name="RestartCountdown" xml:space="preserve"><value>Cuenta atrás para reiniciar</value></data>
+  <data name="ShutdownCountdown" xml:space="preserve"><value>Cuenta atrás para apagar</value></data>
+  <data name="WaitingForRemotePc" xml:space="preserve"><value>Esperando a que vuelva el PC</value></data>
+  <data name="WaitingForManualSignIn" xml:space="preserve"><value>Esperando al PC y al inicio de sesión del usuario</value></data>
+  <data name="WindowsSignIn" xml:space="preserve"><value>Inicio de sesión de Windows</value></data>
+  <data name="RestoringSupport" xml:space="preserve"><value>Restaurando asistencia</value></data>
+  <data name="DesktopReady" xml:space="preserve"><value>Escritorio listo — conexión, imagen reciente y control verificados</value></data>
+  <data name="PowerCountdownCancelled" xml:space="preserve"><value>Solicitud de energía cancelada</value></data>
+  <data name="RestartWaitStopped" xml:space="preserve"><value>Espera de reconexión detenida</value></data>
+  <data name="IssuedRestartCannotBeUndone" xml:space="preserve"><value>Detener la espera no deshace un reinicio que ya está en curso.</value></data>
+  <data name="SignInOnce" xml:space="preserve"><value>Iniciar sesión automáticamente una sola vez tras este reinicio</value></data>
+  <data name="WindowsPasswordForOneRestart" xml:space="preserve"><value>Contraseña de Windows (no PIN). Se utiliza solo para este reinicio y después se elimina.</value></data>
+  <data name="OneTimeLoginUnavailable" xml:space="preserve"><value>El inicio de sesión automático de un solo uso no está disponible con esta configuración de Windows.</value></data>
+  <data name="CancelReconnectWait" xml:space="preserve"><value>Detener espera</value></data>
+  <data name="PowerElapsed" xml:space="preserve"><value>Transcurrido: {0:hh\:mm\:ss}</value></data>
+  <data name="PowerCountdownRemaining" xml:space="preserve"><value>Comienza en {0:mm\:ss}</value></data>
+  <data name="ReconnectTimeRemaining" xml:space="preserve"><value>Tiempo restante para reconectar: {0:hh\:mm\:ss}</value></data>
+  <data name="Continue" xml:space="preserve"><value>Continuar</value></data>
+  <data name="Close" xml:space="preserve"><value>Cerrar</value></data>
+  <data name="WindowsNeedsSignInOrUnlock" xml:space="preserve"><value>El PC ha vuelto. Inicie sesión o desbloquee Windows para recuperar el control.</value></data>
+  <data name="TransferAlreadyRunning" xml:space="preserve"><value>Ya hay una transferencia en curso.</value></data>
+  <data name="TransferQueueWaiting" xml:space="preserve"><value>Copias en cola: {0}</value></data>
+  <data name="ConfirmReplaceFiles" xml:space="preserve"><value>¿Reemplazar {0} archivo(s) existente(s) en {1}?</value></data>
+  <data name="DragAgainToResume" xml:space="preserve"><value>Copia en pausa. Arrastre de nuevo los mismos elementos para reanudar las transferencias parciales verificadas.</value></data>
+  <data name="DropInExplorer" xml:space="preserve"><value>Suelte en una carpeta del Explorador local. Se conservarán los archivos originales.</value></data>
+  <data name="ResumeTransfers" xml:space="preserve"><value>Reanudar</value></data>
+  <data name="ExistingAutomaticDesktopExpected" xml:space="preserve"><value>Este PC ya tiene configurado el inicio de sesión automático para esta cuenta. Se espera volver al escritorio con su configuración actual.</value></data>
+  <data name="RestartRequestAccepted" xml:space="preserve"><value>Solicitud de reinicio aceptada</value></data>
+  <data name="TransferSkipped" xml:space="preserve"><value>Omitido en el Explorador</value></data>
+  <data name="TransferSkippedFiles" xml:space="preserve"><value>Copia finalizada · {0} archivo(s) omitido(s) en el Explorador</value></data>
 </root>

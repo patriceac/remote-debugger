@@ -16,6 +16,14 @@ Launching Remote Debugger again brings the existing desktop window forward. It d
 
 ## During support
 
+**Share clipboard** synchronizes new text copied while connected. Reconnecting, including after a reboot, starts a fresh baseline; text copied before or during a disconnection is not replayed. Turn the checkbox off to pause sharing.
+
+Drag files or folders between Explorer and the **Files** pane, or over an Explorer folder or desktop visible in **Remote screen**. Copies preserve sources and empty folders. The transfer window shows progress and verification; use **Cancel** and **Resume** for queued uploads, or drag the same selection again to resume a download. Existing destination files require replacement confirmation. Virtual Explorer drags currently support up to 10,000 entries and relative paths shorter than 260 characters; filesystem links are rejected.
+
+**Restart PC** explains the expected return before confirmation. Eligible local Windows accounts can use their account password for one automatic sign-in after that restart. Otherwise someone must sign in on the receiving PC. The controller waits up to one hour, shows confirmed stages and a countdown, and lets you stop waiting at any time. **Shut down PC** also confirms the named PC and provides a short cancellation window. Windows can wait for applications with unsaved work; loss of connection alone does not confirm physical power-off.
+
+Incident reports and relevant logs are created automatically and retained locally for 30 days. Codex can read the controller's reports after disconnection when you request an investigation. Clipboard text and sign-in passwords are excluded. There are no scheduled follow-ups.
+
 The header shows connection state. **LIVE** appears only while fresh frames arrive. The viewer enables mouse and keyboard by default; click inside it to direct input to the remote desktop. Moving focus away returns keyboard input to the local PC. Pause, lost connection, target changes, and termination release held input. The monitor selector changes the viewed desktop. Secure-desktop prompts and Ctrl+Alt+Delete remain Windows-controlled.
 
 When the authenticated client runs the same build as the controller, the update button is disabled and reads **✓ Client up to date**. An enrolled admin PC can install strictly newer releases. In private support, **Update all devices** updates online older clients and shows each device's version, status, bar and ETA. Busy or offline devices can be retried later. A newer device version blocks an older controller from starting the batch.

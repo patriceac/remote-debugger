@@ -54,7 +54,7 @@ public sealed partial class MainForm
             using var back = new SolidBrush(Divider); using var fill = new SolidBrush(Teal);
             e.Graphics.FillRectangle(back, track);
             var progress = tracker.Snapshot();
-            e.Graphics.FillRectangle(fill, track with { Width = track.Width * progress.Percent / 100 });
+            e.Graphics.FillRectangle(fill, UpdateProgressBounds(track, progress));
             string detail = UpdateStepNumbers(progress);
             if (device.State == "transferring" && device.Detail.Length > 0) detail += " · " + device.Detail;
             Forms.TextRenderer.DrawText(e.Graphics, detail, peers.Font,
@@ -237,7 +237,13 @@ public sealed partial class MainForm
                     updated = true;
                     RecordDevice(device with { State = "finalizing", Percent = 0, Detail = "" });
                 }
-                catch (Exception ex) { RecordDevice(device with { State = "failed", Detail = lifetime.IsCancellationRequested ? UiText.TransferPaused : FleetFailureDetail(ex) }); }
+                catch (Exception ex)
+                {
+                    if (!lifetime.IsCancellationRequested) diagnostics.Record("fleet_update_failed",
+                        new(device.Peer.Name, "controller", controller.FileVersion ?? "", Route: target.ActiveRoute),
+                        (ex as RemoteOperationException)?.Code, ex, incident: true);
+                    RecordDevice(device with { State = "failed", Detail = lifetime.IsCancellationRequested ? UiText.TransferPaused : FleetFailureDetail(ex) });
+                }
                 finally
                 {
                     if (acquired)

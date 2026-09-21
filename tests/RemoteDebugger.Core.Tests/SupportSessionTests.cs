@@ -53,4 +53,13 @@ public sealed class SupportSessionTests
         Assert.Null(session.Snapshot.DisconnectDeadlineUtc); Assert.Equal("pairing", session.Snapshot.State);
         session.Pair(true); Assert.True(session.Snapshot.Connected);
     }
+    [Fact] public void PlannedRestartHasOneHourDeadlineAndOrdinaryDisconnectStillHasTenMinutes()
+    {
+        var clock = new Clock(); var session = new SupportSession(clock); session.Pair(true);
+        session.AwaitRestart(clock.GetUtcNow().AddHours(1)); session.Disconnect();
+        clock.Advance(TimeSpan.FromMinutes(59)); Assert.False(session.ShouldExit);
+        clock.Advance(TimeSpan.FromMinutes(1)); Assert.True(session.ShouldExit);
+        session.Pair(true); session.AwaitRestart(clock.GetUtcNow().AddHours(1)); session.CompleteRestart(); session.Disconnect();
+        clock.Advance(TimeSpan.FromMinutes(10)); Assert.True(session.ShouldExit);
+    }
 }

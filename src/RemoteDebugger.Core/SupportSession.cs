@@ -15,15 +15,26 @@ public sealed class SupportSession(TimeProvider? clock = null)
     private long lastSeen;
     private long? disconnected;
     private DateTimeOffset? startedUtc, disconnectUtc;
+    private DateTimeOffset? restartDeadline;
     public void Pair(bool binaryMatched)
     {
-        lock (sync) { paired = true; ended = false; matched = binaryMatched; lastSeen = time.GetTimestamp(); disconnected = null; disconnectUtc = null; startedUtc = time.GetUtcNow(); }
+        lock (sync) { paired = true; ended = false; matched = binaryMatched; lastSeen = time.GetTimestamp(); disconnected = null; disconnectUtc = null; restartDeadline = null; startedUtc = time.GetUtcNow(); }
     }
     public void Observe()
     {
         lock (sync) { if (!paired || ended || IsExpired()) return; lastSeen = time.GetTimestamp(); disconnected = null; disconnectUtc = null; }
     }
     public void SetBinaryMatched(bool value) { lock (sync) matched = value; }
+    public void AwaitRestart(DateTimeOffset deadline)
+    {
+        lock (sync)
+        {
+            if (!paired || ended || deadline <= time.GetUtcNow() || deadline > time.GetUtcNow().AddHours(1))
+                throw new InvalidOperationException("Restart recovery requires a live session and a deadline within one hour.");
+            restartDeadline = deadline;
+        }
+    }
+    public void CompleteRestart() { lock (sync) { restartDeadline = null; lastSeen = time.GetTimestamp(); disconnected = null; disconnectUtc = null; } }
     public void Disconnect()
     {
         lock (sync) { if (paired && !ended && disconnected == null) { disconnected = time.GetTimestamp(); disconnectUtc = time.GetUtcNow(); } }
@@ -31,7 +42,7 @@ public sealed class SupportSession(TimeProvider? clock = null)
     public void End() { lock (sync) { ended = true; paired = false; matched = false; } }
     public void ResetForPairing()
     {
-        lock (sync) { paired = false; matched = false; ended = false; disconnected = null; disconnectUtc = null; startedUtc = null; }
+        lock (sync) { paired = false; matched = false; ended = false; disconnected = null; disconnectUtc = null; startedUtc = null; restartDeadline = null; }
     }
     private void DetectDisconnect()
     {
@@ -43,7 +54,7 @@ public sealed class SupportSession(TimeProvider? clock = null)
             disconnectUtc = time.GetUtcNow() - time.GetElapsedTime(disconnected.Value);
         }
     }
-    private bool IsExpired() { DetectDisconnect(); return disconnected != null && time.GetElapsedTime(disconnected.Value) >= DisconnectGrace; }
+    private bool IsExpired() { DetectDisconnect(); return restartDeadline is { } deadline ? time.GetUtcNow() >= deadline : disconnected != null && time.GetElapsedTime(disconnected.Value) >= DisconnectGrace; }
     public bool ShouldExit { get { lock (sync) return ended || IsExpired(); } }
     public SupportSessionSnapshot Snapshot
     {
@@ -53,7 +64,7 @@ public sealed class SupportSession(TimeProvider? clock = null)
             {
                 DetectDisconnect(); bool expired = IsExpired(); bool connected = paired && !ended && disconnected == null;
                 string state = ended || expired ? "ended" : !paired ? "pairing" : !connected ? "reconnecting" : matched ? "connected" : "synchronizing";
-                return new(connected, paired, disconnectUtc + DisconnectGrace, state, matched, startedUtc);
+                return new(connected, paired, restartDeadline ?? disconnectUtc + DisconnectGrace, state, matched, startedUtc);
             }
         }
     }

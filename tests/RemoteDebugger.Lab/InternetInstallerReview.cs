@@ -17,7 +17,7 @@ internal sealed partial class LabForm
         installer = localInstaller;
         if (InternetSettings.Load(Vault.DefaultRoot) != null)
             throw new IOException("The installation test requires a fresh internet configuration.");
-        Pass("installer.fresh_profile", "Internet settings are absent before installation");
+        Pass("installer.fresh_profile", scope == "installed" ? "The fresh installation has no unlocked Internet credentials" : "Internet settings are absent before installation");
         try
         {
             string installedDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "RemoteDebugger");
@@ -29,14 +29,17 @@ internal sealed partial class LabForm
                     throw new IOException("The custom installation directory was not rejected before copying application files.");
                 Pass("installer.fixed_directory", "A custom /DIR is rejected before installing any application files", new { exitCode = rejected });
             }
-            var start = new ProcessStartInfo(installer) { UseShellExecute = true, Verb = "runas" };
-            foreach (string argument in new[] { "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/LOG=" + Path.Combine(output, "install.log") })
-                start.ArgumentList.Add(argument);
-            using var setup = Process.Start(start) ?? throw new IOException("The private installer did not start.");
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(stop.Token);
-            timeout.CancelAfter(TimeSpan.FromSeconds(180));
-            await setup.WaitForExitAsync(timeout.Token);
-            if (setup.ExitCode != 0) throw new IOException("The private installer failed with exit code " + setup.ExitCode);
+            if (scope != "installed")
+            {
+                var start = new ProcessStartInfo(installer) { UseShellExecute = true, Verb = "runas" };
+                foreach (string argument in new[] { "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/LOG=" + Path.Combine(output, "install.log") })
+                    start.ArgumentList.Add(argument);
+                using var setup = Process.Start(start) ?? throw new IOException("The private installer did not start.");
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(stop.Token);
+                timeout.CancelAfter(TimeSpan.FromSeconds(180));
+                await setup.WaitForExitAsync(timeout.Token);
+                if (setup.ExitCode != 0) throw new IOException("The private installer failed with exit code " + setup.ExitCode);
+            }
             Pass("installer.completed", "The signed private installer completes without interactive setup", new { sha256 = await HashFileAsync(installer) });
 
             string installedApp = Path.Combine(installedDirectory, "RemoteDebugger.exe");
@@ -44,6 +47,8 @@ internal sealed partial class LabForm
             string menu = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "Remote Debugger.lnk");
             if (!File.Exists(installedApp) || !File.Exists(startup) || !File.Exists(menu) || !File.Exists(Path.Combine(installedDirectory, "build-info.json")))
                 throw new IOException("The protected application, build identity, or desktop shortcuts are missing.");
+            if (scope == "installed" && await HashFileAsync(installedApp) != await HashFileAsync(Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../release/RemoteDebugger.exe"))))
+                throw new IOException("The installed executable differs from the final signed Release.");
             if (Directory.EnumerateFiles(installedDirectory, "*.rdrelay").Any()) throw new IOException("The imported encrypted profile was not removed from the installation directory.");
             Pass("installer.original_user_integration", "The protected Release includes build identity, machine Start menu and initiating user startup shortcuts");
 

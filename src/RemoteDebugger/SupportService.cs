@@ -38,12 +38,12 @@ internal static class SupportService
         }
 
         protected override void OnStop() => StopHost();
-        protected override void OnShutdown() => StopHost();
+        protected override void OnShutdown() => StopHost(windowsShutdown: true);
 
-        private void StopHost()
+        private void StopHost(bool windowsShutdown = false)
         {
             lifetime?.Cancel();
-            host?.Dispose();
+            host?.Dispose(windowsShutdown);
             lifetime?.Dispose();
             host = null;
             lifetime = null;
@@ -56,6 +56,7 @@ internal sealed class SupportBrokerHost : IDisposable
     private readonly CancellationToken lifetime;
     private readonly SupportConfiguration configuration;
     private readonly PrivilegedUpdateManager updates;
+    private readonly PrivilegedPowerManager power;
     private readonly Action requestStop;
     private readonly SemaphoreSlim clients = new(16, 16);
     private Task? server;
@@ -75,10 +76,12 @@ internal sealed class SupportBrokerHost : IDisposable
             throw new UnauthorizedAccessException("Support service executable is not running from its protected provisioned path.");
         _ = AuthenticodeVerifier.VerifyPinnedTrusted(Environment.ProcessPath!, configuration.PublisherThumbprint);
         updates = new PrivilegedUpdateManager(configuration, lifetime);
+        power = new PrivilegedPowerManager(configuration, lifetime);
     }
 
     public void Start()
     {
+        power.Start();
         server = Task.Run(AcceptAsync);
         _ = Task.Run(WatchIdleAsync);
     }
@@ -90,7 +93,7 @@ internal sealed class SupportBrokerHost : IDisposable
             while (!lifetime.IsCancellationRequested)
             {
                 await Task.Delay(TimeSpan.FromSeconds(5), lifetime);
-                if (Volatile.Read(ref activeClients) == 0 && !updates.HasActiveWork &&
+                if (Volatile.Read(ref activeClients) == 0 && !updates.HasActiveWork && !power.HasActiveWork &&
                     DateTime.UtcNow - new DateTime(Volatile.Read(ref lastActivity), DateTimeKind.Utc) >= TimeSpan.FromMinutes(1))
                 {
                     requestStop();
@@ -176,6 +179,7 @@ internal sealed class SupportBrokerHost : IDisposable
                         "update.remoteHealthy" => await updates.ReportRemoteHealthyAsync(caller, request.Args, requestTimeout.Token),
                         "update.status" => updates.Status(request.Args),
                         "update.cancel" => await updates.CancelAsync(request.Args, requestTimeout.Token),
+                        "power.preflight" or "power.validateLogin" or "power.issue" or "power.cancel" or "power.returned" => power.Dispatch(caller, request.Operation, request.Args),
                         _ => throw new ArgumentException("Unsupported privileged broker operation.")
                     };
                     bool keepAlive = request.KeepAlive && request.Operation != "update.arm";
@@ -184,7 +188,7 @@ internal sealed class SupportBrokerHost : IDisposable
                     Volatile.Write(ref lastActivity, DateTime.UtcNow.Ticks);
                 }
             }
-            catch (Exception ex) when (ex is ArgumentException or InvalidDataException or InvalidOperationException or UnauthorizedAccessException or IOException or OperationCanceledException)
+            catch (Exception ex) when (ex is ArgumentException or InvalidDataException or InvalidOperationException or UnauthorizedAccessException or IOException or OperationCanceledException or System.ComponentModel.Win32Exception)
             {
                 try
                 {
@@ -260,9 +264,11 @@ internal sealed class SupportBrokerHost : IDisposable
         }
     }
 
-    public void Dispose()
+    public void Dispose() => Dispose(windowsShutdown: false);
+    internal void Dispose(bool windowsShutdown)
     {
         if (Interlocked.Exchange(ref disposed, 1) != 0) return;
+        power.Stop(windowsShutdown);
         updates.Dispose();
         // Active pipe handlers still release their slots while service cancellation
         // unwinds. The managed semaphore is collected after those handlers finish.

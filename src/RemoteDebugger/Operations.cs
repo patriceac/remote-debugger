@@ -14,14 +14,18 @@ public sealed partial class Operations
     public string Workspace => Path.Combine(Root, "workspace");
     private string Transfers => Path.Combine(Root, "transfers");
     private readonly object historyLock = new();
+    private DateOnly historyPruned;
     private readonly SemaphoreSlim[] transferLocks = Enumerable.Range(0, 32).Select(_ => new SemaphoreSlim(1)).ToArray();
     private readonly ConcurrentDictionary<int, string> started = new();
     public MaintenanceSession Maintenance { get; }
-    public Operations(string root) { Root = root; Maintenance = new(root); Directory.CreateDirectory(Workspace); Directory.CreateDirectory(Transfers); }
+    public IncidentLog Diagnostics { get; }
+    public Operations(string root) { Root = root; Maintenance = new(root); Diagnostics = new(root); Directory.CreateDirectory(Workspace); Directory.CreateDirectory(Transfers); PruneHistory(); }
     public void Record(string id, string operation, DateTimeOffset start, bool ok, string? error, JsonElement data)
     {
+        Diagnostics.Record(operation, new(Environment.MachineName, "agent", Version), error, incident: !ok && error != "cancelled_or_timeout");
         lock (historyLock)
         {
+            PruneHistory();
             string path = Path.Combine(Root, "history.jsonl");
             if (File.Exists(path) && new FileInfo(path).Length > 8 * 1024 * 1024) File.Move(path, path + ".previous", true);
             JsonElement binary = data.ValueKind == JsonValueKind.Object && data.TryGetProperty("binary", out var b) ? b : operation == "upload.commit" ? data : Json.Element(null);
@@ -29,10 +33,39 @@ public sealed partial class Operations
             File.AppendAllText(path, Json.Text(new { id, operation, start, end = DateTimeOffset.UtcNow, ok, error, toolVersion = Version, versionEvidence }) + Environment.NewLine);
         }
     }
+    private void PruneHistory()
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        if (historyPruned == today) return;
+        foreach (string name in new[] { "history.jsonl", "history.jsonl.previous" })
+        {
+            try
+            {
+            string path = Path.Combine(Root, name);
+            if (!File.Exists(path)) continue;
+            var retained = new List<string>();
+            foreach (string line in File.ReadLines(path))
+            {
+                try
+                {
+                    using var entry = JsonDocument.Parse(line);
+                    if (entry.RootElement.TryGetProperty("end", out var end) && end.TryGetDateTimeOffset(out var at) &&
+                        at >= DateTimeOffset.UtcNow - IncidentLog.Retention) retained.Add(line);
+                }
+                catch (JsonException) { }
+            }
+            File.WriteAllLines(path, retained);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Trace.WriteLine("History retention: " + ex.GetType().Name); }
+        }
+        historyPruned = today;
+    }
     public async Task<object?> ExecuteAsync(string op, JsonElement a, CancellationToken ct)
     {
         switch (op)
         {
+            case "clipboard.begin": case "clipboard.read": case "clipboard.write": return await ClipboardAsync(op, a, ct);
+            case "shell.dropTarget": case "shell.selection": case "files.manifest": case "files.conflicts": case "files.createDirectories": return await FileDropAsync(op, a, ct);
             case "wake.info": return new { wakeAdapters = WakeOnLan.GetAdapters() };
             case "wake": return await WakeOnLan.SendAsync(a.Str("macAddress"), a.Str("destination"), a.Int("port", 9), ct);
             case "status": return new { machine = Environment.MachineName, user = Environment.UserName, version = Version, os = Environment.OSVersion.VersionString, workspace = Workspace, elevated = Native.IsElevated(), processId = Environment.ProcessId, agentBinarySha256 = ExecutableIdentity.Sha256 };
@@ -111,7 +144,7 @@ public sealed partial class Operations
         string volume = Path.GetPathRoot(path)!;
         return Safety.UnderRoot(volume, Path.GetRelativePath(volume, path));
     }
-    private sealed record Upload(string Path, long Size, string Sha256, bool WorkspaceRelative = true);
+    private sealed record Upload(string Path, long Size, string Sha256, bool WorkspaceRelative = true, bool Overwrite = true);
     private async Task<object> UploadAsync(string op, JsonElement a, CancellationToken ct)
     {
         string id = a.Str("transfer"); if (!Guid.TryParseExact(id, "N", out _)) throw new ArgumentException("Transfer must be a UUID in N format.");
@@ -122,8 +155,16 @@ public sealed partial class Operations
             bool relative = !Path.IsPathFullyQualified(a.Str("path"));
             string path = relative ? Safety.UnderRoot(Workspace, a.Str("path")) : ResolveAbsoluteUpload(a.Str("path")); long size = a.Long("size"); string hash = a.Str("sha256");
             if (size < 0 || size > 16L * 1024 * 1024 * 1024 || hash.Length != 64 || !hash.All(Uri.IsHexDigit)) throw new ArgumentException("Invalid size or SHA-256.");
-            if (File.Exists(meta)) throw new IOException("Transfer already exists; use upload.status to resume.");
-            await File.WriteAllTextAsync(meta, Json.Text(new Upload(path, size, hash.ToUpperInvariant(), relative)), ct); using (File.Create(partial)) { }
+            bool overwrite = !a.TryGetProperty("overwrite", out var replace) || replace.ValueKind != JsonValueKind.False;
+            var proposed = new Upload(path, size, hash.ToUpperInvariant(), relative, overwrite);
+            if (File.Exists(meta))
+            {
+                var existing = JsonSerializer.Deserialize<Upload>(await File.ReadAllTextAsync(meta, ct), Json.Options);
+                if (existing != proposed) throw new IOException("Transfer identity already belongs to another file.");
+                return new { transfer = id, offset = new FileInfo(partial).Length };
+            }
+            if (!overwrite && File.Exists(path)) throw new IOException("The destination already exists; confirm replacement before retrying.");
+            await File.WriteAllTextAsync(meta, Json.Text(proposed), ct); using (File.Create(partial)) { }
             return new { transfer = id, offset = 0 };
         }
         var upload = JsonSerializer.Deserialize<Upload>(await File.ReadAllTextAsync(meta, ct), Json.Options)!;
@@ -146,7 +187,7 @@ public sealed partial class Operations
         if (actual.Size != upload.Size) throw new IOException("Incomplete transfer.");
         if (!Safety.Equal(actual.Sha256, upload.Sha256))
         { File.Delete(partial); File.Delete(meta); throw new IOException("Upload hash mismatch; retry to restart the transfer."); }
-        Directory.CreateDirectory(Path.GetDirectoryName(validated)!); File.Move(partial, validated, true); File.Delete(meta); return actual with { Path = validated };
+        Directory.CreateDirectory(Path.GetDirectoryName(validated)!); File.Move(partial, validated, upload.Overwrite); File.Delete(meta); return actual with { Path = validated };
     }
     public sealed record BinaryInfo(string Path, long Size, string Sha256, string? FileVersion);
     public static async Task<BinaryInfo> FileInfoAsync(string path, CancellationToken ct)

@@ -32,7 +32,7 @@ internal sealed record ConnectedReply(string Id, bool Ok, string? TargetId, stri
 
 internal static class ConnectedCli
 {
-    internal static async Task<ConnectedReply> ExecuteAsync(JsonElement request, Func<IConnectedRemote> load, CancellationToken ct)
+    internal static async Task<ConnectedReply> ExecuteAsync(JsonElement request, Func<IConnectedRemote> load, CancellationToken ct, Func<IncidentLog>? reports = null)
     {
         string id = Guid.NewGuid().ToString(), operation = "", expected = "";
         string? target = null, machine = null;
@@ -48,6 +48,16 @@ internal static class ConnectedCli
             if (seconds is < 1 or > 300) throw new ArgumentException("timeoutSeconds must be between 1 and 300.");
             var args = request.TryGetProperty("args", out var a) ? a : Json.Element(new { });
             Validate(operation, args);
+            if (operation == "reports")
+            {
+                ct.ThrowIfCancellationRequested();
+                string reportId = args.Str("reportId");
+                var log = reports?.Invoke() ?? new IncidentLog(Vault.DefaultRoot);
+                var saved = log.Read(reportId.Length == 0 ? null : reportId);
+                object result = reportId.Length > 0 ? saved : saved.Select(report => new
+                    { report.Id, report.FirstSeen, report.LastSeen, report.Occurrences, report.Failure.Name, report.Failure.Context.Machine, report.Failure.Context.Version }).ToArray();
+                return new(id, true, "local-reports", Environment.MachineName, Json.Element(new { reports = result, directory = log.DirectoryPath }), RpcOk: true);
+            }
             if (operation != "status" && expected.Length == 0)
                 throw new ArgumentException("Call remote_status first and supply its targetId.");
 
@@ -117,6 +127,7 @@ internal static class ConnectedCli
         string[] allowed = operation switch
         {
             "status" or "system" or "processes" => [],
+            "reports" => ["reportId"],
             "process.info" => ["pid"],
             "file.info" => ["path"],
             "screenshot" => ["monitor", "maxWidth", "quality"],

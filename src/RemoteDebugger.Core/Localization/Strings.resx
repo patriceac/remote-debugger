@@ -890,7 +890,7 @@
   <data name="DeviceVersion" xml:space="preserve"><value>Version</value></data>
   <data name="DeviceProgress" xml:space="preserve"><value>Progress / ETA</value></data>
   <data name="ElapsedTime" xml:space="preserve"><value>elapsed {0}</value></data>
-  <data name="EstimatedUpdateProgress" xml:space="preserve"><value>{0}% · ETA {1}</value></data>
+  <data name="EstimatedUpdateProgress" xml:space="preserve"><value>estimated remaining ≈ {0}</value></data>
   <data name="MeasuredUpdateProgress" xml:space="preserve"><value>{0}% · ETA {1}</value></data>
   <data name="PreparingUpdatePackage" xml:space="preserve"><value>Preparing update package…</value></data>
   <data name="FinalizingUpdate" xml:space="preserve"><value>Finalizing setup…</value></data>
@@ -934,4 +934,49 @@
   <data name="InvalidWakeDestination" xml:space="preserve"><value>Enter an IPv4 address or hostname without a port, and a UDP port from 1 to 65535.</value></data>
   <data name="WakeNoNetwork" xml:space="preserve"><value>No IPv4 network is available to send wake packets.</value></data>
   <data name="WakeSendFailed" xml:space="preserve"><value>Wake packets could not be sent.</value></data>
+  <data name="ShareClipboard" xml:space="preserve"><value>Share clipboard</value></data>
+  <data name="RestartRemotePc" xml:space="preserve"><value>Restart remote PC</value></data>
+  <data name="ShutdownRemotePc" xml:space="preserve"><value>Shut down remote PC</value></data>
+  <data name="ManualSignInExpected" xml:space="preserve"><value>Manual Windows sign-in is expected. The user must sign in on the remote PC; support will reconnect afterward.</value></data>
+  <data name="AutomaticDesktopExpected" xml:space="preserve"><value>Automatic sign-in and desktop return are expected for this restart only. Normal sign-in settings are restored afterward.</value></data>
+  <data name="ConfirmRemoteRestart" xml:space="preserve"><value>Restart {0}?
+
+You can cancel during the 10-second countdown. Applications with unsaved work will not be forced to close. The controller will wait up to one hour; you can stop waiting at any time.</value></data>
+  <data name="ConfirmRemoteShutdown" xml:space="preserve"><value>Shut down {0}?
+
+You can cancel during the 10-second countdown. Applications with unsaved work will not be forced to close. Automatic reconnection will stop.</value></data>
+  <data name="ShutdownAccepted" xml:space="preserve"><value>Windows accepted the shutdown request.</value></data>
+  <data name="PowerOffNotConfirmed" xml:space="preserve"><value>Disconnected. Physical power-off has not been confirmed.</value></data>
+  <data name="PreparingPowerOperation" xml:space="preserve"><value>Preparing</value></data>
+  <data name="RestartingRemotePc" xml:space="preserve"><value>Restarting</value></data>
+  <data name="RestartCountdown" xml:space="preserve"><value>Restart countdown</value></data>
+  <data name="ShutdownCountdown" xml:space="preserve"><value>Shutdown countdown</value></data>
+  <data name="WaitingForRemotePc" xml:space="preserve"><value>Waiting for the PC to return</value></data>
+  <data name="WaitingForManualSignIn" xml:space="preserve"><value>Waiting for the PC and the user's Windows sign-in</value></data>
+  <data name="WindowsSignIn" xml:space="preserve"><value>Windows sign-in</value></data>
+  <data name="RestoringSupport" xml:space="preserve"><value>Restoring support</value></data>
+  <data name="DesktopReady" xml:space="preserve"><value>Desktop ready — connection, fresh frame and input verified</value></data>
+  <data name="PowerCountdownCancelled" xml:space="preserve"><value>Power request cancelled</value></data>
+  <data name="RestartWaitStopped" xml:space="preserve"><value>Reconnection wait stopped</value></data>
+  <data name="IssuedRestartCannotBeUndone" xml:space="preserve"><value>Stopping the wait does not undo a restart already in progress.</value></data>
+  <data name="SignInOnce" xml:space="preserve"><value>Sign in automatically just once after this restart</value></data>
+  <data name="WindowsPasswordForOneRestart" xml:space="preserve"><value>Windows password (not PIN). Used only for this restart, then removed.</value></data>
+  <data name="OneTimeLoginUnavailable" xml:space="preserve"><value>One-time automatic sign-in is unavailable with this Windows configuration.</value></data>
+  <data name="CancelReconnectWait" xml:space="preserve"><value>Stop waiting</value></data>
+  <data name="PowerElapsed" xml:space="preserve"><value>Elapsed: {0:hh\:mm\:ss}</value></data>
+  <data name="PowerCountdownRemaining" xml:space="preserve"><value>Starts in {0:mm\:ss}</value></data>
+  <data name="ReconnectTimeRemaining" xml:space="preserve"><value>Time left to reconnect: {0:hh\:mm\:ss}</value></data>
+  <data name="Continue" xml:space="preserve"><value>Continue</value></data>
+  <data name="Close" xml:space="preserve"><value>Close</value></data>
+  <data name="WindowsNeedsSignInOrUnlock" xml:space="preserve"><value>The PC is back. Windows sign-in or unlock is required before control can resume.</value></data>
+  <data name="TransferAlreadyRunning" xml:space="preserve"><value>A transfer is already running.</value></data>
+  <data name="TransferQueueWaiting" xml:space="preserve"><value>Queued copies: {0}</value></data>
+  <data name="ConfirmReplaceFiles" xml:space="preserve"><value>Replace {0} existing file(s) in {1}?</value></data>
+  <data name="DragAgainToResume" xml:space="preserve"><value>Copy paused. Drag the same items again to resume verified partial transfers.</value></data>
+  <data name="DropInExplorer" xml:space="preserve"><value>Drop in a local Explorer folder. Source files will be preserved.</value></data>
+  <data name="ResumeTransfers" xml:space="preserve"><value>Resume</value></data>
+  <data name="ExistingAutomaticDesktopExpected" xml:space="preserve"><value>This PC already has automatic sign-in configured for this account. Automatic desktop return is expected with its existing settings.</value></data>
+  <data name="RestartRequestAccepted" xml:space="preserve"><value>Restart request accepted</value></data>
+  <data name="TransferSkipped" xml:space="preserve"><value>Skipped in Explorer</value></data>
+  <data name="TransferSkippedFiles" xml:space="preserve"><value>Copy finished · {0} file(s) skipped in Explorer</value></data>
 </root>
