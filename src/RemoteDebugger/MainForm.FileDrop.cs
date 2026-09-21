@@ -298,8 +298,8 @@ public sealed partial class MainForm
                 if (!data.RequestedFiles.Contains(index)) { transferWindow.SetItem(row, UiText.TransferSkipped); skipped++; }
                 row++;
             }
-            transferWindow.SetState(copied ? skipped == 0 ? UiText.DownloadVerified : UiText.Format(UiText.TransferSkippedFiles, skipped) : UiText.DragAgainToResume,
-                complete: copied && skipped == 0);
+            string outcome = copied ? skipped == 0 ? UiText.DownloadVerified : UiText.Format(UiText.TransferSkippedFiles, skipped) : UiText.DragAgainToResume;
+            transferWindow.SetState(outcome, complete: copied && skipped == 0); fileTransferDetails.SetText(outcome);
             if (copied)
             {
                 foreach (var task in tasks.Values.Where(task => task.IsCompletedSuccessfully))
@@ -307,7 +307,7 @@ public sealed partial class MainForm
                 diagnostics.Record(skipped == 0 ? "file_copy_verified" : "file_copy_finished_with_skips", DiagnosticContext());
             }
         }
-        catch (Exception ex) { transferWindow.SetState(ex is OperationCanceledException ? UiText.DragAgainToResume : ex.Message); if (ex is not OperationCanceledException) RecordIncident("file_transfer_failed", ex); }
+        catch (Exception ex) { string outcome = ex is OperationCanceledException ? UiText.DragAgainToResume : ex.Message; transferWindow.SetState(outcome); fileTransferDetails.SetText(outcome); if (ex is not OperationCanceledException) RecordIncident("file_transfer_failed", ex); }
         finally
         {
             lifetime.Cancel();

@@ -216,6 +216,8 @@ internal sealed partial class LabForm
             ?? throw new IOException("Remote source folder missing from Files pane.");
         await DragWorkflowAsync(Center(row), new(desktop.Width - 150, 630), 2200);
         await WaitFixtureAsync(received, "remote-tree");
+        if (!await WaitForTextAsync("fileTransferDetails", text => text == UiText.DownloadVerified, 10)) throw new IOException("Completed Explorer copy is still shown as unverified.");
+        CaptureDesktop("files-to-explorer-complete.png");
         Pass("workflow.files_to_explorer", "A virtual folder drag from the Files pane lands in real Explorer with nested and empty folders and exact content");
         CloseTransferWindow();
 
