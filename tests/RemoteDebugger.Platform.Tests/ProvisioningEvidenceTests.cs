@@ -86,6 +86,25 @@ public sealed class ProvisioningEvidenceTests
             Assert.Throws<IOException>(() => PowerCredentialFixture.RequirePeerBinding(local, peer));
     }
 
+    [Fact]
+    public void PowerCredentialReadsTheWindowsPowerShellUtf8BomFixture()
+    {
+        using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+        string directory = Path.Combine(AppContext.BaseDirectory, "work");
+        Directory.CreateDirectory(directory);
+        string path = Path.Combine(directory, "credential-" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            File.WriteAllText(path, JsonSerializer.Serialize(new
+            {
+                FormatVersion = 1, UserName = "fixture", UserSid = identity.User!.Value,
+                PoolBaselineId = "dd8f84c4-af2f-4542-b8a3-c2f8ed8327bf", Protection = "DPAPI CurrentUser", ProtectedPassword = "AA=="
+            }), new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+            Assert.Equal(identity.User.Value, PowerCredentialFixture.Read(path).Identity.UserSid);
+        }
+        finally { File.Delete(path); }
+    }
+
     private static JsonObject Evidence() => new()
     {
         ["FormatVersion"] = 1, ["Contract"] = "GuestSetupV1", ["RequestId"] = RequestId,

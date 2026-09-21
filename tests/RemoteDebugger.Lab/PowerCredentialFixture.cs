@@ -21,7 +21,7 @@ internal sealed class PowerCredentialFixture
         if (string.IsNullOrWhiteSpace(path)) throw new IOException("The request-private guest credential fixture is missing.");
         var file = new FileInfo(path);
         if (!file.Exists || file.Length is < 1 or > 16384) throw new IOException("The guest credential fixture has an invalid size.");
-        using var document = JsonDocument.Parse(File.ReadAllBytes(path));
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
         var value = document.RootElement;
         if (value.GetProperty("FormatVersion").GetInt32() != 1 || value.GetProperty("Protection").GetString() != "DPAPI CurrentUser")
             throw new IOException("The guest credential fixture has an unsupported protection format.");
