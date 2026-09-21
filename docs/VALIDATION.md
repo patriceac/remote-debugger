@@ -27,11 +27,14 @@ evidence. The Files completion state and shutdown countdown screenshots were
 visually reviewed.
 
 The current application candidate is signed Release **0.5.0**, built from clean
-source `20634aaf6c03573a3b6e3a520128f879b0c1163e`, with SHA-256
-`2BBD33B5F481AA5284913BE3D1B39CC9B0AF6A54FE1FA01D3831068E62F5D1FC`.
+source `2027b67159526fa5b7db37aef826a3aee8af0ebc`, with SHA-256
+`C457A3DF41CAD5925EFF166FF12D59F8A7DC382B7AAB0F34D54EA6C02FFD54A5`.
 It additionally treats NUL-only logon notices as empty while retaining real
 interactive banners; Luna's four focused preflight cases passed.
-Both installers contain that executable:
+It also puts the stopped reconnect-wait explanation in the visible connection
+status. The installers below still contain the previous candidate
+`2BBD33B5F481AA5284913BE3D1B39CC9B0AF6A54FE1FA01D3831068E62F5D1FC`;
+they must be rebuilt after power qualification:
 
 | Package | SHA-256 | Qualification |
 | --- | --- | --- |
@@ -60,7 +63,7 @@ network adapter remained connected.
 | --- | --- |
 | Session clipboard | Focused session/clipboard tests and native bidirectional, pause/baseline and session-end checks passed. Actual reboot remains part of the power qualification gap. |
 | Automatic reports | Retention/deduplication checks passed; candidate C613 created an unexpected-exit incident and read it offline without clipboard payloads. |
-| Restart and one-use logon | Resume/deadline/credential-state unit checks and native preflight passed. Actual first/second boot, manual return and the full controller wait remain unqualified. |
+| Restart and one-use logon | Unit checks, native preflight and cancellation with temporary-login cleanup passed. Actual automatic first boot occurred, but the controller failed to recover the desktop within five minutes. Manual second boot and the full controller wait remain unqualified. |
 | Shutdown | Native named-PC confirmation, countdown and cancellation passed. Issued shutdown remains unqualified. |
 | Update progress | Ten focused progress tests passed, covering measured/stalled/resumed rates, opaque stages and actual completion; the existing binary/health verification gate is preserved. |
 | Smoother viewer | Sixteen stream/frame/acknowledgement checks passed; native H.264 viewing exceeded the former 5 FPS ceiling without a stale-frame backlog. |
@@ -72,7 +75,7 @@ reproduce; the CLI now forwards the provisioner's current error, and isolated
 request `executable-test-20260921T173912962Z-6cd8e67e` provisioned successfully.
 
 Actual reboot recovery, one-use sign-in/second boot, and issued shutdown remain
-unqualified pending native execution. The Hyper-V Harness project's authorized
+unqualified. The Hyper-V Harness project's authorized
 Astra Max extension is deployed and Ready: commit `7e6cec567305fb819780a81e2e899c88eda097f5`,
 deployment `deploy-17e5af7867d07efa`. Its Ready receipt was independently read.
 The test-only power adapter binds the elevated setup to
@@ -91,9 +94,35 @@ fixtures limited to the one-use-login scenario (Manual sign-in uses the broker's
 own credential), Automatic/Manual boot ordering, and the
 real-hour observation interval. Shutdown explicitly allows 300 seconds for the
 qualified harness evidence-recovery path. Prepare-only checks did not run the
-application. The native Once pair is now submitted as
-`executable-test-20260921T211717759Z-e7dca8a1` and
-`executable-test-20260921T211717962Z-2b0d3b17`; results remain pending. See
+application.
+
+The initial Once controller `executable-test-20260921T211717759Z-e7dca8a1`
+failed because the Lab looked for cancelled-countdown text in a footer occupied
+by viewer controls. The visible session had recovered. Commit `fd368aa` instead
+asserts the connected state, unchanged boot and clean temporary-login preflight.
+Its dependent target `executable-test-20260921T211717962Z-2b0d3b17` was cancelled;
+both requests cleaned up successfully.
+
+On the next Once pair, controller `executable-test-20260921T213040683Z-30b29d04`
+passed that cancellation check, then timed out waiting for Desktop Ready after
+the first actual automatic boot. Target `executable-test-20260921T213040782Z-7e89c641`
+proved a distinct first boot and automatic sign-in without broker credential
+input. It did not prove support reconnection or a second actual boot. The target
+was cancelled after the controller's definitive failure. Both workers ended Off
+with successful payload/network cleanup. This run used candidate 2BBD and Lab
+`6E68982B9D12273FFC8666D4FA6EE10432034DA9D8BF08C4F658E4975F064216`.
+The controller screenshot was reviewed: Waiting for PC remained visible, with
+about 55 minutes left. The deployed harness discarded guest-only continuation
+evidence on early failure/cancellation; its owner is adding a bounded failure
+harvest. Neither account demotion nor OUTDIR reset was found in the harness.
+
+The real-hour Expiry pair is running on C457/Lab 33E8 as requests
+`executable-test-20260921T213626249Z-b4c4269d` and
+`executable-test-20260921T213626348Z-b6365550`. Shutdown is independently submitted
+as `executable-test-20260921T215801617Z-d98c5b76` and
+`executable-test-20260921T215803298Z-c42a8851`, using C457 and Lab
+`B3B93B963F39C8FFF5A004DF556CDE3CD622138C824FC5666DDFC63546008415`.
+Submission is not acceptance. See
 [support workflow](SUPPORT_WORKFLOW.md). Raw evidence is retained
 under `D:\Disk\VMs\Codex-Harness\Live\Broker\Results\<request-id>`.
 
