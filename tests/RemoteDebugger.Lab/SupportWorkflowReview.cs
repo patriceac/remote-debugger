@@ -266,11 +266,11 @@ internal sealed partial class LabForm
         try { RequireFixture(parent, name); return Task.FromResult(true); }
         catch (IOException) { return Task.FromResult(false); } // Explorer may still own its destination handle.
     });
-    private async Task WaitWorkflowAsync(Func<Task<bool>> ready, int seconds = 30)
+    private async Task WaitWorkflowAsync(Func<Task<bool>> ready, int seconds = 30, [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(ready))] string? expectation = null)
     {
         var watch = Stopwatch.StartNew();
         while (watch.Elapsed.TotalSeconds < seconds) { if (await ready()) return; await Task.Delay(250, stop.Token); }
-        throw new TimeoutException("Support workflow observation timed out.");
+        throw new TimeoutException("Support workflow observation timed out: " + expectation);
     }
     private async Task<AutomationElement> WorkflowDialogAsync(string id)
     {

@@ -168,7 +168,7 @@ internal sealed partial class LabForm
             if (enterPassword == null) throw new IOException("The protected target-credential reader is unavailable.");
             var countdown = await AcceptPowerFromControllerAsync(true, true, machine, enterPassword);
             InvokeElement(PowerControl(countdown, "cancelPowerWait"));
-            await WaitWorkflowAsync(() => Task.FromResult(UiTexts().Any(x => x.Contains(UiText.PowerCountdownCancelled, StringComparison.Ordinal))), 30);
+            await WaitWorkflowAsync(() => Task.FromResult(IsConnected(TryValue("connectionStatus"))), 30);
             await Task.Delay(11000, stop.Token);
             if ((await PowerMessageAsync("POWER_STATUS")).Str("bootId") != initial.Str("bootId")) throw new IOException("The cancelled restart still rebooted.");
             _ = await RequireCleanPowerPreflightAsync(remote);
