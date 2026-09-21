@@ -195,6 +195,8 @@ public sealed partial class MainForm : Forms.Form
     private bool suppressTerminationEvent;
     private bool trayVisible;
     private bool trayNoticeShown;
+    private bool shown;
+    private readonly DiscoveryRefreshGate discoveryRefreshGate = new();
     private Forms.FormWindowState trayWindowState;
     private bool resumeViewingOnRestore;
     private int operationGeneration;
@@ -260,7 +262,8 @@ public sealed partial class MainForm : Forms.Form
         Shown += MainFormShown;
         FormClosing += MainFormClosing;
         FormClosed += (_, _) => DisposeResources();
-        Resize += (_, _) => UpdateMinimizedViewing();
+        Resize += (_, _) => { UpdateMinimizedViewing(); RefreshDiscoveryOnOpen(); };
+        VisibleChanged += (_, _) => RefreshDiscoveryOnOpen();
         ResumeLayout(true);
     }
 
@@ -637,7 +640,7 @@ public sealed partial class MainForm : Forms.Form
     private void WireEvents()
     {
         roleAgent.Click += (_, _) => SelectRole(0);
-        roleController.Click += async (_, _) => { SelectRole(1); await ResumeSavedSupportAsync(); };
+        roleController.Click += async (_, _) => { SelectRole(1); await ResumeSavedSupportAsync(); RefreshDiscoveryOnOpen(); };
         navConnection.Click += (_, _) => SelectControllerPage(0); navScreen.Click += (_, _) => SelectControllerPage(1); navProcesses.Click += (_, _) => SelectControllerPage(2); navFiles.Click += (_, _) => SelectControllerPage(3); navDiagnostics.Click += (_, _) => SelectControllerPage(4);
         terminateSession.Click += async (_, _) => await TerminateSupportAsync();
         copyAgentCode.Click += (_, _) => { if (!string.IsNullOrWhiteSpace(CurrentPairingCode)) Forms.Clipboard.SetText(CurrentPairingCode); SetFooterMessage(() => UiText.CodeCopied); RefreshFooter(); };
@@ -719,6 +722,8 @@ public sealed partial class MainForm : Forms.Form
             if (startAgentOnLaunch && (!PrivateInternet || privateSupportEnabled)) { StartAgent(); _ = PrepareAgentAsync(); }
             if (client != null) _ = ResumeSavedSupportAsync();
         }
+        shown = true;
+        RefreshDiscoveryOnOpen();
         await Task.Yield();
     }
 
@@ -784,8 +789,17 @@ public sealed partial class MainForm : Forms.Form
             {
                 pairingBusy = false;
                 UpdateHeader(); RefreshControllerControls(); RefreshFooter();
+                RefreshDiscoveryOnOpen();
             }
         }
+    }
+
+    private void RefreshDiscoveryOnOpen()
+    {
+        if (!shown) return;
+        bool visible = Visible && WindowState != Forms.FormWindowState.Minimized && !trayVisible;
+        if (discoveryRefreshGate.ShouldRefresh(visible, rolePages.SelectedIndex == 1 && !pairingBusy))
+            _ = DiscoverAsync(true);
     }
 
     internal static bool ShouldSynchronizeSavedSession(bool connected, bool binaryMatched) => connected && !binaryMatched;

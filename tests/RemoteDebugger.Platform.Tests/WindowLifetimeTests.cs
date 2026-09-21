@@ -47,4 +47,24 @@ public sealed class WindowLifetimeTests
     [InlineData(CloseReason.None, false, true)]
     public void OnlyOrdinaryWindowCloseKeepsApplicationRunning(CloseReason reason, bool quitting, bool hide) =>
         Assert.Equal(hide, WindowLifetime.HideToTray(reason, quitting));
+
+    [Fact]
+    public void DiscoveryRefreshesOncePerVisibleOpenOrRestore()
+    {
+        var gate = new DiscoveryRefreshGate();
+        Assert.False(gate.ShouldRefresh(false, true)); // Background startup remains in the tray.
+        Assert.True(gate.ShouldRefresh(true, true));
+        Assert.False(gate.ShouldRefresh(true, true)); // Activation and resize do not refresh again.
+        Assert.False(gate.ShouldRefresh(false, true));
+        Assert.True(gate.ShouldRefresh(true, true)); // Tray or taskbar restore starts a new open.
+    }
+
+    [Fact]
+    public void OpeningOnAgentPageWaitsForTheControllerPage()
+    {
+        var gate = new DiscoveryRefreshGate();
+        Assert.False(gate.ShouldRefresh(true, false));
+        Assert.True(gate.ShouldRefresh(true, true));
+        Assert.False(gate.ShouldRefresh(true, true));
+    }
 }
