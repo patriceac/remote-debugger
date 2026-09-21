@@ -71,7 +71,7 @@ public sealed class MaintenanceSession(string root) : IDisposable
                 throw new InvalidOperationException(platform.Message);
             }
             using var connect = CancellationTokenSource.CreateLinkedTokenSource(ct, lifetime.Token);
-            connect.CancelAfter(TimeSpan.FromSeconds(10));
+            connect.CancelAfter(TimeSpan.FromSeconds(SupportOperationTimeouts.PlatformStatusRoundTripSeconds));
             var candidate = await SupportPlatform.OpenBrokerPipeAsync(connect.Token);
             try
             {
@@ -97,6 +97,15 @@ public sealed class MaintenanceSession(string root) : IDisposable
                 }
             }
             catch { candidate.Dispose(); throw; }
+        }
+        catch (Exception ex)
+        {
+            lock (stateLock)
+            {
+                if (Enabled && Volatile.Read(ref disposed) == 0 && !ct.IsCancellationRequested)
+                    Volatile.Write(ref status, CurrentStatus with { Active = false, Message = ex.Message, LeaseId = null });
+            }
+            throw;
         }
         finally { gate.Release(); }
     }
@@ -161,6 +170,14 @@ public sealed class MaintenanceSession(string root) : IDisposable
 
     public void End() => DisposePipe();
     internal void EndInput() => input.End();
+
+    internal async Task RecoverInputAsync(CancellationToken ct)
+    {
+        // Reuse the installed, owner-enabled broker after a failed startup or
+        // service refresh. Never provision support or replay a click/key here.
+        if (Enabled && !CurrentStatus.Active && File.Exists(SupportPlatformPaths.ConfigurationPath))
+            await StartAsync(ct);
+    }
 
     internal async Task SendInputAsync(object args, CancellationToken ct)
     {

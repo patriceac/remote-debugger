@@ -77,6 +77,7 @@ public sealed partial class Operations
             case "ui.key": Native.Key(a.Int("pid"), a.Str("key")); return new { sent = true };
             case "ui.mouse": Native.Mouse(a.Int("pid"), a.Int("x"), a.Int("y")); return new { clicked = true };
             case "ui.input":
+                if (a.Str("kind") == "release") await Maintenance.RecoverInputAsync(ct);
                 if (Maintenance.Enabled && Maintenance.CurrentStatus.Active) await Maintenance.SendInputAsync(a, ct);
                 else Native.HandleInput(a);
                 return new { sent = true };
