@@ -132,6 +132,9 @@ public sealed partial class MainForm
                 using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(5));
                 try { _ = await target.CallAsync("power.cancelWait", ct: stop.Token, seconds: 4); } catch { }
                 ClearPowerControllerSession(target);
+                connectionState.SetText(() => restart
+                    ? UiText.RestartWaitStopped + " " + UiText.IssuedRestartCannotBeUndone
+                    : UiText.ShutdownAccepted + " " + UiText.PowerOffNotConfirmed);
             }
             SetFooterMessage(() => cancelled ? UiText.PowerCountdownCancelled : restart ? UiText.RestartWaitStopped : UiText.ShutdownAccepted);
             SetFooterDetail(() => cancelled ? UiText.SessionEstablished : restart ? UiText.IssuedRestartCannotBeUndone : UiText.PowerOffNotConfirmed); RefreshFooter();
