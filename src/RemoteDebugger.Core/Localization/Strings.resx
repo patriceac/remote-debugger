@@ -132,6 +132,9 @@
   <data name="ClickScreenToControl" xml:space="preserve">
     <value>Click the screen to control</value>
   </data>
+  <data name="CloseNotice" xml:space="preserve">
+    <value>Dismiss notification</value>
+  </data>
   <data name="CloseToTray" xml:space="preserve">
     <value>Closing minimizes to the system tray</value>
   </data>
@@ -642,6 +645,12 @@
   <data name="SupportActive" xml:space="preserve">
     <value>Support active</value>
   </data>
+  <data name="SupportConnectedNoticeBody" xml:space="preserve">
+    <value>An authorized controller can view and control this PC.</value>
+  </data>
+  <data name="SupportConnectedNoticeTitle" xml:space="preserve">
+    <value>Support connected</value>
+  </data>
   <data name="SupportEnded" xml:space="preserve">
     <value>Support ended</value>
   </data>
@@ -743,6 +752,9 @@
   </data>
   <data name="ViewOnly" xml:space="preserve">
     <value>View only</value>
+  </data>
+  <data name="ViewSession" xml:space="preserve">
+    <value>View session</value>
   </data>
   <data name="ViewingPaused" xml:space="preserve">
     <value>Viewing paused</value>

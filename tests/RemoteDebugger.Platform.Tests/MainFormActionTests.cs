@@ -58,6 +58,20 @@ public sealed class MainFormActionTests
     }
 
     [Fact]
+    public void ConnectionNoticeAppearsOnceWhenAUsableNewSessionStarts()
+    {
+        var started = new DateTimeOffset(2026, 9, 21, 12, 0, 0, TimeSpan.Zero);
+        var session = new SupportSessionSnapshot(true, true, null, "connected", true, started);
+
+        Assert.True(MainForm.ShouldShowConnectionNotice(session, null, false));
+        Assert.False(MainForm.ShouldShowConnectionNotice(session, started, false));
+        Assert.False(MainForm.ShouldShowConnectionNotice(session, null, true));
+        Assert.False(MainForm.ShouldShowConnectionNotice(session with { BinaryMatched = false }, null, false));
+        Assert.False(MainForm.ShouldShowConnectionNotice(session with { Connected = false }, null, false));
+        Assert.True(MainForm.ShouldShowConnectionNotice(session with { StartedUtc = started.AddMinutes(1) }, started, false));
+    }
+
+    [Fact]
     public void MatchingClientBuildDisablesTheUpdateAction() =>
         Assert.False(MainForm.CanUpdateClient(true, true, false, false, false, clientUpToDate: true));
 

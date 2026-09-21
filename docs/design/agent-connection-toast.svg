@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title description">
+  <title id="title">Remote Debugger connection notification mockup</title>
+  <desc id="description">A temporary notification appears above the Windows taskbar on the assisted computer when a remote support session starts.</desc>
+  <defs>
+    <linearGradient id="desktop" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#C7DCE0"/>
+      <stop offset="0.55" stop-color="#A8C7CC"/>
+      <stop offset="1" stop-color="#6D999F"/>
+    </linearGradient>
+    <linearGradient id="windowTop" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F7F9FA"/>
+    </linearGradient>
+    <filter id="windowShadow" x="-15%" y="-20%" width="130%" height="150%">
+      <feDropShadow dx="0" dy="14" stdDeviation="20" flood-color="#264B54" flood-opacity="0.16"/>
+    </filter>
+    <filter id="toastShadow" x="-20%" y="-30%" width="140%" height="170%">
+      <feDropShadow dx="0" dy="16" stdDeviation="19" flood-color="#173943" flood-opacity="0.23"/>
+    </filter>
+  </defs>
+
+  <!-- A quiet desktop provides context without making the notification part of another app. -->
+  <rect width="1440" height="900" fill="url(#desktop)"/>
+  <path d="M0 466C199 324 434 342 614 459C783 570 945 615 1145 483C1241 419 1333 396 1440 411V900H0Z" fill="#D8E8E7" opacity="0.46"/>
+  <path d="M0 612C237 485 421 529 650 641C881 754 1139 700 1440 554V900H0Z" fill="#F1F7F3" opacity="0.35"/>
+
+  <!-- An ordinary window stays in front while Remote Debugger is in the tray. -->
+  <g font-family="Segoe UI, Arial, sans-serif" filter="url(#windowShadow)">
+    <rect x="119" y="87" width="925" height="665" rx="10" fill="#FFFFFF"/>
+    <rect x="119" y="87" width="925" height="62" rx="10" fill="url(#windowTop)"/>
+    <path d="M119 139H1044" stroke="#E1E8EA"/>
+    <path d="M143 115H162M152 106V124" stroke="#087F83" stroke-width="2" stroke-linecap="round"/>
+    <text x="178" y="121" fill="#243B43" font-size="14" font-weight="600">Documents</text>
+    <path d="M940 117H952" stroke="#748F9A" stroke-width="1.4"/>
+    <rect x="976" y="110" width="11" height="11" fill="none" stroke="#748F9A" stroke-width="1.3"/>
+    <path d="M1015 110L1026 121M1026 110L1015 121" stroke="#748F9A" stroke-width="1.3"/>
+
+    <rect x="140" y="169" width="883" height="45" rx="7" fill="#F4F7F8"/>
+    <text x="158" y="197" fill="#6F838B" font-size="17">‹</text>
+    <text x="188" y="197" fill="#6F838B" font-size="17">›</text>
+    <text x="236" y="197" fill="#4C646D" font-size="13">Ce PC</text>
+    <text x="281" y="197" fill="#97A9AF" font-size="13">›</text>
+    <text x="301" y="197" fill="#243B43" font-size="13" font-weight="600">Documents</text>
+    <rect x="763" y="178" width="242" height="27" rx="5" fill="#FFFFFF" stroke="#E0E7EA"/>
+    <text x="781" y="196" fill="#94A5AB" font-size="12">Rechercher dans Documents</text>
+
+    <path d="M325 229V751" stroke="#E6ECEE"/>
+    <text x="151" y="265" fill="#667D86" font-size="12" font-weight="600" letter-spacing="1">ACCÈS RAPIDE</text>
+    <rect x="138" y="281" width="172" height="39" rx="5" fill="#E7F2F1"/>
+    <circle cx="159" cy="300" r="7" fill="#087F83"/>
+    <text x="179" y="305" fill="#173D44" font-size="13" font-weight="600">Documents</text>
+    <text x="179" y="348" fill="#5F747D" font-size="13">Bureau</text>
+    <text x="179" y="390" fill="#5F747D" font-size="13">Images</text>
+    <text x="179" y="432" fill="#5F747D" font-size="13">Téléchargements</text>
+
+    <text x="359" y="274" fill="#233A42" font-size="22" font-weight="600">Documents</text>
+    <text x="359" y="303" fill="#7A8E95" font-size="12">Fichiers récents</text>
+    <path d="M357 333H1008" stroke="#E6ECEE"/>
+    <text x="374" y="358" fill="#84969D" font-size="11" font-weight="600">NOM</text>
+    <text x="787" y="358" fill="#84969D" font-size="11" font-weight="600">MODIFIÉ</text>
+    <path d="M357 375H1008" stroke="#E6ECEE"/>
+    <g fill="#E2EBED">
+      <rect x="373" y="395" width="23" height="28" rx="3"/>
+      <rect x="373" y="453" width="23" height="28" rx="3"/>
+      <rect x="373" y="511" width="23" height="28" rx="3"/>
+      <rect x="373" y="569" width="23" height="28" rx="3"/>
+    </g>
+    <g fill="#37505A" font-size="13">
+      <text x="413" y="414">Notes de réunion</text>
+      <text x="413" y="472">Photos de famille</text>
+      <text x="413" y="530">Factures</text>
+      <text x="413" y="588">Projet maison</text>
+    </g>
+    <g fill="#81949B" font-size="12">
+      <text x="786" y="414">Aujourd’hui</text>
+      <text x="786" y="472">Hier</text>
+      <text x="786" y="530">Cette semaine</text>
+      <text x="786" y="588">Cette semaine</text>
+    </g>
+  </g>
+
+  <!-- Windows taskbar. -->
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <rect y="846" width="1440" height="54" fill="#F6F8F9" opacity="0.96"/>
+    <path d="M0 846H1440" stroke="#D5E0E3"/>
+    <g fill="#087F83"><rect x="493" y="863" width="11" height="11" rx="1"/><rect x="508" y="863" width="11" height="11" rx="1"/><rect x="493" y="878" width="11" height="11" rx="1"/><rect x="508" y="878" width="11" height="11" rx="1"/></g>
+    <rect x="538" y="855" width="219" height="36" rx="18" fill="#FFFFFF" stroke="#DFE7E9"/>
+    <circle cx="558" cy="873" r="6" fill="none" stroke="#7E9199" stroke-width="1.5"/>
+    <path d="M562 877L568 883" stroke="#7E9199" stroke-width="1.5"/>
+    <text x="580" y="879" fill="#85969D" font-size="12">Rechercher</text>
+    <rect x="778" y="858" width="31" height="31" rx="7" fill="#E7F2F1"/>
+    <rect x="785" y="868" width="17" height="12" rx="2" fill="none" stroke="#087F83" stroke-width="1.5"/>
+    <rect x="826" y="861" width="27" height="27" rx="6" fill="#E6C65F"/>
+    <path d="M826 869H853" stroke="#F7E9B9" stroke-width="2"/>
+    <rect x="874" y="861" width="27" height="27" rx="7" fill="#E4F0F1"/>
+    <text x="880" y="880" fill="#087F83" font-size="12" font-weight="700">RD</text>
+    <path d="M1306 874L1311 869L1316 874" fill="none" stroke="#536C75" stroke-width="1.5"/>
+    <circle cx="1340" cy="873" r="3" fill="#087F83"/>
+    <text x="1363" y="879" fill="#536C75" font-size="12">14:32</text>
+  </g>
+
+  <!-- Notification: compact, dismissible, visible above the taskbar. -->
+  <g font-family="Segoe UI, Arial, sans-serif" filter="url(#toastShadow)">
+    <rect x="968" y="596" width="440" height="222" rx="12" fill="#FFFFFF" stroke="#DCE6E8"/>
+    <path d="M980 596H1396C1402.6 596 1408 601.4 1408 608V810C1408 814.4 1404.4 818 1400 818H976C971.6 818 968 814.4 968 810V608C968 601.4 973.4 596 980 596Z" fill="none"/>
+    <rect x="968" y="608" width="4" height="198" fill="#087F83"/>
+    <rect x="991" y="617" width="35" height="35" rx="8" fill="#087F83"/>
+    <rect x="998" y="626" width="21" height="14" rx="2" fill="none" stroke="#FFFFFF" stroke-width="1.8"/>
+    <path d="M1004 644H1013" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"/>
+    <text x="1038" y="638" fill="#5C737C" font-size="10.5" font-weight="700" letter-spacing="1.25">REMOTE DEBUGGER</text>
+    <path d="M1380 626L1390 636M1390 626L1380 636" stroke="#82959C" stroke-width="1.8" stroke-linecap="round"/>
+    <text x="991" y="687" fill="#183039" font-size="23" font-weight="600">Assistance connectée</text>
+    <text x="991" y="715" fill="#5A7079" font-size="13.5">Un contrôleur autorisé peut voir et piloter ce PC.</text>
+    <path d="M991 734H1385" stroke="#E4EAEC"/>
+    <text x="991" y="775" fill="#087F83" font-size="13" font-weight="600">Voir la session</text>
+    <rect x="1194" y="746" width="191" height="41" rx="6" fill="#FFF0F1"/>
+    <text x="1210" y="772" fill="#B83D49" font-size="13" font-weight="600">Terminer l’assistance</text>
+    <path d="M968 816H1083" stroke="#087F83" stroke-width="3"/>
+  </g>
+</svg>

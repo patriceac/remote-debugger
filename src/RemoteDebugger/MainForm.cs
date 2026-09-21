@@ -168,6 +168,8 @@ public sealed partial class MainForm : Forms.Form
     private readonly Forms.Timer inputRecoveryTimer = new() { Interval = 750 };
     private Size statusPillRegionSize;
     private readonly Forms.NotifyIcon tray = new();
+    private SupportConnectionNotice? connectionNotice;
+    private DateTimeOffset? notifiedAgentSession;
     private RemoteClient? client;
     private AgentServer? agent;
     private bool agentNetworkPrepared;
@@ -978,7 +980,7 @@ public sealed partial class MainForm : Forms.Form
     {
         if (IsDisposed) return;
         RefreshPowerHold();
-        UpdateAgentState(); if (PrivateInternet) UpdatePrivateAgentState(); UpdateInternetState(); UpdateHeader(); RefreshControllerControls(); RefreshFooter(); RefreshInputStatus();
+        UpdateAgentState(); UpdateSupportConnectionNotice(); if (PrivateInternet) UpdatePrivateAgentState(); UpdateInternetState(); UpdateHeader(); RefreshControllerControls(); RefreshFooter(); RefreshInputStatus();
         if (fleetRefreshing || fleet.Values.Any(device => NeedsFleetProgressAnimation(device.State))) peers.Invalidate();
         if (updateProgressArea.Visible && updateProgressFill.BackColor == Teal) RefreshUpdateProgress();
         if (!agentIdle && agent?.Operations.Maintenance is { } maintenance)
@@ -1165,6 +1167,30 @@ public sealed partial class MainForm : Forms.Form
         if (index == 1 && supportSession && client != null && liveStream == null && controllerPages.SelectedIndex == 1)
             _ = StartStreamAsync();
         UpdateHeader();
+    }
+
+    internal static bool ShouldShowConnectionNotice(SupportSessionSnapshot? session, DateTimeOffset? notifiedSession,
+        bool updateOngoing) => session is { Connected: true, BinaryMatched: true, StartedUtc: { } started }
+            && started != notifiedSession && !updateOngoing;
+
+    private void UpdateSupportConnectionNotice()
+    {
+        var session = agent?.Session;
+        bool updateOngoing = agent != null && IsOngoingUpdate(agent.UpdateProgress);
+        if (session is not { Connected: true, BinaryMatched: true } || updateOngoing || agentIdle || terminating || quitting)
+        {
+            connectionNotice?.Close();
+            return;
+        }
+        if (!ShouldShowConnectionNotice(session, notifiedAgentSession, updateOngoing)) return;
+        connectionNotice?.Close();
+        var notice = new SupportConnectionNotice();
+        notice.FormClosed += (_, _) => { if (ReferenceEquals(connectionNotice, notice)) connectionNotice = null; };
+        notice.ViewSessionRequested += (_, _) => { if (trayVisible) RestoreFromTray(); SelectRole(0); Activate(); };
+        notice.EndSupportRequested += async (_, _) => await TerminateAgentSessionAsync();
+        notice.Show();
+        connectionNotice = notice;
+        notifiedAgentSession = session.StartedUtc;
     }
 
     private void SelectControllerPage(int index)
@@ -2100,6 +2126,7 @@ public sealed partial class MainForm : Forms.Form
     private async Task TerminateAgentSessionAsync()
     {
         if (terminating || agent is not { } oldAgent) return;
+        connectionNotice?.Close();
         terminating = true; terminateSession.Enabled = false; roleAgent.Enabled = roleController.Enabled = false;
         SetFooterMessage(() => UiText.EndingSupport); RefreshFooter();
         bool stopped = true;
@@ -2282,6 +2309,7 @@ public sealed partial class MainForm : Forms.Form
     private void DisposeResources()
     {
         SupportPlatform.ManagedRelaunchRequested -= OnManagedRelaunchRequested;
+        connectionNotice?.Close();
         renderTimer.Dispose(); inputRecoveryTimer.Dispose(); discoveryLifetime?.Dispose(); heartbeatLifetime?.Dispose(); pairingLifetime?.Dispose(); clientUpdateLifetime?.Dispose(); liveStream?.Dispose(); action?.Dispose(); powerHold?.Dispose(); tray.Dispose();
     }
 

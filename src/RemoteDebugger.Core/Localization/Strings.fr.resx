@@ -132,6 +132,9 @@
   <data name="ClickScreenToControl" xml:space="preserve">
     <value>Cliquez dans l’écran pour contrôler</value>
   </data>
+  <data name="CloseNotice" xml:space="preserve">
+    <value>Fermer la notification</value>
+  </data>
   <data name="CloseToTray" xml:space="preserve">
     <value>Fermer réduit dans la zone de notification</value>
   </data>
@@ -642,6 +645,12 @@
   <data name="SupportActive" xml:space="preserve">
     <value>Assistance active</value>
   </data>
+  <data name="SupportConnectedNoticeBody" xml:space="preserve">
+    <value>Un contrôleur autorisé peut voir et piloter ce PC.</value>
+  </data>
+  <data name="SupportConnectedNoticeTitle" xml:space="preserve">
+    <value>Assistance connectée</value>
+  </data>
   <data name="SupportEnded" xml:space="preserve">
     <value>Assistance terminée</value>
   </data>
@@ -743,6 +752,9 @@
   </data>
   <data name="ViewOnly" xml:space="preserve">
     <value>Consultation seule</value>
+  </data>
+  <data name="ViewSession" xml:space="preserve">
+    <value>Voir la session</value>
   </data>
   <data name="ViewingPaused" xml:space="preserve">
     <value>Vision en pause</value>

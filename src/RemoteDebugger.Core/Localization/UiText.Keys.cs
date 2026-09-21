@@ -50,6 +50,7 @@ public static partial class UiText
     public static string ChoosePcAndCode => Get(nameof(ChoosePcAndCode));
     public static string ChoosePcPeriod => Get(nameof(ChoosePcPeriod));
     public static string ClickScreenToControl => Get(nameof(ClickScreenToControl));
+    public static string CloseNotice => Get(nameof(CloseNotice));
     public static string CloseToTray => Get(nameof(CloseToTray));
     public static string CloseToTrayShort => Get(nameof(CloseToTrayShort));
     public static string CodeConsumed => Get(nameof(CodeConsumed));
@@ -221,6 +222,8 @@ public static partial class UiText
     public static string StreamMetrics => Get(nameof(StreamMetrics));
     public static string StreamStoppedResume => Get(nameof(StreamStoppedResume));
     public static string SupportActive => Get(nameof(SupportActive));
+    public static string SupportConnectedNoticeBody => Get(nameof(SupportConnectedNoticeBody));
+    public static string SupportConnectedNoticeTitle => Get(nameof(SupportConnectedNoticeTitle));
     public static string SupportEnded => Get(nameof(SupportEnded));
     public static string SupportEndedNewCode => Get(nameof(SupportEndedNewCode));
     public static string SupportSessionCaption => Get(nameof(SupportSessionCaption));
@@ -255,6 +258,7 @@ public static partial class UiText
     public static string VerifiedIdentity => Get(nameof(VerifiedIdentity));
     public static string VersionSynchronized => Get(nameof(VersionSynchronized));
     public static string ViewOnly => Get(nameof(ViewOnly));
+    public static string ViewSession => Get(nameof(ViewSession));
     public static string ViewingPaused => Get(nameof(ViewingPaused));
     public static string ViewingPausedResume => Get(nameof(ViewingPausedResume));
     public static string ViewingSuspended => Get(nameof(ViewingSuspended));
