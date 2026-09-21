@@ -133,7 +133,7 @@ public sealed partial class MainForm
                 try { _ = await target.CallAsync("power.cancelWait", ct: stop.Token, seconds: 4); } catch { }
                 ClearPowerControllerSession(target);
                 connectionState.SetText(() => restart
-                    ? UiText.RestartWaitStopped + " " + UiText.IssuedRestartCannotBeUndone
+                    ? UiText.RestartWaitStopped + ". " + UiText.IssuedRestartCannotBeUndone
                     : UiText.ShutdownAccepted + " " + UiText.PowerOffNotConfirmed);
             }
             SetFooterMessage(() => cancelled ? UiText.PowerCountdownCancelled : restart ? UiText.RestartWaitStopped : UiText.ShutdownAccepted);
