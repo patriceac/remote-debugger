@@ -776,10 +776,11 @@ public sealed class InternetTransportTests
         var failed = new ScriptedInputStream { FailAfterRequests = 2 };
         var recovered = new ScriptedInputStream();
         int opens = 0;
-        var client = new RemoteClient(new Connection("127.0.0.1", 45832, new string('a', 64), "token"), (_, _) =>
+        var client = new RemoteClient(new Connection("127.0.0.1", 45832, new string('a', 64), "token"), async (_, ct) =>
         {
             opens++;
-            return Task.FromResult<Stream>(opens == 1 ? failed : recovered);
+            if (opens > 1) await Task.Delay(TimeSpan.FromSeconds(3.5), ct);
+            return opens == 1 ? failed : recovered;
         });
 
         await client.SendInputAsync(new { kind = "move", x = 10, y = 20 });
@@ -789,7 +790,25 @@ public sealed class InternetTransportTests
         Assert.Equal(2, opens);
         Assert.Collection(recovered.Requests,
             open => Assert.Equal("ui.input.open", open.Operation),
-            release => { Assert.Equal("ui.input", release.Operation); Assert.Equal("release", release.Args.Str("kind")); });
+            release => { Assert.Equal("ui.input", release.Operation); Assert.Equal("release", release.Args.Str("kind")); Assert.True(release.TimeoutSeconds > 3); });
+        Assert.True((await client.SendInputAsync(new { kind = "keyDown", virtualKey = 65 })).Ok);
+        Assert.Equal(3, recovered.Requests[^1].TimeoutSeconds);
+        Assert.Equal(2, opens);
+    }
+
+    [Theory]
+    [InlineData("down")]
+    [InlineData("keyDown")]
+    public async Task ColdInputStillCancelsClicksAndKeysInsteadOfInjectingThemLate(string kind)
+    {
+        var stream = new ScriptedInputStream();
+        var client = new RemoteClient(new Connection("127.0.0.1", 45832, new string('a', 64), "token"), async (_, ct) =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(3.5), ct);
+            return stream;
+        });
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.SendInputAsync(new { kind }));
+        Assert.Empty(stream.Requests);
     }
 
     private sealed class RecordingSocket : WebSocket

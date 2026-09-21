@@ -173,8 +173,13 @@ internal static class ProvisioningEvidence
     public static ProductIdentity InspectProduct(Process process, string expectedPath, string registeredSid)
     {
         process.Refresh();
-        string executablePath = Path.GetFullPath(process.MainModule?.FileName ?? throw new UnauthorizedAccessException("Product executable path is unavailable."));
-        if (!OpenProcessToken(process.Handle, TokenQuery, out var token)) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        using var processHandle = OpenProcess(0x1000, false, process.Id); // PROCESS_QUERY_LIMITED_INFORMATION also permits elevated targets.
+        if (processHandle.IsInvalid) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        var imagePath = new System.Text.StringBuilder(32768);
+        int imagePathLength = imagePath.Capacity;
+        if (!QueryFullProcessImageName(processHandle, 0, imagePath, ref imagePathLength)) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        string executablePath = Path.GetFullPath(imagePath.ToString());
+        if (!OpenProcessToken(processHandle.DangerousGetHandle(), TokenQuery, out var token)) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
         using (token)
         using (var identity = new WindowsIdentity(token.DangerousGetHandle()))
         {
@@ -371,6 +376,12 @@ internal static class ProvisioningEvidence
         }
         finally { Marshal.FreeHGlobal(buffer); }
     }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern SafeFileHandle OpenProcess(uint desiredAccess, bool inheritHandle, int processId);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool QueryFullProcessImageName(SafeFileHandle process, uint flags, System.Text.StringBuilder imagePath, ref int size);
 
     [DllImport("advapi32.dll", SetLastError = true)]
     private static extern bool OpenProcessToken(IntPtr processHandle, uint desiredAccess, out SafeFileHandle tokenHandle);

@@ -1178,10 +1178,11 @@ public sealed partial class RemoteClient
         var request = new Request(id ?? Guid.NewGuid().ToString(), Connection.Token, operation, args is JsonElement e ? e : Json.Element(args ?? new { }), seconds, controllerBinarySha256);
         return await commands.CallAsync(request, timeout.Token, Connection).ConfigureAwait(false);
     }
-    public async Task<Reply> SendInputAsync(object? args = null, CancellationToken ct = default, int seconds = 3)
+    public async Task<Reply> SendInputAsync(object? args = null, CancellationToken ct = default, int? seconds = null)
     {
+        int inputSeconds = seconds ?? SupportOperationTimeouts.InputSeconds(Json.Element(args ?? new { }).Str("kind"));
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(seconds, 1, 300)));
+        timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(inputSeconds, 1, 300)));
         await inputGate.WaitAsync(timeout.Token).ConfigureAwait(false);
         try
         {
@@ -1192,10 +1193,10 @@ public sealed partial class RemoteClient
                 {
                     Stream transport = await OpenTransportAsync(timeout.Token).ConfigureAwait(false);
                     channel = new PersistentChannel(transport, Connection.Token, controllerBinarySha256, "ui.input.open");
-                    await channel.OpenAsync(timeout.Token, seconds).ConfigureAwait(false);
+                    await channel.OpenAsync(timeout.Token, inputSeconds).ConfigureAwait(false);
                     inputChannel = channel;
                 }
-                return await channel.CallAsync("ui.input", args, timeout.Token, seconds).ConfigureAwait(false);
+                return await channel.CallAsync("ui.input", args, timeout.Token, inputSeconds).ConfigureAwait(false);
             }
             catch
             {

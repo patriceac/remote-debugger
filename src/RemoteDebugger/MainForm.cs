@@ -1858,8 +1858,7 @@ public sealed partial class MainForm : Forms.Form
             bool release = Json.Element(item.Payload).Str("kind") == "release";
             try
             {
-                using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-                RemoteClient.Require(await target.SendInputAsync(item.Payload, deadline.Token, seconds: 3));
+                RemoteClient.Require(await target.SendInputAsync(item.Payload));
                 if (!release) inputBlockMessage = null;
                 if (release && item.Generation == sessionGeneration && ReferenceEquals(target, client))
                 {

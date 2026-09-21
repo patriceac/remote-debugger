@@ -34,7 +34,7 @@ internal static class InteractiveInputBroker
                 ValidateRequest(request);
                 var current = ProcessIdentity.Capture(caller.ProcessId);
                 if (current != caller) throw new UnauthorizedAccessException("The support process identity changed.");
-                using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct); deadline.CancelAfter(TimeSpan.FromSeconds(3));
+                using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct); deadline.CancelAfter(TimeSpan.FromSeconds(SupportOperationTimeouts.InputSeconds(request.Args.Str("kind"))));
                 await Wire.WriteAsync(helper, request, deadline.Token);
                 await Wire.WriteAsync(controller, await Wire.ReadAsync<Reply>(helper, deadline.Token), deadline.Token);
             }
@@ -105,7 +105,8 @@ internal sealed class PrivilegedInputSession
                 catch { candidate.Dispose(); throw; }
             }
             var current = pipe ?? throw new OperationCanceledException("Input session ended.");
-            await Wire.WriteAsync(current, new Request(Guid.NewGuid().ToString(), "", "ui.input", Json.Element(args), 3), ct);
+            var payload = Json.Element(args);
+            await Wire.WriteAsync(current, new Request(Guid.NewGuid().ToString(), "", "ui.input", payload, SupportOperationTimeouts.InputSeconds(payload.Str("kind"))), ct);
             RemoteClient.Require(await Wire.ReadAsync<Reply>(current, ct));
         }
         catch { End(); throw; }
