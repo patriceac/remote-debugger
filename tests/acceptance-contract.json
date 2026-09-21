@@ -13,6 +13,7 @@
     "minimumDistinctFrames": 3
   },
   "uiAutomationIds": {
+    "roleController": "roleController",
     "languageSelector": "languageSelector",
     "languageLabel": "languageLabel",
     "headerTitle": "headerTitle",

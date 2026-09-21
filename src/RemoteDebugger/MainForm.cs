@@ -632,7 +632,7 @@ public sealed partial class MainForm : Forms.Form
     private void WireEvents()
     {
         roleAgent.Click += (_, _) => SelectRole(0);
-        roleController.Click += (_, _) => SelectRole(1);
+        roleController.Click += async (_, _) => { SelectRole(1); await ResumeSavedSupportAsync(); };
         navConnection.Click += (_, _) => SelectControllerPage(0); navScreen.Click += (_, _) => SelectControllerPage(1); navProcesses.Click += (_, _) => SelectControllerPage(2); navFiles.Click += (_, _) => SelectControllerPage(3); navDiagnostics.Click += (_, _) => SelectControllerPage(4);
         terminateSession.Click += async (_, _) => await TerminateSupportAsync();
         copyAgentCode.Click += (_, _) => { if (!string.IsNullOrWhiteSpace(CurrentPairingCode)) Forms.Clipboard.SetText(CurrentPairingCode); SetFooterMessage(() => UiText.CodeCopied); RefreshFooter(); };
@@ -715,7 +715,7 @@ public sealed partial class MainForm : Forms.Form
     private async Task ResumeSavedSupportAsync()
     {
         RemoteClient? target = client;
-        if (target == null || supportSession || quitting) return;
+        if (target == null || supportSession || pairingBusy || quitting || terminating) return;
         int generation = ++operationGeneration;
         sessionGeneration++;
         var resumeCts = new CancellationTokenSource();

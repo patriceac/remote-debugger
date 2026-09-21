@@ -32,6 +32,11 @@ internal sealed partial class LabForm
             else Fail("singleinstance.cli", "The command-line helper still runs while the desktop workspace is open", cli);
 
             product.CloseMainWindow(); await Task.Delay(600, stop.Token);
+            using var startup = Launch("startup", "en", startup: true);
+            await WaitForProcessExitAsync(startup, TimeSpan.FromSeconds(10));
+            if (startup.ExitCode != 0 || Native.NativeWindows().Any(window => window.Pid == primaryPid))
+                throw new IOException("Windows startup surfaced the existing tray workspace.");
+            Pass("singleinstance.startup_stays_hidden", "A sign-in launch keeps the existing workspace in the tray");
             WindowState = Forms.FormWindowState.Normal; Activate();
             var simultaneous = Enumerable.Range(0, 3).Select(index => Launch("concurrent-" + index, "fr")).ToArray();
             foreach (var process in simultaneous) await WaitForProcessExitAsync(process, TimeSpan.FromSeconds(10));
@@ -43,9 +48,10 @@ internal sealed partial class LabForm
             CaptureDesktop("single-instance-restored.png");
 
             await QuitLocalizedProductAsync("singleinstance.quit");
-            product = loopbackController = Launch("after-quit", "en");
+            product = loopbackController = Launch("after-quit", "en", plain: true);
             await WaitUiAsync();
-            Pass("singleinstance.after_quit", "A new desktop instance starts after a normal Quit", new { oldPid = primaryPid, newPid = product.Id });
+            Pass("singleinstance.after_quit", "An argument-free shortcut or postinstall launch opens a visible window after Quit", new { oldPid = primaryPid, newPid = product.Id });
+            CaptureDesktop("single-instance-manual-launch.png");
             product.Kill(entireProcessTree: true); await product.WaitForExitAsync(stop.Token);
             product = loopbackController = Launch("after-crash", "en");
             await WaitUiAsync();
@@ -65,13 +71,15 @@ internal sealed partial class LabForm
             CultureInfo.CurrentUICulture = previousCulture;
         }
 
-        Process Launch(string data, string language)
+        Process Launch(string data, string language, bool plain = false, bool startup = false)
         {
             var start = new ProcessStartInfo(application) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(application)! };
             // Normal desktop scope: no loopback-only exemption, even though the
             // controller is offline and the guest network remains disconnected.
-            foreach (string argument in new[] { "--controller", "--data-root", Path.Combine(output, data), "--ui-language", language })
-                start.ArgumentList.Add(argument);
+            if (!plain)
+                foreach (string argument in new[] { "--controller", "--data-root", Path.Combine(output, data), "--ui-language", language })
+                    start.ArgumentList.Add(argument);
+            if (startup) start.ArgumentList.Add("--startup");
             var process = Process.Start(start) ?? throw new IOException("Desktop launch failed.");
             launched.Add(process);
             return process;

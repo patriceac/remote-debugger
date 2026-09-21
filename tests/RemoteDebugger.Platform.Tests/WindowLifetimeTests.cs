@@ -7,13 +7,14 @@ namespace RemoteDebugger.Platform.Tests;
 public sealed class WindowLifetimeTests
 {
     [Fact]
-    public void NormalAndAutomaticLaunchesStartInTheTray()
+    public void OnlyAutomaticLaunchesStartInTheTray()
     {
-        Assert.True(WindowLifetime.StartInTray([]));
+        Assert.False(WindowLifetime.StartInTray([]));
         Assert.True(WindowLifetime.StartInTray(["--startup"]));
         Assert.True(WindowLifetime.StartInTray(["--resume-update"]));
         Assert.False(WindowLifetime.StartInTray(["--controller"]));
         Assert.False(WindowLifetime.StartInTray(["--security"]));
+        Assert.False(WindowLifetime.StartInTray(["--admin-setup"]));
     }
 
     [Theory]

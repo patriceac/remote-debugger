@@ -34,6 +34,17 @@ internal sealed partial class LabForm
                 "The operational tabs are unavailable before a support session");
 
             await ConnectNavigationSessionAsync(pairingCode, "navigation.connected");
+            string savedToken = RemoteClient.Load().Connection.Token;
+            loopbackController!.Kill(entireProcessTree: true);
+            await loopbackController.WaitForExitAsync(stop.Token);
+            product = loopbackController = LaunchLoopbackProduct(true, controllerRoot);
+            await WaitUiAsync();
+            Click("roleController");
+            bool resumed = await WaitForTextAsync("connectionStatus", IsConnected, 60);
+            if (!resumed || RemoteClient.Load().Connection.Token != savedToken)
+                throw new IOException("Take control did not resume the saved session after an ordinary launch.");
+            Pass("navigation.saved_session_resume", "Take control resumes the existing authenticated session without pairing again");
+            CaptureDesktop("navigation-saved-session-resumed.png");
             await OpenControllerPageAsync("navDiagnostics");
             Click("terminateSession");
             bool controllerDisconnected = await WaitForTextAsync("connectionStatus", text => !IsConnected(text), 30);
