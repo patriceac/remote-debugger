@@ -27,19 +27,18 @@ evidence. The Files completion state and shutdown countdown screenshots were
 visually reviewed.
 
 The current application candidate is signed Release **0.5.0**, built from clean
-source `2027b67159526fa5b7db37aef826a3aee8af0ebc`, with SHA-256
-`C457A3DF41CAD5925EFF166FF12D59F8A7DC382B7AAB0F34D54EA6C02FFD54A5`.
+source `207a4025084e7f2a01c03c5d352a6299304fd41e`, with SHA-256
+`69DF1BBA0526740BE718CFA56849EFF26900E1856F8CD7E2438EA80A163F05D0`.
 It additionally treats NUL-only logon notices as empty while retaining real
 interactive banners; Luna's four focused preflight cases passed.
 It also puts the stopped reconnect-wait explanation in the visible connection
-status. The installers below still contain the previous candidate
-`2BBD33B5F481AA5284913BE3D1B39CC9B0AF6A54FE1FA01D3831068E62F5D1FC`;
-they must be rebuilt after power qualification:
+status. This was visually verified on C457; the latest product change separates
+its two sentences with a period. Both installers contain current candidate 69DF:
 
 | Package | SHA-256 | Qualification |
 | --- | --- | --- |
-| Private setup | `6F0E1DB8730159421380AD26C37CEEB98E1E05D0DE23339107A3022D06076361` | Rebuilt and signed; exact-package verification pending |
-| Standard setup | `5BC2C7F416D39775E6DA83CC6AF149FCBE5DB08FA47255511B0DEFE28BEB4FC0` | Built and signed without embedded connection or administrator profiles; no separate install run |
+| Private setup | `7B1502C81488AFF349968557FD83352150994BE750C39FD0B5984CD67C8E9E32` | Rebuilt and signed; exact-package verification pending |
+| Standard setup | `6F04795AB5C7C3B43C2ED15CD64C267FDA50F7EB54C46D954AA5E288B2DDCF16` | Built and signed without embedded connection or administrator profiles; no separate install run |
 
 The private package contains protected connection profiles and is kept local.
 The publisher fingerprint is
@@ -127,9 +126,22 @@ workers ended Off with payload deletion and successful network cleanup, without
 evidence warnings. The harness owner is fixing argument expansion. These
 requests used C457 and Lab
 `B3B93B963F39C8FFF5A004DF556CDE3CD622138C824FC5666DDFC63546008415`.
-The separate Cancel scenario uses the same bytes and is queued as controller
-`executable-test-20260921T220625028Z-edbd402b` and target
-`executable-test-20260921T220625128Z-90fe691a`. Submission is not acceptance. See
+The separate Cancel scenario uses the same C457/B3B93 bytes. Controller
+`executable-test-20260921T220625028Z-edbd402b` displayed the stopped-wait state and
+forgot its connection, then exceeded the Lab's four-minute target-response wait
+at 22:17:32 UTC. Target `executable-test-20260921T220625128Z-90fe691a` completed an
+actual manual boot at 22:14:09 UTC, with 62.90 seconds signed out, one broker
+sign-in and no action replay. Its continuation was only submitted at 22:16:14 UTC
+and remains under observation. The controller returned complete evidence and
+cleaned up successfully; its overall application assertion failed.
+
+The next Lab allows ten minutes for the post-cancel/expiry target reply and
+bounds abandoned target coordination to ten minutes. Neither change alters the
+product's one-hour timer. Current Lab SHA-256 is
+`D5C5773103DD2558D6ADDC90DC81781CF76E1B4C082E22ECC0A7934CB3635A67`.
+The harness owner also identified a missing post-boot guest-network gate and is
+adding exact before/after network attestation before continuation. Actual
+network-category drift has not been established. See
 [support workflow](SUPPORT_WORKFLOW.md). Raw evidence is retained
 under `D:\Disk\VMs\Codex-Harness\Live\Broker\Results\<request-id>`.
 
