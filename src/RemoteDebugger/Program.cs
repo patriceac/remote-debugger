@@ -132,6 +132,16 @@ public static class Program
                 new UpdateAdminStore(Option("--data-root", Vault.DefaultRoot)).Import(Option("--file"));
                 Console.WriteLine(Json.Text(new { ok = true, staged = true })); return 0;
             }
+            if (verb == "admin-status")
+            {
+                bool isAdmin = new UpdateAdminStore(Option("--data-root", Vault.DefaultRoot)).IsAdmin;
+                Console.WriteLine(Json.Text(new { ok = true, isAdmin })); return isAdmin ? 0 : 1;
+            }
+            if (verb == "admin-disable")
+            {
+                bool changed = new UpdateAdminStore(Option("--data-root", Vault.DefaultRoot)).Disable();
+                Console.WriteLine(Json.Text(new { ok = true, isAdmin = false, changed })); return 0;
+            }
             if (verb is "security-migrate" or "security-status")
             {
                 string root = Option("--data-root", Vault.DefaultRoot);

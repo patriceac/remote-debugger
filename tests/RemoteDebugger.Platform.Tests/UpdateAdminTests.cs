@@ -68,6 +68,10 @@ public sealed class UpdateAdminTests
             byte[] before = File.ReadAllBytes(Path.Combine(target, "update-admin.dpapi"));
             restored.Import(backup);
             Assert.Equal(before, File.ReadAllBytes(Path.Combine(target, "update-admin.dpapi")));
+            Assert.True(restored.Disable());
+            Assert.False(restored.IsAdmin);
+            Assert.False(File.Exists(restored.PendingPath));
+            Assert.False(restored.Disable());
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }

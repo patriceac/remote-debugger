@@ -69,6 +69,10 @@ public sealed class InstallerDefinitionTests
         Assert.Contains("--support-refresh", definition, StringComparison.Ordinal);
         Assert.Contains("ewWaitUntilTerminated, ResultCode", definition, StringComparison.Ordinal);
         Assert.Contains("CustomMessage('SupportRefreshFailed')", definition, StringComparison.Ordinal);
+        Assert.Contains("cli admin-status", definition, StringComparison.Ordinal);
+        Assert.Contains("WizardSelectTasks('adminpc')", definition, StringComparison.Ordinal);
+        Assert.Contains("CurPageID = wpSelectTasks", definition, StringComparison.Ordinal);
+        Assert.Contains("cli admin-disable", definition, StringComparison.Ordinal);
     }
 
     private static string ProjectFile(params string[] segments)

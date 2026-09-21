@@ -33,8 +33,7 @@ public sealed partial class MainForm
     }
 
     internal static string UpdateStepNumbers(UpdateStepProgress progress) => progress.Estimated
-        ? progress.Overdue ? UiText.Format(UiText.UpdateEstimateExceeded, progress.Percent)
-            : UiText.Format(UiText.EstimatedUpdateProgress, progress.Percent, FormatTransferEta(progress.Remaining!.Value))
+        ? UiText.Format(UiText.EstimatedUpdateProgress, progress.Percent, FormatTransferEta(progress.Remaining!.Value))
         : UiText.Format(UiText.MeasuredUpdateProgress, progress.Percent,
             progress.Remaining is { } eta ? FormatTransferEta(eta) : UiText.CalculatingTransferEta);
 

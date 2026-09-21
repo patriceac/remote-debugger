@@ -1,6 +1,6 @@
 namespace RemoteDebugger.Core;
 
-public sealed record UpdateStepProgress(int Percent, TimeSpan? Remaining, bool Estimated, bool Overdue = false);
+public sealed record UpdateStepProgress(int Percent, TimeSpan? Remaining, bool Estimated);
 
 /// <summary>Byte-based transfer progress; explicitly estimated timing for opaque remote steps.</summary>
 public sealed class UpdateProgressTracker(IDictionary<string, double> timings, TimeProvider? clock = null)
@@ -50,9 +50,11 @@ public sealed class UpdateProgressTracker(IDictionary<string, double> timings, T
         }
         if (!IsEstimatedStage(Stage)) return new(0, null, false);
         double elapsed = Math.Max(0, Elapsed.TotalSeconds);
-        return new((int)Math.Min(95, elapsed / expectedSeconds * 100),
-            elapsed < expectedSeconds ? TimeSpan.FromSeconds(Math.Ceiling(expectedSeconds - elapsed)) : null,
-            true, elapsed >= expectedSeconds);
+        // Opaque steps have no byte counter. Start from the learned duration,
+        // then continuously revise the remaining-time guess down as work proceeds.
+        double remaining = expectedSeconds * Math.Exp(-elapsed / expectedSeconds);
+        int percent = (int)Math.Clamp(elapsed / (elapsed + remaining) * 100, 0, 99);
+        return new(percent, TimeSpan.FromSeconds(remaining), true);
     }
 
     private static bool Valid(double seconds) => double.IsFinite(seconds) && seconds >= .25 && seconds < 3600;

@@ -2,11 +2,12 @@
 
 ## Update administrator installation
 
-The installer offers **Set up this PC as an admin**, unchecked on every installation.
-Checking it stages an encrypted admin credential and asks for its password at launch.
+The installer offers **Set up this PC as an admin** and checks it when the current
+Windows user already has admin-PC access. Checking it stages an encrypted admin
+credential and asks for its password at launch when access is not already present.
 Successful setup remembers the private update key with DPAPI CurrentUser. Ordinary
-clients receive no private admin key. Reinstalling preserves existing authority even
-when the option is left unchecked. After reinstalling Windows, use the same personal
+clients receive no private admin key. Unchecking the option removes existing admin-PC
+access for that Windows user. After reinstalling Windows, use the same personal
 installer, select the option, and enter the admin password to restore the same identity.
 Keep the personal installer or encrypted `RemoteDebugger-Admin.rdadmin` file available
 for recovery; losing both requires local enrollment or a newly signed authority release.

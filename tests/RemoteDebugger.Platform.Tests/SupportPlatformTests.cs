@@ -138,4 +138,14 @@ public sealed class SupportPlatformTests
 
         Assert.Equal(expected, SupportPlatform.RequiresServiceRefresh(status, "0.4.33"));
     }
+
+    [Fact]
+    public void ServiceRefreshResultPreservesWorkerFailureAndAcceptsLegacyExitCode()
+    {
+        var failed = SupportPlatform.ParseServiceRefreshResult("{\"exitCode\":2,\"error\":\"Service stop timed out.\"}");
+        Assert.Equal(2, failed.ExitCode);
+        Assert.Equal("Service stop timed out.", failed.Error);
+        Assert.Equal(0, SupportPlatform.ParseServiceRefreshResult("0").ExitCode);
+        Assert.Throws<InvalidDataException>(() => SupportPlatform.ParseServiceRefreshResult("not a result"));
+    }
 }

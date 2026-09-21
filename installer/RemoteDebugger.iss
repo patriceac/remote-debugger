@@ -56,7 +56,7 @@ Source: "{#AdminCredentialPath}"; DestDir: "{app}"; DestName: "RemoteDebugger-Ad
 Source: "{#RelayProfilePath}"; DestDir: "{app}"; DestName: "RemoteDebugger-Internet.rdrelay"; Flags: ignoreversion deleteafterinstall
 #endif
 Source: "..\artifacts\release\RemoteDebugger.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\artifacts\release\RemoteDebugger.exe"; DestName: "RemoteDebugger-InstallerHelper.exe"; Flags: dontcopy
+Source: "..\artifacts\release\RemoteDebugger.exe"; DestName: "RemoteDebugger-InstallerHelper.exe"; Flags: dontcopy noencryption
 Source: "..\artifacts\release\RemoteDebugger.publisher.cer"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "..\artifacts\release\build-info.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
@@ -80,6 +80,9 @@ spanish.AdminPcOption=Configurar este PC como administrador (requiere contraseñ
 english.AdminSetupFailed=The protected admin credential could not be staged.
 french.AdminSetupFailed=Les identifiants administrateur protégés n’ont pas pu être préparés.
 spanish.AdminSetupFailed=No se pudo preparar la credencial de administrador protegida.
+english.AdminStatusFailed=The current admin-PC status could not be read or updated.
+french.AdminStatusFailed=L’état actuel de PC administrateur n’a pas pu être lu ou mis à jour.
+spanish.AdminStatusFailed=No se pudo leer o actualizar el estado actual de PC administrador.
 english.InstallerShutdownFailed=The running Remote Debugger application could not be closed before installation.
 french.InstallerShutdownFailed=Remote Debugger n’a pas pu être fermé avant l’installation.
 spanish.InstallerShutdownFailed=No se pudo cerrar Remote Debugger antes de la instalación.
@@ -96,6 +99,52 @@ spanish.InternetSetupFailed=No se pudo guardar la configuración de Internet. Ej
 #endif
 
 [Code]
+var
+  AdminPcInitiallySelected: Boolean;
+  AdminPcTaskInitialized: Boolean;
+
+function InstallerHelperPath(): String;
+begin
+  Result := ExpandConstant('{tmp}\RemoteDebugger-InstallerHelper.exe');
+  if not FileExists(Result) then ExtractTemporaryFile('RemoteDebugger-InstallerHelper.exe');
+end;
+
+function InitializeSetup(): Boolean;
+var
+  HelperPath: String;
+  ResultCode: Integer;
+begin
+  Result := True;
+#ifdef AdminCredentialPath
+  HelperPath := InstallerHelperPath();
+  if not ExecAsOriginalUser(HelperPath, 'cli admin-status', ExpandConstant('{tmp}'),
+    SW_HIDE, ewWaitUntilTerminated, ResultCode) or ((ResultCode <> 0) and (ResultCode <> 1)) then
+  begin
+    MsgBox(CustomMessage('AdminStatusFailed'), mbError, MB_OK);
+    Result := False;
+    Exit;
+  end;
+  AdminPcInitiallySelected := ResultCode = 0;
+#endif
+end;
+
+procedure InitializeAdminPcTask();
+begin
+#ifdef AdminCredentialPath
+  if not AdminPcTaskInitialized then
+  begin
+    if AdminPcInitiallySelected then WizardSelectTasks('adminpc')
+    else WizardSelectTasks('!adminpc');
+    AdminPcTaskInitialized := True;
+  end;
+#endif
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if CurPageID = wpSelectTasks then InitializeAdminPcTask();
+end;
+
 function LaunchArguments(Param: String): String;
 begin
   Result := '';
@@ -110,13 +159,13 @@ var
   ResultCode: Integer;
 begin
   Result := '';
+  InitializeAdminPcTask();
   if CompareText(RemoveBackslashUnlessRoot(WizardDirValue), ExpandConstant('{autopf}\RemoteDebugger')) <> 0 then
   begin
     Result := 'Remote Debugger requires its protected Program Files directory. Remove the /DIR override.';
     Exit;
   end;
-  ExtractTemporaryFile('RemoteDebugger-InstallerHelper.exe');
-  HelperPath := ExpandConstant('{tmp}\RemoteDebugger-InstallerHelper.exe');
+  HelperPath := InstallerHelperPath();
   try
     if not ExecAsOriginalUser(HelperPath, '--installer-user-cleanup', ExpandConstant('{tmp}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
     begin
@@ -160,6 +209,13 @@ begin
           'cli admin-import --file "' + ProfilePath + '"', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
           RaiseException(CustomMessage('AdminSetupFailed'));
         if ResultCode <> 0 then RaiseException(CustomMessage('AdminSetupFailed'));
+      end;
+      if not WizardIsTaskSelected('adminpc') then
+      begin
+        if not ExecAsOriginalUser(ExpandConstant('{app}\{#AppExeName}'),
+          'cli admin-disable', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+          RaiseException(CustomMessage('AdminStatusFailed'));
+        if ResultCode <> 0 then RaiseException(CustomMessage('AdminStatusFailed'));
       end;
     finally
       DeleteFile(ProfilePath);

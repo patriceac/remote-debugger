@@ -25,9 +25,14 @@ public sealed class UpdateProgressTrackerTests
         tracker.Report(stage, 1000, 1000); // A completed transfer is not completed verification/restart.
         Assert.Equal(new(0, TimeSpan.FromSeconds(20), true), tracker.Snapshot());
         clock.Advance(5); tracker.Report(stage, 1000, 1000);
-        Assert.Equal(new(25, TimeSpan.FromSeconds(15), true), tracker.Snapshot());
+        var early = tracker.Snapshot();
+        Assert.InRange(early.Percent, 1, 99);
+        Assert.InRange(early.Remaining!.Value, TimeSpan.Zero, TimeSpan.FromSeconds(20));
         clock.Advance(30);
-        Assert.Equal(new(95, null, true, true), tracker.Snapshot());
+        var late = tracker.Snapshot();
+        Assert.True(late.Percent > early.Percent);
+        Assert.True(late.Remaining < early.Remaining);
+        Assert.True(late.Remaining > TimeSpan.Zero);
         tracker.Report("complete");
         Assert.Equal(new(100, TimeSpan.Zero, false), tracker.Snapshot());
     }

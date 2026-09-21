@@ -15,6 +15,8 @@ internal sealed record SupportProvisionRequest(
     int RequestingProcessId,
     long RequestingProcessStartTicks);
 
+internal sealed record SupportRefreshResult(int ExitCode, string? Error);
+
 internal static partial class SupportInstaller
 {
     private static string RequireInstalledRefreshHost()
@@ -80,6 +82,7 @@ internal static partial class SupportInstaller
     {
         if (!Native.IsElevated()) return 3;
         string? resultPath = null;
+        string? error = null;
         int result;
         try
         {
@@ -94,23 +97,24 @@ internal static partial class SupportInstaller
                 Thread.Sleep(100);
             }
             try { File.Delete(signalPath); } catch (IOException) { }
-            result = RefreshService();
+            result = RefreshService(out error);
         }
         catch (Exception ex)
         {
             TryWriteMaintenanceError("support-refresh-error.txt", ex);
+            error = ex.GetBaseException().Message;
             result = 2;
         }
-        if (resultPath != null) WriteRefreshResult(resultPath, result);
+        if (resultPath != null) WriteRefreshResult(resultPath, new(result, error));
         return result;
     }
 
-    private static void WriteRefreshResult(string path, int result)
+    private static void WriteRefreshResult(string path, SupportRefreshResult result)
     {
         try
         {
             string temp = path + ".new";
-            File.WriteAllText(temp, result.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            File.WriteAllText(temp, JsonSerializer.Serialize(result, Json.Options));
             File.Move(temp, path, true);
         }
         catch (Exception ex) { TryWriteMaintenanceError("support-refresh-result-error.txt", ex); }
@@ -137,8 +141,11 @@ internal static partial class SupportInstaller
         }
     }
 
-    public static int RefreshService()
+    public static int RefreshService() => RefreshService(out _);
+
+    private static int RefreshService(out string? error)
     {
+        error = null;
         if (!Native.IsElevated()) return 3;
         try
         {
@@ -154,7 +161,7 @@ internal static partial class SupportInstaller
             _ = new SecurityIdentifier(configuration.RegisteredUserSid);
             _ = AuthenticodeVerifier.VerifyPinnedTrusted(source, configuration.PublisherThumbprint);
 
-            using var installationLock = SupportPlatformPaths.AcquireUpdateLock();
+            using var installationLock = AcquireUpdateLock(TimeSpan.FromSeconds(30));
             RequireNoActiveUpdate();
             Directory.CreateDirectory(SupportPlatformPaths.InstallDirectory);
             string serviceTemp = SupportPlatformPaths.ServiceExecutable + ".installer.new";
@@ -214,7 +221,18 @@ internal static partial class SupportInstaller
         catch (Exception ex)
         {
             TryWriteMaintenanceError("support-refresh-error.txt", ex);
+            error = ex.GetBaseException().Message;
             return 2;
+        }
+    }
+
+    private static FileStream AcquireUpdateLock(TimeSpan timeout)
+    {
+        var waiting = Stopwatch.StartNew();
+        while (true)
+        {
+            try { return SupportPlatformPaths.AcquireUpdateLock(); }
+            catch (IOException) when (waiting.Elapsed < timeout) { Thread.Sleep(100); }
         }
     }
 
@@ -224,7 +242,8 @@ internal static partial class SupportInstaller
         while (true)
         {
             try { File.Move(source, SupportPlatformPaths.ServiceExecutable, true); return; }
-            catch (IOException) when (deadline.Elapsed < TimeSpan.FromSeconds(5)) { Thread.Sleep(100); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException &&
+                deadline.Elapsed < TimeSpan.FromSeconds(30)) { Thread.Sleep(100); }
         }
     }
 
@@ -232,7 +251,7 @@ internal static partial class SupportInstaller
     {
         using var pipe = new System.IO.Pipes.NamedPipeClientStream(".", SupportPlatformPaths.PipeName,
             System.IO.Pipes.PipeDirection.InOut, System.IO.Pipes.PipeOptions.Asynchronous);
-        pipe.Connect(10000);
+        pipe.Connect(30000);
         SupportPipeIdentity.VerifyServer(pipe);
     }
 
@@ -387,7 +406,7 @@ internal static partial class SupportInstaller
     private static void StopExistingService()
     {
         RunSc(false, "stop", SupportPlatformPaths.ServiceName);
-        for (int attempt = 0; attempt < 40; attempt++)
+        for (int attempt = 0; attempt < 120; attempt++)
         {
             var query = RunSc(false, "query", SupportPlatformPaths.ServiceName);
             if (query.ExitCode != 0 || query.Stdout.Contains("STOPPED", StringComparison.OrdinalIgnoreCase)) return;
@@ -419,7 +438,7 @@ internal static partial class SupportInstaller
         using var service = new ServiceController(SupportPlatformPaths.ServiceName);
         var deadline = Stopwatch.StartNew();
         ServiceControllerStatus? last = null;
-        while (deadline.Elapsed < TimeSpan.FromSeconds(30))
+        while (deadline.Elapsed < TimeSpan.FromSeconds(60))
         {
             service.Refresh();
             last = service.Status;
@@ -428,7 +447,7 @@ internal static partial class SupportInstaller
                 throw new InvalidOperationException($"Support service entered {last} instead of RUNNING during provisioning.");
             Thread.Sleep(250);
         }
-        throw new System.TimeoutException($"Support service remained {last?.ToString() ?? "unavailable"} and did not reach RUNNING within 30 seconds.");
+        throw new System.TimeoutException($"Support service remained {last?.ToString() ?? "unavailable"} and did not reach RUNNING within 60 seconds.");
     }
 
     private static (int ExitCode, string Stdout, string Stderr) RunSc(bool required, params string[] arguments)

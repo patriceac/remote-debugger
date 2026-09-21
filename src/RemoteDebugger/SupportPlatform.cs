@@ -217,8 +217,10 @@ public static class SupportPlatform
         if (!File.Exists(resultPath)) throw new TimeoutException("The protected support service refresh did not finish before its deadline.");
         string resultText = await File.ReadAllTextAsync(resultPath, ct);
         try { File.Delete(resultPath); } catch (IOException) { }
-        if (!int.TryParse(resultText, out int result) || result != 0)
-            throw new InvalidOperationException("The protected support service refresh failed.");
+        var refresh = ParseServiceRefreshResult(resultText);
+        if (refresh.ExitCode != 0)
+            throw new InvalidOperationException("The protected support service refresh failed" +
+                (string.IsNullOrWhiteSpace(refresh.Error) ? "." : ": " + refresh.Error));
 
         await brokerConnections.ClearAsync();
         status = await GetStatusAsync(ct);
@@ -226,6 +228,20 @@ public static class SupportPlatform
             throw new InvalidOperationException("The protected support service refresh did not enable the current elevated-input broker: " + status.Message);
         await maintenance.StartAsync(ct);
         return status;
+    }
+
+    internal static SupportRefreshResult ParseServiceRefreshResult(string value)
+    {
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<SupportRefreshResult>(value, Json.Options);
+            if (parsed != null) return parsed;
+        }
+        catch (JsonException) { }
+        if (int.TryParse(value, System.Globalization.NumberStyles.Integer,
+            System.Globalization.CultureInfo.InvariantCulture, out int legacyExitCode))
+            return new(legacyExitCode, null);
+        throw new InvalidDataException("The protected support service returned an invalid refresh result.");
     }
 
     public static async Task<SupportPlatformStatus> ProvisionAsync(CancellationToken ct = default, bool enableSupport = false)

@@ -28,10 +28,11 @@ the same unlocked profile preserves remembered access. The passphrase is never
 an installer argument. See [security setup](SECURITY_SETUP.md).
 
 When an encrypted `RemoteDebugger-Admin.rdadmin` credential is supplied to the
-builder, the installer also offers **Set up this PC as an admin**, unchecked by
-default. Checking it requires the admin password at launch. Leaving it unchecked
-does not remove existing admin access. Client installations never unlock the
-admin key. Preserve this personal installer for recovery after reinstalling Windows.
+builder, the installer also offers **Set up this PC as an admin**. Its initial check
+state reflects the current Windows user's saved admin-PC access. Checking it requires
+the admin password at launch when access is not already present; unchecking it removes
+that user's existing admin credential. Preserve this personal installer for recovery
+after reinstalling Windows.
 
 The desktop installer owns the Program Files application. Choosing **Enable
 support** still requests one explicit Windows administrator approval so the

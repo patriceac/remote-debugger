@@ -14,7 +14,6 @@ public static partial class UiText
     public static string ElapsedTime => Get(nameof(ElapsedTime));
     public static string EstimatedUpdateProgress => Get(nameof(EstimatedUpdateProgress));
     public static string MeasuredUpdateProgress => Get(nameof(MeasuredUpdateProgress));
-    public static string UpdateEstimateExceeded => Get(nameof(UpdateEstimateExceeded));
     public static string PreparingUpdatePackage => Get(nameof(PreparingUpdatePackage));
     public static string FinalizingUpdate => Get(nameof(FinalizingUpdate));
     public static string UpdateControllerFirst => Get(nameof(UpdateControllerFirst));

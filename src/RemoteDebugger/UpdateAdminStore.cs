@@ -96,4 +96,12 @@ internal sealed class UpdateAdminStore(string root, string trustedPublicKey = Up
         Directory.CreateDirectory(root);
         File.WriteAllBytes(PendingPath, bytes);
     }
+
+    public bool Disable()
+    {
+        bool changed = File.Exists(KeyPath) || File.Exists(PendingPath);
+        File.Delete(KeyPath);
+        File.Delete(PendingPath);
+        return changed;
+    }
 }
