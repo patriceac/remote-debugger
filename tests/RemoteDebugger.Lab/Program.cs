@@ -100,6 +100,7 @@ internal sealed partial class LabForm : Forms.Form
         this.output = Path.GetFullPath(output);
         this.scope = scope.Trim().ToLowerInvariant();
         if (this.role == "internetinstaller" && this.scope == "demo-hold") stop.CancelAfter(TimeSpan.FromHours(2));
+        if (this.role.StartsWith("power", StringComparison.Ordinal)) stop.CancelAfter(TimeSpan.FromHours(2));
         this.updateVariant = updateVariant.Trim().ToLowerInvariant();
         application = applicationPath == null ? ResolveApplicationPath(this.role, this.updateVariant) : Path.GetFullPath(applicationPath);
         if (!File.Exists(application)) throw new FileNotFoundException("Release artifact missing.", application);
@@ -135,6 +136,12 @@ internal sealed partial class LabForm : Forms.Form
                     await PrepareBrokerProvisioningAsync();
                 if (role == "workflowagent") await WorkflowAgentAsync();
                 else if (role == "workflowcontroller") await WorkflowControllerAsync();
+                else if (role == "poweragent") await PowerAgentAsync(0);
+                else if (role == "powerafterfirst") await PowerAgentAsync(1);
+                else if (role == "poweraftersecond") await PowerAgentAsync(2);
+                else if (role == "powercontroller-cancel") await PowerControllerAsync("cancel");
+                else if (role == "powercontroller-expiry") await PowerControllerAsync("expiry");
+                else if (role == "powercontroller-shutdown") await PowerControllerAsync("shutdown");
                 else if (role == "localization") await LocalizationReviewAsync();
                 else if (role == "input") await PrivilegedInputReviewAsync();
                 else if (role == "languageselection") await LanguageSelectionReviewAsync();
@@ -241,7 +248,7 @@ internal sealed partial class LabForm : Forms.Form
         File.WriteAllText(Path.Combine(output, "progress.json"), Json.Text(new { schemaVersion = 2, role, scope, updateVariant, checks = snapshot }));
     }
 
-    private async Task FinishAsync(string? fatal = null)
+    private async Task FinishAsync(string? fatal = null, string markerName = "lab-result.json")
     {
         CheckRecord[] snapshot;
         lock (checkLock) snapshot = checks.ToArray();
@@ -264,9 +271,13 @@ internal sealed partial class LabForm : Forms.Form
             checks = snapshot,
             fatal
         };
-        string marker = Path.Combine(output, "lab-result.json");
+        string marker = Path.Combine(output, markerName);
         string temporary = marker + ".tmp";
-        await File.WriteAllTextAsync(temporary, Json.Text(result), stop.Token);
+        using (var stream = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
+        {
+            await JsonSerializer.SerializeAsync(stream, result, Json.Options, stop.Token);
+            await stream.FlushAsync(stop.Token); stream.Flush(true);
+        }
         File.Move(temporary, marker, true);
     }
 
