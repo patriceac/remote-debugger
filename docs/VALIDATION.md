@@ -76,7 +76,11 @@ using the request-private DPAPI credential. Its continuations observe the
 product's registered RunOnce launch; its expiry scenario uses the real hour.
 The adapter builds without changing the C613 Release artifact. Luna's ten
 focused provisioning/binding checks and the submission script's syntax check
-passed. See
+passed. All four `-PrepareOnly` scenarios also passed request/plan assertions:
+exact artifact hashes and setup arguments, shared isolated cohorts, credential
+fixtures limited to the relevant roles, Automatic/Manual boot ordering, and the
+real-hour observation interval. This generated requests only; no native power
+scenario was submitted. See
 [support workflow](SUPPORT_WORKFLOW.md). Raw evidence is retained
 under `D:\Disk\VMs\Codex-Harness\Live\Broker\Results\<request-id>`.
 
