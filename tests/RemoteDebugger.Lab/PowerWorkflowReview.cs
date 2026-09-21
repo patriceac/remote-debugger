@@ -207,7 +207,8 @@ internal sealed partial class LabForm
                 _ = await PowerMessageAsync("POWER_DONE"); await FinishAsync(); return;
             }
 
-            await WaitWorkflowAsync(() => Task.FromResult(Value(PowerControl(progress, "powerState")) == UiText.DesktopReady), 300);
+            try { await WaitWorkflowAsync(() => Task.FromResult(Value(PowerControl(progress, "powerState")) == UiText.DesktopReady), 300); }
+            catch (TimeoutException) { await CapturePowerReturnDiagnosticsAsync(remote); throw; }
             var state = await PowerMessageAsync("POWER_STATUS", 120);
             if (state.Int("boot") != boot || state.Str("bootId") == priorBoot) throw new IOException("The continuation did not observe the expected new boot.");
             if (!Safety.Equal(RemoteClient.Load().Connection.Token, connection.Token)) throw new IOException("Restart silently replaced the authorized support grant.");
@@ -236,6 +237,16 @@ internal sealed partial class LabForm
         }
         await remote.EndSessionAsync(stop.Token);
         _ = await PowerMessageAsync("POWER_DONE"); await FinishAsync();
+    }
+
+    private async Task CapturePowerReturnDiagnosticsAsync(RemoteClient remote)
+    {
+        var observations = new Dictionary<string, object>();
+        try { observations["target"] = await PowerMessageAsync("POWER_STATUS", 5); }
+        catch (Exception ex) { observations["targetError"] = ex.GetType().Name + ": " + ex.Message; }
+        try { observations["heartbeat"] = await remote.CallAsync("session.heartbeat", ct: stop.Token, seconds: 5); }
+        catch (Exception ex) { observations["heartbeatError"] = ex.GetType().Name + ": " + ex.Message; }
+        await File.WriteAllTextAsync(Path.Combine(output, "power-return-diagnostics.json"), Json.Text(observations), stop.Token);
     }
 
     private async Task<JsonElement> RequireCleanPowerPreflightAsync(RemoteClient remote)

@@ -170,6 +170,8 @@ internal sealed partial class LabForm : Forms.Form
             {
                 Record("lab.fatal", "The acceptance Lab completed without hiding an exception", "fail", true, new { error = ex.ToString() });
                 await FinishAsync(ex.ToString());
+                if (role is "poweragent" or "powerafterfirst")
+                    await FinishAsync(ex.ToString(), role == "poweragent" ? "power-before-boot-1.json" : "power-before-boot-2.json");
             }
         };
         FormClosed += (_, _) =>
