@@ -278,7 +278,14 @@ internal static partial class SupportInstaller
         using var process = Process.Start(start) ?? throw new IOException("Windows did not start the support provisioner.");
         await process.WaitForExitAsync(ct);
         if (process.ExitCode != 0)
-            throw new InvalidOperationException($"Support service provisioning failed (exit code {process.ExitCode}). No privileged capability was reported as ready.");
+        {
+            string? detail = null;
+            string errorPath = Path.Combine(SupportPlatformPaths.StateDirectory, "provisioning-error.txt");
+            try { if (File.GetLastWriteTimeUtc(errorPath) >= process.StartTime.ToUniversalTime()) detail = File.ReadAllText(errorPath); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            throw new InvalidOperationException($"Support service provisioning failed (exit code {process.ExitCode}). No privileged capability was reported as ready." +
+                (detail == null ? "" : "\n" + detail));
+        }
     }
 
     public static int WriteInstallerProvisionRequest(string path)
