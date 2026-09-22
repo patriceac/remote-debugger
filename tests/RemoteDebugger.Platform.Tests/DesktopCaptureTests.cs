@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
 using RemoteDebugger;
 using Xunit;
 
@@ -36,5 +37,36 @@ public sealed class DesktopCaptureTests
         Assert.Equal(firstFingerprint, DesktopCapture.Fingerprint(same, bounds, "layout"));
         Assert.NotEqual(firstFingerprint, DesktopCapture.Fingerprint(changed, bounds, "layout"));
         Assert.NotEqual(firstFingerprint, DesktopCapture.Fingerprint(first, new Rectangle(11, 20, 2, 2), "layout"));
+    }
+
+    [Theory]
+    [InlineData("transparent", true)]
+    [InlineData("opaque-black", false)]
+    [InlineData("colored", false)]
+    public void EmptyFrameIgnoresRowPaddingAndRecognizesNonTransparentPixels(string frame, bool expectedEmpty)
+    {
+        const int width = 2;
+        const int height = 2;
+        const int rowPitch = width * 4 + 4;
+        byte[] bytes = new byte[rowPitch * height];
+        if (frame == "opaque-black")
+            bytes[3] = byte.MaxValue;
+        else if (frame == "colored")
+        {
+            bytes[0] = 0x7f;
+        }
+        bytes[rowPitch - 1] = byte.MaxValue;
+        bytes[rowPitch * 2 - 1] = byte.MaxValue;
+
+        IntPtr data = Marshal.AllocHGlobal(bytes.Length);
+        try
+        {
+            Marshal.Copy(bytes, 0, data, bytes.Length);
+            Assert.Equal(expectedEmpty, DxgiCapture.IsEmptyFrame(data, rowPitch, width, height));
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(data);
+        }
     }
 }

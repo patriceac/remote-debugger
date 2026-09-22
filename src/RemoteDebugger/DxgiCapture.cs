@@ -69,6 +69,10 @@ internal sealed class DxgiCapture : IDisposable
                 context.Map(staging!, 0, MapMode.Read, Vortice.Direct3D11.MapFlags.None, out var mapped).CheckError();
                 try
                 {
+                    // Some drivers initially expose an unpopulated surface despite a successful acquire.
+                    // Let CaptureBuffer use GDI instead of publishing a transparent black first frame.
+                    if (!hasFrame && IsEmptyFrame(mapped.DataPointer, checked((int)mapped.RowPitch), target.Width, target.Height))
+                        throw new InvalidOperationException("Desktop duplication returned an empty initial surface.");
                     var pixels = target.LockBits(new Rectangle(Point.Empty, target.Size), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
                     try
                     {
@@ -84,6 +88,13 @@ internal sealed class DxgiCapture : IDisposable
             }
         }
         finally { duplication.ReleaseFrame().CheckError(); }
+    }
+
+    internal static unsafe bool IsEmptyFrame(IntPtr data, int rowPitch, int width, int height)
+    {
+        for (int y = 0; y < height; y++)
+            if (new ReadOnlySpan<byte>((byte*)data + y * rowPitch, width * 4).ContainsAnyExcept((byte)0)) return false;
+        return true;
     }
 
     public void Dispose()
