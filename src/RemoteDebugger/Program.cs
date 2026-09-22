@@ -217,6 +217,22 @@ public static class Program
             }
             if (verb == "connected")
             {
+                if (args.Contains("--worker"))
+                {
+                    Connection? saved = null; ConnectedRemote? cached = null;
+                    IConnectedRemote Load()
+                    {
+                        // Re-read the small protected connection so target changes take effect.
+                        var connection = JsonSerializer.Deserialize<Connection>(Vault.Read(config), Json.Options)
+                            ?? throw new InvalidDataException("Missing saved connection.");
+                        if (cached == null || connection != saved)
+                        { saved = connection; cached = new ConnectedRemote(new RemoteClient(connection)); }
+                        return cached;
+                    }
+                    await ConnectedWorker.RunAsync(Console.In, Console.Out, Load, ct.Token,
+                        () => new IncidentLog(Option("--data-root", Vault.DefaultRoot)));
+                    return 0;
+                }
                 string path = Option("--request");
                 bool monitorInput = path == "-" && args.Contains("--cancel-on-stdin-close");
                 string input = path != "-" ? await File.ReadAllTextAsync(path, ct.Token) : monitorInput

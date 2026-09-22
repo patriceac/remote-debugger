@@ -65,48 +65,73 @@ internal static unsafe class FfmpegRuntime
 
 internal sealed unsafe class H264Encoder : IDisposable
 {
-    private readonly int sourceWidth;
-    private readonly int sourceHeight;
-    private readonly int width;
-    private readonly int height;
-    private readonly AVCodecContext* context;
-    private readonly AVFrame* yuv;
-    private readonly AVPacket* packet;
-    private readonly SwsContext* scaler;
+    private readonly int sourceWidth, sourceHeight, width, height, fps, quality;
+    private AVCodecContext* context;
+    private AVFrame* yuv;
+    private AVPacket* packet;
+    private SwsContext* scaler;
     private bool disposed;
+    private readonly MemoryStream encoded = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> unavailable = new();
+    internal string Name { get; private set; } = "libx264";
+    internal string? FallbackReason { get; private set; }
 
-    public H264Encoder(int sourceWidth, int sourceHeight, int width, int height, int fps, int quality)
+    public H264Encoder(int sourceWidth, int sourceHeight, int width, int height, int fps, int quality, bool preferHardware = true)
     {
         FfmpegRuntime.EnsureAvailable();
-        this.sourceWidth = sourceWidth;
-        this.sourceHeight = sourceHeight;
-        this.width = width;
-        this.height = height;
-        var codec = ffmpeg.avcodec_find_encoder_by_name("libx264");
-        if (codec == null) throw new InvalidOperationException("libx264 encoder not found.");
+        this.sourceWidth = sourceWidth; this.sourceHeight = sourceHeight;
+        this.width = width; this.height = height; this.fps = fps; this.quality = quality;
+        if (preferHardware)
+            foreach (string candidate in new[] { "h264_nvenc", "h264_qsv", "h264_amf", "h264_mf" })
+            {
+                if (unavailable.ContainsKey(candidate)) continue;
+                try { Initialize(candidate); return; }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                { unavailable.TryAdd(candidate, 0); ReleaseCodec(); }
+            }
+        try { Initialize("libx264"); }
+        catch { ReleaseCodec(); encoded.Dispose(); throw; }
+    }
+
+    private void Initialize(string name)
+    {
+        var codec = ffmpeg.avcodec_find_encoder_by_name(name);
+        if (codec == null) throw new InvalidOperationException(name + " encoder not found.");
+        Name = name;
+        bool hardware = name != "libx264";
+        var format = hardware ? AVPixelFormat.AV_PIX_FMT_NV12 : AVPixelFormat.AV_PIX_FMT_YUV420P;
         context = ffmpeg.avcodec_alloc_context3(codec);
         if (context == null) throw new InvalidOperationException("Could not allocate the H.264 encoder.");
-        context->width = width;
-        context->height = height;
+        context->width = width; context->height = height;
         context->time_base = new AVRational { num = 1, den = fps };
         context->framerate = new AVRational { num = fps, den = 1 };
-        context->pix_fmt = AVPixelFormat.AV_PIX_FMT_YUV420P;
-        context->max_b_frames = 0;
-        context->gop_size = Math.Max(1, fps * 2);
-        SetOption("preset", "veryfast");
-        SetOption("tune", "zerolatency");
-        SetOption("crf", QualityToCrf(quality).ToString(System.Globalization.CultureInfo.InvariantCulture));
-        Check(ffmpeg.avcodec_open2(context, codec, null), "Open H.264 encoder");
-
+        context->pix_fmt = format; context->max_b_frames = 0; context->gop_size = Math.Max(1, fps * 2);
+        context->bit_rate = Math.Clamp((long)width * height * fps / 8, 2_000_000, 20_000_000);
+        string qp = QualityToCrf(quality).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        switch (name)
+        {
+            case "h264_nvenc":
+                SetOption("preset", "p2"); SetOption("tune", "ull"); SetOption("zerolatency", "1");
+                SetOption("delay", "0"); SetOption("rc", "constqp"); SetOption("qp", qp); break;
+            case "h264_qsv":
+                SetOption("preset", "veryfast"); SetOption("async_depth", "1"); SetOption("look_ahead", "0"); break;
+            case "h264_amf":
+                SetOption("usage", "ultralowlatency"); SetOption("quality", "speed");
+                SetOption("rc", "cqp"); SetOption("qp_i", qp); SetOption("qp_p", qp); break;
+            case "h264_mf":
+                SetOption("hw_encoding", "1"); SetOption("scenario", "display_remoting"); break;
+            default:
+                SetOption("preset", "veryfast"); SetOption("tune", "zerolatency"); SetOption("crf", qp); break;
+        }
+        Check(ffmpeg.avcodec_open2(context, codec, null), "Open " + name);
         yuv = ffmpeg.av_frame_alloc();
         if (yuv == null) throw new InvalidOperationException("Could not allocate the H.264 frame.");
-        yuv->format = (int)AVPixelFormat.AV_PIX_FMT_YUV420P;
-        yuv->width = width;
-        yuv->height = height;
+        yuv->format = (int)format; yuv->width = width; yuv->height = height;
         Check(ffmpeg.av_frame_get_buffer(yuv, 32), "Allocate H.264 frame buffers");
         packet = ffmpeg.av_packet_alloc();
         if (packet == null) throw new InvalidOperationException("Could not allocate the H.264 packet.");
-        scaler = ffmpeg.sws_getContext(sourceWidth, sourceHeight, AVPixelFormat.AV_PIX_FMT_BGRA, width, height, AVPixelFormat.AV_PIX_FMT_YUV420P, (int)SwsFlags.SWS_FAST_BILINEAR, null, null, null);
+        scaler = ffmpeg.sws_getContext(sourceWidth, sourceHeight, AVPixelFormat.AV_PIX_FMT_BGRA, width, height, format,
+            (int)SwsFlags.SWS_FAST_BILINEAR, null, null, null);
         if (scaler == null) throw new InvalidOperationException("Could not allocate the H.264 pixel converter.");
     }
 
@@ -114,9 +139,23 @@ internal sealed unsafe class H264Encoder : IDisposable
     {
         ObjectDisposedException.ThrowIf(disposed, this);
         if (bitmap.Width != sourceWidth || bitmap.Height != sourceHeight) throw new ArgumentException("The captured bitmap dimensions changed during the H.264 stream.", nameof(bitmap));
+        var elapsed = Stopwatch.StartNew();
+        try { var result = EncodeFrame(bitmap, sequence); return result with { EncodeMs = elapsed.Elapsed.TotalMilliseconds }; }
+        catch (Exception ex) when (Name != "libx264" && ex is not OutOfMemoryException)
+        {
+            // A device lost or an encoder that buffers frames cannot stall interactive input.
+            FallbackReason = Name + ": " + ex.Message; unavailable.TryAdd(Name, 0);
+            ReleaseCodec(); Initialize("libx264");
+            var result = EncodeFrame(bitmap, sequence); // New encoder emits SPS/PPS and an IDR frame.
+            return result with { EncodeMs = elapsed.Elapsed.TotalMilliseconds };
+        }
+    }
+
+    private EncodedVideoFrame EncodeFrame(Bitmap bitmap, long sequence)
+    {
         var watch = Stopwatch.StartNew();
-        var area = new Rectangle(0, 0, bitmap.Width, bitmap.Height);
-        var data = bitmap.LockBits(area, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        Check(ffmpeg.av_frame_make_writable(yuv), "Prepare H.264 frame");
+        var data = bitmap.LockBits(new Rectangle(0, 0, bitmap.Width, bitmap.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
         try
         {
             byte*[] source = [(byte*)data.Scan0, null, null, null];
@@ -126,47 +165,37 @@ internal sealed unsafe class H264Encoder : IDisposable
             Check(ffmpeg.sws_scale(scaler, source, sourceStride, 0, bitmap.Height, destination, destinationStride) == height ? 0 : -1, "Convert desktop pixels to H.264");
         }
         finally { bitmap.UnlockBits(data); }
-
         yuv->pts = sequence;
         Check(ffmpeg.avcodec_send_frame(context, yuv), "Encode H.264 frame");
-        using var encoded = new MemoryStream();
+        encoded.SetLength(0);
         while (true)
         {
             ffmpeg.av_packet_unref(packet);
             int result = ffmpeg.avcodec_receive_packet(context, packet);
             if (result == ffmpeg.AVERROR(ffmpeg.EAGAIN) || result == ffmpeg.AVERROR_EOF) break;
             Check(result, "Read H.264 packet");
-            byte[] bytes = new byte[packet->size]; Marshal.Copy((IntPtr)packet->data, bytes, 0, packet->size); encoded.Write(bytes);
+            encoded.Write(new ReadOnlySpan<byte>(packet->data, packet->size));
         }
-        if (encoded.Length == 0) throw new InvalidOperationException("H.264 encoder produced no packet.");
+        if (encoded.Length == 0) throw new InvalidOperationException("H.264 encoder buffered the frame.");
         return new EncodedVideoFrame(encoded.ToArray(), watch.Elapsed.TotalMilliseconds);
     }
 
-    private void SetOption(string name, string value)
-    {
-        Check(ffmpeg.av_opt_set(context->priv_data, name, value, 0), "Set H.264 option " + name);
-    }
-
+    private void SetOption(string name, string value) => Check(ffmpeg.av_opt_set(context->priv_data, name, value, 0), "Set H.264 option " + name);
     private static int QualityToCrf(int quality) => Math.Clamp(39 - (int)Math.Round(Math.Clamp(quality, 30, 95) * 0.18), 20, 34);
-
-    public void Dispose()
+    private void ReleaseCodec()
     {
-        if (disposed) return;
-        disposed = true;
-        var packetToFree = packet; ffmpeg.av_packet_free(&packetToFree);
-        var frameToFree = yuv; ffmpeg.av_frame_free(&frameToFree);
-        var contextToFree = context; ffmpeg.avcodec_free_context(&contextToFree);
-        var scalerToFree = scaler; ffmpeg.sws_freeContext(scalerToFree);
+        var p = packet; ffmpeg.av_packet_free(&p); packet = null;
+        var f = yuv; ffmpeg.av_frame_free(&f); yuv = null;
+        var c = context; ffmpeg.avcodec_free_context(&c); context = null;
+        ffmpeg.sws_freeContext(scaler); scaler = null;
     }
-
+    public void Dispose() { if (disposed) return; disposed = true; ReleaseCodec(); encoded.Dispose(); }
     private static void Check(int result, string operation)
-    {
-        if (result < 0) throw new InvalidOperationException($"{operation} failed ({result}).");
-    }
+    { if (result < 0) throw new InvalidOperationException($"{operation} failed ({result})."); }
 }
-
 internal sealed unsafe class H264Decoder : IDisposable
 {
+    private readonly BitmapPool? bitmapPool;
     private readonly AVCodecContext* context;
     private readonly AVPacket* packet;
     private readonly AVFrame* frame;
@@ -176,8 +205,9 @@ internal sealed unsafe class H264Decoder : IDisposable
     private AVPixelFormat sourceFormat;
     private bool disposed;
 
-    public H264Decoder()
+    public H264Decoder(BitmapPool? bitmapPool = null)
     {
+        this.bitmapPool = bitmapPool;
         FfmpegRuntime.EnsureAvailable();
         var codec = ffmpeg.avcodec_find_decoder(AVCodecID.AV_CODEC_ID_H264);
         if (codec == null) throw new InvalidOperationException("H.264 decoder not found.");
@@ -217,8 +247,9 @@ internal sealed unsafe class H264Decoder : IDisposable
             sourceWidth = width; sourceHeight = height; sourceFormat = format;
         }
 
-        var bitmap = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+        var bitmap = bitmapPool?.Rent(width, height) ?? new Bitmap(width, height, PixelFormat.Format32bppArgb);
         var data = bitmap.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+        bool converted = false;
         try
         {
             byte*[] sourceData = [source->data[0], source->data[1], source->data[2], source->data[3], null, null, null, null];
@@ -226,13 +257,9 @@ internal sealed unsafe class H264Decoder : IDisposable
             byte*[] destinationData = [(byte*)data.Scan0, null, null, null];
             int[] destinationStride = [data.Stride, 0, 0, 0];
             Check(ffmpeg.sws_scale(scaler, sourceData, sourceStride, 0, height, destinationData, destinationStride) == height ? 0 : -1, "Convert H.264 frame for display");
+            converted = true;
         }
-        catch
-        {
-            bitmap.Dispose();
-            throw;
-        }
-        finally { bitmap.UnlockBits(data); }
+        finally { bitmap.UnlockBits(data); if (!converted) { if (bitmapPool == null) bitmap.Dispose(); else bitmapPool.Return(bitmap); } }
         return bitmap;
     }
 
@@ -256,11 +283,11 @@ internal sealed record EncodedVideoFrame(byte[] Data, double EncodeMs);
 
 internal sealed class DecodedStreamFrame : IDisposable
 {
-    private Bitmap? image;
+    private BitmapLease? image;
 
-    public DecodedStreamFrame(long sequence, DateTimeOffset capturedUtc, DesktopGeometry geometry, string codec, Bitmap image, double captureEncodeMs, int bytes)
+    public DecodedStreamFrame(long sequence, DateTimeOffset capturedUtc, DesktopGeometry geometry, string codec, Bitmap image, double captureEncodeMs, int bytes, BitmapPool? pool = null)
     {
-        Sequence = sequence; CapturedUtc = capturedUtc; Geometry = geometry; Codec = codec; this.image = image; CaptureEncodeMs = captureEncodeMs; Bytes = bytes;
+        Sequence = sequence; CapturedUtc = capturedUtc; Geometry = geometry; Codec = codec; this.image = new BitmapLease(image, pool); CaptureEncodeMs = captureEncodeMs; Bytes = bytes;
     }
 
     public long Sequence { get; }
@@ -269,7 +296,7 @@ internal sealed class DecodedStreamFrame : IDisposable
     public string Codec { get; }
     public double CaptureEncodeMs { get; }
     public int Bytes { get; }
-    public Bitmap TakeImage()
+    public BitmapLease TakeImage()
     {
         var result = image ?? throw new ObjectDisposedException(nameof(DecodedStreamFrame));
         image = null;

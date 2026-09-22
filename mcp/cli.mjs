@@ -1,48 +1,73 @@
 import { spawn } from 'node:child_process';
 
-// One explicit CLI executable, JSON on stdin, no shell or temporary request files.
-export function createCliRunner(executable, connection) {
-  return (request, signal) => new Promise((resolve) => {
-    const failure = (error, message) => ({ id: request.id, ok: false, targetId: request.targetId ?? null,
-      machine: null, data: null, rpcOk: null, exitCode: null, error, message });
-    if (signal?.aborted) return resolve(failure('cancelled', 'Cancelled before dispatch.'));
-    const args = ['cli', 'connected', '--request', '-', '--cancel-on-stdin-close'];
+// Reuse one authenticated worker; serialize operations and never replay a failed call.
+export function createCliRunner(executable, connection, { spawnProcess = spawn } = {}) {
+  let child, active, tail = Promise.resolve(), closed = false;
+  const failure = (request, error, message) => ({ id: request.id, ok: false,
+    targetId: request.targetId ?? null, machine: null, data: null, rpcOk: null, exitCode: null, error, message });
+  function start() {
+    const args = ['cli', 'connected', '--worker'];
     if (connection) args.push('--connection', connection);
-    const child = spawn(executable, args, { shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
-    let output = '', stderr = '', bytes = 0, stopReason, killTimer;
-    const stop = (reason) => {
-      if (stopReason) return;
-      stopReason = reason;
-      // EOF cancels the CLI token, which sends a bounded cancel RPC for commands.
-      child.stdin.end();
-      killTimer = setTimeout(() => child.kill(), 7000);
-    };
-    const abort = () => stop('cancelled');
-    signal?.addEventListener('abort', abort, { once: true });
-    if (signal?.aborted) abort();
-    const timeout = setTimeout(() => stop('timeout'), (request.timeoutSeconds + 10) * 1000);
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', chunk => {
-      bytes += Buffer.byteLength(chunk);
-      if (bytes > 24 * 1024 * 1024) stop('output_limit');
-      else output += chunk;
+    const process = spawnProcess(executable, args, { shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+    child = process;
+    let output = '', bytes = 0, stderr = '';
+    process.stdout.setEncoding('utf8');
+    process.stderr.setEncoding('utf8');
+    process.stdout.on('data', chunk => {
+      bytes += Buffer.byteLength(chunk); output += chunk;
+      if (bytes > 24 * 1024 * 1024) { output = ''; active?.stop('output_limit'); return; }
+      let end;
+      while ((end = output.indexOf('\n')) >= 0) {
+        const line = output.slice(0, end); output = output.slice(end + 1); bytes = Buffer.byteLength(output);
+        let reply;
+        try { reply = JSON.parse(line); } catch { /* Fail closed below. */ }
+        if (!active || reply?.id !== active.request.id || typeof reply?.ok !== 'boolean') {
+          if (child === process) child = undefined;
+          process.kill(); active?.finish(failure(active.request, 'invalid_reply', 'The worker returned an invalid reply. Remote outcome may be unknown.')); return;
+        }
+        active.finish(reply);
+      }
     });
-    child.stderr.on('data', chunk => { if (stderr.length < 4096) stderr += chunk.slice(0, 4096 - stderr.length); });
-    child.stdin.on('error', () => {}); // An exited CLI closes its input pipe.
-    child.once('error', error => { stderr = error.message; });
-    child.once('close', code => {
-      clearTimeout(timeout); clearTimeout(killTimer);
-      signal?.removeEventListener('abort', abort);
-      let reply;
-      try { reply = JSON.parse(output); } catch { /* Normalize startup / transport failures below. */ }
-      if (reply?.id !== request.id || typeof reply?.ok !== 'boolean')
-        return resolve(failure(stopReason ?? 'cli_failed', stderr || 'The CLI did not return a valid connected-session response. Remote outcome may be unknown; retain this request ID.'));
-      if (stopReason && reply.ok) return resolve({ ...reply, ok: false, error: stopReason,
-        message: 'The call was interrupted. Inspect the returned result before retrying with the same request ID.' });
-      if (code !== 0 && reply.ok) return resolve({ ...reply, ok: false, error: 'cli_failed', message: `The CLI exited with code ${code}.` });
-      resolve(reply);
+    process.stderr.on('data', chunk => { if (stderr.length < 4096) stderr += chunk.slice(0, 4096 - stderr.length); });
+    process.stdin.on('error', () => {});
+    process.once('error', error => { stderr = error.message; });
+    process.once('close', () => {
+      if (child !== process) return;
+      child = undefined;
+      active?.finish(failure(active.request, 'cli_failed', stderr || 'Worker closed. Remote outcome may be unknown; retain this request ID.'));
     });
-    if (!stopReason) child.stdin.write(JSON.stringify(request) + '\n');
-  });
+  }
+  const run = (request, signal) => {
+    const task = tail.then(() => new Promise(resolve => {
+      if (signal?.aborted || closed) return resolve(failure(request, 'cancelled', 'Cancelled before dispatch.'));
+      if (!child) start();
+      let stopReason, killTimer;
+      const stop = reason => {
+        if (stopReason) return;
+        stopReason = reason;
+        child?.stdin.write(JSON.stringify({ cancel: request.id }) + '\n');
+        killTimer = setTimeout(() => child?.kill(), 7000);
+      };
+      const abort = () => stop('cancelled');
+      const timeout = setTimeout(() => stop('timeout'), (request.timeoutSeconds + 10) * 1000);
+      active = { request, stop, finish(reply) {
+        clearTimeout(timeout); clearTimeout(killTimer); signal?.removeEventListener('abort', abort); active = undefined;
+        if (stopReason) reply = { ...reply, ok: false, error: stopReason,
+          message: 'The call was interrupted. Inspect its result before retrying with the same request ID.' };
+        resolve(reply);
+      }};
+      signal?.addEventListener('abort', abort, { once: true });
+      child.stdin.write(JSON.stringify(request) + '\n');
+      if (signal?.aborted) abort();
+    }));
+    tail = task.catch(() => {});
+    return task;
+  };
+  run.close = () => {
+    closed = true;
+    const process = child;
+    process?.stdin.end();
+    if (process) setTimeout(() => process.kill(), 7000).unref();
+  };
+  return run;
 }

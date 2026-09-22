@@ -7,6 +7,8 @@ public static class StreamPolicy
     public const double H264EncodeBudgetRatio = 0.75;
     public const double H264MinimumEncodeBudgetMs = 50;
     public static int ClampFps(int requested) => Math.Clamp(requested, 1, MaximumFps);
+    public static int IdleDelayMs(int unchangedFrames, int fps) =>
+        Math.Min(1000, (1000 / ClampFps(fps)) * (1 << Math.Min(5, Math.Max(0, unchangedFrames) / 3)));
     public static (int Fps, int MaxWidth, int Quality) ViewingSettings(bool relayEconomy) =>
         relayEconomy ? (3, 1280, 55) : (MaximumFps, 1920, 65);
 

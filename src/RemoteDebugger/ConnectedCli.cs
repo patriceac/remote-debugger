@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text.Json;
 using RemoteDebugger.Core;
 
@@ -21,9 +20,7 @@ internal sealed class ConnectedRemote(RemoteClient client) : IConnectedRemote
     public Task<JsonElement> UploadAsync(string local, string remote, CancellationToken ct) => client.UploadAsync(local, remote, ct);
     public async Task<JsonElement> DownloadAsync(string remote, string local, CancellationToken ct)
     {
-        await client.DownloadAsync(remote, local, ct);
-        await using var file = File.OpenRead(local);
-        return Json.Element(new { file = local, size = file.Length, sha256 = Convert.ToHexString(await SHA256.HashDataAsync(file, ct)) });
+        return Json.Element(await client.DownloadAsync(remote, local, ct));
     }
 }
 
@@ -77,7 +74,8 @@ internal static class ConnectedCli
             if (expected.Length > 0 && !Safety.Equal(target, expected))
                 throw new RemoteOperationException("target_changed", "The support session changed. Call remote_status again.");
 
-            var status = RemoteClient.Require(await remote.CallAsync("status", new { }, budget.Token, Guid.NewGuid().ToString(), Math.Min(seconds, 15)));
+            var status = operation == "status" || state.Str("machine").Length == 0
+                ? RemoteClient.Require(await remote.CallAsync("status", new { }, budget.Token, Guid.NewGuid().ToString(), Math.Min(seconds, 15))) : state;
             machine = status.Str("machine");
             if (string.IsNullOrWhiteSpace(machine)) throw new IOException("The agent did not identify its computer.");
             bool matched = state.TryGetProperty("binaryMatched", out var match) && match.ValueKind == JsonValueKind.True;

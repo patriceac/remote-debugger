@@ -18,6 +18,29 @@ public sealed partial class MainForm
     private bool economyPreferred = true, updatingEconomy, loadingViewerPreferences;
     private string viewerFingerprint = "";
     private string remoteDeviceName = "";
+    private BitmapLease? displayedFrame;
+    private long lastStreamStatistics;
+
+    private void ShowFrame(BitmapLease image)
+    {
+        var previous = displayedFrame;
+        displayedFrame = image; screen.Image = image.Image;
+        previous?.Dispose(); screen.Invalidate();
+    }
+
+    private void ClearDisplayedFrame()
+    { screen.Image = null; displayedFrame?.Dispose(); displayedFrame = null; }
+
+    private void UpdateStreamStatistics(int bytes, double captureEncodeMs)
+    {
+        if (liveStream == null || streamStartedUtc is not { } started) return;
+        streamFrames++; streamBytes += bytes;
+        if (streamFrames != 1 && System.Diagnostics.Stopwatch.GetElapsedTime(lastStreamStatistics).TotalMilliseconds < 250) return;
+        lastStreamStatistics = System.Diagnostics.Stopwatch.GetTimestamp();
+        double seconds = Math.Max(0.001, (DateTimeOffset.UtcNow - started).TotalSeconds);
+        streamStatus.SetText(() => StreamStatusWithRoute(UiText.Format(UiText.StreamMetrics, streamCodec, streamFrames / seconds, streamBytes * 8 / seconds / 1_000_000d, captureEncodeMs)));
+        SetFooterDetail(() => streamStatus.Text); RefreshFooter();
+    }
     private Forms.Panel? fullScreenHost;
     private Forms.TableLayoutPanel? viewerHost;
     private Rectangle windowedBounds;

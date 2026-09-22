@@ -19,6 +19,7 @@ public sealed partial class Operations
     private readonly ConcurrentDictionary<int, string> started = new();
     public MaintenanceSession Maintenance { get; }
     public IncidentLog Diagnostics { get; }
+    internal ResourceSampling Resources { get; } = new();
     public Operations(string root) { Root = root; Maintenance = new(root); Diagnostics = new(root); Directory.CreateDirectory(Workspace); Directory.CreateDirectory(Transfers); PruneHistory(); }
     public void Record(string id, string operation, DateTimeOffset start, bool ok, string? error, JsonElement data)
     {
@@ -81,7 +82,7 @@ public sealed partial class Operations
                     byte[] data = new byte[256 * 1024]; int n = await f.ReadAsync(data, ct); return new { offset, data = Convert.ToBase64String(data, 0, n) };
                 }
             case "files": return new DirectoryInfo(string.IsNullOrWhiteSpace(a.Str("path")) ? Workspace : Resolve(a.Str("path"))).EnumerateFileSystemInfos().Take(1000).Select(x => new { x.Name, path = x.FullName, directory = x.Attributes.HasFlag(FileAttributes.Directory), size = x is FileInfo file ? (long?)file.Length : null, modifiedUtc = x.LastWriteTimeUtc }).ToArray();
-            case "processes": return await ResourceSampling.ProcessesAsync(ct);
+            case "processes": return await Resources.ProcessesAsync(ct);
             case "process.info": return await ProcessInfoAsync(a.Int("pid"), ct);
             case "start":
             {
@@ -110,6 +111,16 @@ public sealed partial class Operations
             case "ui.key": Native.Key(a.Int("pid"), a.Str("key")); return new { sent = true };
             case "ui.mouse": Native.Mouse(a.Int("pid"), a.Int("x"), a.Int("y")); return new { clicked = true };
             case "ui.input":
+                if (a.Str("kind") == "batch")
+                {
+                    var events = a.GetProperty("events");
+                    if (events.ValueKind != JsonValueKind.Array || events.GetArrayLength() is < 1 or > 16 ||
+                        events.EnumerateArray().Any(e => e.Str("kind") is "batch" or "release" or "secureAttention"))
+                        throw new ArgumentException("Invalid input batch.");
+                    foreach (var item in events.EnumerateArray())
+                    { ct.ThrowIfCancellationRequested(); await ExecuteAsync("ui.input", item, ct); }
+                    return new { sent = true };
+                }
                 if (a.Str("kind") == "release") await Maintenance.RecoverInputAsync(ct);
                 if (Maintenance.Enabled && Maintenance.CurrentStatus.Active) await Maintenance.SendInputAsync(a, ct);
                 else Native.HandleInput(a);
@@ -129,7 +140,7 @@ public sealed partial class Operations
                 if (!Maintenance.Enabled) throw new InvalidOperationException(MaintenanceSession.DisabledMessage);
                 return await Maintenance.RunAsync(a.Str("file"), a.Strings("arguments"), ct);
             case "platform.ensureCurrent": return await SupportPlatform.EnsureCurrentServiceAsync(Maintenance, ct);
-            case "system": return await ResourceSampling.SystemAsync(ct);
+            case "system": return await Resources.SystemAsync(ct);
             case "network": return await PowerShellAsync("[pscustomobject]@{Adapters=@(Get-NetIPConfiguration | Select-Object InterfaceAlias,IPv4Address,IPv4DefaultGateway,DNSServer);Statistics=@(Get-NetAdapterStatistics | Select-Object Name,ReceivedBytes,SentBytes)} | ConvertTo-Json -Depth 5 -Compress", ct);
             case "services": return await PowerShellAsync("Get-Service | Select-Object Name,DisplayName,Status,StartType | ConvertTo-Json -Compress", ct);
             case "events":

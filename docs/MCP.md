@@ -1,11 +1,11 @@
 # Local MCP tools
 
 The adapter runs on the controlling PC over stdio and invokes the signed Release
-CLI's `connected` verb. It uses the existing authenticated client, verified
+CLI's persistent `connected --worker` process. It uses the existing authenticated client, verified
 transfers, and provisioned administrator broker. It adds no listener, remote
 component, credentials, pairing, or automatic synchronization.
 
-Requires Node 20+ to build and Remote Debugger 0.4.47+ on the controller. The normal
+Requires Node 20+ to build and Remote Debugger 0.5.2+ on the controller. The normal
 exact-binary requirement still applies to the receiving agent. Connect and
 synchronize through the Remote Debugger application before using action tools.
 Local `remote_reports` requires controller version 0.5.0+ and works without a connected PC.
@@ -42,7 +42,7 @@ Codex settings after configuration changes. See the
 
 For remote actions, call `remote_status` first and pass its opaque `targetId` to subsequent tools. Local `remote_reports` works independently.
 This binds the certificate/credential and agent process/session start. The CLI
-loads the profile once, rejects another computer before contacting it, and
+reloads the small protected profile for each request, reuses connections while it is unchanged, rejects another computer before contacting it, and
 rejects a changed session before dispatch. Status also reports binary mismatches;
 other operations fail until the binaries match, without attempting an update.
 
@@ -65,7 +65,7 @@ an MCP error even when the RPC succeeded. Screenshot bytes appear as image conte
 with metadata in the structured result.
 
 `timeoutSeconds` is an overall 1–300 second budget including session checks.
-MCP cancellation closes the CLI input pipe; the CLI cancels work and attempts a
+MCP cancellation sends a request-specific cancellation message; closing the adapter also closes the worker input pipe. The CLI cancels work and attempts a
 bounded cancellation RPC for a running command. A transport failure may leave an
 uncertain outcome. Inspect state, keep the returned ID, and supply the same
 `requestId` for an uncertain command retry in the same session. The existing

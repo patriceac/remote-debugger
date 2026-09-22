@@ -9,6 +9,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="9.0.1" />
     <ProjectReference Include="../../src/RemoteDebugger/RemoteDebugger.csproj" />
     <Compile Include="../UpdateAcceptanceAuthority.cs" Link="UpdateAcceptanceAuthority.cs" />
     <Content Include="../acceptance-contract.json" Link="acceptance-contract.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" ExcludeFromSingleFile="true" />

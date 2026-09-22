@@ -1011,7 +1011,9 @@ public sealed partial class MainForm : Forms.Form
         RefreshClipboardSharing();
         SampleDiagnostics();
         RefreshPowerHold();
-        UpdateAgentState(); UpdateSupportConnectionNotice(); if (PrivateInternet) UpdatePrivateAgentState(); UpdateInternetState(); UpdateHeader(); RefreshControllerControls(); RefreshFooter(); RefreshInputStatus();
+        UpdateSupportConnectionNotice();
+        if (!Visible || WindowState == Forms.FormWindowState.Minimized) return;
+        UpdateAgentState(); if (PrivateInternet) UpdatePrivateAgentState(); UpdateInternetState(); UpdateHeader(); RefreshControllerControls(); RefreshFooter(); RefreshInputStatus();
         if (fleetRefreshing || fleet.Values.Any(device => NeedsFleetProgressAnimation(device.State))) peers.Invalidate();
         if (updateProgressArea.Visible && updateProgressFill.BackColor == Teal) RefreshUpdateProgress();
         if (!agentIdle && agent?.Operations.Maintenance is { } maintenance)
@@ -1230,7 +1232,7 @@ public sealed partial class MainForm : Forms.Form
         if (liveStream != null && controllerPages.SelectedIndex == 1 && index != 1) StopStream(() => UiText.ViewingSuspended);
         controllerPages.SelectedIndex = index; UpdateHeader(); RefreshControllerControls(); RefreshFooter();
         if (index == 1 && supportSession && client != null && liveStream == null) _ = StartStreamAsync();
-        if (index == 2 && processRows.Count == 0 && supportSession && heartbeatHealthy) _ = RefreshResourcesAsync();
+        if (index == 2) { RenderProcesses(); if (processRows.Count == 0 && supportSession && heartbeatHealthy) _ = RefreshResourcesAsync(); }
         if (index == 3 && fileRows.Count == 0 && supportSession && heartbeatHealthy) _ = BrowseFilesAsync();
     }
 
@@ -1747,7 +1749,7 @@ public sealed partial class MainForm : Forms.Form
             return;
         }
         ClearReconnectWarning();
-        geometry = frame.Geometry; using var ms = new MemoryStream(Convert.FromBase64String(frame.Data)); using var image = Image.FromStream(ms); var previous = screen.Image; screen.Image = new Bitmap(image); previous?.Dispose(); screen.Refresh(); liveFrameFresh = true; liveBadge.Visible = true; streamOverlay.Visible = false; RefreshInputStatus();
+        geometry = frame.Geometry; using var ms = new MemoryStream(Convert.FromBase64String(frame.Data)); using var image = Image.FromStream(ms); ShowFrame(new BitmapLease(new Bitmap(image))); liveFrameFresh = true; liveBadge.Visible = true; streamOverlay.Visible = false; RefreshInputStatus();
         if (liveStream != null && streamStartedUtc is { } started)
         {
             streamFrames++; streamBytes += frame.Data.Length; double seconds = Math.Max(0.001, (DateTimeOffset.UtcNow - started).TotalSeconds); double fps = streamFrames / seconds; double mbps = streamBytes * 8 / seconds / 1_000_000d; streamStatus.SetText(() => StreamStatusWithRoute(UiText.Format(UiText.StreamMetrics, fps, mbps, frame.CaptureEncodeMs))); SetFooterDetail(() => streamStatus.Text); RefreshFooter();
@@ -1780,11 +1782,11 @@ public sealed partial class MainForm : Forms.Form
         {
             geometry = frame.Geometry;
             ClearReconnectWarning();
-            var image = frame.TakeImage(); var previous = screen.Image; screen.Image = image; previous?.Dispose(); screen.Refresh(); liveFrameFresh = true; liveBadge.Visible = true; streamOverlay.Visible = false; RefreshInputStatus();
+            ShowFrame(frame.TakeImage()); liveFrameFresh = true; liveBadge.Visible = true; streamOverlay.Visible = false; RefreshInputStatus();
             if (string.IsNullOrEmpty(streamCodec)) streamCodec = frame.Codec.Equals("h264", StringComparison.OrdinalIgnoreCase) ? "H.264" : "JPEG";
             if (liveStream != null && streamStartedUtc is { } started)
             {
-                streamFrames++; streamBytes += frame.Bytes; double seconds = Math.Max(0.001, (DateTimeOffset.UtcNow - started).TotalSeconds); double fps = streamFrames / seconds; double mbps = streamBytes * 8 / seconds / 1_000_000d; streamStatus.SetText(() => StreamStatusWithRoute(UiText.Format(UiText.StreamMetrics, streamCodec, fps, mbps, frame.CaptureEncodeMs))); SetFooterDetail(() => streamStatus.Text); RefreshFooter();
+                UpdateStreamStatistics(frame.Bytes, frame.CaptureEncodeMs);
             }
         }
         finally { frame.Dispose(); }
@@ -1933,15 +1935,34 @@ public sealed partial class MainForm : Forms.Form
 
     private async Task PumpInputAsync()
     {
+        var moves = new Queue<Task>();
         await foreach (QueuedInput item in inputQueue.ReadAllAsync())
         {
+            string kind = Json.Element(item.Payload).Str("kind");
+            var batch = new List<QueuedInput> { item };
+            if (kind is not ("release" or "secureAttention"))
+                batch.AddRange(inputQueue.TakePending(15, next => next.Generation == item.Generation && ReferenceEquals(next.Client, item.Client)));
+            bool onlyMoves = batch.All(value => Json.Element(value.Payload).Str("kind") == "move");
+            if (!onlyMoves) { await Task.WhenAll(moves); moves.Clear(); }
+            while (moves.TryPeek(out var completed) && completed.IsCompleted) { await moves.Dequeue(); }
+            var sent = SendAsync(batch);
+            if (onlyMoves) { moves.Enqueue(sent); if (moves.Count >= 4) await moves.Dequeue(); }
+            else await sent;
+        }
+        await Task.WhenAll(moves);
+
+        async Task SendAsync(List<QueuedInput> batch)
+        {
+            var item = batch[0];
             RemoteClient target = item.Client;
-            if (!supportSession || item.Generation != sessionGeneration || !ReferenceEquals(target, client)) { item.Applied?.TrySetResult(false); continue; }
             bool release = Json.Element(item.Payload).Str("kind") == "release";
+            if (!supportSession || item.Generation != sessionGeneration || !ReferenceEquals(target, client) || !release && inputState.Suspended)
+            { foreach (var queued in batch) queued.Applied?.TrySetResult(false); return; }
             try
             {
-                RemoteClient.Require(await target.SendInputAsync(item.Payload));
-                item.Applied?.TrySetResult(true);
+                object payload = batch.Count == 1 ? item.Payload : new { kind = "batch", events = batch.Select(value => value.Payload).ToArray() };
+                RemoteClient.Require(await target.SendInputAsync(payload));
+                foreach (var queued in batch) queued.Applied?.TrySetResult(true);
                 if (!release) inputBlockMessage = null;
                 if (release && item.Generation == sessionGeneration && ReferenceEquals(target, client))
                 {
@@ -1952,8 +1973,8 @@ public sealed partial class MainForm : Forms.Form
             }
             catch (Exception ex)
             {
-                item.Applied?.TrySetResult(false);
-                if (item.Generation != sessionGeneration || !ReferenceEquals(target, client)) continue;
+                foreach (var queued in batch) queued.Applied?.TrySetResult(false);
+                if (item.Generation != sessionGeneration || !ReferenceEquals(target, client)) return;
                 RecordIncident("input_failed", ex);
                 inputState.Suspend();
                 if (ex is RemoteOperationException { Code: "input_blocked" }) inputBlockMessage = ex.Message;
@@ -1979,7 +2000,8 @@ public sealed partial class MainForm : Forms.Form
             int? selected = processList.SelectedItems.Count > 0 && processList.SelectedItems[0].Tag is ProcessSortRow row ? row.Pid : null;
             processRows.Clear();
             foreach (var p in data.GetProperty("processes").EnumerateArray()) processRows.Add(new ProcessSortRow(p.Int("pid"), p.Str("name", UiText.Unavailable), NullableDouble(p, "cpuPercentTotalMachine"), NullableLong(p, "workingSetBytes"), NullableBool(p, "responding"), p.Str("window"), NullableDate(p, "startUtc")));
-            lastMeasurementUtc = NullableDate(data, "sampleEndUtc") ?? DateTimeOffset.UtcNow; RenderProcesses(selected);
+            lastMeasurementUtc = NullableDate(data, "sampleEndUtc") ?? DateTimeOffset.UtcNow;
+            if (controllerPages.SelectedIndex == 2 && Visible && WindowState != Forms.FormWindowState.Minimized) RenderProcesses(selected);
             var cpu = NullableDouble(system, "cpuPercentTotalMachine"); cpuSummary.SetText(() => cpu is { } c ? $"{c:F1} %" : UiText.Unavailable);
             long? total = NullableLong(system, "physicalMemoryTotalBytes"), available = NullableLong(system, "physicalMemoryAvailableBytes");
             ramSummary.SetText(() => total is > 0 && available is >= 0 ? FormatBytes(total.Value - available.Value) : UiText.Unavailable);
@@ -1997,7 +2019,30 @@ public sealed partial class MainForm : Forms.Form
     {
         int? topPid = (processList.TopItem?.Tag as ProcessSortRow)?.Pid;
         SetSortIndicator(processList, (int)processSort.Column, processSort.Descending);
-        int? keep = selectedPid ?? (processList.SelectedItems.Count > 0 && processList.SelectedItems[0].Tag is ProcessSortRow selectedRow ? selectedRow.Pid : null); var sorted = UiSorting.SortProcesses(processRows, processSort); processList.BeginUpdate(); processList.Items.Clear(); foreach (var row in sorted) { var item = new Forms.ListViewItem(row.Pid.ToString()); item.SubItems.Add(row.Name); item.SubItems.Add(row.CpuPercentTotalMachine is { } cpu ? cpu.ToString("F1") : "—"); item.SubItems.Add(row.WorkingSetBytes is { } bytes ? (bytes / 1048576d).ToString("F1") : "—"); item.SubItems.Add(row.Responding is null ? "—" : row.Responding.Value ? UiText.Yes : UiText.NotResponding); item.SubItems.Add(string.IsNullOrWhiteSpace(row.Window) ? "—" : row.Window); item.Tag = row; if (keep == row.Pid) item.Selected = true; processList.Items.Add(item); } processList.EndUpdate();
+        int? keep = selectedPid ?? (processList.SelectedItems.Count > 0 && processList.SelectedItems[0].Tag is ProcessSortRow selectedRow ? selectedRow.Pid : null);
+        var existing = processList.Items.Cast<Forms.ListViewItem>().ToDictionary(item => ((ProcessSortRow)item.Tag!).Pid);
+        var sorted = UiSorting.SortProcesses(processRows, processSort).ToArray();
+        var pids = sorted.Select(row => row.Pid).ToHashSet();
+        processList.BeginUpdate();
+        try
+        {
+            foreach (var item in existing.Values.Where(item => !pids.Contains(((ProcessSortRow)item.Tag!).Pid))) processList.Items.Remove(item);
+            for (int index = 0; index < sorted.Length; index++)
+            {
+                var row = sorted[index];
+                if (!existing.TryGetValue(row.Pid, out var item)) item = new Forms.ListViewItem(new string[6]);
+                string[] cells = [row.Pid.ToString(), row.Name, row.CpuPercentTotalMachine is { } cpu ? cpu.ToString("F1") : "—",
+                    row.WorkingSetBytes is { } bytes ? (bytes / 1048576d).ToString("F1") : "—",
+                    row.Responding is null ? "—" : row.Responding.Value ? UiText.Yes : UiText.NotResponding,
+                    string.IsNullOrWhiteSpace(row.Window) ? "—" : row.Window];
+                for (int column = 0; column < cells.Length; column++)
+                    if (item.SubItems[column].Text != cells[column]) item.SubItems[column].Text = cells[column];
+                item.Tag = row;
+                if (item.Index != index) { if (item.ListView != null) processList.Items.Remove(item); processList.Items.Insert(index, item); }
+                item.Selected = keep == row.Pid;
+            }
+        }
+        finally { processList.EndUpdate(); }
         if (topPid.HasValue && processList.Items.Cast<Forms.ListViewItem>().FirstOrDefault(item => (item.Tag as ProcessSortRow)?.Pid == topPid) is { } top) processList.TopItem = top;
     }
 
@@ -2228,7 +2273,7 @@ public sealed partial class MainForm : Forms.Form
         selectedPeerName.SetText(() => selectedPeer?.Name ?? UiText.NewConnection); selectedPeerAddress.SetText(() => PrivateInternet ? UiText.PrivateConnectInstructions : UiText.EnterRemoteCode);
         geometry = null; inputState.Released(); inputRecoveryTimer.Stop(); code.SetText("");
         processRows.Clear(); fileRows.Clear(); processList.Items.Clear(); fileList.Items.Clear();
-        screen.Image?.Dispose(); screen.Image = null; currentDirectory = ""; fileDirectory.Clear(); remotePath.SetText("");
+        ClearDisplayedFrame(); currentDirectory = ""; fileDirectory.Clear(); remotePath.SetText("");
         cpuSummary.SetText(ramSummary.SetText(processSummary.SetText(resourceMeasuredAt.SetText("—"))));
         lastMeasurementUtc = null; powerHold?.Dispose(); powerHold = null;
         resourceState.SetText(() => ConnectToContinue); fileState.SetText(() => ConnectToContinue); diagnosticState.SetText(() => ConnectToContinue);
@@ -2354,7 +2399,7 @@ public sealed partial class MainForm : Forms.Form
             localAgent.Dispose();
             if (ReferenceEquals(agent, localAgent)) agent = null;
         }
-        inputQueue.Complete(); if (agent != null) agent.Dispose(); agent = null; powerHold?.Dispose(); powerHold = null; tray.Visible = false; screen.Image?.Dispose();
+        inputQueue.Complete(); if (agent != null) agent.Dispose(); agent = null; powerHold?.Dispose(); powerHold = null; tray.Visible = false; ClearDisplayedFrame();
         return true;
     }
 

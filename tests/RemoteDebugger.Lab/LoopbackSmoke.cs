@@ -135,6 +135,12 @@ internal sealed partial class LabForm
             await FinishAsync();
             return;
         }
+        if (role == "loopbackperformance")
+        {
+            await PerformanceReviewAsync();
+            await FinishAsync();
+            return;
+        }
 
         ProbeDefaultInput();
         ProbeLoopbackRemoteScreenInput();

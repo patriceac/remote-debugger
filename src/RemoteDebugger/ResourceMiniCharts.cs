@@ -17,8 +17,8 @@ internal sealed class ResourceMiniCharts : Forms.Control
         AccessibleName = string.Join(", ", new[] { "CPU", "RAM", UiText.DiskActivity, "GPU" }.Select((name, i) => name + " " + Format(history[^1][i])));
         Invalidate();
     }
-    public void Reset() { history.Clear(); SetStale(); }
-    public void SetStale() { if (stale && history.Count > 0) return; stale = true; AccessibleName = UiText.ResourcesUnavailable; Invalidate(); }
+    public void Reset() { history.Clear(); stale = false; SetStale(); }
+    public void SetStale() { if (stale) return; stale = true; AccessibleName = UiText.ResourcesUnavailable; Invalidate(); }
     private static string Format(double? value) => value is { } v && double.IsFinite(v) ? $"{v:0}%" : "—";
     protected override void OnPaint(Forms.PaintEventArgs e)
     {

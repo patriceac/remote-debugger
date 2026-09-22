@@ -605,7 +605,7 @@ public sealed partial class AgentServer : IDisposable
                             }
                             if (persistentHeartbeat) timeout.CancelAfter(SupportSession.HeartbeatTimeout);
                             session.Observe();
-                            reply = Reply.Success(r.Id, new { session = Session, persistent = persistentHeartbeat, agentBinarySha256 = ExecutableIdentity.Sha256, controllerBinarySha256 = controllerBinaryHash, binaryMatched = Session.BinaryMatched, processId = Environment.ProcessId, maintenance = Operations.Maintenance.Status });
+                            reply = Reply.Success(r.Id, new { machine = Environment.MachineName, session = Session, persistent = persistentHeartbeat, agentBinarySha256 = ExecutableIdentity.Sha256, controllerBinarySha256 = controllerBinaryHash, binaryMatched = Session.BinaryMatched, processId = Environment.ProcessId, maintenance = Operations.Maintenance.Status });
                         }
                         else if (r.Operation == "session.disconnect") { Native.ReleaseAllInput(); Operations.Clipboard?.Pause(); session.Disconnect(); reply = Reply.Success(r.Id, new { session = Session }); }
                         else if (r.Operation == "update.resume")
@@ -740,7 +740,7 @@ public sealed partial class AgentServer : IDisposable
                                 persistentInputGrant = grant.Register(timeout.Cancel);
                             }
                             timeout.CancelAfter(TimeSpan.FromHours(12));
-                            reply = Reply.Success(r.Id, new { ready = true });
+                            reply = Reply.Success(r.Id, new { ready = true, inputBatches = true });
                         }
                         else if (r.Operation == "security.stage")
                         {
@@ -875,7 +875,7 @@ public sealed partial class AgentServer : IDisposable
                     }
                     catch (Exception ex) { state.FallbackReason = "x264 unavailable: " + ex.Message; }
                 }
-                var start = Reply.Success(request.Id, new { type = "stream_started", codec = state.Codec, reason = state.FallbackReason, geometry = first.Geometry });
+                var start = Reply.Success(request.Id, new { type = "stream_started", codec = state.Codec, encoder = state.Encoder?.Name, capture = first.CaptureMethod, reason = state.FallbackReason, geometry = first.Geometry });
                 await Wire.WriteAsync(tls, start, ct);
                 Status?.Invoke($"Live screen stream active ({state.Codec}). Target {fps} fps.");
                 await SendAdaptiveFrameAsync(tls, first, state, sequence, fps, maxWidth, quality, ct);
@@ -893,7 +893,7 @@ public sealed partial class AgentServer : IDisposable
                 previousFingerprint = capture.Fingerprint;
                 if (capture.Capture is not { } current)
                 {
-                    await captureWake.WaitAsync(Math.Min(1000, 1000 / pacing.FramesPerSecond * (1 + ++unchanged / 5)), ct);
+                    await captureWake.WaitAsync(StreamPolicy.IdleDelayMs(++unchanged, pacing.FramesPerSecond), ct);
                     continue;
                 }
                 unchanged = 0;
@@ -937,16 +937,16 @@ public sealed partial class AgentServer : IDisposable
         if (state.Geometry != null && state.Geometry != capture.Geometry)
             throw new IOException("Display layout changed; reopen the stream to negotiate its geometry.");
         state.Geometry = capture.Geometry;
-        byte[]? bytes = null; StreamPacketKind kind = StreamPacketKind.Jpeg; double encodeMs = capture.CopyMs;
+        byte[]? bytes = null; StreamPacketKind kind = StreamPacketKind.Jpeg; double encodeMs = capture.TotalCaptureMs;
         if (state.Codec == "h264" && state.Encoder != null)
         {
             try
             {
-                var encoded = state.Encoder.Encode(capture.Bitmap, sequence); encodeMs = capture.CopyMs + encoded.EncodeMs;
+                var encoded = state.Encoder.Encode(capture.Bitmap, sequence); encodeMs = capture.TotalCaptureMs + encoded.EncodeMs;
                 if (StreamPolicy.IsH264EncodeSlow(encoded.EncodeMs, fps)) state.SlowFrames++; else state.SlowFrames = 0;
                 if (StreamPolicy.ShouldFallbackToJpeg(state.SlowFrames))
                 {
-                    state.FallbackReason = $"x264 encode exceeded {StreamPolicy.H264EncodeBudgetMs(fps):F0} ms for {StreamPolicy.H264SlowFrameCount} frames";
+                    state.FallbackReason = $"H.264 encode exceeded {StreamPolicy.H264EncodeBudgetMs(fps):F0} ms for {StreamPolicy.H264SlowFrameCount} frames";
                     state.Encoder.Dispose(); state.Encoder = null; state.Codec = "jpeg"; state.SlowFrames = 0;
                     await SendCodecChangeAsync(tls, state, ct);
                 }
@@ -954,7 +954,7 @@ public sealed partial class AgentServer : IDisposable
             }
             catch (Exception ex)
             {
-                state.FallbackReason = "x264 encode failed: " + ex.Message;
+                state.FallbackReason = "H.264 encode failed: " + ex.Message;
                 state.Encoder?.Dispose(); state.Encoder = null; state.Codec = "jpeg"; state.SlowFrames = 0;
                 await SendCodecChangeAsync(tls, state, ct);
             }
@@ -1029,6 +1029,7 @@ public sealed partial class AgentServer : IDisposable
         try { activeDiscovery.Dispose(); } catch { }
         updates.Dispose();
         Operations.Clipboard?.Dispose();
+        Operations.Resources.Dispose();
     }
 }
 
@@ -1038,6 +1039,7 @@ public sealed partial class RemoteClient
     private readonly Func<Connection, CancellationToken, Task<Stream>> transportFactory;
     private readonly RpcConnectionPool commands;
     private readonly SemaphoreSlim inputGate = new(1, 1);
+    private readonly SemaphoreSlim inputWindow = new(4, 4);
     private readonly SemaphoreSlim updateGate = new(1, 1);
     private PersistentChannel? inputChannel;
     private PersistentChannel? updateChannel;
@@ -1047,6 +1049,7 @@ public sealed partial class RemoteClient
     private bool legacyHeartbeats;
     private int legacyUpdateOperations;
     public Connection Connection { get; private set; }
+    internal JsonElement StreamNegotiation { get; private set; }
     internal string AdminRoot { get; set; } = Vault.DefaultRoot;
     public static string DefaultPath => Path.Combine(Vault.DefaultRoot, "controller.connection");
     public RemoteClient(Connection connection) : this(connection, OpenAuthenticatedTransportOnceAsync) { discoverRoutes = true; }
@@ -1207,12 +1210,15 @@ public sealed partial class RemoteClient
         int inputSeconds = seconds ?? SupportOperationTimeouts.InputSeconds(Json.Element(args ?? new { }).Str("kind"));
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(inputSeconds, 1, 300)));
-        await inputGate.WaitAsync(timeout.Token).ConfigureAwait(false);
+        await inputWindow.WaitAsync(timeout.Token).ConfigureAwait(false);
+        PersistentChannel? channel = null;
         try
         {
-            PersistentChannel? channel = inputChannel;
+            Task<Reply> reply;
+            await inputGate.WaitAsync(timeout.Token).ConfigureAwait(false);
             try
             {
+                channel = inputChannel;
                 if (channel == null)
                 {
                     Stream transport = await OpenTransportAsync(timeout.Token).ConfigureAwait(false);
@@ -1220,19 +1226,37 @@ public sealed partial class RemoteClient
                     await channel.OpenAsync(timeout.Token, inputSeconds).ConfigureAwait(false);
                     inputChannel = channel;
                 }
-                return await channel.CallAsync("ui.input", args, timeout.Token, inputSeconds).ConfigureAwait(false);
+                var payload = Json.Element(args ?? new { });
+                if (payload.Str("kind") == "batch" && !channel.SupportsInputBatches)
+                {
+                    Reply? last = null;
+                    foreach (var item in payload.GetProperty("events").EnumerateArray())
+                    {
+                        last = await (await channel.BeginCallAsync("ui.input", item, timeout.Token, inputSeconds).ConfigureAwait(false)).ConfigureAwait(false);
+                        if (!last.Ok) break;
+                    }
+                    return last ?? throw new ArgumentException("Empty input batch.");
+                }
+                reply = await channel.BeginCallAsync("ui.input", args, timeout.Token, inputSeconds).ConfigureAwait(false);
             }
-            catch
+            finally { inputGate.Release(); }
+            return await reply.ConfigureAwait(false);
+        }
+        catch
+        {
+            await inputGate.WaitAsync().ConfigureAwait(false);
+            try
             {
                 if (channel != null && ReferenceEquals(inputChannel, channel)) inputChannel = null;
                 if (channel != null)
                 {
                     try { await channel.DisposeAsync().ConfigureAwait(false); } catch { }
                 }
-                throw;
             }
+            finally { inputGate.Release(); }
+            throw;
         }
-        finally { inputGate.Release(); }
+        finally { inputWindow.Release(); }
     }
 
     /// <summary>Send update operations over one authenticated connection for the transfer lifetime.</summary>
@@ -1362,15 +1386,38 @@ public sealed partial class RemoteClient
         private readonly string openOperation = openOperation;
         private int disposed;
         public bool SupportsBinaryChunks { get; private set; }
+        public bool SupportsInputBatches { get; private set; }
+        private Task readTail = Task.CompletedTask;
         public async Task<JsonElement> OpenAsync(CancellationToken ct, int seconds)
         {
             object args = openOperation == "session.heartbeat" ? new { keepAlive = true } : new { };
             var data = RemoteClient.Require(await SendAsync(openOperation, args, ct, seconds).ConfigureAwait(false));
             SupportsBinaryChunks = data.TryGetProperty("binaryChunks", out var supported) && supported.ValueKind == JsonValueKind.True;
+            SupportsInputBatches = data.TryGetProperty("inputBatches", out var batches) && batches.ValueKind == JsonValueKind.True;
             return data;
         }
         public async Task<Reply> CallAsync(string operation, object? args, CancellationToken ct, int seconds, ReadOnlyMemory<byte> binaryChunk = default)
             => await SendAsync(operation, args is JsonElement e ? e : Json.Element(args ?? new { }), ct, seconds, binaryChunk).ConfigureAwait(false);
+        // Writes are serialized by inputGate; replies remain in order while up to four
+        // requests are in flight. A failed read poisons this channel, never replaying input.
+        public async Task<Task<Reply>> BeginCallAsync(string operation, object? args, CancellationToken ct, int seconds)
+        {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
+            ct.ThrowIfCancellationRequested();
+            if (readTail.IsFaulted || readTail.IsCanceled) await readTail.ConfigureAwait(false);
+            var request = new Request(Guid.NewGuid().ToString(), token, operation, args is JsonElement e ? e : Json.Element(args ?? new { }), seconds, binarySha256);
+            await Wire.WriteAsync(stream, request, ct).ConfigureAwait(false);
+            var reply = ReadReplyAsync(readTail, request.Id, ct);
+            readTail = reply;
+            return reply;
+        }
+        private async Task<Reply> ReadReplyAsync(Task previous, string id, CancellationToken ct)
+        {
+            await previous.ConfigureAwait(false);
+            var reply = await Wire.ReadAsync<Reply>(stream, ct).ConfigureAwait(false);
+            if (reply.Id != id) throw new InvalidDataException("Reply did not match its request.");
+            return reply;
+        }
         private async Task<Reply> SendAsync(string operation, object? args, CancellationToken ct, int seconds, ReadOnlyMemory<byte> binaryChunk = default)
         {
             ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
@@ -1408,11 +1455,13 @@ public sealed partial class RemoteClient
         await Wire.WriteAsync(tls, new Request(Guid.NewGuid().ToString(), Connection.Token, "screen.stream", Json.Element(new { codec = "auto", h264 = FfmpegRuntime.IsAvailable(), fps = Math.Min(fps, settings.Fps), monitor, maxWidth = settings.MaxWidth, quality = settings.Quality }), seconds, controllerBinarySha256), ct);
         var start = await Wire.ReadAsync<Reply>(tls, ct); Require(start);
         if (start.Data.Str("type") != "stream_started") throw new InvalidDataException("Missing stream negotiation.");
+        StreamNegotiation = start.Data.Clone();
         string codec = start.Data.Str("codec", "jpeg");
         var geometry = start.Data.TryGetProperty("geometry", out var geometryValue) ? geometryValue.Deserialize<DesktopGeometry>(Json.Options) : null;
         if (geometry == null) throw new InvalidDataException("Missing stream geometry.");
         codecChanged?.Invoke(codec, start.Data.Str("reason"));
-        H264Decoder? decoder = codec == "h264" ? new H264Decoder() : null;
+        using var bitmapPool = new BitmapPool();
+        H264Decoder? decoder = codec == "h264" ? new H264Decoder(bitmapPool) : null;
         try
         {
             while (!ct.IsCancellationRequested)
@@ -1425,7 +1474,7 @@ public sealed partial class RemoteClient
                     if (type == "codec_changed")
                     {
                         codec = control.Str("codec", "jpeg");
-                        decoder?.Dispose(); decoder = codec == "h264" ? new H264Decoder() : null;
+                        decoder?.Dispose(); decoder = codec == "h264" ? new H264Decoder(bitmapPool) : null;
                         codecChanged?.Invoke(codec, control.Str("reason"));
                         await Wire.WriteAsync(tls, new { sequence = -1 }, ct);
                         continue;
@@ -1435,21 +1484,26 @@ public sealed partial class RemoteClient
                 }
 
                 Bitmap? image = null;
-                if (packet.Kind == StreamPacketKind.Jpeg)
+                try
                 {
-                    using var imageStream = new MemoryStream(packet.Payload, writable: false);
-                    using var source = Image.FromStream(imageStream);
-                    image = new Bitmap(source);
+                    if (packet.Kind == StreamPacketKind.Jpeg)
+                    {
+                        using var imageStream = new MemoryStream(packet.Payload, writable: false);
+                        using var source = Image.FromStream(imageStream);
+                        image = bitmapPool.Rent(source.Width, source.Height);
+                        using var graphics = Graphics.FromImage(image);
+                        graphics.DrawImageUnscaled(source, 0, 0);
+                    }
+                    else if (packet.Kind == StreamPacketKind.H264)
+                    {
+                        if (decoder == null) throw new InvalidDataException("H.264 packet received without a decoder.");
+                        image = decoder.Decode(packet.Payload);
+                    }
+                    else throw new InvalidDataException("Unknown adaptive stream frame packet.");
+                    await Wire.WriteAsync(tls, new { sequence = packet.Sequence }, ct);
+                    if (image != null) { publish(new DecodedStreamFrame(packet.Sequence, packet.CapturedUtc, geometry, codec, image, packet.CaptureEncodeMs, packet.Payload.Length, bitmapPool)); image = null; }
                 }
-                else if (packet.Kind == StreamPacketKind.H264)
-                {
-                    if (decoder == null) throw new InvalidDataException("H.264 packet received without a decoder.");
-                    image = decoder.Decode(packet.Payload);
-                }
-                else throw new InvalidDataException("Unknown adaptive stream frame packet.");
-
-                await Wire.WriteAsync(tls, new { sequence = packet.Sequence }, ct);
-                if (image != null) publish(new DecodedStreamFrame(packet.Sequence, packet.CapturedUtc, geometry, codec, image, packet.CaptureEncodeMs, packet.Payload.Length));
+                finally { if (image != null) bitmapPool.Return(image); }
             }
         }
         finally { decoder?.Dispose(); }
@@ -1504,7 +1558,7 @@ public sealed partial class RemoteClient
         if (!Safety.Equal(committed.Str("sha256"), hash) || committed.Long("size") != input.Length) throw new IOException("Upload verification failed.");
         File.Delete(resume); return committed;
     }
-    public async Task DownloadAsync(string remote, string local, CancellationToken ct = default, IProgress<FileTransferProgress>? progress = null)
+    public async Task<VerifiedDownload> DownloadAsync(string remote, string local, CancellationToken ct = default, IProgress<FileTransferProgress>? progress = null)
     {
         string temp = local + ".rd-" + Safety.Hash(Connection.Fingerprint + "|" + remote)[..16] + ".partial";
         string metadata = temp + ".sha256";
@@ -1528,7 +1582,9 @@ public sealed partial class RemoteClient
             if (!Safety.Equal(Convert.ToHexString(await SHA256.HashDataAsync(verify, ct)), hash))
             { File.Delete(metadata); throw new IOException("Download hash mismatch; retry to restart the transfer."); }
         File.Move(temp, local, true); File.Delete(metadata);
+        return new VerifiedDownload(local, length, hash);
     }
 }
 
 public sealed record FileTransferProgress(long TransferredBytes, long TotalBytes, long BytesThisAttempt = 0);
+public sealed record VerifiedDownload(string File, long Size, string Sha256);

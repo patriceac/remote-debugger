@@ -55,6 +55,16 @@ public sealed class RemoteInputQueue<T>(int capacity = 128)
     }
 
     public void Complete() => ready.Writer.TryComplete();
+
+    public IReadOnlyList<T> TakePending(int maximum, Func<T, bool> eligible)
+    {
+        var values = new List<T>();
+        lock (sync)
+            while (values.Count < Math.Clamp(maximum, 0, 15) && pending.First is { } first &&
+                first.Value.Kind is not ("release" or "secureAttention") && eligible(first.Value.Value))
+            { values.Add(first.Value.Value); pending.RemoveFirst(); }
+        return values;
+    }
 }
 
 /// <summary>User preference is independent from temporary transport availability.</summary>
