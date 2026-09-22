@@ -158,7 +158,9 @@ internal sealed partial class LabForm
         {
             var progress = await AcceptPowerFromControllerAsync(false, false, machine);
             _ = await PowerMessageAsync("POWER_BEFORE_SHUTDOWN", 4);
-            await WaitWorkflowAsync(() => Task.FromResult(Value(PowerControl(progress, "powerState")) == UiText.PowerOffNotConfirmed), 30);
+            await WaitWorkflowAsync(() => Task.FromResult(progress.FindFirst(TreeScope.Descendants,
+                new PropertyCondition(AutomationElement.AutomationIdProperty, "powerState")) is { } state &&
+                Value(state) == UiText.PowerOffNotConfirmed), 30);
             if (File.Exists(RemoteClient.DefaultPath)) throw new IOException("The controller retained the shutdown session for reconnection.");
             CaptureDesktop("power-shutdown-accepted.png");
             Pass("power.shutdown_controller", "The controller accepts shutdown, forgets reconnection and does not claim physical power-off");
