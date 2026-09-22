@@ -57,7 +57,9 @@ public sealed partial class RemoteClient
             yield return wan;
     }
 
-    internal async Task<Stream> OpenTransportAsync(CancellationToken ct)
+    internal Task<Stream> OpenTransportAsync(CancellationToken ct) => OpenTransportAsync(ct, null);
+
+    private async Task<Stream> OpenTransportAsync(CancellationToken ct, Action<string>? selectedRoute)
     {
         if (discoverRoutes) await RefreshRoutesIfNeededAsync(ct).ConfigureAwait(false);
         var route = Connection;
@@ -72,7 +74,8 @@ public sealed partial class RemoteClient
                     var direct = route with { DirectHost = endpoint.Host, DirectPort = endpoint.Port };
                     var stream = await transportFactory(direct, attempt.Token).ConfigureAwait(false);
                     if (ReferenceEquals(Connection, route)) Connection = direct;
-                    ActiveRoute = IsLanAddress(endpoint.Host) ? "Direct LAN" : "Direct WAN";
+                    string name = IsLanAddress(endpoint.Host) ? "Direct LAN" : "Direct WAN";
+                    ActiveRoute = name; selectedRoute?.Invoke(name);
                     return stream;
                 }
                 catch (Exception) when (!ct.IsCancellationRequested) { CoolDown(endpoint.Host, endpoint.Port); }
@@ -81,7 +84,8 @@ public sealed partial class RemoteClient
             route = route with { DirectHost = "", DirectPort = 0 };
         }
         var transport = await transportFactory(route, ct).ConfigureAwait(false);
-        ActiveRoute = route.RelayUrl.Length > 0 ? "Relay" : IsLanAddress(route.Host) ? "Direct LAN" : "Direct WAN";
+        string routeName = route.RelayUrl.Length > 0 ? "Relay" : IsLanAddress(route.Host) ? "Direct LAN" : "Direct WAN";
+        ActiveRoute = routeName; selectedRoute?.Invoke(routeName);
         return transport;
     }
 

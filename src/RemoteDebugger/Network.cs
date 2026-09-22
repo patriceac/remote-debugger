@@ -1072,6 +1072,7 @@ public sealed partial class RemoteClient
         Connection = await PairingTransport.PairAsync(Connection, code, ct).ConfigureAwait(false);
     }
     public bool UsesDirectTransport => Connection.DirectHost.Length > 0;
+    public string ScreenRoute { get; private set; } = "";
     internal async Task<IReadOnlyList<DirectEndpoint>> GetDirectEndpointsAsync(CancellationToken ct = default)
     {
         if (Connection.RelayUrl.Length == 0) return [];
@@ -1402,8 +1403,8 @@ public sealed partial class RemoteClient
     private async Task ReceiveAdaptiveFramesAsync(Action<DecodedStreamFrame> publish, Action<string, string?>? codecChanged, int fps, int monitor, int seconds, CancellationToken ct, bool relayEconomy)
     {
         using var connecting = CancellationTokenSource.CreateLinkedTokenSource(ct); connecting.CancelAfter(TimeSpan.FromSeconds(30));
-        await using var tls = await OpenTransportAsync(connecting.Token);
-        var settings = StreamPolicy.ViewingSettings(relayEconomy && ActiveRoute == "Relay");
+        await using var tls = await OpenTransportAsync(connecting.Token, route => ScreenRoute = route);
+        var settings = StreamPolicy.ViewingSettings(relayEconomy && ScreenRoute == "Relay");
         await Wire.WriteAsync(tls, new Request(Guid.NewGuid().ToString(), Connection.Token, "screen.stream", Json.Element(new { codec = "auto", h264 = FfmpegRuntime.IsAvailable(), fps = Math.Min(fps, settings.Fps), monitor, maxWidth = settings.MaxWidth, quality = settings.Quality }), seconds, controllerBinarySha256), ct);
         var start = await Wire.ReadAsync<Reply>(tls, ct); Require(start);
         if (start.Data.Str("type") != "stream_started") throw new InvalidDataException("Missing stream negotiation.");

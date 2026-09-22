@@ -259,7 +259,7 @@
     <value>Introduzca el código que aparece en este PC.</value>
   </data>
   <data name="EnterKey" xml:space="preserve">
-    <value>Intro</value>
+    <value>Enviar Intro</value>
   </data>
   <data name="EnterPc" xml:space="preserve">
     <value>Introduzca un PC</value>
@@ -535,7 +535,7 @@
     <value>Pantalla remota</value>
   </data>
   <data name="RemoteTextPlaceholder" xml:space="preserve">
-    <value>Texto para enviar al PC remoto</value>
+    <value>Texto para el PC remoto · Intro para enviar</value>
   </data>
   <data name="ReparsePointsNotUploaded" xml:space="preserve">
     <value>No se suben puntos de reanálisis.</value>
@@ -712,7 +712,7 @@
     <value>La conexión sigue activa. Haga doble clic en el icono para volver a abrir la ventana.</value>
   </data>
   <data name="TypeText" xml:space="preserve">
-    <value>Escribir</value>
+    <value>Enviar texto</value>
   </data>
   <data name="Unavailable" xml:space="preserve">
     <value>No disponible</value>
@@ -979,4 +979,14 @@ Puede cancelar durante la cuenta atrás de 10 segundos. No se forzará el cierre
   <data name="RestartRequestAccepted" xml:space="preserve"><value>Solicitud de reinicio aceptada</value></data>
   <data name="TransferSkipped" xml:space="preserve"><value>Omitido en el Explorador</value></data>
   <data name="TransferSkippedFiles" xml:space="preserve"><value>Copia finalizada · {0} archivo(s) omitido(s) en el Explorador</value></data>
+  <data name="FullScreen" xml:space="preserve"><value>Pantalla completa</value></data>
+  <data name="ExitFullScreen" xml:space="preserve"><value>Salir de pantalla completa</value></data>
+  <data name="ReleaseKeyboard" xml:space="preserve"><value>Ctrl+Alt+F12 o Ctrl+Mayús+F12: liberar teclado / salir de pantalla completa</value></data>
+  <data name="EconomyExplanation" xml:space="preserve"><value>Reducir la frecuencia y el tamaño de las imágenes para ahorrar ancho de banda en esta conexión por relé.</value></data>
+  <data name="EconomyUnavailable" xml:space="preserve"><value>El modo ahorro solo se aplica al compartir pantalla por relé. Las conexiones directas LAN/WAN usan la calidad normal.</value></data>
+  <data name="SendTextHint" xml:space="preserve"><value>Enviar este texto al campo activo del PC remoto. También puede pulsar Intro aquí.</value></data>
+  <data name="RemoteEnterHint" xml:space="preserve"><value>Pulsar la tecla Intro en el PC remoto.</value></data>
+  <data name="SecureAttentionHint" xml:space="preserve"><value>Enviar Ctrl+Alt+Supr mediante el servicio remoto. Requiere mantenimiento de administrador. La pantalla de seguridad de Windows debe manejarse en el PC remoto.</value></data>
+  <data name="DiskActivity" xml:space="preserve"><value>Disco</value></data>
+  <data name="ResourceChartsHint" xml:space="preserve"><value>CPU, memoria usada, actividad del disco y motor GPU más activo. Actualización cada 5 segundos en conexiones directas LAN/WAN. — indica no disponible o en pausa.</value></data>
 </root>

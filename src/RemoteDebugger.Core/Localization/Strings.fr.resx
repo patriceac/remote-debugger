@@ -259,7 +259,7 @@
     <value>Saisissez le code affiché sur ce PC.</value>
   </data>
   <data name="EnterKey" xml:space="preserve">
-    <value>Entrée</value>
+    <value>Touche Entrée</value>
   </data>
   <data name="EnterPc" xml:space="preserve">
     <value>PC à saisir</value>
@@ -535,7 +535,7 @@
     <value>Écran distant</value>
   </data>
   <data name="RemoteTextPlaceholder" xml:space="preserve">
-    <value>Texte à envoyer au PC distant</value>
+    <value>Texte pour le PC distant · Entrée pour envoyer</value>
   </data>
   <data name="ReparsePointsNotUploaded" xml:space="preserve">
     <value>Les points de reparse ne sont pas téléversés.</value>
@@ -712,7 +712,7 @@
     <value>La connexion reste active. Double-cliquez sur l’icône pour rouvrir la fenêtre.</value>
   </data>
   <data name="TypeText" xml:space="preserve">
-    <value>Saisir</value>
+    <value>Envoyer</value>
   </data>
   <data name="Unavailable" xml:space="preserve">
     <value>Indisponible</value>
@@ -979,4 +979,14 @@ Vous pouvez annuler pendant le compte à rebours de 10 secondes. Les application
   <data name="RestartRequestAccepted" xml:space="preserve"><value>Demande de redémarrage acceptée</value></data>
   <data name="TransferSkipped" xml:space="preserve"><value>Ignoré dans l’Explorateur</value></data>
   <data name="TransferSkippedFiles" xml:space="preserve"><value>Copie terminée · {0} fichier(s) ignoré(s) dans l’Explorateur</value></data>
+  <data name="FullScreen" xml:space="preserve"><value>Plein écran</value></data>
+  <data name="ExitFullScreen" xml:space="preserve"><value>Quitter le plein écran</value></data>
+  <data name="ReleaseKeyboard" xml:space="preserve"><value>Ctrl+Alt+F12 ou Ctrl+Maj+F12 : libérer le clavier / quitter le plein écran</value></data>
+  <data name="EconomyExplanation" xml:space="preserve"><value>Réduire la fréquence et la taille des images pour économiser la bande passante de cette connexion par relais.</value></data>
+  <data name="EconomyUnavailable" xml:space="preserve"><value>Le mode éco s'applique uniquement au partage d'écran par relais. Les connexions directes LAN/WAN utilisent la qualité normale.</value></data>
+  <data name="SendTextHint" xml:space="preserve"><value>Envoyer ce texte dans le champ actif du PC distant. Vous pouvez aussi appuyer sur Entrée ici.</value></data>
+  <data name="RemoteEnterHint" xml:space="preserve"><value>Appuyer sur la touche Entrée du PC distant.</value></data>
+  <data name="SecureAttentionHint" xml:space="preserve"><value>Envoyer Ctrl+Alt+Suppr via le service distant. Nécessite la maintenance administrateur. L'écran de sécurité Windows doit être traité sur le PC distant.</value></data>
+  <data name="DiskActivity" xml:space="preserve"><value>Disque</value></data>
+  <data name="ResourceChartsHint" xml:space="preserve"><value>CPU, mémoire utilisée, activité disque et moteur GPU le plus actif. Actualisation toutes les 5 secondes en connexion directe LAN/WAN. — signifie indisponible ou en pause.</value></data>
 </root>

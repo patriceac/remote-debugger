@@ -259,7 +259,7 @@
     <value>Enter the code displayed on this PC.</value>
   </data>
   <data name="EnterKey" xml:space="preserve">
-    <value>Enter</value>
+    <value>Send Enter</value>
   </data>
   <data name="EnterPc" xml:space="preserve">
     <value>Enter a PC</value>
@@ -535,7 +535,7 @@
     <value>Remote screen</value>
   </data>
   <data name="RemoteTextPlaceholder" xml:space="preserve">
-    <value>Text to send to the remote PC</value>
+    <value>Text to send to the remote PC · Enter to send</value>
   </data>
   <data name="ReparsePointsNotUploaded" xml:space="preserve">
     <value>Reparse points are not uploaded.</value>
@@ -712,7 +712,7 @@
     <value>The connection stays active. Double-click the icon to reopen the window.</value>
   </data>
   <data name="TypeText" xml:space="preserve">
-    <value>Type</value>
+    <value>Send text</value>
   </data>
   <data name="Unavailable" xml:space="preserve">
     <value>Unavailable</value>
@@ -979,4 +979,14 @@ You can cancel during the 10-second countdown. Applications with unsaved work wi
   <data name="RestartRequestAccepted" xml:space="preserve"><value>Restart request accepted</value></data>
   <data name="TransferSkipped" xml:space="preserve"><value>Skipped in Explorer</value></data>
   <data name="TransferSkippedFiles" xml:space="preserve"><value>Copy finished · {0} file(s) skipped in Explorer</value></data>
+  <data name="FullScreen" xml:space="preserve"><value>Full screen</value></data>
+  <data name="ExitFullScreen" xml:space="preserve"><value>Exit full screen</value></data>
+  <data name="ReleaseKeyboard" xml:space="preserve"><value>Ctrl+Alt+F12 or Ctrl+Shift+F12: release keyboard / exit full screen</value></data>
+  <data name="EconomyExplanation" xml:space="preserve"><value>Reduce frame rate and image size to save bandwidth on this relay connection.</value></data>
+  <data name="EconomyUnavailable" xml:space="preserve"><value>Economy mode applies only while the remote screen uses the relay. Direct LAN/WAN connections use normal quality.</value></data>
+  <data name="SendTextHint" xml:space="preserve"><value>Send this text to the focused field on the remote PC. You can also press Enter here.</value></data>
+  <data name="RemoteEnterHint" xml:space="preserve"><value>Press the Enter key on the remote PC.</value></data>
+  <data name="SecureAttentionHint" xml:space="preserve"><value>Send Ctrl+Alt+Del through the remote support service. Requires administrator maintenance. The Windows security screen must be handled on the remote PC.</value></data>
+  <data name="DiskActivity" xml:space="preserve"><value>Disk</value></data>
+  <data name="ResourceChartsHint" xml:space="preserve"><value>CPU, used memory, disk busy time and busiest GPU engine. Updates every 5 seconds on direct LAN/WAN connections. — means unavailable or paused.</value></data>
 </root>

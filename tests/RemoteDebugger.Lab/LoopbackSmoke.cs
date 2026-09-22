@@ -129,6 +129,13 @@ internal sealed partial class LabForm
         else Fail("loopback.live_auto_start", "The loopback controller starts live viewing after a fresh frame", new { live, liveBadge = new { visible = liveEvidence.BadgeVisible, text = liveEvidence.BadgeText }, streamStatus = liveEvidence.TelemetryText, waitedSeconds = liveEvidence.WaitedSeconds, freshFrame, frame = firstFrame });
         CaptureDesktop("loopback-controller-live.png");
 
+        if (role == "loopbackviewer")
+        {
+            await ViewerReviewAsync(controllerRoot);
+            await FinishAsync();
+            return;
+        }
+
         ProbeDefaultInput();
         ProbeLoopbackRemoteScreenInput();
         if (trayOnly)

@@ -30,6 +30,7 @@ public static class ResourceSampling
     }
     public static async Task<object> SystemAsync(CancellationToken ct)
     {
+        using var counters = new ResourceCounters();
         DateTimeOffset start = DateTimeOffset.UtcNow; bool first = GetSystemTimes(out var idle1, out var kernel1, out var user1); var sw = Stopwatch.StartNew(); await Task.Delay(600, ct);
         bool second = GetSystemTimes(out var idle2, out var kernel2, out var user2); ulong total = 0;
         if (first && second)
@@ -39,6 +40,7 @@ public static class ResourceSampling
             if (current >= previous) total = current - previous;
         }
         var memory = new MEMORY { Length = (uint)Marshal.SizeOf<MEMORY>() }; bool hasMemory = GlobalMemoryStatusEx(ref memory);
-        return new { sampleStartUtc = start, sampleEndUtc = DateTimeOffset.UtcNow, intervalMs = sw.Elapsed.TotalMilliseconds, cpuPercentTotalMachine = first && second && total > 0 && idle2.Value >= idle1.Value ? Math.Clamp(100.0 * (1 - (idle2.Value - idle1.Value) / (double)total), 0, 100) : (double?)null, logicalProcessors = Environment.ProcessorCount, physicalMemoryTotalBytes = hasMemory ? memory.TotalPhysical : (ulong?)null, physicalMemoryAvailableBytes = hasMemory ? memory.AvailablePhysical : (ulong?)null, volumes = DriveInfo.GetDrives().Select(d => { try { return new { name = d.Name, ready = d.IsReady, totalBytes = d.IsReady ? d.TotalSize : (long?)null, freeBytes = d.IsReady ? d.AvailableFreeSpace : (long?)null }; } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return new { name = d.Name, ready = false, totalBytes = (long?)null, freeBytes = (long?)null }; } }).ToArray(), os = Environment.OSVersion.VersionString, uptimeSeconds = Environment.TickCount64 / 1000 };
+        var utilization = counters.Read();
+        return new { sampleStartUtc = start, sampleEndUtc = DateTimeOffset.UtcNow, intervalMs = sw.Elapsed.TotalMilliseconds, cpuPercentTotalMachine = first && second && total > 0 && idle2.Value >= idle1.Value ? Math.Clamp(100.0 * (1 - (idle2.Value - idle1.Value) / (double)total), 0, 100) : (double?)null, logicalProcessors = Environment.ProcessorCount, physicalMemoryTotalBytes = hasMemory ? memory.TotalPhysical : (ulong?)null, physicalMemoryAvailableBytes = hasMemory ? memory.AvailablePhysical : (ulong?)null, machine = Environment.MachineName, diskBusyPercent = utilization.Disk, gpuPercent = utilization.Gpu, volumes = DriveInfo.GetDrives().Select(d => { try { return new { name = d.Name, ready = d.IsReady, totalBytes = d.IsReady ? d.TotalSize : (long?)null, freeBytes = d.IsReady ? d.AvailableFreeSpace : (long?)null }; } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return new { name = d.Name, ready = false, totalBytes = (long?)null, freeBytes = (long?)null }; } }).ToArray(), os = Environment.OSVersion.VersionString, uptimeSeconds = Environment.TickCount64 / 1000 };
     }
 }

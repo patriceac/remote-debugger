@@ -14,6 +14,7 @@ public sealed partial class MainForm
 
     private void RefreshClipboardSharing()
     {
+        LoadViewerPreferences();
         if (!ClipboardConnected || !shareClipboard.Checked)
         {
             clipboardLifetime?.Cancel();

@@ -100,21 +100,21 @@ public sealed partial class MainForm : Forms.Form
     private bool renderingPeers;
 
     // Live screen.
-    private readonly RemoteScreenView screen = new() { Name = "remoteScreen", Dock = Forms.DockStyle.Fill, SizeMode = Forms.PictureBoxSizeMode.Zoom, BackColor = Rail };
-    private readonly Forms.Panel screenSurface = new() { Dock = Forms.DockStyle.Fill, BackColor = Rail, Padding = new Forms.Padding(0) };
+    private readonly RemoteScreenView screen = new() { Name = "remoteScreen", Dock = Forms.DockStyle.Fill, SizeMode = Forms.PictureBoxSizeMode.Zoom, BackColor = Color.FromArgb(211, 216, 220) };
+    private readonly Forms.Panel screenSurface = new() { Dock = Forms.DockStyle.Fill, BackColor = Color.FromArgb(211, 216, 220), Padding = new Forms.Padding(0) };
     private readonly Forms.Label liveBadge = Badge(() => UiText.Live, "liveBadge");
     private readonly Forms.Label streamOverlay = new Forms.Label { Name = "streamOverlay", AutoSize = true, ForeColor = Color.White, BackColor = Color.FromArgb(190, 20, 38, 48), Padding = new Forms.Padding(10, 7, 10, 7), Visible = true }.WithText(() => UiText.WaitingFreshFrameEllipsis);
     private readonly Forms.Button pauseViewing = Button(() => UiText.Pause, "pauseViewing", 82);
     private readonly LocalizedComboBox monitor = new() { Name = "monitor", DropDownStyle = Forms.ComboBoxStyle.DropDownList, Width = 130 };
     private readonly Forms.CheckBox mouseEnabled = new Forms.CheckBox { Name = "mouseKeyboard", Checked = true, AutoSize = true, ForeColor = PrimaryText, Margin = new Forms.Padding(12, 10, 0, 0) }.WithText(() => UiText.MouseKeyboardControl);
-    private readonly Forms.CheckBox relayEconomy = new Forms.CheckBox { Name = "relayEconomy", Checked = true, AutoSize = true, ForeColor = PrimaryText, Margin = new Forms.Padding(12, 10, 0, 0) }.WithText(() => UiText.RelayEconomy);
+    private readonly Forms.CheckBox relayEconomy = new Forms.CheckBox { Name = "relayEconomy", Enabled = false, AutoSize = true, ForeColor = PrimaryText, Location = new Point(12, 10), Margin = Forms.Padding.Empty }.WithText(() => UiText.RelayEconomy);
     private bool resumeViewingAfterMinimize;
-    private readonly Forms.Label streamStatus = new() { Name = "streamStatus", AutoSize = false, Dock = Forms.DockStyle.Fill, Margin = Forms.Padding.Empty, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F), AutoEllipsis = true, TextAlign = ContentAlignment.MiddleRight };
-    private readonly Forms.Label inputStatus = new() { Name = "inputStatus", AutoSize = false, Dock = Forms.DockStyle.Fill, Margin = Forms.Padding.Empty, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F), AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft };
+    private readonly Forms.Label streamStatus = new() { Name = "streamStatus", AutoSize = false, Dock = Forms.DockStyle.Fill, Margin = Forms.Padding.Empty, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F), AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft };
+    private readonly Forms.Label inputStatus = new() { Name = "inputStatus", AutoSize = false, Dock = Forms.DockStyle.Fill, Margin = Forms.Padding.Empty, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F), AutoEllipsis = true, TextAlign = ContentAlignment.MiddleRight };
     private readonly RemoteInputState inputState = new();
     private readonly Forms.TextBox remoteText = TextBox("remoteText");
-    private readonly Forms.Button typeText = Button(() => UiText.TypeText, "typeText", 76);
-    private readonly Forms.Button enterKey = Button(() => UiText.EnterKey, "enterKey", 76);
+    private readonly Forms.Button typeText = Button(() => UiText.TypeText, "typeText", 112);
+    private readonly Forms.Button enterKey = Button(() => UiText.EnterKey, "enterKey", 100);
     private DesktopGeometry? geometry;
     private bool liveFrameFresh;
     private CancellationTokenSource? liveStream;
@@ -244,6 +244,7 @@ public sealed partial class MainForm : Forms.Form
         BuildControllerPages();
         BuildTray();
         WireEvents();
+        InitializeViewer();
         InitializeFileDrop();
         InitializeWorkspaceState();
         LoadSavedConnection();
@@ -325,7 +326,9 @@ public sealed partial class MainForm : Forms.Form
 
     private void BuildHeader()
     {
-        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 1, Padding = new Forms.Padding(28, 0, 28, 0), Margin = Forms.Padding.Empty };
+        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 2, Padding = new Forms.Padding(28, 0, 28, 0), Margin = Forms.Padding.Empty };
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
         layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
         var titles = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = new Forms.Padding(0, 14, 0, 0), Margin = Forms.Padding.Empty };
@@ -339,6 +342,7 @@ public sealed partial class MainForm : Forms.Form
         statusDot.Location = new Point(12, 7); statusLabel.Location = new Point(28, 6); statusPill.Controls.Add(statusDot); statusPill.Controls.Add(statusLabel); RefreshStatusPillRegion();
         actions.Controls.Add(statusPill); actions.Controls.Add(terminateSession);
         layout.Controls.Add(titles, 0, 0); layout.Controls.Add(actions, 1, 0);
+        layout.Controls.Add(headerCharts, 0, 1); layout.SetColumnSpan(headerCharts, 2);
         header.Controls.Add(layout);
         var line = new Forms.Panel { Dock = Forms.DockStyle.Bottom, Height = 1, BackColor = Divider }; header.Controls.Add(line);
     }
@@ -357,8 +361,8 @@ public sealed partial class MainForm : Forms.Form
     {
         if (screenFooterVisible == visible && footerContent.Controls.Count == 2) return;
         footerContent.Controls.Clear();
-        footerContent.Controls.Add(visible ? inputStatus : footerLeft, 0, 0);
-        footerContent.Controls.Add(visible ? streamStatus : footerRight, 1, 0);
+        footerContent.Controls.Add(visible ? streamStatus : footerLeft, 0, 0);
+        footerContent.Controls.Add(visible ? inputStatus : footerRight, 1, 0);
         screenFooterVisible = visible;
     }
 
@@ -538,23 +542,26 @@ public sealed partial class MainForm : Forms.Form
     {
         var page = new PagePanel(() => UiText.RemoteScreen) { BackColor = Canvas, Padding = new Forms.Padding(20, 8, 20, 12) };
         monitor.Items.Add(new MonitorChoice(0, () => UiText.PrimaryMonitor)); monitor.SelectedIndex = 0;
-        var top = ControlRow(RowLabel(() => UiText.Monitor, "monitorLabel"), monitor, mouseEnabled, relayEconomy, new Forms.Panel { Size = new Size(1, 1) }, pauseViewing);
-        top.Dock = Forms.DockStyle.Top; top.Padding = new Forms.Padding(0, 0, 0, 8);
-        top.ColumnStyles[4] = new Forms.ColumnStyle(Forms.SizeType.Percent, 100);
+        economyHost.Controls.Add(relayEconomy);
+        var top = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Top, AutoSize = true, WrapContents = true, Padding = new Forms.Padding(0, 0, 0, 8) };
+        shareClipboard.Margin = new Forms.Padding(12, 10, 0, 0);
+        top.Controls.AddRange([RowLabel(() => UiText.Monitor, "monitorLabel"), monitor, mouseEnabled, shareClipboard, economyHost]);
         screenSurface.Controls.Add(screen); screenSurface.Controls.Add(liveBadge); screenSurface.Controls.Add(streamOverlay); liveBadge.BringToFront(); streamOverlay.BringToFront(); liveBadge.Location = new Point(16, 14); streamOverlay.Anchor = Forms.AnchorStyles.None; screenSurface.Resize += (_, _) => streamOverlay.Location = new Point(Math.Max(0, (screenSurface.Width - streamOverlay.Width) / 2), Math.Max(0, (screenSurface.Height - streamOverlay.Height) / 2));
         var view = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
         // An automatic column can grow to the bitmap's preferred width when DPI
         // changes. Keep both the viewer and its input row inside the workspace.
         view.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
         view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100)); view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize)); view.Controls.Add(screenSurface, 0, 0);
-        var bottom = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 4, RowCount = 1, Padding = new Forms.Padding(0, 6, 0, 0), Margin = Forms.Padding.Empty };
+        var bottom = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 6, RowCount = 1, Padding = new Forms.Padding(0, 6, 0, 0), Margin = Forms.Padding.Empty };
         bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100)); bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
         bottom.AutoSize = true; bottom.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         remoteText.Anchor = Forms.AnchorStyles.Left | Forms.AnchorStyles.Right; remoteText.PlaceholderText = UiText.RemoteTextPlaceholder;
         typeText.Anchor = enterKey.Anchor = Forms.AnchorStyles.Left;
         bottom.Controls.Add(remoteText, 0, 0); bottom.Controls.Add(typeText, 1, 0); bottom.Controls.Add(enterKey, 2, 0);
-        bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); bottom.Controls.Add(shareClipboard, 3, 0);
-        shareClipboard.CheckedChanged += (_, _) => RefreshClipboardSharing();
+        bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); bottom.Controls.Add(secureAttention, 3, 0);
+        bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); bottom.Controls.Add(fullScreenButton, 4, 0);
+        bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); bottom.Controls.Add(pauseViewing, 5, 0);
+        shareClipboard.CheckedChanged += (_, _) => { SaveViewerPreferences(); RefreshClipboardSharing(); };
         view.Controls.Add(bottom, 0, 1);
         page.Controls.Add(view); page.Controls.Add(top); return page;
     }
@@ -661,9 +668,9 @@ public sealed partial class MainForm : Forms.Form
         pairButton.Click += async (_, _) => await PairSelectedAsync();
         updateClientButton.Click += async (_, _) => await UpdateConnectedClientAsync();
         pauseViewing.Click += (_, _) => { if (liveStream == null) _ = StartStreamAsync(); else StopStream(() => UiText.ViewingPaused); };
-        relayEconomy.CheckedChanged += (_, _) => { if (liveStream != null) { StopStream(() => UiText.ViewingSuspended); _ = StartStreamAsync(); } };
+        relayEconomy.CheckedChanged += (_, _) => { if (updatingEconomy) return; economyPreferred = relayEconomy.Checked; if (liveStream != null) { StopStream(() => UiText.ViewingSuspended); _ = StartStreamAsync(); } };
         monitor.SelectedIndexChanged += (_, _) => { if (!refreshingMonitorLabels && liveStream != null) { StopStream(() => UiText.MonitorChanged); _ = StartStreamAsync(); } };
-        mouseEnabled.CheckedChanged += (_, _) => { inputState.Enabled = mouseEnabled.Checked; if (!mouseEnabled.Checked) ReleaseHeldInputForCurrentSession(); RefreshInputStatus(); };
+        mouseEnabled.CheckedChanged += (_, _) => { SaveViewerPreferences(); inputState.Enabled = mouseEnabled.Checked; if (!mouseEnabled.Checked) ReleaseHeldInputForCurrentSession(); RefreshInputStatus(); };
         restartAgent.Click += (_, _) => { agent?.Dispose(); agent = null; agentIdle = false; StartAgent(); _ = PrepareAgentAsync(); };
         Deactivate += (_, _) => { ReleaseHeldInputForCurrentSession(); RefreshInputStatus(); };
         Activated += (_, _) => RefreshInputStatus();
@@ -671,8 +678,8 @@ public sealed partial class MainForm : Forms.Form
         screen.MouseDown += (_, e) => { screen.Focus(); RefreshInputStatus(); var applied = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously); QueueMouse("down", e, applied); BeginViewerFileGesture(e, applied.Task); };
         screen.MouseUp += (_, e) => { QueueMouse("up", e); viewerDragOrigin = null; viewerDragCandidate = null; };
         screen.MouseMove += async (_, e) => { if (await ContinueViewerFileGestureAsync(e)) return; long now = Environment.TickCount64; if (now - lastMove < 33) return; lastMove = now; QueueMouse("move", e); };
-        screen.MouseWheel += (_, e) => QueueMouse("wheel", e); screen.PreviewKeyDown += (_, e) => e.IsInputKey = true; screen.KeyDown += (_, e) => { if (!CanSendInput()) return; e.SuppressKeyPress = true; QueueInput(new { kind = "keyDown", virtualKey = (int)e.KeyCode }); }; screen.KeyUp += (_, e) => { if (!CanSendInput()) return; e.SuppressKeyPress = true; QueueInput(new { kind = "keyUp", virtualKey = (int)e.KeyCode }); }; screen.GotFocus += (_, _) => RefreshInputStatus(); screen.LostFocus += (_, _) => { ReleaseHeldInputForCurrentSession(); RefreshInputStatus(); };
-        typeText.Click += (_, _) => QueueFocusedText(); enterKey.Click += async (_, _) => await ExecuteAsync("ui.key", new { pid = (int)pid.Value, key = "ENTER" });
+        screen.MouseWheel += (_, e) => QueueMouse("wheel", e); screen.GotFocus += (_, _) => RefreshInputStatus(); screen.LostFocus += (_, _) => { ReleaseHeldInputForCurrentSession(); RefreshInputStatus(); };
+        typeText.Click += (_, _) => QueueFocusedText(); enterKey.Click += (_, _) => { if (!CanSendFocusedInput()) return; QueueInput(new { kind = "keyDown", virtualKey = 13 }); QueueInput(new { kind = "keyUp", virtualKey = 13 }); };
         processList.ColumnClick += (_, e) => { processSort = processSort.Toggle(ProcessColumn(e.Column)); RenderProcesses(); }; processList.SelectedIndexChanged += (_, _) => { if (processList.SelectedItems.Count > 0 && processList.SelectedItems[0].Tag is ProcessSortRow row) { pid.Value = row.Pid; } };
         fileList.ColumnClick += (_, e) => { fileSort = fileSort.Toggle(FileColumn(e.Column)); RenderFiles(); }; fileList.SelectedIndexChanged += (_, _) => { selectedFilePath = fileList.SelectedItems.Count > 0 && fileList.SelectedItems[0].Tag is FileSortRow row && !row.IsDirectory ? row.Path : null; remotePath.SetText(selectedFilePath ?? ""); RefreshControllerControls(); }; fileList.DoubleClick += async (_, _) => { if (fileList.SelectedItems.Count > 0 && fileList.SelectedItems[0].Tag is FileSortRow { IsDirectory: true } row) await OpenRemoteFolderAsync(row.Path); };
         refreshResourcesButton.Click += async (_, _) => await RefreshResourcesAsync(); executeButton.Click += async (_, _) => await ExecuteSelectedAsync(); cancelButton.Click += async (_, _) => await CancelActionAsync(); uploadButton.Click += async (_, _) => await UploadFileAsync(); uploadFolderButton.Click += async (_, _) => await UploadFolderAsync(); downloadButton.Click += async (_, _) => await DownloadFileAsync();
@@ -1646,7 +1653,7 @@ public sealed partial class MainForm : Forms.Form
             {
                 if (ct.IsCancellationRequested || !ReferenceEquals(target, client)) break;
                 RecordIncident("connection_lost", ex);
-                heartbeatHealthy = false; liveFrameFresh = false; ReleaseHeldInputForCurrentSession(); SetFooterMessage(() => UiText.Reconnecting); footerDetail = ex.Message; PostUi(() => { streamOverlay.SetText(() => UiText.SessionRetrying); streamOverlay.Visible = true; liveBadge.Visible = false; UpdateHeader(); RefreshInputStatus(); RefreshFooter(); });
+                heartbeatHealthy = false; liveFrameFresh = false; ReleaseHeldInputForCurrentSession(); SetFooterMessage(() => UiText.Reconnecting); footerDetail = ex.Message; PostUi(() => { DelayReconnectWarning(() => UiText.SessionRetrying); liveBadge.Visible = false; UpdateHeader(); RefreshInputStatus(); RefreshFooter(); });
             }
             try { await Task.Delay(TimeSpan.FromSeconds(5), ct); } catch (OperationCanceledException) { break; }
         }
@@ -1677,7 +1684,7 @@ public sealed partial class MainForm : Forms.Form
                     {
                         if (!lifetime.IsCancellationRequested && ReferenceEquals(liveStream, lifetime) && generation == sessionGeneration && ReferenceEquals(target, client) && supportSession) Present(frame);
                         return Task.CompletedTask;
-                    }, (codec, reason) => SetStreamCodec(codec, reason), StreamPolicy.MaximumFps, MonitorValue(), 300, lifetime.Token, relayEconomy.Checked);
+                    }, (codec, reason) => SetStreamCodec(codec, reason), StreamPolicy.MaximumFps, MonitorValue(), 300, lifetime.Token, economyPreferred);
                 }
                 catch (Exception ex) when (!lifetime.IsCancellationRequested && ex is IOException or System.Net.Sockets.SocketException or OperationCanceledException)
                 {
@@ -1685,7 +1692,7 @@ public sealed partial class MainForm : Forms.Form
                     // The five-minute transport boundary and transient link loss
                     // renew the stream inside the same authenticated session.
                     liveFrameFresh = false; liveBadge.Visible = false;
-                    streamOverlay.SetText(() => UiText.ReconnectingStream); streamOverlay.Visible = true;
+                    DelayReconnectWarning(() => UiText.ReconnectingStream);
                     streamStatus.SetText(() => UiText.WaitingFreshFrame); RefreshInputStatus();
                     ReleaseHeldInputForCurrentSession();
                     await Task.Delay(500, lifetime.Token);
@@ -1721,6 +1728,7 @@ public sealed partial class MainForm : Forms.Form
 
     private void StopStream(Func<string> message)
     {
+        ClearReconnectWarning();
         var target = client;
         var running = liveStream;
         liveStream = null;
@@ -1738,6 +1746,7 @@ public sealed partial class MainForm : Forms.Form
             PostUi(() => Present(frame));
             return;
         }
+        ClearReconnectWarning();
         geometry = frame.Geometry; using var ms = new MemoryStream(Convert.FromBase64String(frame.Data)); using var image = Image.FromStream(ms); var previous = screen.Image; screen.Image = new Bitmap(image); previous?.Dispose(); screen.Refresh(); liveFrameFresh = true; liveBadge.Visible = true; streamOverlay.Visible = false; RefreshInputStatus();
         if (liveStream != null && streamStartedUtc is { } started)
         {
@@ -1770,6 +1779,7 @@ public sealed partial class MainForm : Forms.Form
         try
         {
             geometry = frame.Geometry;
+            ClearReconnectWarning();
             var image = frame.TakeImage(); var previous = screen.Image; screen.Image = image; previous?.Dispose(); screen.Refresh(); liveFrameFresh = true; liveBadge.Visible = true; streamOverlay.Visible = false; RefreshInputStatus();
             if (string.IsNullOrEmpty(streamCodec)) streamCodec = frame.Codec.Equals("h264", StringComparison.OrdinalIgnoreCase) ? "H.264" : "JPEG";
             if (liveStream != null && streamStartedUtc is { } started)
@@ -1818,14 +1828,15 @@ public sealed partial class MainForm : Forms.Form
 
     private bool CanSendFocusedInput() => rolePages.SelectedIndex == 1 && !clientUpdateBusy && !powerBusy && supportSession && heartbeatHealthy && !trayVisible && liveFrameFresh;
 
-    private bool CanSendInput() => rolePages.SelectedIndex == 1 && !clientUpdateBusy && !powerBusy && inputState.CanSend(supportSession && heartbeatHealthy && !trayVisible, liveFrameFresh, screen.ContainsFocus && ContainsFocus);
+    private bool CanSendInput() => rolePages.SelectedIndex == 1 && !clientUpdateBusy && !powerBusy && inputState.CanSend(supportSession && heartbeatHealthy && !trayVisible, liveFrameFresh, screen.ContainsFocus && Forms.Form.ActiveForm == this);
 
     private void RefreshInputStatus()
     {
-        inputStatus.SetText(() => !supportSession ? UiText.ConnectToControl : clientUpdateBusy ? UiText.Synchronizing : !inputState.Enabled ? UiText.ViewOnly : !heartbeatHealthy ? UiText.ControlAwaitingConnection : inputBlockMessage ?? (inputState.Suspended ? UiText.RestoringControl : !liveFrameFresh ? UiText.WaitingFreshFrame : screen.ContainsFocus && ContainsFocus ? UiText.MouseKeyboardActive : UiText.ClickScreenToControl));
+        inputStatus.SetText(() => !supportSession ? UiText.ConnectToControl : clientUpdateBusy ? UiText.Synchronizing : !inputState.Enabled ? UiText.ViewOnly : !heartbeatHealthy ? UiText.ControlAwaitingConnection : inputBlockMessage ?? (inputState.Suspended ? UiText.RestoringControl : !liveFrameFresh ? UiText.WaitingFreshFrame : ""));
+        keyboardCapture?.Refresh();
     }
 
-    private string StreamStatusWithRoute(string status) => client?.ActiveRoute is { Length: > 0 } route
+    private string StreamStatusWithRoute(string status) => client?.ScreenRoute is { Length: > 0 } route
         ? route + " · " + status
         : status;
 
@@ -1852,6 +1863,7 @@ public sealed partial class MainForm : Forms.Form
     /// </summary>
     private void InvalidateInputSession()
     {
+        keyboardCapture?.Reset();
         clipboardLifetime?.Cancel(); localClipboard?.Pause();
         RemoteClient? oldClient = client;
         bool hadInputSession = supportSession || liveStream != null;
@@ -1874,6 +1886,7 @@ public sealed partial class MainForm : Forms.Form
 
     private void ReleaseHeldInputForCurrentSession()
     {
+        keyboardCapture?.Reset();
         if (supportSession && client is { } target)
             inputQueue.Reset(new QueuedInput(target, sessionGeneration, new { kind = "release" }));
     }
@@ -1951,23 +1964,41 @@ public sealed partial class MainForm : Forms.Form
         }
     }
 
-    private async Task RefreshResourcesAsync()
+    private async Task RefreshResourcesAsync(bool automatic = false)
     {
         if (resourcesLoading) return;
         resourcesLoading = true; RefreshControllerControls();
         int generation = sessionGeneration; RemoteClient? target = client;
         try
         {
-            RequireClient(); resourceState.SetText(() => UiText.Measuring); volumeSummary.SetText(() => UiText.VolumesMeasuring); int? selected = processList.SelectedItems.Count > 0 && processList.SelectedItems[0].Tag is ProcessSortRow row ? row.Pid : null; var data = RemoteClient.Require(await target!.CallAsync("processes", seconds: 30)); var system = RemoteClient.Require(await target.CallAsync("system", seconds: 30)); if (generation != sessionGeneration || !ReferenceEquals(target, client)) return; processRows.Clear(); foreach (var p in data.GetProperty("processes").EnumerateArray()) processRows.Add(new ProcessSortRow(p.Int("pid"), p.Str("name", UiText.Unavailable), NullableDouble(p, "cpuPercentTotalMachine"), NullableLong(p, "workingSetBytes"), NullableBool(p, "responding"), p.Str("window"), NullableDate(p, "startUtc"))); lastMeasurementUtc = NullableDate(data, "sampleEndUtc") ?? DateTimeOffset.UtcNow; RenderProcesses(selected); var cpu = NullableDouble(system, "cpuPercentTotalMachine"); cpuSummary.SetText(() => cpu is { } c ? $"{c:F1} %" : UiText.Unavailable); long? total = NullableLong(system, "physicalMemoryTotalBytes"); long? available = NullableLong(system, "physicalMemoryAvailableBytes"); ramSummary.SetText(() => total is > 0 && available is >= 0 ? FormatBytes(total.Value - available.Value) : UiText.Unavailable); processSummary.SetText(processRows.Count.ToString("N0")); resourceMeasuredAt.SetText(lastMeasurementUtc.Value.ToLocalTime().ToString("T")); volumeSummary.SetText(() => FormatVolumes(system)); resourceState.SetText(() => UiText.MeasurementComplete); SetFooterDetail(() => UiText.Format(UiText.MeasuredAtTime, resourceMeasuredAt.Text)); RefreshFooter();
+            RequireClient();
+            if (!automatic) { resourceState.SetText(() => UiText.Measuring); volumeSummary.SetText(() => UiText.VolumesMeasuring); }
+            var samples = await Task.WhenAll(target!.CallAsync("processes", seconds: 30), target.CallAsync("system", seconds: 30));
+            if (generation != sessionGeneration || !ReferenceEquals(target, client)) return;
+            var data = RemoteClient.Require(samples[0]); var system = RemoteClient.Require(samples[1]);
+            int? selected = processList.SelectedItems.Count > 0 && processList.SelectedItems[0].Tag is ProcessSortRow row ? row.Pid : null;
+            processRows.Clear();
+            foreach (var p in data.GetProperty("processes").EnumerateArray()) processRows.Add(new ProcessSortRow(p.Int("pid"), p.Str("name", UiText.Unavailable), NullableDouble(p, "cpuPercentTotalMachine"), NullableLong(p, "workingSetBytes"), NullableBool(p, "responding"), p.Str("window"), NullableDate(p, "startUtc")));
+            lastMeasurementUtc = NullableDate(data, "sampleEndUtc") ?? DateTimeOffset.UtcNow; RenderProcesses(selected);
+            var cpu = NullableDouble(system, "cpuPercentTotalMachine"); cpuSummary.SetText(() => cpu is { } c ? $"{c:F1} %" : UiText.Unavailable);
+            long? total = NullableLong(system, "physicalMemoryTotalBytes"), available = NullableLong(system, "physicalMemoryAvailableBytes");
+            ramSummary.SetText(() => total is > 0 && available is >= 0 ? FormatBytes(total.Value - available.Value) : UiText.Unavailable);
+            UpdateResourceCharts(system);
+            processSummary.SetText(processRows.Count.ToString("N0")); resourceMeasuredAt.SetText(lastMeasurementUtc.Value.ToLocalTime().ToString("T"));
+            volumeSummary.SetText(() => FormatVolumes(system)); resourceState.SetText(() => UiText.MeasurementComplete);
+            if (!automatic) SetFooterDetail(() => UiText.Format(UiText.MeasuredAtTime, resourceMeasuredAt.Text));
+            RefreshFooter();
         }
-        catch (Exception ex) { if (generation != sessionGeneration) return; resourceState.SetText(() => UiText.MeasurementUnavailable); SetFooterMessage(() => UiText.ResourcesUnavailable); footerDetail = ex.Message; RefreshFooter(); }
+        catch (Exception ex) { if (generation != sessionGeneration) return; headerCharts.SetStale(); fullScreenCharts.SetStale(); resourceState.SetText(() => UiText.MeasurementUnavailable); if (!automatic) { SetFooterMessage(() => UiText.ResourcesUnavailable); footerDetail = ex.Message; RefreshFooter(); } }
         finally { resourcesLoading = false; RefreshControllerControls(); }
     }
 
     private void RenderProcesses(int? selectedPid = null)
     {
+        int? topPid = (processList.TopItem?.Tag as ProcessSortRow)?.Pid;
         SetSortIndicator(processList, (int)processSort.Column, processSort.Descending);
         int? keep = selectedPid ?? (processList.SelectedItems.Count > 0 && processList.SelectedItems[0].Tag is ProcessSortRow selectedRow ? selectedRow.Pid : null); var sorted = UiSorting.SortProcesses(processRows, processSort); processList.BeginUpdate(); processList.Items.Clear(); foreach (var row in sorted) { var item = new Forms.ListViewItem(row.Pid.ToString()); item.SubItems.Add(row.Name); item.SubItems.Add(row.CpuPercentTotalMachine is { } cpu ? cpu.ToString("F1") : "—"); item.SubItems.Add(row.WorkingSetBytes is { } bytes ? (bytes / 1048576d).ToString("F1") : "—"); item.SubItems.Add(row.Responding is null ? "—" : row.Responding.Value ? UiText.Yes : UiText.NotResponding); item.SubItems.Add(string.IsNullOrWhiteSpace(row.Window) ? "—" : row.Window); item.Tag = row; if (keep == row.Pid) item.Selected = true; processList.Items.Add(item); } processList.EndUpdate();
+        if (topPid.HasValue && processList.Items.Cast<Forms.ListViewItem>().FirstOrDefault(item => (item.Tag as ProcessSortRow)?.Pid == topPid) is { } top) processList.TopItem = top;
     }
 
     private async Task OpenRemoteFolderAsync(string path)
@@ -2283,6 +2314,7 @@ public sealed partial class MainForm : Forms.Form
 
     private void SaveWindowPlacement()
     {
+        if (fullScreenHost != null) { WindowPlacementStore.Save(root, windowedBounds, windowedState == Forms.FormWindowState.Maximized); return; }
         Rectangle bounds = WindowState == Forms.FormWindowState.Normal ? Bounds : RestoreBounds;
         WindowPlacementStore.Save(root, bounds, (trayVisible ? trayWindowState : WindowState) == Forms.FormWindowState.Maximized);
     }
@@ -2328,6 +2360,7 @@ public sealed partial class MainForm : Forms.Form
 
     private void DisposeResources()
     {
+        keyboardCapture?.Dispose(); viewerTips.Dispose(); resourceRefreshTimer.Dispose();
         powerLifetime?.Cancel();
         if (diagnosticRunStarted) diagnostics.EndRun(DiagnosticContext());
         clipboardLifetime?.Cancel(); localClipboard?.Dispose();

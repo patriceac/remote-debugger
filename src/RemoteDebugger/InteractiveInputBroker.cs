@@ -35,6 +35,16 @@ internal static class InteractiveInputBroker
                 var current = ProcessIdentity.Capture(caller.ProcessId);
                 if (current != caller) throw new UnauthorizedAccessException("The support process identity changed.");
                 using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct); deadline.CancelAfter(TimeSpan.FromSeconds(SupportOperationTimeouts.InputSeconds(request.Args.Str("kind"))));
+                if (request.Args.Str("kind") == "secureAttention")
+                {
+                    await Wire.WriteAsync(helper, request with { Args = Json.Element(new { kind = "release" }) }, deadline.Token);
+                    RemoteClient.Require(await Wire.ReadAsync<Reply>(helper, deadline.Token));
+                    Reply reply;
+                    try { SecureAttention.Send(controller); reply = Reply.Success(request.Id, new { sent = true }); }
+                    catch (Exception ex) { reply = Reply.Failure(request.Id, "input_blocked", ex.Message); }
+                    await Wire.WriteAsync(controller, reply, deadline.Token);
+                    continue;
+                }
                 await Wire.WriteAsync(helper, request, deadline.Token);
                 await Wire.WriteAsync(controller, await Wire.ReadAsync<Reply>(helper, deadline.Token), deadline.Token);
             }
@@ -91,7 +101,7 @@ internal sealed class PrivilegedInputSession
             if (!permitted()) throw new InputBlockedException(MaintenanceSession.DisabledMessage);
             if (pipe == null)
             {
-                var candidate = await SupportPlatform.OpenBrokerPipeAsync(ct);
+                var candidate = await SupportPlatform.OpenBrokerPipeAsync(ct, TokenImpersonationLevel.Impersonation);
                 try
                 {
                     await Wire.WriteAsync(candidate, new Request(Guid.NewGuid().ToString(), "", "input.open", Json.Element(new { })), ct);

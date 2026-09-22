@@ -84,6 +84,7 @@ public sealed partial class MainForm
 
     private void RefreshControllerControls()
     {
+        RefreshViewerControls();
         RefreshWanAddress();
         RefreshWakeControls();
         RefreshPowerControls();

@@ -65,7 +65,8 @@ public static class Native
         GetWindowThreadProcessId(GetForegroundWindow(), out uint focused);
         if (focused != pid) throw new InvalidOperationException("Windows refused foreground focus; no input was sent."); return h;
     }
-    private static void Input(params INPUT[] input) { if (SendInput((uint)input.Length, input, Marshal.SizeOf<INPUT>()) != input.Length) throw new InputBlockedException("Windows blocked input. Enable administrator maintenance for elevated windows; unlock or handle secure desktop prompts locally."); }
+    internal static readonly UIntPtr InputTag = (UIntPtr)0x52444247;
+    private static void Input(params INPUT[] input) { for (int i = 0; i < input.Length; i++) if (input[i].type == 1) input[i].data.key.extra = InputTag; if (SendInput((uint)input.Length, input, Marshal.SizeOf<INPUT>()) != input.Length) throw new InputBlockedException("Windows blocked input. Enable administrator maintenance for elevated windows; unlock or handle secure desktop prompts locally."); }
     public static object Windows(int pid) => AutomationElement.RootElement.FindAll(TreeScope.Children, pid > 0 ? new PropertyCondition(AutomationElement.ProcessIdProperty, pid) : Condition.TrueCondition).Cast<AutomationElement>().Take(100).Select(x => new { pid = x.Current.ProcessId, name = x.Current.Name, handle = x.Current.NativeWindowHandle }).ToArray();
     public static object Inspect(int pid)
     {
@@ -117,7 +118,7 @@ public static class Native
         SetCursorPos(x, y); Input(new INPUT { data = new UNION { mouse = new MOUSE { flags = 2 } } }, new INPUT { data = new UNION { mouse = new MOUSE { flags = 4 } } });
     }
     private static readonly object InputLock = new();
-    private static readonly HashSet<ushort> HeldKeys = new();
+    private static readonly Dictionary<ushort, KEY> HeldKeys = new();
     private static readonly HashSet<string> HeldButtons = new();
     private static DateTime lastInput = DateTime.UtcNow;
     private static readonly System.Threading.Timer InputWatchdog = new(_ => { lock (InputLock) if (DateTime.UtcNow - lastInput > TimeSpan.FromSeconds(3)) ReleaseAllInput(); }, null, 1000, 1000);
@@ -130,6 +131,8 @@ public static class Native
             lastInput = DateTime.UtcNow;
             string kind = a.Str("kind");
             if (kind == "release") { ReleaseAllInput(requireSuccess: true); return; }
+            if (kind == "keepAlive") return;
+            if (kind == "secureAttention") throw new InputBlockedException("Ctrl+Alt+Del requires administrator maintenance and the current Remote Debugger support service on the remote PC.");
             if (kind == "text") { TypeTextIntoFocusedControl(a.Str("text")); return; }
             if (kind is "move" or "down" or "up" or "wheel")
             {
@@ -145,8 +148,11 @@ public static class Native
             if (kind is "keyDown" or "keyUp")
             {
                 int vk = a.Int("virtualKey"); if (vk is < 8 or > 254) throw new ArgumentException("Invalid virtual key.");
-                Input(new INPUT { type = 1, data = new UNION { key = new KEY { vk = (ushort)vk, flags = kind == "keyUp" ? 2u : 0u } } });
-                if (kind == "keyDown") HeldKeys.Add((ushort)vk); else HeldKeys.Remove((ushort)vk); return;
+                int scan = a.Int("scanCode"); if (scan is < 0 or > 255) throw new ArgumentException("Invalid scan code.");
+                bool extended = a.TryGetProperty("extended", out var ext) ? ext.GetBoolean() : IsExtendedKey(vk);
+                var key = new KEY { vk = (ushort)vk, scan = (ushort)scan, flags = KeyboardFlags(kind == "keyUp", scan, extended), extra = InputTag };
+                Input(new INPUT { type = 1, data = new UNION { key = key } });
+                if (kind == "keyDown") HeldKeys[(ushort)vk] = key; else HeldKeys.Remove((ushort)vk); return;
             }
             throw new ArgumentException("Unknown input kind.");
         }
@@ -155,13 +161,18 @@ public static class Native
     {
         lock (InputLock)
         {
-            foreach (ushort key in HeldKeys.ToArray())
-                if (SendInput(1, [new INPUT { type = 1, data = new UNION { key = new KEY { vk = key, flags = 2 } } }], Marshal.SizeOf<INPUT>()) == 1) HeldKeys.Remove(key);
+            foreach (var entry in HeldKeys.ToArray())
+            {
+                var key = entry.Value; key.flags |= 2;
+                if (SendInput(1, [new INPUT { type = 1, data = new UNION { key = key } }], Marshal.SizeOf<INPUT>()) == 1) HeldKeys.Remove(entry.Key);
+            }
             foreach (string button in HeldButtons.ToArray())
                 if (SendInput(1, [new INPUT { data = new UNION { mouse = new MOUSE { flags = button == "left" ? 4u : button == "right" ? 16u : 64u } } }], Marshal.SizeOf<INPUT>()) == 1) HeldButtons.Remove(button);
             if (requireSuccess && (HeldKeys.Count > 0 || HeldButtons.Count > 0)) throw new InputBlockedException("Windows has not released held input; return to the interactive desktop.");
         }
     }
+    internal static bool IsExtendedKey(int vk) => vk is >= 0x21 and <= 0x28 or 0x2C or 0x2D or 0x2E or 0x5B or 0x5C or 0x5D or 0x6F or 0x90 or 0xA3 or 0xA5;
+    internal static uint KeyboardFlags(bool up, int scanCode, bool extended) => (up ? 2u : 0u) | (scanCode != 0 ? 8u : 0u) | (extended ? 1u : 0u);
     public static object Screenshot()
     {
         var r = System.Windows.Forms.SystemInformation.VirtualScreen;

@@ -34,7 +34,7 @@ internal static class SupportOperationTimeouts
 {
     // Release cannot inject a delayed click/key; let recovery finish cold broker
     // and helper signature checks instead of restarting them every three seconds.
-    internal static int InputSeconds(string kind) => kind == "release" ? 75 : 3;
+    internal static int InputSeconds(string kind) => kind is "release" or "secureAttention" ? 75 : 3;
 
     // Cold signature validation and NetSecurity/CIM startup can take materially
     // longer than an ordinary pipe request. Keep each client alive beyond its

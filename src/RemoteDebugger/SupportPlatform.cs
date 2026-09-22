@@ -338,10 +338,10 @@ public static class SupportPlatform
         }
     }
 
-    internal static async Task<NamedPipeClientStream> OpenBrokerPipeAsync(CancellationToken ct)
+    internal static async Task<NamedPipeClientStream> OpenBrokerPipeAsync(CancellationToken ct, System.Security.Principal.TokenImpersonationLevel impersonation = System.Security.Principal.TokenImpersonationLevel.None)
     {
         await StartServiceAsync(ct);
-        var pipe = new NamedPipeClientStream(".", SupportPlatformPaths.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+        var pipe = new NamedPipeClientStream(".", SupportPlatformPaths.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous, impersonation);
         try
         {
             await pipe.ConnectAsync(ct);
