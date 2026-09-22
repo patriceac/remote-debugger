@@ -33,7 +33,19 @@ internal static class PowerGuestSetup
             try { await process.WaitForExitAsync(deadline.Token); }
             catch { if (!process.HasExited) process.Kill(entireProcessTree: true); throw; }
             string provisionerOutput = await stdout, provisionerError = await stderr;
-            if (process.ExitCode != 0) throw new IOException($"The Release provisioner exited {process.ExitCode}: {provisionerError}");
+            if (process.ExitCode != 0)
+            {
+                using var diagnosticTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                const string query = "Get-WinEvent -FilterHashtable @{LogName=@('System','Application');StartTime=(Get-Date).AddMinutes(-5)} -ErrorAction SilentlyContinue | Where-Object { $_.ProviderName -in @('Service Control Manager','.NET Runtime','Application Error') -and $_.Message -match 'RemoteDebugger' } | Select-Object -First 8 TimeCreated,ProviderName,Id,Message | ConvertTo-Json -Depth 3; sc.exe queryex RemoteDebuggerSupport";
+                try
+                {
+                    var diagnostics = await Operations.RunAsync(Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe"),
+                        ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", query], diagnosticTimeout.Token);
+                    Console.Error.WriteLine(JsonSerializer.Serialize(diagnostics));
+                }
+                catch (Exception ex) { Console.Error.WriteLine("Service diagnostics unavailable: " + ex.Message); }
+                throw new IOException($"The Release provisioner exited {process.ExitCode}: {provisionerOutput} {provisionerError}");
+            }
             var provisioned = JsonSerializer.Deserialize<JsonElement>(provisionerOutput);
             if (!provisioned.GetProperty("ok").GetBoolean()) throw new IOException("The Release provisioner did not confirm success.");
             if (Hash(SupportPlatformPaths.ApplicationExecutable) != args[3] || Hash(SupportPlatformPaths.ServiceExecutable) != args[3])
