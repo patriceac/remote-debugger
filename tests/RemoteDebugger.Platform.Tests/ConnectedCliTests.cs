@@ -6,6 +6,23 @@ namespace RemoteDebugger.Platform.Tests;
 
 public sealed class ConnectedCliTests
 {
+    [Fact]
+    public async Task StoredReportsAreAvailableWithoutLoadingOrContactingARemoteConnection()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "rd-reports-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var log = new IncidentLog(root);
+            log.Record("update_failed", new("offline-pc", "controller", "1.0"), incident: true);
+            var request = Json.Element(new { id = Guid.NewGuid().ToString(), operation = "reports", args = new { } });
+            var reply = await ConnectedCli.ExecuteAsync(request, () => throw new InvalidOperationException("Must not connect"), default, () => log);
+            Assert.True(reply.Ok);
+            Assert.Equal("local-reports", reply.TargetId);
+            Assert.Equal("offline-pc", reply.Data.GetProperty("reports")[0].GetProperty("machine").GetString());
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
     private sealed class Remote : IConnectedRemote
     {
         public string ConnectionId { get; set; } = new('A', 64);

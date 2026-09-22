@@ -15,13 +15,16 @@ try {
   await client.connect(new StdioClientTransport({ command: process.execPath,
     args: [fileURLToPath(new URL('../server.mjs', import.meta.url))],
     env: { ...process.env, REMOTE_DEBUGGER_EXE: resolve(executable), REMOTE_DEBUGGER_CONNECTION: resolve(connection) }, stderr: 'pipe' }));
-  assert.equal((await client.listTools()).tools.length, 9);
-  checks.push('stdio_initialize_and_nine_tools');
+  assert.equal((await client.listTools()).tools.length, 10);
+  checks.push('stdio_initialize_and_ten_tools');
   const call = async (name, args = {}, expectError = false) => {
     const result = await client.callTool({ name, arguments: args }, undefined, { timeout: 45000 });
     assert.equal(result.isError, expectError, JSON.stringify(result.structuredContent));
     return result;
   };
+  const reports = await call('remote_reports');
+  assert.ok(Array.isArray(reports.structuredContent.data.reports));
+  checks.push('local_reports_without_remote_target');
   const status = await call('remote_status', {}, mode === 'disconnected');
   if (mode === 'disconnected') {
     assert.equal(status.structuredContent.error, 'not_connected');

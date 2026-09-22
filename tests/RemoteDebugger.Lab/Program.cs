@@ -20,6 +20,11 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        if (args.FirstOrDefault() == "powersetup")
+        {
+            Environment.ExitCode = PowerGuestSetup.RunAsync(args).GetAwaiter().GetResult();
+            return;
+        }
         if (args.Length < 2) throw new ArgumentException("The Lab needs a role and an output directory.");
         Forms.Application.SetHighDpiMode(Forms.HighDpiMode.PerMonitorV2);
         Forms.Application.EnableVisualStyles();
@@ -94,12 +99,13 @@ internal sealed partial class LabForm : Forms.Form
 
     private sealed record CheckRecord(string Id, string Requirement, string Status, bool Required, DateTimeOffset Utc, object? Evidence);
 
-    public LabForm(string role, string output, string scope, string updateVariant, string? applicationPath = null, string? mcpPackage = null)
+    public LabForm(string role, string output, string scope, string updateVariant, string? applicationPath = null, string? auxiliaryPath = null)
     {
         this.role = role.Trim().ToLowerInvariant();
         this.output = Path.GetFullPath(output);
         this.scope = scope.Trim().ToLowerInvariant();
         if (this.role == "internetinstaller" && this.scope == "demo-hold") stop.CancelAfter(TimeSpan.FromHours(2));
+        if (this.role.StartsWith("power", StringComparison.Ordinal)) stop.CancelAfter(TimeSpan.FromHours(2));
         this.updateVariant = updateVariant.Trim().ToLowerInvariant();
         application = applicationPath == null ? ResolveApplicationPath(this.role, this.updateVariant) : Path.GetFullPath(applicationPath);
         if (!File.Exists(application)) throw new FileNotFoundException("Release artifact missing.", application);
@@ -126,13 +132,23 @@ internal sealed partial class LabForm : Forms.Form
             try
             {
                 guestElevated = Native.IsElevated();
-                if (role == "loopbackmcp") { await McpReviewAsync(mcpPackage ?? throw new ArgumentException("MCP package path is required.")); return; }
+                if (role == "loopbackmcp") { await McpReviewAsync(auxiliaryPath ?? throw new ArgumentException("MCP package path is required.")); return; }
                 if (role == "internetinstaller") { await InternetInstallerReviewAsync(); return; }
                 if (role == "internet") { await InternetReviewAsync(); return; }
                 if (role == "security") { await SecurityReviewAsync(); return; }
+                if (role == "localreports") { product = LaunchProduct(false); await WaitUiAsync(); await ProbeWorkflowReportsAsync(); await FinishAsync(); return; }
                 if (!IsLoopback)
                     await PrepareBrokerProvisioningAsync();
-                if (role == "localization") await LocalizationReviewAsync();
+                if (role == "workflowagent") await WorkflowAgentAsync();
+                else if (role == "workflowcontroller") await WorkflowControllerAsync();
+                else if (role == "poweragent") await PowerAgentAsync(0, auxiliaryPath);
+                else if (role == "powerafterfirst") await PowerAgentAsync(1, auxiliaryPath);
+                else if (role == "poweraftersecond") await PowerAgentAsync(2, auxiliaryPath);
+                else if (role == "powercontroller-once") await PowerControllerAsync("once", PowerCredentialFixture.Read(auxiliaryPath));
+                else if (role == "powercontroller-cancel") await PowerControllerAsync("cancel");
+                else if (role == "powercontroller-expiry") await PowerControllerAsync("expiry");
+                else if (role == "powercontroller-shutdown") await PowerControllerAsync("shutdown");
+                else if (role == "localization") await LocalizationReviewAsync();
                 else if (role == "input") await PrivilegedInputReviewAsync();
                 else if (role == "languageselection") await LanguageSelectionReviewAsync();
                 else if (role == "singleinstance") await SingleInstanceReviewAsync();
@@ -154,6 +170,8 @@ internal sealed partial class LabForm : Forms.Form
             {
                 Record("lab.fatal", "The acceptance Lab completed without hiding an exception", "fail", true, new { error = ex.ToString() });
                 await FinishAsync(ex.ToString());
+                if (role is "poweragent" or "powerafterfirst")
+                    await FinishAsync(ex.ToString(), role == "poweragent" ? "power-before-boot-1.json" : "power-before-boot-2.json");
             }
         };
         FormClosed += (_, _) =>
@@ -238,7 +256,7 @@ internal sealed partial class LabForm : Forms.Form
         File.WriteAllText(Path.Combine(output, "progress.json"), Json.Text(new { schemaVersion = 2, role, scope, updateVariant, checks = snapshot }));
     }
 
-    private async Task FinishAsync(string? fatal = null)
+    private async Task FinishAsync(string? fatal = null, string markerName = "lab-result.json")
     {
         CheckRecord[] snapshot;
         lock (checkLock) snapshot = checks.ToArray();
@@ -261,9 +279,13 @@ internal sealed partial class LabForm : Forms.Form
             checks = snapshot,
             fatal
         };
-        string marker = Path.Combine(output, "lab-result.json");
+        string marker = Path.Combine(output, markerName);
         string temporary = marker + ".tmp";
-        await File.WriteAllTextAsync(temporary, Json.Text(result), stop.Token);
+        using (var stream = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
+        {
+            await JsonSerializer.SerializeAsync(stream, result, Json.Options, stop.Token);
+            await stream.FlushAsync(stop.Token); stream.Flush(true);
+        }
         File.Move(temporary, marker, true);
     }
 
@@ -514,7 +536,20 @@ internal sealed partial class LabForm : Forms.Form
             return;
         }
 
-        if (ProvisioningEvidence.TryValidate(application, output, out var receipt, out string error))
+        bool powerRole = role.StartsWith("power", StringComparison.Ordinal);
+        var validationTime = Stopwatch.StartNew();
+        bool validated;
+        ProvisioningEvidence.BrokerReceipt receipt;
+        string error;
+        do
+        {
+            validated = ProvisioningEvidence.TryValidate(application, output, out receipt, out error, allowPowerSetup: powerRole);
+            if (validated || !role.StartsWith("powerafter", StringComparison.Ordinal) || validationTime.Elapsed.TotalSeconds >= 30) break;
+            // The product's one-use sign-in watcher restores demand start just
+            // after Windows signs in. Retain the normal receipt/service checks.
+            await Task.Delay(500, stop.Token);
+        } while (true);
+        if (validated)
         {
             brokerProvisioning = receipt;
             application = receipt.ManagedExecutablePath;

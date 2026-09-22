@@ -86,9 +86,10 @@ public sealed partial class MainForm
     {
         RefreshWanAddress();
         RefreshWakeControls();
+        RefreshPowerControls();
         navScreen.Enabled = navProcesses.Enabled = navFiles.Enabled = navDiagnostics.Enabled = CanUseControllerWorkspace(supportSession, terminating);
         if (executeButton == null) return;
-        var state = WorkspaceAvailability.For(supportSession, heartbeatHealthy, pairingBusy || clientUpdateBusy || FleetBusy, terminating, action != null, selectedFilePath != null);
+        var state = WorkspaceAvailability.For(supportSession, heartbeatHealthy, pairingBusy || clientUpdateBusy || FleetBusy || powerBusy, terminating, action != null, selectedFilePath != null);
         pairButton.Enabled = host.Enabled = code.Enabled = state.CanPair;
         peers.Enabled = !pairingBusy && !clientUpdateBusy && !terminating && !wakeBusy;
         pairButton.SetText(() => pairingBusy ? UiText.Connecting : supportSession ? UiText.Connected : UiText.Connect);
@@ -99,7 +100,7 @@ public sealed partial class MainForm
         updateAllDevices.SetText(() => fleetRefreshing ? UiText.CheckingVersion : FleetBusy ? UiText.StopUpdates : UiText.UpdateAllDevices);
         if (NewerDeviceKnown) discoveryState.SetText(() => UiText.UpdateControllerFirst);
         discoverButton.Enabled = !pairingBusy && !clientUpdateBusy && !FleetBusy && !fleetRefreshing && !terminating && !supportSession;
-        if (FleetBusy || fleetRefreshing || wakeBusy) { pairButton.Enabled = false; discoverButton.Enabled = false; updateClientButton.Enabled = false; }
+        if (FleetBusy || fleetRefreshing || wakeBusy || powerBusy) { pairButton.Enabled = false; discoverButton.Enabled = false; updateClientButton.Enabled = false; updateAllDevices.Enabled = false; }
         refreshResourcesButton.Enabled = state.CanOperate && !resourcesLoading;
         bool filesAvailable = state.CanOperate && !filesLoading && fileTransferLifetime == null;
         browseFilesButton.Enabled = fileDirectory.Enabled = openFolderButton.Enabled = filesAvailable;
@@ -107,7 +108,7 @@ public sealed partial class MainForm
         bool folderReady = filesAvailable && fileDirectoryLoaded && string.Equals(fileDirectory.Text.Trim(), currentDirectory, StringComparison.OrdinalIgnoreCase);
         uploadButton.Enabled = uploadFolderButton.Enabled = folderReady;
         downloadButton.Enabled = folderReady && state.CanDownload;
-        fileList.Enabled = filesAvailable;
+        fileList.Enabled = state.CanOperate && !filesLoading;
         transferCancelButton.Enabled = fileTransferLifetime != null && !fileTransferLifetime.IsCancellationRequested;
         executeButton.Enabled = state.CanOperate && action == null;
         if (state.CanOperate && diagnosticState.Text == ConnectToContinue) diagnosticState.SetText(() => UiText.ReadyToRun);

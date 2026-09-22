@@ -1,5 +1,360 @@
 # Validation record
 
+## 0.5.0 — support workflow
+
+September 21, 2026: Luna Max ran focused Core/platform regression checks during
+implementation. The latest merged-source subset passed **78 platform tests and
+6 MCP tests**. The primary agent owns application and test code.
+
+September 22: the current signed 30F1 application passed the complete native
+automatic/manual reboot sequence and confirmed shutdown with independently
+observed power-off, evidence recovery and no application replay. Expiry uses
+retained real-hour timeout screens and nine fast clock/ticket checks; the user
+explicitly excluded another hour-long run. Exact package limitations remain
+listed below.
+
+Signed Release `B0892B06C4B39F98BF39583E53EF294863FEA9F7E87F2AA49C89EACFA63C2FD7`
+passed clipboard sharing/pause/end, all four Explorer drag-and-drop paths with
+nested/empty folders and exact contents, 32 MiB transfer cancellation/resume,
+restart preflight, and controller shutdown confirmation/cancellation. The H.264
+probe measured 11.06 FPS with a maximum frame age of 175 ms in the isolated VM;
+this is not a physical-hardware 30 FPS benchmark. Request IDs:
+`executable-test-20260921T174411144Z-54a86e36` (agent) and
+`executable-test-20260921T174411217Z-3f6a9c06` (controller).
+
+The controller's overall assertion failed at the final local-report lookup:
+the CLI ignored `--data-root`. Commit `2cf3119` fixes that wiring. Separate native
+request `executable-test-20260921T180241282Z-f532c410` passed on candidate C613:
+an actual unexpected process exit creates an automatic report, readable without
+a remote profile, with clipboard payloads excluded. Its screenshot was reviewed;
+application, guest/broker, process/payload cleanup and network isolation passed,
+and the worker ended Off. Both workflow
+VMs ended Off with successful process/payload/network cleanup and no skipped
+evidence. The Files completion state and shutdown countdown screenshots were
+visually reviewed.
+
+The current application candidate is signed Release **0.5.0**, built from clean
+source `6ae026320b96c50926c2d3d0b5b6f33159517455`, with SHA-256
+`30F1F63AC2F2CA510B1DE6659013E772B3CE741B674C60F60354E5C727D9EC56`.
+It additionally treats NUL-only logon notices as empty while retaining real
+interactive banners; Luna's four focused preflight cases passed.
+It also puts the stopped reconnect-wait explanation in the visible connection
+status. This was visually verified on C457, with punctuation refined in 69DF.
+Candidate 30F1 fixes boot identification using the actual OS boot time. Both
+installers contain that current candidate:
+
+| Package | SHA-256 | Qualification |
+| --- | --- | --- |
+| Private setup | `21B2D51EA898340336DF7B175B55C18D975F8DCB51A8EE1E86163363AE027CE9` | Rebuilt and signed with 30F1; preceding 69DF package passed five installer checks |
+| Standard setup | `E143A23B0FA46DAF9ABAC9A5A1F442CB3C32DE41A0B22F7059E354502296653C` | Built and signed without embedded connection or administrator profiles; no separate install run |
+
+The private package contains protected connection profiles and is kept local.
+The publisher fingerprint is
+`772169E21DEBE5D4E39D74BE04F168038C539552844CA06F86766A5FAEAD36EC`;
+the local signer reports `UnknownError` trust status, so signing is not a claim of
+public certificate trust.
+
+Preceding private-installer request
+`executable-test-20260921T223831389Z-a420d956` passed all five checks: fresh
+credential state, installation, original-user integration, protected setup and
+the first-launch passphrase requirement. The installed executable at
+`C:\Program Files\RemoteDebugger\RemoteDebugger.exe` matched 69DF
+(`69DF1BBA0526740BE718CFA56849EFF26900E1856F8CD7E2438EA80A163F05D0`), and setup
+`7B1502C81488AFF349968557FD83352150994BE750C39FD0B5984CD67C8E9E32` exited zero.
+Its first-launch screenshot was visually
+reviewed. Guest/broker assertions, process cleanup, payload deletion, disconnected
+network cleanup and worker recycle passed without warnings; the VM ended Off.
+This silent disconnected check does not qualify Internet connection, a custom
+install directory or uninstallation.
+
+Earlier installer request `executable-test-20260921T180221363Z-eb2e7fbd` passed fresh
+credential state, silent installation, build identity and original-user shell
+integration, protected profile staging, and the first-launch passphrase prompt.
+It tested private setup `DC2D9413DDC838413403294F215E03FB53D7C4EF1BC25AE0914EB7D259F385E5`
+and installed candidate `C613F0895B8877A268F2782A468E146EE01EC6AC46C414DD5D716C4FCA1FD1B6`
+from source `2cf3119ce03b36f42e92c35e49caeafd2fb7d051`. The passphrase
+screenshot was visually reviewed. This disconnected check does not qualify an
+Internet connection, a custom install directory, or uninstallation.
+Guest/broker execution and cleanup succeeded: the VM ended Off, no processes
+survived, the payload was deleted, all seven evidence items were copied, and no
+network adapter remained connected.
+
+| Requirement | Evidence and remaining limit |
+| --- | --- |
+| Session clipboard | Focused session/clipboard tests and native bidirectional, pause/baseline and session-end checks passed. Candidate 30F1 also passed the no-replay checks after automatic and manual reboots. |
+| Automatic reports | Retention/deduplication checks passed; candidate C613 created an unexpected-exit incident and read it offline without clipboard payloads. |
+| Restart and one-use logon | Unit checks, native preflight and cancellation with temporary-login cleanup passed. Candidate 30F1 passed both native boots with the same grant, fresh video and real input: automatic sign-in in 92.11 seconds and manual second-boot return in 156.47 seconds. The broker proved one manual sign-in, one original application launch and no action replay. |
+| Shutdown | Native named-PC confirmation, countdown/cancellation, accepted-shutdown UI and reconnect-profile removal passed on 30F1. The broker independently observed power-off before cleanup, recovered the evidence and proved no application replay. Both final requests passed completely. |
+| Update progress | Ten focused progress tests passed, covering measured/stalled/resumed rates, opaque stages and actual completion; the existing binary/health verification gate is preserved. |
+| Smoother viewer | Sixteen stream/frame/acknowledgement checks passed; native H.264 viewing exceeded the former 5 FPS ceiling without a stale-frame backlog. |
+| Explorer transfer | Tree/descriptor/destination checks and all four native copy paths passed, including Unicode/nested/empty folders, source preservation and bulk cancellation/resume with exact hashes. |
+
+Earlier attempts exposed an OLE extraction deadlock and Explorer test-timing
+issues, corrected before the B089 run. One 0.5.0 provisioning failure did not
+reproduce; the CLI now forwards the provisioner's current error, and isolated
+request `executable-test-20260921T173912962Z-6cd8e67e` provisioned successfully.
+
+The remaining short power checks are complete. An earlier release of the Hyper-V Harness project's
+authorized Astra Max extension received a verified Ready receipt at commit
+`b67b47e479f2c25775f011824745781afff77631`, deployment
+`deploy-47d275054947b776`, completed September 22 at 00:46:05 UTC. Its Ready
+receipt was independently read. The underlying 6414 release passed 498 deterministic scenarios,
+eight isolated acceptance paths and a separate network peer. It qualifies
+per-boot network restoration, exact terminal-result recognition, setup argument
+expansion and bounded failure evidence. Product power qualification is separate.
+The b67 update also fixes screenshot-only live capture and preserves unknown
+process state as null when a requested evidence file is missing; two focused
+regressions and live captures qualified those changes.
+The test-only power adapter binds the elevated setup to
+the exact Lab and Release hashes, retains independent installed-product/service
+verification, and checks the target's account/SID/pool-baseline binding before
+using the request-private DPAPI credential. Its continuations observe the
+product's registered RunOnce launch; its expiry scenario uses the real hour.
+Luna's ten
+focused provisioning/binding checks, a Windows PowerShell UTF-8 BOM fixture
+regression, and the submission script's syntax check passed. All four
+`-PrepareOnly` scenarios were regenerated and passed request/plan assertions
+against the current Release and Lab SHA-256
+`7380CF3F2C26BBF4CFB69605C9724A2DED0BB19311E1077FBC16E7475D97EA0E`:
+exact artifact hashes and setup arguments, shared isolated cohorts, credential
+fixtures limited to the one-use-login scenario (Manual sign-in uses the broker's
+own credential), Automatic/Manual boot ordering, and the
+real-hour observation interval. Shutdown explicitly allows 300 seconds for the
+qualified harness evidence-recovery path. Prepare-only checks did not run the
+application.
+
+The initial Once controller `executable-test-20260921T211717759Z-e7dca8a1`
+failed because the Lab looked for cancelled-countdown text in a footer occupied
+by viewer controls. The visible session had recovered. Commit `fd368aa` instead
+asserts the connected state, unchanged boot and clean temporary-login preflight.
+Its dependent target `executable-test-20260921T211717962Z-2b0d3b17` was cancelled;
+both requests cleaned up successfully.
+
+On the next Once pair, controller `executable-test-20260921T213040683Z-30b29d04`
+passed that cancellation check, then timed out waiting for Desktop Ready after
+the first actual automatic boot. Target `executable-test-20260921T213040782Z-7e89c641`
+proved a distinct first boot and automatic sign-in without broker credential
+input. It did not prove support reconnection or a second actual boot. The target
+was cancelled after the controller's definitive failure. Both workers ended Off
+with successful payload/network cleanup. This run used candidate 2BBD and Lab
+`6E68982B9D12273FFC8666D4FA6EE10432034DA9D8BF08C4F658E4975F064216`.
+The controller screenshot was reviewed: Waiting for PC remained visible, with
+about 55 minutes left. The deployed harness discarded guest-only continuation
+evidence on early failure/cancellation; the replacement now retains a bounded
+failure snapshot. Neither account demotion nor OUTDIR reset was found in the harness.
+
+The real-hour Expiry pair ran on C457/Lab 33E8 as requests
+`executable-test-20260921T213626249Z-b4c4269d` and
+`executable-test-20260921T213626348Z-b6365550`. Broker captures showed the initial
+59:49 countdown at 21:42:47 UTC, 38:55 remaining at 22:03:41 UTC, and the stopped
+wait with the old desktop removed at 22:43:19 UTC. These screens were visually
+reviewed. The controller then failed its four-minute target-response probe at
+22:46:51 UTC. The broker observed a distinct manual boot at 21:43:04 UTC,
+3700.55 seconds signed out, one managed sign-in, one original launch and no
+action replay. The dependent target was canonically cancelled after that failure;
+both VMs ended Off with payload deletion and successful network cleanup. This
+establishes the visible real-hour timeout, but does not pass the complete
+post-sign-in no-reconnect scenario.
+
+The user ruled out repeating the hour-long run. Remaining expiry qualification
+uses the preserved real-timer captures, fast injected-clock deadline and expired
+ticket checks, and the short native cancellation/reboot path. A complete second
+hour-long end-to-end run is not a release gate and must not be started under the
+current test plan.
+Luna passed all eight session tests and the restart-ticket test in seconds,
+including one tick before/exactly at the deadline and rejection of a late
+heartbeat or expired restart ticket.
+
+The Shutdown target
+`executable-test-20260921T215803298Z-c42a8851` failed elevated setup before the
+product ran: the expected-power-off path passed literal `{PAYLOAD}` tokens to
+the setup executable. Its dependent controller
+`executable-test-20260921T215801617Z-d98c5b76` was canonically cancelled. Both
+workers ended Off with payload deletion and successful network cleanup, without
+evidence warnings. The replacement harness fixes argument expansion. These
+requests used C457 and Lab
+`B3B93B963F39C8FFF5A004DF556CDE3CD622138C824FC5666DDFC63546008415`.
+The separate Cancel scenario uses the same C457/B3B93 bytes. Controller
+`executable-test-20260921T220625028Z-edbd402b` displayed the stopped-wait state and
+forgot its connection, then exceeded the Lab's four-minute target-response wait
+at 22:17:32 UTC. Target `executable-test-20260921T220625128Z-90fe691a` completed an
+actual manual boot at 22:14:09 UTC, with 62.90 seconds signed out, one broker
+sign-in and no action replay. Its continuation was only submitted at 22:16:14 UTC
+and later reached the request's 30-minute timeout during continuation. Both
+requests cleaned up successfully; the controller's overall application assertion
+failed and the old harness did not export the target's guest-only diagnostics.
+A separately supplied user screenshot showed the target Lab's `power.boot_1`
+pass beside a Remote Debugger firewall prompt. That check follows exact-process
+identity verification, supporting that the product's RunOnce launch occurred;
+the screenshot is user observation, not broker-attested request evidence.
+
+The next Lab allows ten minutes for the post-cancel/expiry target reply and
+bounds abandoned target coordination to ten minutes. Neither change alters the
+product's one-hour timer. It records the visible stopped wait and removed profile
+before probing the returning target, preserving those results on later failure.
+Lab SHA-256 for the first boot-time-fix pair was
+`182F368B2B2E27F9C76583ED4C4AAAA1946E1CB61C9DF792861280160696EE68`.
+Harness canaries subsequently reproduced Public-category drift and loss of the
+request-owned Private interface exemption after reboot, with the leased MAC,
+address, routes, DNS and IPv6 unchanged. The replacement gate restores only that
+request-owned category/exemption before continuation and validates other network
+state. Traffic passed to a separate peer after automatic and manual boots.
+Autonomous product startup may precede this gate, so the product's firewall-prompt
+timing still needs native verification.
+
+After harness qualification, short Cancel controller
+`executable-test-20260922T000006133Z-8b5b1bac` passed its stopped-wait check, then
+failed because the reported boot identity had not changed. Target
+`executable-test-20260922T000006316Z-4c01c79b` independently completed a manual
+reboot, one sign-in after 63.62 seconds signed out, a successful network gate and
+autonomous product startup at medium integrity. The bounded failure snapshot
+retained both phases: each reported the same GUID despite the actual reboot.
+This GUID prevented the product from restoring its restart grant. The fix queries
+the documented [OS boot time](https://learn.microsoft.com/en-us/windows/win32/wmisdk/wmi-tasks--desktop-management)
+instead; the focused store
+test also confirms that unavailable boot information refuses restoration. Luna's
+targeted test passed. Both requests cleaned up successfully after cancellation
+of the orphan target. No additional hour-long run is planned.
+
+The concurrent Shutdown pair (`executable-test-20260922T000157359Z-b1b0e56c` and
+`executable-test-20260922T000157433Z-b24af831`) was cancelled before any shutdown
+because a worker readiness failure left its target queued. Cleanup passed; the
+worker recovered automatically. This is not a product shutdown result. See
+[support workflow](SUPPORT_WORKFLOW.md). Raw evidence is retained
+under `D:\Disk\VMs\Codex-Harness\Live\Broker\Results\<request-id>`.
+
+The first 30F1/Lab 182F short pairs failed during elevated setup, before Lab
+launch: Once controller `executable-test-20260922T004847113Z-e34d878b` and
+Shutdown controller `executable-test-20260922T004900271Z-1e77d717` each reported
+SCM StartService error 1053. Their setup receipts bind the exact 30F1 product;
+the available error did not establish the underlying cause. Dependent targets
+`executable-test-20260922T004847228Z-5d416374` and
+`executable-test-20260922T004900349Z-5e8abe9c` were canonically cancelled without
+application launch or replay. All four VMs ended Off with payload deletion,
+complete network cleanup and no evidence warnings; the queue returned healthy
+and idle. Lab commit `40296f4` retains provisioner stdout and bounded service
+event diagnostics on setup failure. Its Release SHA-256 is
+`288EDA4093E21AF6954E8E46ACE6169012E7FA59D0417F79D47533283A4B03F4`;
+the product and installers remain unchanged.
+
+Single-VM provisioning diagnostic `executable-test-20260922T010447047Z-dba8af90`
+succeeded on those exact bytes. Setup returned zero after 121.69 seconds and the
+read-only `cli platform-status` process returned zero; no reboot or shutdown was
+performed. The service error did not reproduce, so this does not establish its
+cause. The VM ended Off with payload removal, Network None cleanup and no
+evidence warnings. The next short pairs run one pair at a time. Both roles now
+use the same hash-bound setup adapter so either failure retains diagnostics;
+the event filter also matches the spaced service display name. Luna passed the
+single setup-receipt binding regression. Lab source `2fa38c3` has SHA-256
+`4B2568A521FC4025A1875843C309A3B7CCA12761E77BBAB11539EB5BA9C9EF0C`.
+
+The next Once controller `executable-test-20260922T011104966Z-37691efe` passed
+provisioning and cancellation with temporary-login cleanup, then reached
+Desktop Ready after the first automatic reboot. It verified the changed boot,
+same grant, matching binary, fresh frame, no planned-restart crash report and no
+disconnected clipboard replay before failing the input text probe at 01:18:19 UTC.
+The visually reviewed final screenshot shows an unanswered Windows Firewall
+prompt over the target desktop. Target `executable-test-20260922T011104817Z-f7837b92`
+attested the automatic boot and autonomous medium-integrity product resume;
+manual boot 2 was never requested. The orphan was cancelled, retaining 13
+diagnostic files without skips. Both VMs ended Off with successful payload and
+network cleanup and no warnings. The harness owner is addressing the isolated
+network's startup classification: restoring Private after autonomous sign-in is
+too late to prevent the prompt. No prompt was accepted and product firewall
+permissions were not broadened.
+
+The subsequent Shutdown pair used the same 30F1 product and 4B25 Lab.
+Controller `executable-test-20260922T012752530Z-82e05991` passed provisioning and
+all accepted-shutdown assertions: the named target was confirmed, the command
+was accepted, reconnect state was forgotten, and disconnect was not presented as
+proof of physical power-off. Its final desktop was visually reviewed. For target
+`executable-test-20260922T012752355Z-f5d68527`, the broker independently observed
+power-off at 01:33:37 UTC, before cleanup. Evidence recovery then refused to
+overwrite the broker-owned `broker-guest-setup.json`: the Lab had copied its
+setup receipt into the output directory using that same filename. The target's
+formal recovery/no-replay assertion was not retained, so this is not a complete
+target harness pass. Both VMs ended Off with successful payload/network cleanup
+and no cleanup warnings. The Lab copy now uses `lab-guest-setup.json`; the
+original receipt and broker overwrite protection are unchanged. The rebuilt Lab
+SHA-256 is `11E879CFFD0BE063470DD684C194ED81F7A67DD4F62A2A8CC5CF8709A59EB09D`.
+Luna passed the single receipt-collision regression. The product and both signed
+installers are unchanged.
+
+The harness held product submissions while qualifying its startup-network
+repair. Candidate `6710db1895f37dac2d3ac6712be9e139c90a0005`, deployment
+`deploy-d03a0ef15fd35409`, did not receive Ready. Its automatic-boot request
+`executable-test-20260922T014633616Z-50e3f6f9` proves that the network is already
+Private before post-boot observation, with both boot classification policies
+intact and no late restoration. Qualification then failed because the
+request-owned firewall interface exception did not survive reboot. That receipt
+was independently read; this is harness evidence, not a Remote Debugger test.
+Successor `3c096599059fb1ddff811c7c8840dd3d12a0e439` received a verified Ready
+receipt in `deploy-1ab0217ffae253fc` at 02:47:25 UTC: all eight acceptance paths
+and the separate restart peer passed, with one recovery refresh. The owner
+explicitly lifted the hold. Both boot modes retained Private classification and
+the effective native firewall exception without late restoration. The second
+boot's CIM projection omitted the exception, so qualification now retains that
+observation alongside the effective native result. A notification appeared on
+the headless peer despite passing traffic; harness qualification does not prove
+a prompt-free product desktop. Only the short Once and Shutdown product checks
+are authorized, with actual product UI and input verification required.
+
+On that Ready harness, Once controller
+`executable-test-20260922T024917046Z-30767258` passed cancellation/credential
+cleanup and `power.return_boot_1`: the first automatic reboot restored the same
+grant, matching binary, fresh live video and real keyboard input in 98.72 seconds.
+Target `executable-test-20260922T024916969Z-b8cca9a0` booted automatically at
+02:55:48 UTC, then manually at 02:57:24 UTC after 33.06 seconds signed out and one
+broker credential entry. Both network gates passed. The second return reached a
+live desktop, visually reviewed without a firewall prompt, but the Lab's
+separate input probe reused its pre-reboot persistent socket and failed with
+connection reset at 02:59:02 UTC. The helper now opens a fresh client for each
+returned boot while retaining the same grant check; no product code changed.
+The target subsequently failed its cohort lease check after the controller
+terminated; its diagnostics retained 17 files without skips. Both VMs ended Off
+with payload deletion and successful network cleanup. The Lab fix is commit
+`846f5c6`; its rebuilt artifact has SHA-256
+`A769872D1B0BC5AFBB0100D47625D89BDBF049DA1A795BDB62ADB88679D2DF7D`
+for the remaining short checks; the signed Release remains 30F1.
+
+The next Once pair passed completely on those exact 30F1/A769 bytes:
+controller `executable-test-20260922T030344009Z-5fa3e427` and target
+`executable-test-20260922T030343872Z-87b81775`. The controller passed cancellation
+and temporary-login cleanup, then both real boot returns with the same grant,
+matching binary, fresh live video, keyboard input and no offline clipboard
+replay. Automatic return took 92.11 seconds; manual second-boot return took
+156.47 seconds, including 32.11 seconds deliberately signed out before the
+broker entered credentials. Both network gates passed. The target's restart contract is
+proven, with one original launch, one manual sign-in and no action replay.
+The second-boot screenshot was independently reviewed: live desktop, typed
+input and no firewall prompt. Both roles passed harness and application
+assertions, ended Off, deleted their payloads and completed network cleanup
+without warnings or skipped evidence. The healthy queue returned to zero active
+and queued requests.
+
+The next shutdown target `executable-test-20260922T031542034Z-e38001c4`
+passed the complete power-off/evidence-recovery/no-replay contract. Controller
+`executable-test-20260922T031542236Z-f7df4521` stopped at a transient UI Automation
+lookup even though its final screenshot visibly showed the correct completed
+state. Lab commit `c3da45c` keeps polling for the status control within the
+existing 30-second deadline, preserving the expected text and profile-removal
+assertions. Its artifact SHA-256 is
+`C4B5A70461A5A17B320595C662537ACB6539AB2C5AE9E263B5799198B6F51DCE`;
+the application and installers remain unchanged.
+
+The focused shutdown rerun passed completely: target
+`executable-test-20260922T032611948Z-8738031d` and controller
+`executable-test-20260922T032612104Z-a90e1674`. The controller passed provisioning
+and `power.shutdown_controller`, including named-PC confirmation/countdown,
+accepted shutdown, forgotten reconnect state and honest physical-off wording.
+Its final desktop was independently reviewed. The broker observed the target
+Off at 03:31:33 UTC before cleanup, recovered evidence after a controlled boot,
+and proved that the original application was not relaunched. Both requests
+passed harness and application assertions, ended Off, removed payloads and
+processes, and completed network cleanup with no warnings. The queue returned
+healthy with zero active or queued requests. No further native reruns are
+required for the agreed scope.
+
 ## 0.4.13 — audit fixes
 
 September 19, 2026: Luna Max executed **172 Core tests, 141 Windows platform tests

@@ -87,11 +87,10 @@ public sealed partial class MainForm : Forms.Form
     private readonly Forms.Button updateClientButton = Button(() => UiText.UpdateClient, "updateClient", 150);
     private readonly Forms.Button discoverButton = Button(() => UiText.Refresh, "discover", 92);
     private readonly Forms.Label connectionState = new() { Name = "connectionFormState", AutoSize = true, ForeColor = SecondaryText, MaximumSize = new Size(460, 0) };
-    private readonly Forms.TableLayoutPanel updateProgressArea = new() { Dock = Forms.DockStyle.Top, Height = 50, ColumnCount = 1, RowCount = 2, Margin = Forms.Padding.Empty, Visible = false };
+    private readonly Forms.TableLayoutPanel updateProgressArea = new() { Dock = Forms.DockStyle.Top, Height = 96, ColumnCount = 1, RowCount = 2, Margin = Forms.Padding.Empty, Visible = false };
     private readonly Forms.Panel updateProgressTrack = new() { Name = "updateProgress", Dock = Forms.DockStyle.Fill, BackColor = Divider, Margin = new Forms.Padding(0, 0, 0, 4) };
     private readonly Forms.Panel updateProgressFill = new() { Dock = Forms.DockStyle.Left, BackColor = Teal, Width = 0 };
     private readonly Forms.Label updateProgressText = new() { Name = "updateProgressText", Dock = Forms.DockStyle.Fill, AutoSize = false, ForeColor = SecondaryText, Margin = Forms.Padding.Empty };
-    private int updateTransferPercent;
     private readonly Forms.Label selectedPeerName = new WorkspaceLabel { AutoSize = true, Font = new Font("Segoe UI", 15, FontStyle.Bold), ForeColor = PrimaryText }.WithText(() => UiText.ManualConnection);
     private readonly Forms.Label selectedPeerAddress = new WorkspaceLabel { AutoSize = true, ForeColor = SecondaryText }.WithText(() => UiText.TargetAddress);
     private readonly Forms.Label discoveryState = new() { AutoSize = true, ForeColor = SecondaryText };
@@ -218,6 +217,7 @@ public sealed partial class MainForm : Forms.Form
         // panels still contain their unscaled design-time dimensions.
         SuspendLayout();
         root = dataRoot ?? Vault.DefaultRoot;
+        diagnostics = new IncidentLog(root);
         isUpdateAdmin = new UpdateAdminStore(root).IsAdmin;
         this.loopbackOnly = loopbackOnly;
         this.startupPreparationError = startupPreparationError;
@@ -244,6 +244,7 @@ public sealed partial class MainForm : Forms.Form
         BuildControllerPages();
         BuildTray();
         WireEvents();
+        InitializeFileDrop();
         InitializeWorkspaceState();
         LoadSavedConnection();
         SupportPlatform.ManagedRelaunchRequested += OnManagedRelaunchRequested;
@@ -260,6 +261,7 @@ public sealed partial class MainForm : Forms.Form
             }
         };
         Shown += MainFormShown;
+        Shown += (_, _) => { diagnostics.BeginRun(DiagnosticContext()); diagnosticRunStarted = true; };
         FormClosing += MainFormClosing;
         FormClosed += (_, _) => DisposeResources();
         Resize += (_, _) => { UpdateMinimizedViewing(); RefreshDiscoveryOnOpen(); };
@@ -307,6 +309,7 @@ public sealed partial class MainForm : Forms.Form
         var work = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false, Margin = Forms.Padding.Empty, Padding = new Forms.Padding(0, 14, 0, 0), BackColor = Rail };
         work.Controls.Add(controllerNavCaption);
         work.Controls.Add(navConnection); work.Controls.Add(navScreen); work.Controls.Add(navProcesses); work.Controls.Add(navFiles); work.Controls.Add(navDiagnostics);
+        InitializePowerControls(work);
         layout.Controls.Add(work, 0, 2);
 
         var local = new Forms.Panel { Dock = Forms.DockStyle.Fill };
@@ -501,7 +504,7 @@ public sealed partial class MainForm : Forms.Form
         updateProgressArea.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 10));
         updateProgressArea.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
         updateProgressTrack.Controls.Add(updateProgressFill);
-        updateProgressTrack.SizeChanged += (_, _) => updateProgressFill.Width = updateProgressTrack.ClientSize.Width * updateTransferPercent / 100;
+        updateProgressTrack.SizeChanged += (_, _) => RefreshUpdateProgress();
         updateProgressArea.Controls.Add(updateProgressTrack, 0, 0); updateProgressArea.Controls.Add(updateProgressText, 0, 1);
         panel.Controls.Add(updateProgressArea, 0, 8); return panel;
     }
@@ -544,12 +547,14 @@ public sealed partial class MainForm : Forms.Form
         // changes. Keep both the viewer and its input row inside the workspace.
         view.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
         view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100)); view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize)); view.Controls.Add(screenSurface, 0, 0);
-        var bottom = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 3, RowCount = 1, Padding = new Forms.Padding(0, 6, 0, 0), Margin = Forms.Padding.Empty };
+        var bottom = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 4, RowCount = 1, Padding = new Forms.Padding(0, 6, 0, 0), Margin = Forms.Padding.Empty };
         bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100)); bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
         bottom.AutoSize = true; bottom.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         remoteText.Anchor = Forms.AnchorStyles.Left | Forms.AnchorStyles.Right; remoteText.PlaceholderText = UiText.RemoteTextPlaceholder;
         typeText.Anchor = enterKey.Anchor = Forms.AnchorStyles.Left;
         bottom.Controls.Add(remoteText, 0, 0); bottom.Controls.Add(typeText, 1, 0); bottom.Controls.Add(enterKey, 2, 0);
+        bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); bottom.Controls.Add(shareClipboard, 3, 0);
+        shareClipboard.CheckedChanged += (_, _) => RefreshClipboardSharing();
         view.Controls.Add(bottom, 0, 1);
         page.Controls.Add(view); page.Controls.Add(top); return page;
     }
@@ -663,7 +668,10 @@ public sealed partial class MainForm : Forms.Form
         Deactivate += (_, _) => { ReleaseHeldInputForCurrentSession(); RefreshInputStatus(); };
         Activated += (_, _) => RefreshInputStatus();
         inputRecoveryTimer.Tick += (_, _) => RetryInputRecovery();
-        screen.MouseDown += (_, e) => { screen.Focus(); RefreshInputStatus(); QueueMouse("down", e); }; screen.MouseUp += (_, e) => QueueMouse("up", e); screen.MouseMove += (_, e) => { long now = Environment.TickCount64; if (now - lastMove < 33) return; lastMove = now; QueueMouse("move", e); }; screen.MouseWheel += (_, e) => QueueMouse("wheel", e); screen.PreviewKeyDown += (_, e) => e.IsInputKey = true; screen.KeyDown += (_, e) => { if (!CanSendInput()) return; e.SuppressKeyPress = true; QueueInput(new { kind = "keyDown", virtualKey = (int)e.KeyCode }); }; screen.KeyUp += (_, e) => { if (!CanSendInput()) return; e.SuppressKeyPress = true; QueueInput(new { kind = "keyUp", virtualKey = (int)e.KeyCode }); }; screen.GotFocus += (_, _) => RefreshInputStatus(); screen.LostFocus += (_, _) => { ReleaseHeldInputForCurrentSession(); RefreshInputStatus(); };
+        screen.MouseDown += (_, e) => { screen.Focus(); RefreshInputStatus(); var applied = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously); QueueMouse("down", e, applied); BeginViewerFileGesture(e, applied.Task); };
+        screen.MouseUp += (_, e) => { QueueMouse("up", e); viewerDragOrigin = null; viewerDragCandidate = null; };
+        screen.MouseMove += async (_, e) => { if (await ContinueViewerFileGestureAsync(e)) return; long now = Environment.TickCount64; if (now - lastMove < 33) return; lastMove = now; QueueMouse("move", e); };
+        screen.MouseWheel += (_, e) => QueueMouse("wheel", e); screen.PreviewKeyDown += (_, e) => e.IsInputKey = true; screen.KeyDown += (_, e) => { if (!CanSendInput()) return; e.SuppressKeyPress = true; QueueInput(new { kind = "keyDown", virtualKey = (int)e.KeyCode }); }; screen.KeyUp += (_, e) => { if (!CanSendInput()) return; e.SuppressKeyPress = true; QueueInput(new { kind = "keyUp", virtualKey = (int)e.KeyCode }); }; screen.GotFocus += (_, _) => RefreshInputStatus(); screen.LostFocus += (_, _) => { ReleaseHeldInputForCurrentSession(); RefreshInputStatus(); };
         typeText.Click += (_, _) => QueueFocusedText(); enterKey.Click += async (_, _) => await ExecuteAsync("ui.key", new { pid = (int)pid.Value, key = "ENTER" });
         processList.ColumnClick += (_, e) => { processSort = processSort.Toggle(ProcessColumn(e.Column)); RenderProcesses(); }; processList.SelectedIndexChanged += (_, _) => { if (processList.SelectedItems.Count > 0 && processList.SelectedItems[0].Tag is ProcessSortRow row) { pid.Value = row.Pid; } };
         fileList.ColumnClick += (_, e) => { fileSort = fileSort.Toggle(FileColumn(e.Column)); RenderFiles(); }; fileList.SelectedIndexChanged += (_, _) => { selectedFilePath = fileList.SelectedItems.Count > 0 && fileList.SelectedItems[0].Tag is FileSortRow row && !row.IsDirectory ? row.Path : null; remotePath.SetText(selectedFilePath ?? ""); RefreshControllerControls(); }; fileList.DoubleClick += async (_, _) => { if (fileList.SelectedItems.Count > 0 && fileList.SelectedItems[0].Tag is FileSortRow { IsDirectory: true } row) await OpenRemoteFolderAsync(row.Path); };
@@ -993,6 +1001,8 @@ public sealed partial class MainForm : Forms.Form
     private void RefreshUiState()
     {
         if (IsDisposed) return;
+        RefreshClipboardSharing();
+        SampleDiagnostics();
         RefreshPowerHold();
         UpdateAgentState(); UpdateSupportConnectionNotice(); if (PrivateInternet) UpdatePrivateAgentState(); UpdateInternetState(); UpdateHeader(); RefreshControllerControls(); RefreshFooter(); RefreshInputStatus();
         if (fleetRefreshing || fleet.Values.Any(device => NeedsFleetProgressAnimation(device.State))) peers.Invalidate();
@@ -1524,6 +1534,7 @@ public sealed partial class MainForm : Forms.Form
 
     private void ShowSynchronizationFailure(string detail)
     {
+        diagnostics.Record("synchronization_failed", DiagnosticContext(), incident: true);
         updateProgressText.SetText(() => UiText.SynchronizationInterrupted);
         updateProgressText.ForeColor = DestructiveText;
         updateProgressFill.BackColor = DestructiveText;
@@ -1634,6 +1645,7 @@ public sealed partial class MainForm : Forms.Form
             catch (Exception ex)
             {
                 if (ct.IsCancellationRequested || !ReferenceEquals(target, client)) break;
+                RecordIncident("connection_lost", ex);
                 heartbeatHealthy = false; liveFrameFresh = false; ReleaseHeldInputForCurrentSession(); SetFooterMessage(() => UiText.Reconnecting); footerDetail = ex.Message; PostUi(() => { streamOverlay.SetText(() => UiText.SessionRetrying); streamOverlay.Visible = true; liveBadge.Visible = false; UpdateHeader(); RefreshInputStatus(); RefreshFooter(); });
             }
             try { await Task.Delay(TimeSpan.FromSeconds(5), ct); } catch (OperationCanceledException) { break; }
@@ -1669,6 +1681,7 @@ public sealed partial class MainForm : Forms.Form
                 }
                 catch (Exception ex) when (!lifetime.IsCancellationRequested && ex is IOException or System.Net.Sockets.SocketException or OperationCanceledException)
                 {
+                    if (ex is not OperationCanceledException) RecordIncident("stream_interrupted", ex);
                     // The five-minute transport boundary and transient link loss
                     // renew the stream inside the same authenticated session.
                     liveFrameFresh = false; liveBadge.Visible = false;
@@ -1684,6 +1697,7 @@ public sealed partial class MainForm : Forms.Form
         {
             if (ReferenceEquals(liveStream, lifetime))
             {
+                RecordIncident("stream_failed", ex);
                 liveFrameFresh = false; liveBadge.Visible = false; streamOverlay.SetText(() => UiText.StreamInterruptedResume); streamOverlay.Visible = true; streamStatus.SetText(() => UiText.StreamInterruptedPrefix + ex.Message); RefreshInputStatus();
             }
         }
@@ -1718,6 +1732,7 @@ public sealed partial class MainForm : Forms.Form
 
     private void Present(ScreenFrame frame)
     {
+        lastPresentedAt = DateTimeOffset.UtcNow;
         if (InvokeRequired)
         {
             PostUi(() => Present(frame));
@@ -1745,6 +1760,7 @@ public sealed partial class MainForm : Forms.Form
 
     private void Present(DecodedStreamFrame frame)
     {
+        lastPresentedAt = DateTimeOffset.UtcNow;
         if (InvokeRequired)
         {
             if (IsDisposed || !IsHandleCreated) { frame.Dispose(); return; }
@@ -1764,9 +1780,12 @@ public sealed partial class MainForm : Forms.Form
         finally { frame.Dispose(); }
     }
 
-    private void QueueMouse(string kind, Forms.MouseEventArgs e)
+    private void QueueMouse(string kind, Forms.MouseEventArgs e, TaskCompletionSource<bool>? applied = null)
     {
-        if (!CanSendInput() || geometry == null) return; var point = geometry.MapLetterbox(screen.Width, screen.Height, e.X, e.Y); if (point == null) { if (kind == "up") QueueInput(new { kind = "release" }); return; } QueueInput(new { kind, x = point.Value.X, y = point.Value.Y, layoutId = geometry.LayoutId, button = e.Button == Forms.MouseButtons.Right ? "right" : e.Button == Forms.MouseButtons.Middle ? "middle" : "left", delta = e.Delta });
+        if (!CanSendInput() || geometry == null) { applied?.TrySetResult(false); return; }
+        var point = geometry.MapLetterbox(screen.Width, screen.Height, e.X, e.Y);
+        if (point == null) { applied?.TrySetResult(false); if (kind == "up") QueueInput(new { kind = "release" }); return; }
+        QueueInput(new { kind, x = point.Value.X, y = point.Value.Y, layoutId = geometry.LayoutId, button = e.Button == Forms.MouseButtons.Right ? "right" : e.Button == Forms.MouseButtons.Middle ? "middle" : "left", delta = e.Delta }, applied);
     }
 
     private void RefreshPowerHold()
@@ -1797,9 +1816,9 @@ public sealed partial class MainForm : Forms.Form
         QueueInput(new { kind = "text", text = remoteText.Text });
     }
 
-    private bool CanSendFocusedInput() => rolePages.SelectedIndex == 1 && !clientUpdateBusy && supportSession && heartbeatHealthy && !trayVisible && liveFrameFresh;
+    private bool CanSendFocusedInput() => rolePages.SelectedIndex == 1 && !clientUpdateBusy && !powerBusy && supportSession && heartbeatHealthy && !trayVisible && liveFrameFresh;
 
-    private bool CanSendInput() => rolePages.SelectedIndex == 1 && !clientUpdateBusy && inputState.CanSend(supportSession && heartbeatHealthy && !trayVisible, liveFrameFresh, screen.ContainsFocus && ContainsFocus);
+    private bool CanSendInput() => rolePages.SelectedIndex == 1 && !clientUpdateBusy && !powerBusy && inputState.CanSend(supportSession && heartbeatHealthy && !trayVisible, liveFrameFresh, screen.ContainsFocus && ContainsFocus);
 
     private void RefreshInputStatus()
     {
@@ -1810,15 +1829,16 @@ public sealed partial class MainForm : Forms.Form
         ? route + " · " + status
         : status;
 
-    private void QueueInput(object value)
+    private void QueueInput(object value, TaskCompletionSource<bool>? applied = null)
     {
         RemoteClient? target = client;
-        if (target == null || !supportSession) return;
+        if (target == null || !supportSession) { applied?.TrySetResult(false); return; }
         string kind = Json.Element(value).Str("kind");
-        if (clientUpdateBusy && kind != "release") return;
+        if ((clientUpdateBusy || powerBusy) && kind != "release") { applied?.TrySetResult(false); return; }
         if (kind == "release") { ReleaseHeldInputForCurrentSession(); return; }
-        if (!inputQueue.TryWrite(kind, new QueuedInput(target, sessionGeneration, value)))
+        if (!inputQueue.TryWrite(kind, new QueuedInput(target, sessionGeneration, value, applied)))
         {
+            applied?.TrySetResult(false);
             inputState.Suspend();
             inputStatus.SetText(() => UiText.InputQueueFull);
             BeginInputRecovery();
@@ -1832,6 +1852,7 @@ public sealed partial class MainForm : Forms.Form
     /// </summary>
     private void InvalidateInputSession()
     {
+        clipboardLifetime?.Cancel(); localClipboard?.Pause();
         RemoteClient? oldClient = client;
         bool hadInputSession = supportSession || liveStream != null;
         sessionGeneration++;
@@ -1902,11 +1923,12 @@ public sealed partial class MainForm : Forms.Form
         await foreach (QueuedInput item in inputQueue.ReadAllAsync())
         {
             RemoteClient target = item.Client;
-            if (!supportSession || item.Generation != sessionGeneration || !ReferenceEquals(target, client)) continue;
+            if (!supportSession || item.Generation != sessionGeneration || !ReferenceEquals(target, client)) { item.Applied?.TrySetResult(false); continue; }
             bool release = Json.Element(item.Payload).Str("kind") == "release";
             try
             {
                 RemoteClient.Require(await target.SendInputAsync(item.Payload));
+                item.Applied?.TrySetResult(true);
                 if (!release) inputBlockMessage = null;
                 if (release && item.Generation == sessionGeneration && ReferenceEquals(target, client))
                 {
@@ -1917,7 +1939,9 @@ public sealed partial class MainForm : Forms.Form
             }
             catch (Exception ex)
             {
+                item.Applied?.TrySetResult(false);
                 if (item.Generation != sessionGeneration || !ReferenceEquals(target, client)) continue;
+                RecordIncident("input_failed", ex);
                 inputState.Suspend();
                 if (ex is RemoteOperationException { Code: "input_blocked" }) inputBlockMessage = ex.Message;
                 inputStatus.SetText(() => ex is RemoteOperationException { Code: "input_blocked" } ? ex.Message : UiText.RestoringControl);
@@ -2035,37 +2059,15 @@ public sealed partial class MainForm : Forms.Form
     private async Task UploadFileAsync()
     {
         if (fileTransferLifetime != null || !fileDirectoryLoaded) return;
-        using var dialog = new Forms.OpenFileDialog(); if (dialog.ShowDialog() != Forms.DialogResult.OK) return;
-        string path = Path.Combine(currentDirectory, Path.GetFileName(dialog.FileName));
-        await TransferFileAsync(path, async (target, ct, progress) =>
-        {
-            var result = await target.UploadAsync(dialog.FileName, path, ct, progress);
-            output.SetText(Pretty(result));
-        });
+        using var dialog = new Forms.OpenFileDialog { Multiselect = true }; if (dialog.ShowDialog() != Forms.DialogResult.OK) return;
+        await EnqueueCopyAsync(dialog.FileNames, currentDirectory);
     }
 
     private async Task UploadFolderAsync()
     {
         if (fileTransferLifetime != null || !fileDirectoryLoaded) return;
         using var dialog = new Forms.FolderBrowserDialog(); if (dialog.ShowDialog() != Forms.DialogResult.OK) return;
-        string folderDestination = currentDirectory;
-        await TransferFileAsync(folderDestination, async (target, ct, progress) =>
-        {
-            var files = await Task.Run(() => Directory.EnumerateFiles(dialog.SelectedPath, "*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint }).Select(path => new FileInfo(path)).ToArray(), ct);
-            long total = files.Sum(file => file.Length), completed = 0, sent = 0;
-            foreach (var file in files)
-            {
-                long attempt = 0;
-                var fileProgress = new ForwardFileProgress(value =>
-                {
-                    attempt = value.BytesThisAttempt;
-                    progress.Report(new(completed + value.TransferredBytes, total, sent + attempt));
-                });
-                await target.UploadAsync(file.FullName, Path.Combine(folderDestination, Path.GetRelativePath(dialog.SelectedPath, file.FullName)), ct, fileProgress);
-                completed += file.Length; sent += attempt;
-                progress.Report(new(completed, total, sent));
-            }
-        });
+        await EnqueueCopyAsync([dialog.SelectedPath], currentDirectory);
     }
 
     private async Task DownloadFileAsync()
@@ -2082,7 +2084,7 @@ public sealed partial class MainForm : Forms.Form
         if (fileTransferLifetime != null) return;
         using var lifetime = new CancellationTokenSource();
         int generation = sessionGeneration;
-        bool receivingProgress = true, measuring = false;
+        bool receivingProgress = true;
         try
         {
             RequireClient(); var target = client!;
@@ -2090,20 +2092,14 @@ public sealed partial class MainForm : Forms.Form
             fileTransferProgress.Value = 0; fileTransferProgress.Style = Forms.ProgressBarStyle.Marquee;
             fileTransferStatus.SetText(() => UiText.Format(download ? UiText.DownloadingTo : UiText.UploadingTo, name));
             fileTransferDetails.SetText(() => UiText.PreparingFileTransfer);
-            var watch = Stopwatch.StartNew();
+            using var display = new TransferProgressDisplay(this, lifetime);
             var progress = new Progress<FileTransferProgress>(value =>
             {
                 if (!receivingProgress || generation != sessionGeneration || !ReferenceEquals(fileTransferLifetime, lifetime)) return;
-                if (!measuring) { watch.Restart(); measuring = true; }
-                var metrics = FileTransferMetrics.Calculate(value.TransferredBytes, value.TotalBytes, value.BytesThisAttempt, watch.Elapsed);
-                fileTransferProgress.Style = Forms.ProgressBarStyle.Continuous; fileTransferProgress.Value = metrics.Percent;
-                fileTransferDetails.SetText(() => value.TransferredBytes >= value.TotalBytes ? UiText.VerifyingFileTransfer :
-                    UiText.Format(UiText.FileTransferNumbers, metrics.Percent, FormatBytes(value.TransferredBytes), FormatBytes(value.TotalBytes),
-                        metrics.BytesPerSecond > 0 ? FormatBytes((long)metrics.BytesPerSecond) + "/s" : "—",
-                        metrics.Remaining is { } eta ? FormatTransferEta(eta) : UiText.CalculatingTransferEta));
+                display.Report(value.TransferredBytes, value.TotalBytes, name);
             });
             await transfer(target, lifetime.Token, progress);
-            receivingProgress = false;
+            receivingProgress = false; display.Dispose();
             if (generation == sessionGeneration)
             {
                 fileTransferProgress.Style = Forms.ProgressBarStyle.Continuous; fileTransferProgress.Value = 100;
@@ -2162,6 +2158,7 @@ public sealed partial class MainForm : Forms.Form
     private async Task TerminateControllerSessionAsync()
     {
         if (terminating || (client == null && !pairingBusy)) return;
+        powerLifetime?.Cancel();
         terminating = true; operationGeneration++; terminateSession.Enabled = false; roleAgent.Enabled = roleController.Enabled = false;
         SetFooterMessage(() => UiText.EndingSupport); RefreshFooter();
         pairingLifetime?.Cancel(); clientUpdateLifetime?.Cancel(); heartbeatLifetime?.Cancel(); action?.Cancel(); fileTransferLifetime?.Cancel(); resumeViewingOnRestore = false; resumeViewingAfterMinimize = false;
@@ -2188,6 +2185,7 @@ public sealed partial class MainForm : Forms.Form
 
     private void ClearControllerSession()
     {
+        ClearFileCopyQueue();
         fileTransferLifetime?.Cancel(); fileTransferLifetime = null; fileDirectoryLoaded = false;
         fileTransferProgress.Style = Forms.ProgressBarStyle.Continuous; fileTransferProgress.Value = 0;
         fileTransferStatus.SetText(() => UiText.FileTransfers); fileTransferDetails.SetText(() => UiText.FileTransferReady);
@@ -2217,6 +2215,13 @@ public sealed partial class MainForm : Forms.Form
     private async void MainFormClosing(object? sender, Forms.FormClosingEventArgs e)
     {
         SaveWindowPlacement();
+        if (e.CloseReason == Forms.CloseReason.WindowsShutDown && agent is { } powerAgent &&
+            (powerAgent.PowerRestartArmed || powerAgent.PowerShutdownArmed))
+        {
+            diagnostics.PlannedExit(DiagnosticContext()); diagnosticRunStarted = false;
+            powerAgent.Dispose(); agent = null; shutdownStarted = true;
+            return;
+        }
         if (shutdownStarted) return;
         if (WindowLifetime.HideToTray(e.CloseReason, quitting))
         {
@@ -2284,6 +2289,7 @@ public sealed partial class MainForm : Forms.Form
 
     private async Task<bool> ShutdownAsync()
     {
+        powerLifetime?.Cancel();
         renderTimer.Stop(); inputRecoveryTimer.Stop(); discoveryLifetime?.Cancel(); heartbeatLifetime?.Cancel(); pairingLifetime?.Cancel(); clientUpdateLifetime?.Cancel(); fleetLifetime?.Cancel(); liveStream?.Cancel(); action?.Cancel(); fileTransferLifetime?.Cancel();
         // A saved connection only pre-fills the controller form. It is not an
         // active outbound session, and must never delay an agent replacement
@@ -2322,6 +2328,9 @@ public sealed partial class MainForm : Forms.Form
 
     private void DisposeResources()
     {
+        powerLifetime?.Cancel();
+        if (diagnosticRunStarted) diagnostics.EndRun(DiagnosticContext());
+        clipboardLifetime?.Cancel(); localClipboard?.Dispose();
         SupportPlatform.ManagedRelaunchRequested -= OnManagedRelaunchRequested;
         connectionNotice?.Close();
         renderTimer.Dispose(); inputRecoveryTimer.Dispose(); discoveryLifetime?.Dispose(); heartbeatLifetime?.Dispose(); pairingLifetime?.Dispose(); clientUpdateLifetime?.Dispose(); liveStream?.Dispose(); action?.Dispose(); powerHold?.Dispose(); tray.Dispose();
@@ -2443,7 +2452,7 @@ public sealed partial class MainForm : Forms.Form
     private static Icon LoadApplicationIcon() { using Stream stream = typeof(MainForm).Assembly.GetManifestResourceStream("RemoteDebugger.Assets.RemoteDebugger.ico") ?? throw new InvalidOperationException("The application icon resource is missing."); using var icon = new Icon(stream); return (Icon)icon.Clone(); }
     private void PostUi(Action callback) { if (IsDisposed || !IsHandleCreated) return; try { BeginInvoke(callback); } catch (InvalidOperationException) { } }
 
-    private sealed record QueuedInput(RemoteClient Client, int Generation, object Payload);
+    private sealed record QueuedInput(RemoteClient Client, int Generation, object Payload, TaskCompletionSource<bool>? Applied = null);
     private sealed record MonitorChoice(int Index, Func<string> Name) { public override string ToString() => Name(); }
     public static readonly Dictionary<string, string> Templates = new()
     {

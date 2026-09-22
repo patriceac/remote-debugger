@@ -9,7 +9,7 @@
     "disconnectGraceSeconds": 600
   },
   "stream": {
-    "maximumFps": 5,
+    "maximumFps": 30,
     "minimumDistinctFrames": 3
   },
   "uiAutomationIds": {

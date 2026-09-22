@@ -54,7 +54,7 @@ public static class Program
             catch (Exception ex) { startupPreparationError = ex.Message; }
         }
         bool loopbackOnly = args.Contains("--loopback-only");
-        bool silentStartup = args.Contains("--startup") || args.Contains("--resume-update");
+        bool silentStartup = args.Contains("--startup") || args.Contains("--resume-update") || args.Contains("--resume-restart");
         bool startInTray = WindowLifetime.StartInTray(args);
         using var instance = SingleInstance.ForCurrentSession(loopbackOnly, dataRoot);
         if (!instance.TryAcquire())
@@ -67,7 +67,7 @@ public static class Program
         }
         bool controllerOnly = args.Contains("--controller");
         var form = new MainForm(!controllerOnly, dataRoot, loopbackOnly, startupPreparationError, languageOverride,
-            enableSupport: args.Contains("--enable-support") || args.Contains("--resume-update"), startInTray: startInTray);
+            enableSupport: args.Contains("--enable-support") || args.Contains("--resume-update") || args.Contains("--resume-restart"), startInTray: startInTray);
         form.Shown += (_, _) => instance.StartListening(form.ActivateExistingWindow);
         if (args.Contains("--security")) form.Shown += (_, _) => form.BeginInvoke(form.ShowSecuritySetup);
         SupportPlatform.ManagedRelaunchRequested += () =>
@@ -223,7 +223,8 @@ public static class Program
                     ? await Console.In.ReadLineAsync(ct.Token) ?? "" : await Console.In.ReadToEndAsync(ct.Token);
                 var connectedRequest = JsonSerializer.Deserialize<JsonElement>(input);
                 if (monitorInput) _ = Task.Run(() => CancelWhenInputClosesAsync(ct));
-                var result = await ConnectedCli.ExecuteAsync(connectedRequest, () => new ConnectedRemote(RemoteClient.Load(config)), ct.Token);
+                var result = await ConnectedCli.ExecuteAsync(connectedRequest, () => new ConnectedRemote(RemoteClient.Load(config)), ct.Token,
+                    () => new IncidentLog(Option("--data-root", Vault.DefaultRoot)));
                 Console.WriteLine(Json.Text(result)); return result.Ok ? 0 : 1;
             }
             var remote = RemoteClient.Load(config);

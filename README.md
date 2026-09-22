@@ -19,7 +19,9 @@ For a normal desktop installation, run `artifacts/installer/RemoteDebugger-<vers
 
 Without a private internet profile, LAN mode uses a six-digit pairing code that rotates every five minutes. Both modes synchronize the agent to the controller's signed executable and open the live desktop with mouse and keyboard enabled. Connection and live-frame indicators remain visible throughout support. See [the validation record](docs/VALIDATION.md) for completed test evidence; planned cases are listed separately in [the acceptance matrix](docs/ACCEPTANCE_MATRIX.md).
 
-Features include adaptive encrypted H.264/JPEG desktop streaming (5 fps cap, unchanged images suppressed), fresh screenshots, keyboard/mouse events, UI Automation controls, file browsing, resumable binary uploads and downloads with progress, cancellation and SHA-256 verification, application launch/stop/restart and binary identity, timestamped CPU/RAM/process/volume samples, network/services/event diagnostics, bounded commands, real native debugger attachment with breakpoint evidence, minidumps, and intervention history.
+Features include adaptive encrypted H.264/JPEG desktop streaming (up to 30 fps, unchanged images suppressed), fresh screenshots, keyboard/mouse events, UI Automation controls, file browsing, resumable binary uploads and downloads with progress, cancellation and SHA-256 verification, application launch/stop/restart and binary identity, timestamped CPU/RAM/process/volume samples, network/services/event diagnostics, bounded commands, real native debugger attachment with breakpoint evidence, minidumps, and intervention history.
+
+The support workflow adds connected-session text clipboard sharing, 30 days of automatic local incident reports, confirmed controller restart/shutdown actions, and copy-only file/folder drag-and-drop between Explorer and both the Files pane and remote viewer. Restart preflight explains whether manual Windows sign-in is expected, with an optional one-use sign-in for eligible local accounts and a cancellable one-hour reconnect wait. See [support workflow requirements and acceptance](docs/SUPPORT_WORKFLOW.md) for scope and verification status.
 
 Discovery and connection prefer LAN, then the device's optional configured WAN address, then relay. Select a device to save a hostname or IPv4 address with an optional port (default TCP 45832); leave it blank for LAN → relay. Failed routes have a cooldown and are reconsidered when the network changes. An unchanged desktop reduces capture polling and still responds to a fresh-frame request after a connection interruption.
 
@@ -37,7 +39,7 @@ on a remote LAN. See [Wake-on-LAN](docs/WAKE_ON_LAN.md) for setup and network re
 
 ## Development
 
-Codex can use nine typed [local MCP tools](docs/MCP.md) for the connected computer.
+Codex can use ten typed [local MCP tools](docs/MCP.md), including local incident reports available after disconnection.
 The stdio adapter wraps the signed CLI with target binding, bounded requests,
 structured errors and image results. Build it with `./scripts/Build-Mcp.ps1`.
 

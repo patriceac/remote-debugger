@@ -29,4 +29,20 @@ $request = @{
     ExecutionTimeoutSeconds = $(if ($LeaveRunning -or $Handoff) { 7200 } elseif ($Demo) { 1200 } else { 360 })
     ThrowOnFailure = $true
 }
+if ($LockedSetup) {
+    # The signed, standalone installer runs through the broker's bounded elevated
+    # setup phase; the first-launch assertions still run as the desktop user.
+    $artifact = Join-Path $projectRoot 'artifacts'
+    $relative = [IO.Path]::GetRelativePath($artifact, $resolvedInstaller)
+    if ($relative.StartsWith('..') -or [IO.Path]::IsPathRooted($relative)) { throw 'LockedSetup requires the canonical installer under artifacts.' }
+    $request.ArtifactPath = $artifact
+    $request.ExecutableRelativePath = 'lab\RemoteDebugger.Lab.exe'
+    $request.Arguments = 'internetinstaller "{OUTDIR}" installed none "{PAYLOAD}\' + $relative + '"'
+    $request.Remove('ReadOnlyHostInput'); $request.Remove('AllowNetworkWithHostInputs')
+    $request.GuestSetupExecutableRelativePath = $relative
+    $request.GuestSetupExecutableSha256 = (Get-FileHash -LiteralPath $resolvedInstaller -Algorithm SHA256).Hash
+    $request.GuestSetupArguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-')
+    $request.GuestSetupTimeoutSeconds = 300
+    $request.ExecutionTimeoutSeconds = 900
+}
 & $runner @request

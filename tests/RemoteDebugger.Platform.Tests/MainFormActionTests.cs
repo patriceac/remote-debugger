@@ -119,10 +119,13 @@ public sealed class MainFormActionTests
     [Fact]
     public void EstimatedStepProgressCannotBeMistakenForMeasuredProgress()
     {
-        Assert.StartsWith("25%", MainForm.UpdateStepNumbers(new(25, TimeSpan.FromSeconds(15), true)));
-        Assert.DoesNotContain("≈", MainForm.UpdateStepNumbers(new(25, TimeSpan.FromSeconds(15), true)));
+        string estimate = MainForm.UpdateStepNumbers(new(null, TimeSpan.FromSeconds(15), true, TimeSpan.FromSeconds(5)));
+        Assert.DoesNotContain("%", estimate);
+        Assert.Contains("≈", estimate);
+        Assert.Contains("0:05", estimate);
         Assert.StartsWith("25%", MainForm.UpdateStepNumbers(new(25, TimeSpan.FromSeconds(15), false)));
-        Assert.Contains("ETA 0:01", MainForm.UpdateStepNumbers(new(95, TimeSpan.FromSeconds(1), true)));
-        Assert.DoesNotContain("exceeded", MainForm.UpdateStepNumbers(new(95, TimeSpan.FromSeconds(1), true)), StringComparison.OrdinalIgnoreCase);
+        string overdue = MainForm.UpdateStepNumbers(new(null, null, true, TimeSpan.FromMinutes(2)));
+        Assert.DoesNotContain("ETA", overdue);
+        Assert.Contains("2:00", overdue);
     }
 }

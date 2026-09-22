@@ -8,6 +8,7 @@ component, credentials, pairing, or automatic synchronization.
 Requires Node 20+ to build and Remote Debugger 0.4.47+ on the controller. The normal
 exact-binary requirement still applies to the receiving agent. Connect and
 synchronize through the Remote Debugger application before using action tools.
+Local `remote_reports` requires controller version 0.5.0+ and works without a connected PC.
 
 ## Build and configure
 
@@ -39,7 +40,7 @@ Codex settings after configuration changes. See the
 
 ## Workflow
 
-Call `remote_status` first and pass its opaque `targetId` to subsequent tools.
+For remote actions, call `remote_status` first and pass its opaque `targetId` to subsequent tools. Local `remote_reports` works independently.
 This binds the certificate/credential and agent process/session start. The CLI
 loads the profile once, rejects another computer before contacting it, and
 rejects a changed session before dispatch. Status also reports binary mismatches;
@@ -47,6 +48,7 @@ other operations fail until the binaries match, without attempting an update.
 
 | Tool | Purpose |
 | --- | --- |
+| `remote_reports` | Local 30-day incident summaries/details, available without a connected PC |
 | `remote_status` | Current computer, session and binary match state |
 | `remote_system` | CPU, RAM, uptime and storage |
 | `remote_processes` | Processes and sampled resource use |
@@ -80,7 +82,7 @@ session-ending operations remain in the existing CLI workflow.
 ## Guarded CLI and tests
 
 `cli connected --request FILE` accepts the usual UTF-8 JSON request envelope,
-plus `targetId` for every operation except `status`. Use `--request -` for stdin.
+plus `targetId` for every operation except `status` and local `reports`. Use `--request -` for stdin.
 The MCP adapter adds `--cancel-on-stdin-close`: it sends one JSON line, holds stdin
 open during execution, and closes it to cancel. Supported operation names match
 the table, with `maintenance.session` for `remote_run` and

@@ -5,6 +5,24 @@ using Xunit;
 
 public sealed class FileDestinationTests
 {
+    [Fact]
+    public async Task AFileAppearingAfterPreflightCannotBeOverwrittenWithoutApproval()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "rd-conflict-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var operations = new Operations(root); string transfer = Guid.NewGuid().ToString("N");
+            byte[] bytes = "new copy"u8.ToArray();
+            var request = Json.Element(new { transfer, path = "conflict.txt", size = bytes.Length, sha256 = Convert.ToHexString(SHA256.HashData(bytes)), overwrite = false });
+            await operations.ExecuteAsync("upload.begin", request, default);
+            await operations.ExecuteAsync("upload.begin", request, default); // Retry is bound to the same manifest.
+            await operations.ExecuteAsync("upload.chunk", Json.Element(new { transfer, offset = 0, data = Convert.ToBase64String(bytes) }), default);
+            string destination = Path.Combine(operations.Workspace, "conflict.txt"); await File.WriteAllTextAsync(destination, "keep existing");
+            await Assert.ThrowsAsync<IOException>(() => operations.ExecuteAsync("upload.commit", Json.Element(new { transfer }), default));
+            Assert.Equal("keep existing", await File.ReadAllTextAsync(destination));
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

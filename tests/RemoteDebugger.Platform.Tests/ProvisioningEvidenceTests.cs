@@ -12,6 +12,15 @@ public sealed class ProvisioningEvidenceTests
     private static readonly string Hash = new('A', 64);
 
     [Fact]
+    public void CollectedSetupCopyDoesNotCollideWithTheBrokersOwnReceipt()
+    {
+        string output = Path.GetFullPath(Path.Combine("outbox", RequestId));
+        string brokerReceipt = Path.Combine(output, "broker-guest-setup.json");
+        Assert.False(string.Equals(brokerReceipt, ProvisioningEvidence.EvidencePath(output), StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("guest-setup.json", Path.GetFileName(ProvisioningEvidence.SourceEvidencePath(output)));
+    }
+
+    [Fact]
     public void GenericSetupBindsTheExactProductProvisionerToItsRequest()
     {
         var receipt = Validate(Evidence());
@@ -50,8 +59,60 @@ public sealed class ProvisioningEvidenceTests
         }
     }
 
+    [Fact]
+    public void PowerSetupBindsBothLabBytesAndTheExactReleaseArguments()
+    {
+        string labHash = new('B', 64), release = @"P:\release\RemoteDebugger.exe", lab = @"P:\lab\RemoteDebugger.Lab.exe";
+        JsonObject evidence = Evidence();
+        evidence["ExecutableRelativePath"] = @"lab\RemoteDebugger.Lab.exe";
+        evidence["ExecutableSha256"] = labHash; evidence["StagedExecutableSha256"] = labHash;
+        evidence["StagedExecutablePath"] = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "CodexHarness", "GuestSetup", RequestId, "stage", "RemoteDebugger.Lab.exe");
+        evidence["Arguments"] = new JsonArray("powersetup", release, lab, Hash);
+        ProvisioningEvidence.SetupReceipt Check() => ProvisioningEvidence.ValidatePowerSetupReceipt(JsonSerializer.SerializeToElement(evidence), RequestId, labHash, release, lab, Hash);
+        Assert.Equal("S-1-5-21-111-222-333-1001", Check().UserSid);
+        Assert.Throws<InvalidDataException>(() => Validate(evidence));
+        foreach (int index in new[] { 1, 2, 3 })
+        {
+            string original = evidence["Arguments"]![index]!.GetValue<string>();
+            evidence["Arguments"]![index] = "different-fixture";
+            Assert.Throws<InvalidDataException>(() => Check());
+            evidence["Arguments"]![index] = original;
+        }
+        evidence["StagedExecutableSha256"] = Hash;
+        Assert.Throws<InvalidDataException>(() => Check());
+    }
+
     private static ProvisioningEvidence.SetupReceipt Validate(JsonObject evidence)
         => ProvisioningEvidence.ValidateSetupReceipt(JsonSerializer.SerializeToElement(evidence), RequestId, RelativePath, Hash);
+
+    [Fact]
+    public void PowerCredentialRequiresMatchingAccountSidAndPoolBaseline()
+    {
+        var local = new PowerCredentialFixture.Binding("CodexTest", "S-1-5-21-111-222-333-1001", "dd8f84c4-af2f-4542-b8a3-c2f8ed8327bf");
+        PowerCredentialFixture.RequirePeerBinding(local, local);
+        foreach (var peer in new[] { local with { UserName = "Other" }, local with { UserSid = "S-1-5-21-111-222-333-1002" },
+            local with { PoolBaselineId = "cc8f84c4-af2f-4542-b8a3-c2f8ed8327bf" }, local with { PoolBaselineId = "" } })
+            Assert.Throws<IOException>(() => PowerCredentialFixture.RequirePeerBinding(local, peer));
+    }
+
+    [Fact]
+    public void PowerCredentialReadsTheWindowsPowerShellUtf8BomFixture()
+    {
+        using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+        string directory = Path.Combine(AppContext.BaseDirectory, "work");
+        Directory.CreateDirectory(directory);
+        string path = Path.Combine(directory, "credential-" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            File.WriteAllText(path, JsonSerializer.Serialize(new
+            {
+                FormatVersion = 1, UserName = "fixture", UserSid = identity.User!.Value,
+                PoolBaselineId = "dd8f84c4-af2f-4542-b8a3-c2f8ed8327bf", Protection = "DPAPI CurrentUser", ProtectedPassword = "AA=="
+            }), new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+            Assert.Equal(identity.User.Value, PowerCredentialFixture.Read(path).Identity.UserSid);
+        }
+        finally { File.Delete(path); }
+    }
 
     private static JsonObject Evidence() => new()
     {
