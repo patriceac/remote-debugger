@@ -27,18 +27,19 @@ evidence. The Files completion state and shutdown countdown screenshots were
 visually reviewed.
 
 The current application candidate is signed Release **0.5.0**, built from clean
-source `207a4025084e7f2a01c03c5d352a6299304fd41e`, with SHA-256
-`69DF1BBA0526740BE718CFA56849EFF26900E1856F8CD7E2438EA80A163F05D0`.
+source `6ae026320b96c50926c2d3d0b5b6f33159517455`, with SHA-256
+`30F1F63AC2F2CA510B1DE6659013E772B3CE741B674C60F60354E5C727D9EC56`.
 It additionally treats NUL-only logon notices as empty while retaining real
 interactive banners; Luna's four focused preflight cases passed.
 It also puts the stopped reconnect-wait explanation in the visible connection
-status. This was visually verified on C457; the latest product change separates
-its two sentences with a period. Both installers contain current candidate 69DF:
+status. This was visually verified on C457, with punctuation refined in 69DF.
+Candidate 30F1 fixes boot identification using the actual OS boot time. Both
+installers contain that current candidate:
 
 | Package | SHA-256 | Qualification |
 | --- | --- | --- |
-| Private setup | `7B1502C81488AFF349968557FD83352150994BE750C39FD0B5984CD67C8E9E32` | Five disconnected installer checks passed; installed executable matched 69DF |
-| Standard setup | `6F04795AB5C7C3B43C2ED15CD64C267FDA50F7EB54C46D954AA5E288B2DDCF16` | Built and signed without embedded connection or administrator profiles; no separate install run |
+| Private setup | `21B2D51EA898340336DF7B175B55C18D975F8DCB51A8EE1E86163363AE027CE9` | Rebuilt and signed with 30F1; preceding 69DF package passed five installer checks |
+| Standard setup | `E143A23B0FA46DAF9ABAC9A5A1F442CB3C32DE41A0B22F7059E354502296653C` | Built and signed without embedded connection or administrator profiles; no separate install run |
 
 The private package contains protected connection profiles and is kept local.
 The publisher fingerprint is
@@ -46,12 +47,14 @@ The publisher fingerprint is
 the local signer reports `UnknownError` trust status, so signing is not a claim of
 public certificate trust.
 
-Current private-installer request
+Preceding private-installer request
 `executable-test-20260921T223831389Z-a420d956` passed all five checks: fresh
 credential state, installation, original-user integration, protected setup and
 the first-launch passphrase requirement. The installed executable at
-`C:\Program Files\RemoteDebugger\RemoteDebugger.exe` matched the current 69DF
-hash above, and setup exited zero. Its first-launch screenshot was visually
+`C:\Program Files\RemoteDebugger\RemoteDebugger.exe` matched 69DF
+(`69DF1BBA0526740BE718CFA56849EFF26900E1856F8CD7E2438EA80A163F05D0`), and setup
+`7B1502C81488AFF349968557FD83352150994BE750C39FD0B5984CD67C8E9E32` exited zero.
+Its first-launch screenshot was visually
 reviewed. Guest/broker assertions, process cleanup, payload deletion, disconnected
 network cleanup and worker recycle passed without warnings; the VM ended Off.
 This silent disconnected check does not qualify Internet connection, a custom
@@ -181,7 +184,7 @@ bounds abandoned target coordination to ten minutes. Neither change alters the
 product's one-hour timer. It records the visible stopped wait and removed profile
 before probing the returning target, preserving those results on later failure.
 Current Lab SHA-256 is
-`776A2FFDEA4174F28DF0600A0EEC3224009687F8040E9305398B57FEC282696A`.
+`182F368B2B2E27F9C76583ED4C4AAAA1946E1CB61C9DF792861280160696EE68`.
 Harness canaries subsequently reproduced Public-category drift and loss of the
 request-owned Private interface exemption after reboot, with the leased MAC,
 address, routes, DNS and IPv6 unchanged. The replacement gate restores only that
@@ -196,9 +199,10 @@ failed because the reported boot identity had not changed. Target
 `executable-test-20260922T000006316Z-4c01c79b` independently completed a manual
 reboot, one sign-in after 63.62 seconds signed out, a successful network gate and
 autonomous product startup at medium integrity. The bounded failure snapshot
-retained both phases: each reported GUID `91dc39e4943711f1976c8c65631d8117` despite
-the actual reboot. This GUID prevented the product from restoring its restart
-grant. The fix queries the documented OS boot time instead; the focused store
+retained both phases: each reported the same GUID despite the actual reboot.
+This GUID prevented the product from restoring its restart grant. The fix queries
+the documented [OS boot time](https://learn.microsoft.com/en-us/windows/win32/wmisdk/wmi-tasks--desktop-management)
+instead; the focused store
 test also confirms that unavailable boot information refuses restoration. Luna's
 targeted test passed. Both requests cleaned up successfully after cancellation
 of the orphan target. No additional hour-long run is planned.
