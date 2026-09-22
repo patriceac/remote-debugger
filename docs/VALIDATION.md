@@ -2,30 +2,45 @@
 
 ## 0.5.2 — performance improvements
 
-September 22, 2026: the initial signed Release from source `6813ff9` has SHA-256
-`21A4CFDF61375466C956705C57E6DB4D63307B2D99613CD4BB8C6992E867F59B`.
-Its private installer has SHA-256
-`0F41ADE01ED7C66FF7F17BC87C1F193FD42DB667DEC03B8D299E2317991EF7ED`.
+September 22, 2026: signed Release source `37546e8` has SHA-256
+`9CBD12D54B9813DC5034A3FD49BFCB54E5DDB33636AB2638D56A34C671DDE296`.
+The private installer has SHA-256
+`F40557EAF75149BEA47FA35D1C7292F3496F80BED75657480B16EF1DA4B5C455`.
 Both use the existing enrolled publisher. They are signed, not publicly trusted.
 
-Luna Max passed **103 focused checks**: 16 Core, 79 platform and 8 MCP tests.
+Luna Max passed **104 distinct focused checks**: 16 Core, 80 platform and 8 MCP
+tests, across the implementation and a final four-test resource-sampling run.
 These cover ordered input batching and the four-request limit, failed-channel
 discard without replay, resource baselines, frame ownership, persistent worker
 cancellation/reuse and forwarding the already-verified download result.
 
-Disconnected request `executable-test-20260922T145054479Z-550b682c` passed all
+Final Release request `executable-test-20260922T150205223Z-9c39f778` passed all
 required native performance assertions: 14 checks passed, with three optional
 power/LAN checks outside this loopback scope. It verified unchanged-frame
 suppression and explicit refresh, Shift+extended Home and modifier release,
-repeated resource samples, two correlated requests in one CLI worker followed
-by clean exit, and minimize/restore without losing pause intent. The stream used
-GDI and software H.264. The live and final screenshots were visually reviewed.
+repeated resource samples with readable `Idle` and `System` names despite denied
+timing access, two correlated requests in one CLI worker followed by clean exit,
+and minimize/restore without losing pause intent. The stream used GDI and
+software H.264. The live and final screenshots were visually reviewed.
 
-Disconnected request `executable-test-20260922T145054682Z-61c34f56` passed both
+On preceding Release `21A4CFDF61375466C956705C57E6DB4D63307B2D99613CD4BB8C6992E867F59B`,
+request `executable-test-20260922T145054682Z-61c34f56` passed both
 packaged MCP scenarios, including target checks, file hashes and a fresh image.
-Its result screenshot was visually reviewed. A subsequent review restored
-readable names for processes that deny timing access; that small correction is
-covered by a focused process-sampling regression.
+Its result screenshot was visually reviewed. The final Release only adds the
+process-name fallback when Windows denies timing access, covered by the focused
+regression; MCP code is unchanged.
+
+Final private-installer request `executable-test-20260922T150205647Z-8f4f39c2`
+passed all five required checks: clean credential state, installation, original
+user integration, protected setup and first-launch passphrase. Setup exited
+zero and the installed executable matched the final Release SHA-256 above. The
+passphrase and final screenshots were visually reviewed.
+
+The completed native runs passed guest/broker assertions and process cleanup,
+ended with workers Off, removed payloads and read-only host-input children, and
+left all adapters disconnected. No missing evidence or failure warnings were
+reported. These disconnected tests do not qualify an Internet installation,
+custom install directory or uninstallation.
 
 GPU capture and hardware encoding retain GDI, software H.264 and JPEG fallback
 paths. Isolated VM acceptance cannot establish physical GPU speedups or WAN
