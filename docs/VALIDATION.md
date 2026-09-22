@@ -76,7 +76,7 @@ network adapter remained connected.
 | --- | --- |
 | Session clipboard | Focused session/clipboard tests and native bidirectional, pause/baseline and session-end checks passed. Actual reboot remains part of the power qualification gap. |
 | Automatic reports | Retention/deduplication checks passed; candidate C613 created an unexpected-exit incident and read it offline without clipboard payloads. |
-| Restart and one-use logon | Unit checks, native preflight and cancellation with temporary-login cleanup passed. Actual automatic first boot occurred, but the controller failed to recover the desktop within five minutes. Manual second boot and the full controller wait remain unqualified. |
+| Restart and one-use logon | Unit checks, native preflight and cancellation with temporary-login cleanup passed. Candidate 30F1 restored the same grant and fresh video after automatic boot 1; the subsequent input check was obstructed by a Windows Firewall prompt. Manual boot 2 remains unqualified. |
 | Shutdown | Native named-PC confirmation, countdown and cancellation passed. Issued shutdown remains unqualified. |
 | Update progress | Ten focused progress tests passed, covering measured/stalled/resumed rates, opaque stages and actual completion; the existing binary/health verification gate is preserved. |
 | Smoother viewer | Sixteen stream/frame/acknowledgement checks passed; native H.264 viewing exceeded the former 5 FPS ceiling without a stale-frame backlog. |
@@ -241,6 +241,21 @@ use the same hash-bound setup adapter so either failure retains diagnostics;
 the event filter also matches the spaced service display name. Luna passed the
 single setup-receipt binding regression. Lab source `2fa38c3` has SHA-256
 `4B2568A521FC4025A1875843C309A3B7CCA12761E77BBAB11539EB5BA9C9EF0C`.
+
+The next Once controller `executable-test-20260922T011104966Z-37691efe` passed
+provisioning and cancellation with temporary-login cleanup, then reached
+Desktop Ready after the first automatic reboot. It verified the changed boot,
+same grant, matching binary, fresh frame, no planned-restart crash report and no
+disconnected clipboard replay before failing the input text probe at 01:18:19 UTC.
+The visually reviewed final screenshot shows an unanswered Windows Firewall
+prompt over the target desktop. Target `executable-test-20260922T011104817Z-f7837b92`
+attested the automatic boot and autonomous medium-integrity product resume;
+manual boot 2 was never requested. The orphan was cancelled, retaining 13
+diagnostic files without skips. Both VMs ended Off with successful payload and
+network cleanup and no warnings. The harness owner is addressing the isolated
+network's startup classification: restoring Private after autonomous sign-in is
+too late to prevent the prompt. No prompt was accepted and product firewall
+permissions were not broadened.
 
 ## 0.4.13 — audit fixes
 
