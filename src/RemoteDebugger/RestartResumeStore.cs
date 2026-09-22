@@ -1,4 +1,5 @@
-using System.Runtime.InteropServices;
+using System.ComponentModel;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.Win32;
@@ -65,14 +66,20 @@ internal static class WindowsBootIdentity
 {
     internal static string Read()
     {
-        int status = NtQuerySystemInformation(90, out var information, Marshal.SizeOf<BootEnvironment>(), out _);
-        if (status != 0 || information.Identifier == Guid.Empty)
-            throw new InvalidOperationException("Windows boot identity is unavailable; restart recovery cannot be armed.");
-        return information.Identifier.ToString("N");
+        // The boot-environment GUID can survive a restart; use the OS boot time.
+        const string query = "(Get-CimInstance Win32_OperatingSystem -Property LastBootUpTime -ErrorAction Stop).LastBootUpTime.ToUniversalTime().Ticks";
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        try
+        {
+            // Restore can run on the UI thread; the command's awaits must not capture it.
+            var result = Json.Element(Task.Run(() => Operations.RunAsync(Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe"),
+                ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", query], timeout.Token)).GetAwaiter().GetResult());
+            if (result.Int("exitCode", -1) != 0 || !long.TryParse(result.Str("stdout").Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out long ticks)
+                || ticks <= 0 || ticks > DateTime.MaxValue.Ticks)
+                throw new IOException("Windows boot time is unavailable; restart recovery cannot be armed.");
+            return ticks.ToString(CultureInfo.InvariantCulture);
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or Win32Exception)
+        { throw new IOException("Windows boot time is unavailable; restart recovery cannot be armed.", ex); }
     }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct BootEnvironment { public Guid Identifier; public int FirmwareType; public ulong BootFlags; }
-    [DllImport("ntdll.dll")]
-    private static extern int NtQuerySystemInformation(int informationClass, out BootEnvironment information, int length, out int returned);
 }

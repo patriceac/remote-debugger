@@ -188,7 +188,25 @@ address, routes, DNS and IPv6 unchanged. The replacement gate restores only that
 request-owned category/exemption before continuation and validates other network
 state. Traffic passed to a separate peer after automatic and manual boots.
 Autonomous product startup may precede this gate, so the product's firewall-prompt
-timing still needs native verification. See
+timing still needs native verification.
+
+After harness qualification, short Cancel controller
+`executable-test-20260922T000006133Z-8b5b1bac` passed its stopped-wait check, then
+failed because the reported boot identity had not changed. Target
+`executable-test-20260922T000006316Z-4c01c79b` independently completed a manual
+reboot, one sign-in after 63.62 seconds signed out, a successful network gate and
+autonomous product startup at medium integrity. The bounded failure snapshot
+retained both phases: each reported GUID `91dc39e4943711f1976c8c65631d8117` despite
+the actual reboot. This GUID prevented the product from restoring its restart
+grant. The fix queries the documented OS boot time instead; the focused store
+test also confirms that unavailable boot information refuses restoration. Luna's
+targeted test passed. Both requests cleaned up successfully after cancellation
+of the orphan target. No additional hour-long run is planned.
+
+The concurrent Shutdown pair (`executable-test-20260922T000157359Z-b1b0e56c` and
+`executable-test-20260922T000157433Z-b24af831`) was cancelled before any shutdown
+because a worker readiness failure left its target queued. Cleanup passed; the
+worker recovered automatically. This is not a product shutdown result. See
 [support workflow](SUPPORT_WORKFLOW.md). Raw evidence is retained
 under `D:\Disk\VMs\Codex-Harness\Live\Broker\Results\<request-id>`.
 

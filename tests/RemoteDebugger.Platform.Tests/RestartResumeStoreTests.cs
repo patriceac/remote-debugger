@@ -16,13 +16,15 @@ public sealed class RestartResumeStoreTests
         try
         {
             var time = new Clock(); string boot = "first"; string binary = new('c', 64);
-            var store = new RestartResumeStore(root, () => boot, time);
+            bool bootReadable = true;
+            var store = new RestartResumeStore(root, () => bootReadable ? boot : throw new IOException("Boot provider unavailable."), time);
             var issued = store.Create(new('a', 64), new('b', 64), binary);
             Assert.Null(store.Restore(binary));
             boot = "second";
             var restored = Assert.IsType<RestartAuthorization>(store.Restore(binary));
             Assert.Equal(Safety.Hash(issued.Ticket), restored.TicketHash);
             Assert.Equal(time.Now.AddHours(1), restored.ExpiresUtc);
+            bootReadable = false; Assert.Null(store.Restore(binary)); bootReadable = true;
             Assert.Null(store.Restore(new('d', 64)));
             time.Now = time.Now.AddHours(1); Assert.Null(store.Restore(binary));
             store.Clear(removeStartup: false);
