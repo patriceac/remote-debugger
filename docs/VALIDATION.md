@@ -231,6 +231,17 @@ event diagnostics on setup failure. Its Release SHA-256 is
 `288EDA4093E21AF6954E8E46ACE6169012E7FA59D0417F79D47533283A4B03F4`;
 the product and installers remain unchanged.
 
+Single-VM provisioning diagnostic `executable-test-20260922T010447047Z-dba8af90`
+succeeded on those exact bytes. Setup returned zero after 121.69 seconds and the
+read-only `cli platform-status` process returned zero; no reboot or shutdown was
+performed. The service error did not reproduce, so this does not establish its
+cause. The VM ended Off with payload removal, Network None cleanup and no
+evidence warnings. The next short pairs run one pair at a time. Both roles now
+use the same hash-bound setup adapter so either failure retains diagnostics;
+the event filter also matches the spaced service display name. Luna passed the
+single setup-receipt binding regression. Lab source `2fa38c3` has SHA-256
+`4B2568A521FC4025A1875843C309A3B7CCA12761E77BBAB11539EB5BA9C9EF0C`.
+
 ## 0.4.13 — audit fixes
 
 September 19, 2026: Luna Max executed **172 Core tests, 141 Windows platform tests
