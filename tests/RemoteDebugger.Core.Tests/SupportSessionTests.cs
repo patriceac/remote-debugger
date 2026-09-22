@@ -57,8 +57,9 @@ public sealed class SupportSessionTests
     {
         var clock = new Clock(); var session = new SupportSession(clock); session.Pair(true);
         session.AwaitRestart(clock.GetUtcNow().AddHours(1)); session.Disconnect();
-        clock.Advance(TimeSpan.FromMinutes(59)); Assert.False(session.ShouldExit);
-        clock.Advance(TimeSpan.FromMinutes(1)); Assert.True(session.ShouldExit);
+        clock.Advance(TimeSpan.FromHours(1) - TimeSpan.FromTicks(1)); Assert.False(session.ShouldExit);
+        clock.Advance(TimeSpan.FromTicks(1)); session.Observe();
+        Assert.True(session.ShouldExit); Assert.False(session.Snapshot.Connected); Assert.Equal("ended", session.Snapshot.State);
         session.Pair(true); session.AwaitRestart(clock.GetUtcNow().AddHours(1)); session.CompleteRestart(); session.Disconnect();
         clock.Advance(TimeSpan.FromMinutes(10)); Assert.True(session.ShouldExit);
     }

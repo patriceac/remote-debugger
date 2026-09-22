@@ -144,6 +144,15 @@ both VMs ended Off with payload deletion and successful network cleanup. This
 establishes the visible real-hour timeout, but does not pass the complete
 post-sign-in no-reconnect scenario.
 
+The user ruled out repeating the hour-long run. Remaining expiry qualification
+uses the preserved real-timer captures, fast injected-clock deadline and expired
+ticket checks, and the short native cancellation/reboot path. A complete second
+hour-long end-to-end run is not a release gate and must not be started under the
+current test plan.
+Luna passed all eight session tests and the restart-ticket test in seconds,
+including one tick before/exactly at the deadline and rejection of a late
+heartbeat or expired restart ticket.
+
 The Shutdown target
 `executable-test-20260921T215803298Z-c42a8851` failed elevated setup before the
 product ran: the expected-power-off path passed literal `{PAYLOAD}` tokens to
