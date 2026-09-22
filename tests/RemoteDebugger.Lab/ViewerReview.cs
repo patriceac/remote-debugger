@@ -55,7 +55,12 @@ internal sealed partial class LabForm
         CaptureDesktop("viewer-normal-minimum.png");
         for (int i = 0; i < 3; i++)
         {
-            InvokeElement(Control("fullScreen"));
+            if (i == 0) InvokeElement(Control("fullScreen"));
+            else
+            {
+                Control("remoteText").SetFocus();
+                await ViewerChordAsync(i == 1 ? [0xA2, 0xA4, 0x7B] : [0xA3, 0xA1, 0x7B, 0x7B]);
+            }
             await Task.Delay(350, stop.Token);
             var exit = Control("exitFullScreen"); var status = Control("fullScreenStatus");
             Require(Control("fullScreenResourceCharts").Current.BoundingRectangle.Right <= exit.Current.BoundingRectangle.Left,

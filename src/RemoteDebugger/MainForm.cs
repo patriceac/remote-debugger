@@ -80,7 +80,7 @@ public sealed partial class MainForm : Forms.Form
     private readonly Forms.Label agentLog = new() { Name = "agentLog", AutoSize = true, ForeColor = SecondaryText, MaximumSize = new Size(720, 0) };
 
     // Connection screen.
-    private readonly RememberedListView peers = new() { Name = "peers", Dock = Forms.DockStyle.Fill, View = Forms.View.Details, FullRowSelect = true, HideSelection = false, MultiSelect = false, BorderStyle = Forms.BorderStyle.None, BackColor = Surface, LogicalRowHeight = 44 };
+    private readonly RememberedListView peers = new() { Name = "peers", Dock = Forms.DockStyle.Fill, View = Forms.View.Details, FullRowSelect = true, HideSelection = false, MultiSelect = false, BorderStyle = Forms.BorderStyle.None, BackColor = Surface, LogicalRowHeight = 44, FitColumnsToWidth = true };
     private readonly Forms.TextBox host = TextBox("host");
     private readonly Forms.TextBox code = TextBox("pairCode");
     private readonly Forms.Button pairButton = Button(() => UiText.Connect, "pair", 110, primary: true);
@@ -326,12 +326,13 @@ public sealed partial class MainForm : Forms.Form
 
     private void BuildHeader()
     {
-        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 2, Padding = new Forms.Padding(28, 0, 28, 0), Margin = Forms.Padding.Empty };
+        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 3, RowCount = 2, Padding = new Forms.Padding(28, 0, 28, 0), Margin = Forms.Padding.Empty };
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 0));
+        layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
         layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
         layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
-        var titles = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = new Forms.Padding(0, 14, 0, 0), Margin = Forms.Padding.Empty };
+        var titles = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, AutoSize = true, ColumnCount = 1, RowCount = 2, Padding = new Forms.Padding(0, 14, 0, 0), Margin = Forms.Padding.Empty };
         titles.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize)); titles.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         headerTitle.Font = new Font("Segoe UI", 22, FontStyle.Bold); headerSubtitle.Font = new Font("Segoe UI", 10.5F);
         titles.Controls.Add(headerTitle, 0, 0); titles.Controls.Add(headerSubtitle, 0, 1);
@@ -341,8 +342,20 @@ public sealed partial class MainForm : Forms.Form
         terminateSession.Margin = Forms.Padding.Empty; terminateSession.Visible = false;
         statusDot.Location = new Point(12, 7); statusLabel.Location = new Point(28, 6); statusPill.Controls.Add(statusDot); statusPill.Controls.Add(statusLabel); RefreshStatusPillRegion();
         actions.Controls.Add(statusPill); actions.Controls.Add(terminateSession);
-        layout.Controls.Add(titles, 0, 0); layout.Controls.Add(actions, 1, 0);
-        layout.Controls.Add(headerCharts, 0, 1); layout.SetColumnSpan(headerCharts, 2);
+        layout.Controls.Add(titles, 0, 0); layout.Controls.Add(headerCharts, 1, 0); layout.Controls.Add(actions, 2, 0);
+        layout.Layout += (_, _) =>
+        {
+            float scale = DeviceDpi / 96f;
+            bool below = headerCharts.Visible && layout.ClientSize.Width - layout.Padding.Horizontal - titles.PreferredSize.Width - actions.PreferredSize.Width < 440 * scale;
+            var position = new Forms.TableLayoutPanelCellPosition(below ? 0 : 1, below ? 1 : 0);
+            if (layout.GetCellPosition(headerCharts) != position) layout.SetCellPosition(headerCharts, position);
+            int span = below ? 3 : 1;
+            if (layout.GetColumnSpan(headerCharts) != span) layout.SetColumnSpan(headerCharts, span);
+            var margin = below ? new Forms.Padding(0, 0, 0, (int)(12 * scale)) : new Forms.Padding((int)(24 * scale), (int)(12 * scale), (int)(24 * scale), (int)(12 * scale));
+            if (headerCharts.Margin != margin) headerCharts.Margin = margin;
+            float rowHeight = below ? 60 * scale : 0;
+            if (layout.RowStyles[1].Height != rowHeight) layout.RowStyles[1].Height = rowHeight;
+        };
         header.Controls.Add(layout);
         var line = new Forms.Panel { Dock = Forms.DockStyle.Bottom, Height = 1, BackColor = Divider }; header.Controls.Add(line);
     }

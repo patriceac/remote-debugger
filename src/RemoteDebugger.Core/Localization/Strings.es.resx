@@ -981,7 +981,7 @@ Puede cancelar durante la cuenta atrás de 10 segundos. No se forzará el cierre
   <data name="TransferSkippedFiles" xml:space="preserve"><value>Copia finalizada · {0} archivo(s) omitido(s) en el Explorador</value></data>
   <data name="FullScreen" xml:space="preserve"><value>Pantalla completa</value></data>
   <data name="ExitFullScreen" xml:space="preserve"><value>Salir de pantalla completa</value></data>
-  <data name="ReleaseKeyboard" xml:space="preserve"><value>Ctrl+Alt+F12 o Ctrl+Mayús+F12: liberar teclado / salir de pantalla completa</value></data>
+  <data name="ReleaseKeyboard" xml:space="preserve"><value>Ctrl+Alt+F12 o Ctrl+Mayús+F12: alternar pantalla completa</value></data>
   <data name="EconomyExplanation" xml:space="preserve"><value>Reducir la frecuencia y el tamaño de las imágenes para ahorrar ancho de banda en esta conexión por relé.</value></data>
   <data name="EconomyUnavailable" xml:space="preserve"><value>El modo ahorro solo se aplica al compartir pantalla por relé. Las conexiones directas LAN/WAN usan la calidad normal.</value></data>
   <data name="SendTextHint" xml:space="preserve"><value>Enviar este texto al campo activo del PC remoto. También puede pulsar Intro aquí.</value></data>

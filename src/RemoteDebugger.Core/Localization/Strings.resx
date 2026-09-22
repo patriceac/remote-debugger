@@ -981,7 +981,7 @@ You can cancel during the 10-second countdown. Applications with unsaved work wi
   <data name="TransferSkippedFiles" xml:space="preserve"><value>Copy finished · {0} file(s) skipped in Explorer</value></data>
   <data name="FullScreen" xml:space="preserve"><value>Full screen</value></data>
   <data name="ExitFullScreen" xml:space="preserve"><value>Exit full screen</value></data>
-  <data name="ReleaseKeyboard" xml:space="preserve"><value>Ctrl+Alt+F12 or Ctrl+Shift+F12: release keyboard / exit full screen</value></data>
+  <data name="ReleaseKeyboard" xml:space="preserve"><value>Ctrl+Alt+F12 or Ctrl+Shift+F12: toggle full screen</value></data>
   <data name="EconomyExplanation" xml:space="preserve"><value>Reduce frame rate and image size to save bandwidth on this relay connection.</value></data>
   <data name="EconomyUnavailable" xml:space="preserve"><value>Economy mode applies only while the remote screen uses the relay. Direct LAN/WAN connections use normal quality.</value></data>
   <data name="SendTextHint" xml:space="preserve"><value>Send this text to the focused field on the remote PC. You can also press Enter here.</value></data>

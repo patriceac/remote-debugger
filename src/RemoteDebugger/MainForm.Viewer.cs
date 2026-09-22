@@ -6,13 +6,13 @@ namespace RemoteDebugger;
 public sealed partial class MainForm
 {
     private RemoteKeyboardCapture? keyboardCapture;
-    private readonly Forms.ToolTip viewerTips = new() { ShowAlways = true };
+    private readonly Forms.ToolTip viewerTips = new() { ShowAlways = true, InitialDelay = 1000, ReshowDelay = 1000 };
     private readonly Forms.Panel economyHost = new() { AutoSize = true, Margin = Forms.Padding.Empty };
     private readonly Forms.Button secureAttention = Button(() => "Ctrl+Alt+Del", "secureAttention", 116);
     private readonly Forms.Button fullScreenButton = Button(() => UiText.FullScreen, "fullScreen", 124);
     private readonly Forms.Button exitFullScreen = Button(() => UiText.ExitFullScreen, "exitFullScreen", 190);
     private readonly Forms.Label fullScreenStatus = new() { Name = "fullScreenStatus", Dock = Forms.DockStyle.Fill, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft, ForeColor = SecondaryText };
-    private readonly ResourceMiniCharts headerCharts = new() { Name = "resourceMiniCharts", Width = 440, Height = 40, Visible = false, ForeColor = PrimaryText, Margin = Forms.Padding.Empty };
+    private readonly ResourceMiniCharts headerCharts = new() { Name = "resourceMiniCharts", Dock = Forms.DockStyle.Fill, Visible = false, ForeColor = PrimaryText, Font = new Font("Segoe UI", 9.5F), Margin = new Forms.Padding(24, 12, 24, 12) };
     private readonly ResourceMiniCharts fullScreenCharts = new() { Name = "fullScreenResourceCharts", Width = 264, Height = 34, ForeColor = PrimaryText, Anchor = Forms.AnchorStyles.Left };
     private readonly Forms.Timer resourceRefreshTimer = new() { Interval = 5000 };
     private bool economyPreferred = true, updatingEconomy, loadingViewerPreferences;
@@ -70,11 +70,9 @@ public sealed partial class MainForm
     {
         resourceRefreshTimer.Tick += async (_, _) => { if (CanRefreshResourcesAutomatically()) await RefreshResourcesAsync(automatic: true); };
         resourceRefreshTimer.Start();
-        keyboardCapture = new(CanSendInput, value => QueueInput(value), ReleaseHeldInputForCurrentSession, () =>
-        {
-            SetFullScreen(false);
-            remoteText.Focus();
-        }, () => fullScreenHost != null && Forms.Form.ActiveForm == this);
+        keyboardCapture = new(CanSendInput, value => QueueInput(value), ReleaseHeldInputForCurrentSession,
+            () => SetFullScreen(fullScreenHost == null),
+            () => Forms.Form.ActiveForm == this && (fullScreenHost != null || fullScreenButton.Enabled && rolePages.SelectedIndex == 1 && controllerPages.SelectedIndex == 1));
         Shown += (_, _) =>
         {
             try { keyboardCapture.Start(); }
@@ -109,7 +107,7 @@ public sealed partial class MainForm
         // Disabled controls do not receive hover messages: the enabled parent owns the tooltip.
         viewerTips.SetToolTip(economyHost, economyTip);
         viewerTips.SetToolTip(relayEconomy, economyTip);
-        viewerTips.SetToolTip(screen, UiText.ReleaseKeyboard);
+        viewerTips.SetToolTip(fullScreenButton, UiText.ReleaseKeyboard);
         viewerTips.SetToolTip(typeText, UiText.SendTextHint);
         viewerTips.SetToolTip(enterKey, UiText.RemoteEnterHint);
         viewerTips.SetToolTip(secureAttention, UiText.SecureAttentionHint);

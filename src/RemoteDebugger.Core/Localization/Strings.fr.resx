@@ -981,7 +981,7 @@ Vous pouvez annuler pendant le compte à rebours de 10 secondes. Les application
   <data name="TransferSkippedFiles" xml:space="preserve"><value>Copie terminée · {0} fichier(s) ignoré(s) dans l’Explorateur</value></data>
   <data name="FullScreen" xml:space="preserve"><value>Plein écran</value></data>
   <data name="ExitFullScreen" xml:space="preserve"><value>Quitter le plein écran</value></data>
-  <data name="ReleaseKeyboard" xml:space="preserve"><value>Ctrl+Alt+F12 ou Ctrl+Maj+F12 : libérer le clavier / quitter le plein écran</value></data>
+  <data name="ReleaseKeyboard" xml:space="preserve"><value>Ctrl+Alt+F12 ou Ctrl+Maj+F12 : activer ou quitter le plein écran</value></data>
   <data name="EconomyExplanation" xml:space="preserve"><value>Réduire la fréquence et la taille des images pour économiser la bande passante de cette connexion par relais.</value></data>
   <data name="EconomyUnavailable" xml:space="preserve"><value>Le mode éco s'applique uniquement au partage d'écran par relais. Les connexions directes LAN/WAN utilisent la qualité normale.</value></data>
   <data name="SendTextHint" xml:space="preserve"><value>Envoyer ce texte dans le champ actif du PC distant. Vous pouvez aussi appuyer sur Entrée ici.</value></data>

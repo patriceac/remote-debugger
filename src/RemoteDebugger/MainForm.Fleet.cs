@@ -41,11 +41,16 @@ public sealed partial class MainForm
         peers.DrawColumnHeader += (_, e) => e.DrawDefault = true;
         peers.DrawSubItem += (_, e) =>
         {
+            using var background = new SolidBrush(peers.BackColor);
+            e.Graphics.FillRectangle(background, e.Bounds);
             if (e.ColumnIndex != 3 || e.Item?.Tag is not Peer peer || !fleet.TryGetValue(DeviceKey(peer), out var device) ||
                 !UpdateProgressTracker.IsActiveStage(device.State) || !fleetProgress.TryGetValue(DeviceKey(peer), out var tracker))
-            { e.DrawDefault = true; return; }
-            using var background = new SolidBrush(e.Item.Selected ? SystemColors.Highlight : peers.BackColor);
-            e.Graphics.FillRectangle(background, e.Bounds);
+            {
+                using var selectedFont = e.ColumnIndex == 0 && e.Item?.Selected == true ? new Font(peers.Font, FontStyle.Bold) : null;
+                Forms.TextRenderer.DrawText(e.Graphics, e.SubItem?.Text, selectedFont ?? peers.Font, e.Bounds, PrimaryText,
+                    Forms.TextFormatFlags.EndEllipsis | Forms.TextFormatFlags.VerticalCenter | Forms.TextFormatFlags.SingleLine | Forms.TextFormatFlags.NoPrefix);
+                return;
+            }
             int horizontalInset = Math.Max(6, e.Bounds.Height / 6);
             int trackHeight = Math.Max(3, e.Bounds.Height / 11);
             int trackBottomInset = Math.Max(5, e.Bounds.Height / 9);
@@ -60,7 +65,7 @@ public sealed partial class MainForm
             Forms.TextRenderer.DrawText(e.Graphics, detail, peers.Font,
                 new Rectangle(e.Bounds.X + horizontalInset, e.Bounds.Y + 2,
                     Math.Max(0, e.Bounds.Width - horizontalInset * 2), Math.Max(0, track.Top - e.Bounds.Y - 5)),
-                e.Item.Selected ? SystemColors.HighlightText : PrimaryText, Forms.TextFormatFlags.EndEllipsis | Forms.TextFormatFlags.VerticalCenter);
+                PrimaryText, Forms.TextFormatFlags.EndEllipsis | Forms.TextFormatFlags.VerticalCenter);
         };
         RenderPeers();
     }

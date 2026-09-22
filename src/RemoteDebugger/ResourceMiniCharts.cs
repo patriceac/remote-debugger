@@ -24,15 +24,16 @@ internal sealed class ResourceMiniCharts : Forms.Control
     {
         base.OnPaint(e); e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
         float column = ClientSize.Width / 4f;
+        int labelHeight = Forms.TextRenderer.MeasureText("CPU", Font, Size.Empty, Forms.TextFormatFlags.NoPadding).Height;
         string[] names = ["CPU", "RAM", UiText.DiskActivity, "GPU"];
         for (int i = 0; i < 4; i++)
         {
             int left = (int)(i * column), width = Math.Max(1, (int)column - 8);
             Forms.TextRenderer.DrawText(e.Graphics, names[i] + " " + (stale || history.Count == 0 ? "—" : Format(history[^1][i])), Font,
-                new Rectangle(left, 0, width, 18), stale ? SystemColors.GrayText : ForeColor, Forms.TextFormatFlags.NoPadding | Forms.TextFormatFlags.EndEllipsis);
+                new Rectangle(left, 0, width, labelHeight), stale ? SystemColors.GrayText : ForeColor, Forms.TextFormatFlags.NoPadding | Forms.TextFormatFlags.EndEllipsis);
             using var line = new Pen(stale ? Color.LightGray : Colors[i], 1.5f);
             using var baseline = new Pen(Color.FromArgb(225, 230, 232));
-            int bottom = ClientSize.Height - 3, graphHeight = Math.Max(2, ClientSize.Height - 22);
+            int bottom = ClientSize.Height - 3, graphHeight = Math.Max(2, bottom - labelHeight - 4);
             e.Graphics.DrawLine(baseline, left, bottom, left + width, bottom);
             PointF? previous = null;
             for (int n = 0; n < history.Count; n++)

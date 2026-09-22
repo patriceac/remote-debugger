@@ -14,6 +14,8 @@ internal sealed class RememberedListView : Forms.ListView
 
     public RememberedListView() => DoubleBuffered = true;
 
+    public bool FitColumnsToWidth { get; init; }
+
     public int LogicalRowHeight
     {
         get => logicalRowHeight;
@@ -50,6 +52,12 @@ internal sealed class RememberedListView : Forms.ListView
         ApplyLayout();
     }
 
+    protected override void OnClientSizeChanged(EventArgs e)
+    {
+        base.OnClientSizeChanged(e);
+        if (FitColumnsToWidth) ApplyLayout();
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing) rowHeightImages.Dispose();
@@ -72,10 +80,13 @@ internal sealed class RememberedListView : Forms.ListView
         applying = true;
         try
         {
+            double scale = DeviceDpi / 96d;
+            if (FitColumnsToWidth && ClientSize.Width > 0 && layout.Length > 0)
+                scale = Math.Min(scale, ClientSize.Width / layout.Sum(column => column.Width));
             foreach (var column in layout.OrderBy(column => column.Order))
             {
                 var header = Columns[column.Id]!;
-                header.Width = (int)Math.Round(column.Width * DeviceDpi / 96d);
+                header.Width = (int)(FitColumnsToWidth ? Math.Floor(column.Width * scale) : Math.Round(column.Width * scale));
                 header.DisplayIndex = column.Order;
             }
         }

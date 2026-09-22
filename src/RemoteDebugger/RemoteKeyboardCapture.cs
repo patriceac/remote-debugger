@@ -62,7 +62,7 @@ internal sealed class RemoteKeyboardCapture(Func<bool> canCapture, Action<object
         try
         {
             Refresh();
-            if (down && (active || canEscape?.Invoke() == true) && IsReleaseShortcut(vk, pressed))
+            if (down && !suppress && (active || canEscape?.Invoke() == true) && IsReleaseShortcut(vk, pressed))
             {
                 swallowed.Add(vk); Reset(); release(); escape(); return (IntPtr)1;
             }

@@ -132,6 +132,7 @@ internal sealed partial class LabForm : Forms.Form
             try
             {
                 guestElevated = Native.IsElevated();
+                if (role == "uirefinements") { await UiRefinementsAsync(); return; }
                 if (role == "loopbackmcp") { await McpReviewAsync(auxiliaryPath ?? throw new ArgumentException("MCP package path is required.")); return; }
                 if (role == "internetinstaller") { await InternetInstallerReviewAsync(); return; }
                 if (role == "internet") { await InternetReviewAsync(); return; }

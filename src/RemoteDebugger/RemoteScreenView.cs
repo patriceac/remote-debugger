@@ -13,4 +13,16 @@ internal sealed class RemoteScreenView : PictureBox
     }
 
     protected override bool IsInputKey(Keys keyData) => true;
+
+    protected override void OnPaintBackground(PaintEventArgs e)
+    {
+        base.OnPaintBackground(e);
+        if (Image == null) return;
+        float scale = DeviceDpi / 96f;
+        using var pen = new Pen(Color.FromArgb(40, Color.Black), scale);
+        int spacing = Math.Max(1, (int)Math.Round(28 * scale));
+        // The opaque screen image paints over this, leaving stripes only in its margins.
+        for (int x = -Height; x < Width; x += spacing)
+            e.Graphics.DrawLine(pen, x, Height, x + Height, 0);
+    }
 }
