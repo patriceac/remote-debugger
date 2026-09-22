@@ -1,10 +1,17 @@
 # Validation record
 
-## 0.5.0 — support workflow (power qualification incomplete)
+## 0.5.0 — support workflow
 
 September 21, 2026: Luna Max ran focused Core/platform regression checks during
 implementation. The latest merged-source subset passed **78 platform tests and
 6 MCP tests**. The primary agent owns application and test code.
+
+September 22: the current signed 30F1 application passed the complete native
+automatic/manual reboot sequence and confirmed shutdown with independently
+observed power-off, evidence recovery and no application replay. Expiry uses
+retained real-hour timeout screens and nine fast clock/ticket checks; the user
+explicitly excluded another hour-long run. Exact package limitations remain
+listed below.
 
 Signed Release `B0892B06C4B39F98BF39583E53EF294863FEA9F7E87F2AA49C89EACFA63C2FD7`
 passed clipboard sharing/pause/end, all four Explorer drag-and-drop paths with
@@ -77,7 +84,7 @@ network adapter remained connected.
 | Session clipboard | Focused session/clipboard tests and native bidirectional, pause/baseline and session-end checks passed. Candidate 30F1 also passed the no-replay checks after automatic and manual reboots. |
 | Automatic reports | Retention/deduplication checks passed; candidate C613 created an unexpected-exit incident and read it offline without clipboard payloads. |
 | Restart and one-use logon | Unit checks, native preflight and cancellation with temporary-login cleanup passed. Candidate 30F1 passed both native boots with the same grant, fresh video and real input: automatic sign-in in 92.11 seconds and manual second-boot return in 156.47 seconds. The broker proved one manual sign-in, one original application launch and no action replay. |
-| Shutdown | Native named-PC confirmation, countdown and cancellation passed. On 30F1, the controller passed accepted-shutdown checks and the broker observed the target Off before cleanup. Final target recovery evidence remains unqualified because of a Lab receipt filename collision. |
+| Shutdown | Native named-PC confirmation, countdown/cancellation, accepted-shutdown UI and reconnect-profile removal passed on 30F1. The broker independently observed power-off before cleanup, recovered the evidence and proved no application replay. Both final requests passed completely. |
 | Update progress | Ten focused progress tests passed, covering measured/stalled/resumed rates, opaque stages and actual completion; the existing binary/health verification gate is preserved. |
 | Smoother viewer | Sixteen stream/frame/acknowledgement checks passed; native H.264 viewing exceeded the former 5 FPS ceiling without a stale-frame backlog. |
 | Explorer transfer | Tree/descriptor/destination checks and all four native copy paths passed, including Unicode/nested/empty folders, source preservation and bulk cancellation/resume with exact hashes. |
@@ -87,7 +94,7 @@ issues, corrected before the B089 run. One 0.5.0 provisioning failure did not
 reproduce; the CLI now forwards the provisioner's current error, and isolated
 request `executable-test-20260921T173912962Z-6cd8e67e` provisioned successfully.
 
-Final shutdown recovery evidence remains unqualified. An earlier release of the Hyper-V Harness project's
+The remaining short power checks are complete. An earlier release of the Hyper-V Harness project's
 authorized Astra Max extension received a verified Ready receipt at commit
 `b67b47e479f2c25775f011824745781afff77631`, deployment
 `deploy-47d275054947b776`, completed September 22 at 00:46:05 UTC. Its Ready
@@ -323,7 +330,30 @@ The second-boot screenshot was independently reviewed: live desktop, typed
 input and no firewall prompt. Both roles passed harness and application
 assertions, ended Off, deleted their payloads and completed network cleanup
 without warnings or skipped evidence. The healthy queue returned to zero active
-and queued requests. Only the short shutdown evidence check remains.
+and queued requests.
+
+The next shutdown target `executable-test-20260922T031542034Z-e38001c4`
+passed the complete power-off/evidence-recovery/no-replay contract. Controller
+`executable-test-20260922T031542236Z-f7df4521` stopped at a transient UI Automation
+lookup even though its final screenshot visibly showed the correct completed
+state. Lab commit `c3da45c` keeps polling for the status control within the
+existing 30-second deadline, preserving the expected text and profile-removal
+assertions. Its artifact SHA-256 is
+`C4B5A70461A5A17B320595C662537ACB6539AB2C5AE9E263B5799198B6F51DCE`;
+the application and installers remain unchanged.
+
+The focused shutdown rerun passed completely: target
+`executable-test-20260922T032611948Z-8738031d` and controller
+`executable-test-20260922T032612104Z-a90e1674`. The controller passed provisioning
+and `power.shutdown_controller`, including named-PC confirmation/countdown,
+accepted shutdown, forgotten reconnect state and honest physical-off wording.
+Its final desktop was independently reviewed. The broker observed the target
+Off at 03:31:33 UTC before cleanup, recovered evidence after a controlled boot,
+and proved that the original application was not relaunched. Both requests
+passed harness and application assertions, ended Off, removed payloads and
+processes, and completed network cleanup with no warnings. The queue returned
+healthy with zero active or queued requests. No further native reruns are
+required for the agreed scope.
 
 ## 0.4.13 — audit fixes
 
