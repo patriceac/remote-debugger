@@ -74,9 +74,9 @@ network adapter remained connected.
 
 | Requirement | Evidence and remaining limit |
 | --- | --- |
-| Session clipboard | Focused session/clipboard tests and native bidirectional, pause/baseline and session-end checks passed. Actual reboot remains part of the power qualification gap. |
+| Session clipboard | Focused session/clipboard tests and native bidirectional, pause/baseline and session-end checks passed. Candidate 30F1 also passed the no-replay checks after automatic and manual reboots. |
 | Automatic reports | Retention/deduplication checks passed; candidate C613 created an unexpected-exit incident and read it offline without clipboard payloads. |
-| Restart and one-use logon | Unit checks, native preflight and cancellation with temporary-login cleanup passed. Candidate 30F1 restored the same grant and fresh video after automatic boot 1; the subsequent input check was obstructed by a Windows Firewall prompt. Manual boot 2 remains unqualified. |
+| Restart and one-use logon | Unit checks, native preflight and cancellation with temporary-login cleanup passed. Candidate 30F1 passed both native boots with the same grant, fresh video and real input: automatic sign-in in 92.11 seconds and manual second-boot return in 156.47 seconds. The broker proved one manual sign-in, one original application launch and no action replay. |
 | Shutdown | Native named-PC confirmation, countdown and cancellation passed. On 30F1, the controller passed accepted-shutdown checks and the broker observed the target Off before cleanup. Final target recovery evidence remains unqualified because of a Lab receipt filename collision. |
 | Update progress | Ten focused progress tests passed, covering measured/stalled/resumed rates, opaque stages and actual completion; the existing binary/health verification gate is preserved. |
 | Smoother viewer | Sixteen stream/frame/acknowledgement checks passed; native H.264 viewing exceeded the former 5 FPS ceiling without a stale-frame backlog. |
@@ -87,8 +87,7 @@ issues, corrected before the B089 run. One 0.5.0 provisioning failure did not
 reproduce; the CLI now forwards the provisioner's current error, and isolated
 request `executable-test-20260921T173912962Z-6cd8e67e` provisioned successfully.
 
-Usable-input recovery across automatic/manual boots and final shutdown recovery
-evidence remain unqualified. An earlier release of the Hyper-V Harness project's
+Final shutdown recovery evidence remains unqualified. An earlier release of the Hyper-V Harness project's
 authorized Astra Max extension received a verified Ready receipt at commit
 `b67b47e479f2c25775f011824745781afff77631`, deployment
 `deploy-47d275054947b776`, completed September 22 at 00:46:05 UTC. Its Ready
@@ -292,6 +291,39 @@ observation alongside the effective native result. A notification appeared on
 the headless peer despite passing traffic; harness qualification does not prove
 a prompt-free product desktop. Only the short Once and Shutdown product checks
 are authorized, with actual product UI and input verification required.
+
+On that Ready harness, Once controller
+`executable-test-20260922T024917046Z-30767258` passed cancellation/credential
+cleanup and `power.return_boot_1`: the first automatic reboot restored the same
+grant, matching binary, fresh live video and real keyboard input in 98.72 seconds.
+Target `executable-test-20260922T024916969Z-b8cca9a0` booted automatically at
+02:55:48 UTC, then manually at 02:57:24 UTC after 33.06 seconds signed out and one
+broker credential entry. Both network gates passed. The second return reached a
+live desktop, visually reviewed without a firewall prompt, but the Lab's
+separate input probe reused its pre-reboot persistent socket and failed with
+connection reset at 02:59:02 UTC. The helper now opens a fresh client for each
+returned boot while retaining the same grant check; no product code changed.
+The target subsequently failed its cohort lease check after the controller
+terminated; its diagnostics retained 17 files without skips. Both VMs ended Off
+with payload deletion and successful network cleanup. The Lab fix is commit
+`846f5c6`; its rebuilt artifact has SHA-256
+`A769872D1B0BC5AFBB0100D47625D89BDBF049DA1A795BDB62ADB88679D2DF7D`
+for the remaining short checks; the signed Release remains 30F1.
+
+The next Once pair passed completely on those exact 30F1/A769 bytes:
+controller `executable-test-20260922T030344009Z-5fa3e427` and target
+`executable-test-20260922T030343872Z-87b81775`. The controller passed cancellation
+and temporary-login cleanup, then both real boot returns with the same grant,
+matching binary, fresh live video, keyboard input and no offline clipboard
+replay. Automatic return took 92.11 seconds; manual second-boot return took
+156.47 seconds, including 32.11 seconds deliberately signed out before the
+broker entered credentials. Both network gates passed. The target's restart contract is
+proven, with one original launch, one manual sign-in and no action replay.
+The second-boot screenshot was independently reviewed: live desktop, typed
+input and no firewall prompt. Both roles passed harness and application
+assertions, ended Off, deleted their payloads and completed network cleanup
+without warnings or skipped evidence. The healthy queue returned to zero active
+and queued requests. Only the short shutdown evidence check remains.
 
 ## 0.4.13 — audit fixes
 
