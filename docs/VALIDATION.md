@@ -90,12 +90,15 @@ request `executable-test-20260921T173912962Z-6cd8e67e` provisioned successfully.
 Actual reboot recovery, one-use sign-in/second boot, and issued shutdown remain
 unqualified. The Hyper-V Harness project's authorized
 Astra Max extension is deployed and Ready: commit
-`6414c50a50ebc30f96fdb214601dac422780bdf0`, deployment
-`deploy-805bbed3db1ff531`, completed September 21 at 23:56:44 UTC. Its Ready
-receipt was independently read. The release passed 498 deterministic scenarios,
+`b67b47e479f2c25775f011824745781afff77631`, deployment
+`deploy-47d275054947b776`, completed September 22 at 00:46:05 UTC. Its Ready
+receipt was independently read. The underlying 6414 release passed 498 deterministic scenarios,
 eight isolated acceptance paths and a separate network peer. It qualifies
 per-boot network restoration, exact terminal-result recognition, setup argument
 expansion and bounded failure evidence. Product power qualification is separate.
+The b67 update also fixes screenshot-only live capture and preserves unknown
+process state as null when a requested evidence file is missing; two focused
+regressions and live captures qualified those changes.
 The test-only power adapter binds the elevated setup to
 the exact Lab and Release hashes, retains independent installed-product/service
 verification, and checks the target's account/SID/pool-baseline binding before
@@ -183,7 +186,7 @@ The next Lab allows ten minutes for the post-cancel/expiry target reply and
 bounds abandoned target coordination to ten minutes. Neither change alters the
 product's one-hour timer. It records the visible stopped wait and removed profile
 before probing the returning target, preserving those results on later failure.
-Current Lab SHA-256 is
+Lab SHA-256 for the first boot-time-fix pair was
 `182F368B2B2E27F9C76583ED4C4AAAA1946E1CB61C9DF792861280160696EE68`.
 Harness canaries subsequently reproduced Public-category drift and loss of the
 request-owned Private interface exemption after reboot, with the leased MAC,
@@ -213,6 +216,20 @@ because a worker readiness failure left its target queued. Cleanup passed; the
 worker recovered automatically. This is not a product shutdown result. See
 [support workflow](SUPPORT_WORKFLOW.md). Raw evidence is retained
 under `D:\Disk\VMs\Codex-Harness\Live\Broker\Results\<request-id>`.
+
+The first 30F1/Lab 182F short pairs failed during elevated setup, before Lab
+launch: Once controller `executable-test-20260922T004847113Z-e34d878b` and
+Shutdown controller `executable-test-20260922T004900271Z-1e77d717` each reported
+SCM StartService error 1053. Their setup receipts bind the exact 30F1 product;
+the available error did not establish the underlying cause. Dependent targets
+`executable-test-20260922T004847228Z-5d416374` and
+`executable-test-20260922T004900349Z-5e8abe9c` were canonically cancelled without
+application launch or replay. All four VMs ended Off with payload deletion,
+complete network cleanup and no evidence warnings; the queue returned healthy
+and idle. Lab commit `40296f4` retains provisioner stdout and bounded service
+event diagnostics on setup failure. Its Release SHA-256 is
+`288EDA4093E21AF6954E8E46ACE6169012E7FA59D0417F79D47533283A4B03F4`;
+the product and installers remain unchanged.
 
 ## 0.4.13 — audit fixes
 
