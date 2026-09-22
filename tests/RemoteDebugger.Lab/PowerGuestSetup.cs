@@ -36,7 +36,7 @@ internal static class PowerGuestSetup
             if (process.ExitCode != 0)
             {
                 using var diagnosticTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-                const string query = "Get-WinEvent -FilterHashtable @{LogName=@('System','Application');StartTime=(Get-Date).AddMinutes(-5)} -ErrorAction SilentlyContinue | Where-Object { $_.ProviderName -in @('Service Control Manager','.NET Runtime','Application Error') -and $_.Message -match 'RemoteDebugger' } | Select-Object -First 8 TimeCreated,ProviderName,Id,Message | ConvertTo-Json -Depth 3; sc.exe queryex RemoteDebuggerSupport";
+                const string query = "Get-WinEvent -FilterHashtable @{LogName=@('System','Application');StartTime=(Get-Date).AddMinutes(-5)} -ErrorAction SilentlyContinue | Where-Object { $_.ProviderName -in @('Service Control Manager','.NET Runtime','Application Error') -and $_.Message -match 'Remote ?Debugger' } | Select-Object -First 8 TimeCreated,ProviderName,Id,Message | ConvertTo-Json -Depth 3; sc.exe queryex RemoteDebuggerSupport";
                 try
                 {
                     var diagnostics = await Operations.RunAsync(Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe"),

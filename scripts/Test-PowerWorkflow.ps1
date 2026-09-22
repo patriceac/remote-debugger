@@ -26,15 +26,12 @@ $requests = foreach ($roleName in @('poweragent', ('powercontroller-' + $Scenari
         ArtifactPath = $artifact; ExecutableRelativePath = 'lab\RemoteDebugger.Lab.exe'
         Arguments = (Get-LabArguments $roleName)
         AssertResultFile = '{OUTDIR}\lab-result.json'; AssertResultJsonPointer = '/passed'; AssertResultEqualsJson = 'true'
-        GuestSetupExecutableRelativePath = 'release\RemoteDebugger.exe'; GuestSetupExecutableSha256 = $releaseHash
-        GuestSetupArguments = @('cli', 'platform-provision'); GuestSetupTimeoutSeconds = 300
+        GuestSetupExecutableRelativePath = 'lab\RemoteDebugger.Lab.exe'; GuestSetupExecutableSha256 = $labHash
+        GuestSetupArguments = @('powersetup', '{PAYLOAD}\release\RemoteDebugger.exe', '{PAYLOAD}\lab\RemoteDebugger.Lab.exe', $releaseHash); GuestSetupTimeoutSeconds = 300
         NetworkProfile = 'IsolatedTestNet'; NetworkCohort = $Cohort; ExecutionTimeoutSeconds = $executionSeconds; ThrowOnFailure = $true
     }
     if ($Scenario -eq 'Once') { $request.GuestCredentialFixture = $true }
     if ($roleName -eq 'poweragent') {
-        $request.GuestSetupExecutableRelativePath = 'lab\RemoteDebugger.Lab.exe'
-        $request.GuestSetupExecutableSha256 = $labHash
-        $request.GuestSetupArguments = @('powersetup', '{PAYLOAD}\release\RemoteDebugger.exe', '{PAYLOAD}\lab\RemoteDebugger.Lab.exe', $releaseHash)
         if ($Scenario -eq 'Shutdown') {
             $request.ExpectGuestPowerOff = $true
             $request.GuestPowerOffRecoveryTimeoutSeconds = 300
