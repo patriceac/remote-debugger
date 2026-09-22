@@ -31,7 +31,13 @@ public sealed class ResourceSampling : IDisposable
                 name = previousProcesses != null && previousProcesses.TryGetValue(p.Id, out var old) && old.StartUtc == start ? old.Name : p.ProcessName;
                 values[p.Id] = new Sample(p.Id, name, start, p.TotalProcessorTime.TotalMilliseconds, p.WorkingSet64, p.MainWindowTitle, p.MainWindowHandle != IntPtr.Zero ? p.Responding : null, null);
             }
-            catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException or ArgumentException) { values[p.Id] = new Sample(p.Id, name, null, null, null, null, null, ex.GetType().Name); }
+            catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException or ArgumentException)
+            {
+                // Windows can expose a process name while denying its timing data.
+                if (name == "<unavailable>")
+                    try { name = p.ProcessName; } catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException or ArgumentException) { }
+                values[p.Id] = new Sample(p.Id, name, null, null, null, null, null, ex.GetType().Name);
+            }
         }
         return values;
     }

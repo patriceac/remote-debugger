@@ -1,5 +1,36 @@
 # Validation record
 
+## 0.5.2 — performance improvements
+
+September 22, 2026: the initial signed Release from source `6813ff9` has SHA-256
+`21A4CFDF61375466C956705C57E6DB4D63307B2D99613CD4BB8C6992E867F59B`.
+Its private installer has SHA-256
+`0F41ADE01ED7C66FF7F17BC87C1F193FD42DB667DEC03B8D299E2317991EF7ED`.
+Both use the existing enrolled publisher. They are signed, not publicly trusted.
+
+Luna Max passed **103 focused checks**: 16 Core, 79 platform and 8 MCP tests.
+These cover ordered input batching and the four-request limit, failed-channel
+discard without replay, resource baselines, frame ownership, persistent worker
+cancellation/reuse and forwarding the already-verified download result.
+
+Disconnected request `executable-test-20260922T145054479Z-550b682c` passed all
+required native performance assertions: 14 checks passed, with three optional
+power/LAN checks outside this loopback scope. It verified unchanged-frame
+suppression and explicit refresh, Shift+extended Home and modifier release,
+repeated resource samples, two correlated requests in one CLI worker followed
+by clean exit, and minimize/restore without losing pause intent. The stream used
+GDI and software H.264. The live and final screenshots were visually reviewed.
+
+Disconnected request `executable-test-20260922T145054682Z-61c34f56` passed both
+packaged MCP scenarios, including target checks, file hashes and a fresh image.
+Its result screenshot was visually reviewed. A subsequent review restored
+readable names for processes that deny timing access; that small correction is
+covered by a focused process-sampling regression.
+
+GPU capture and hardware encoding retain GDI, software H.264 and JPEG fallback
+paths. Isolated VM acceptance cannot establish physical GPU speedups or WAN
+latency improvements; no percentage performance gain is claimed.
+
 ## 0.5.0 — support workflow
 
 September 21, 2026: Luna Max ran focused Core/platform regression checks during

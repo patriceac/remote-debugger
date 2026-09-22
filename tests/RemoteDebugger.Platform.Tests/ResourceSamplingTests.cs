@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using RemoteDebugger;
 using Xunit;
@@ -31,6 +32,22 @@ public sealed class ResourceSamplingTests
         Assert.Equal(0, result.GetProperty("intervalMs").GetDouble());
         Assert.All(result.GetProperty("processes").EnumerateArray(), process =>
             Assert.Equal(JsonValueKind.Null, process.GetProperty("cpuPercentTotalMachine").ValueKind));
+    }
+
+    [Fact]
+    public async Task ProcessSamplingKeepsIdleNameWhenStartTimeIsUnavailable()
+    {
+        using var idle = Process.GetProcessById(0);
+        using var sampling = new ResourceSampling();
+
+        JsonElement result = JsonSerializer.SerializeToElement(
+            await sampling.ProcessesAsync(CancellationToken.None));
+        JsonElement idleResult = result.GetProperty("processes").EnumerateArray()
+            .Single(process => process.GetProperty("pid").GetInt32() == idle.Id);
+
+        Assert.Equal(idle.ProcessName, idleResult.GetProperty("name").GetString());
+        Assert.Equal(JsonValueKind.Null, idleResult.GetProperty("startUtc").ValueKind);
+        Assert.NotEqual(JsonValueKind.Null, idleResult.GetProperty("unavailableReason").ValueKind);
     }
 
     [Fact]
