@@ -77,7 +77,7 @@ network adapter remained connected.
 | Session clipboard | Focused session/clipboard tests and native bidirectional, pause/baseline and session-end checks passed. Actual reboot remains part of the power qualification gap. |
 | Automatic reports | Retention/deduplication checks passed; candidate C613 created an unexpected-exit incident and read it offline without clipboard payloads. |
 | Restart and one-use logon | Unit checks, native preflight and cancellation with temporary-login cleanup passed. Candidate 30F1 restored the same grant and fresh video after automatic boot 1; the subsequent input check was obstructed by a Windows Firewall prompt. Manual boot 2 remains unqualified. |
-| Shutdown | Native named-PC confirmation, countdown and cancellation passed. Issued shutdown remains unqualified. |
+| Shutdown | Native named-PC confirmation, countdown and cancellation passed. On 30F1, the controller passed accepted-shutdown checks and the broker observed the target Off before cleanup. Final target recovery evidence remains unqualified because of a Lab receipt filename collision. |
 | Update progress | Ten focused progress tests passed, covering measured/stalled/resumed rates, opaque stages and actual completion; the existing binary/health verification gate is preserved. |
 | Smoother viewer | Sixteen stream/frame/acknowledgement checks passed; native H.264 viewing exceeded the former 5 FPS ceiling without a stale-frame backlog. |
 | Explorer transfer | Tree/descriptor/destination checks and all four native copy paths passed, including Unicode/nested/empty folders, source preservation and bulk cancellation/resume with exact hashes. |
@@ -87,8 +87,8 @@ issues, corrected before the B089 run. One 0.5.0 provisioning failure did not
 reproduce; the CLI now forwards the provisioner's current error, and isolated
 request `executable-test-20260921T173912962Z-6cd8e67e` provisioned successfully.
 
-Actual reboot recovery, one-use sign-in/second boot, and issued shutdown remain
-unqualified. The Hyper-V Harness project's authorized
+Usable-input recovery across automatic/manual boots and final shutdown recovery
+evidence remain unqualified. The Hyper-V Harness project's authorized
 Astra Max extension is deployed and Ready: commit
 `b67b47e479f2c25775f011824745781afff77631`, deployment
 `deploy-47d275054947b776`, completed September 22 at 00:46:05 UTC. Its Ready
@@ -256,6 +256,23 @@ network cleanup and no warnings. The harness owner is addressing the isolated
 network's startup classification: restoring Private after autonomous sign-in is
 too late to prevent the prompt. No prompt was accepted and product firewall
 permissions were not broadened.
+
+The subsequent Shutdown pair used the same 30F1 product and 4B25 Lab.
+Controller `executable-test-20260922T012752530Z-82e05991` passed provisioning and
+all accepted-shutdown assertions: the named target was confirmed, the command
+was accepted, reconnect state was forgotten, and disconnect was not presented as
+proof of physical power-off. Its final desktop was visually reviewed. For target
+`executable-test-20260922T012752355Z-f5d68527`, the broker independently observed
+power-off at 01:33:37 UTC, before cleanup. Evidence recovery then refused to
+overwrite the broker-owned `broker-guest-setup.json`: the Lab had copied its
+setup receipt into the output directory using that same filename. The target's
+formal recovery/no-replay assertion was not retained, so this is not a complete
+target harness pass. Both VMs ended Off with successful payload/network cleanup
+and no cleanup warnings. The Lab copy now uses `lab-guest-setup.json`; the
+original receipt and broker overwrite protection are unchanged. The rebuilt Lab
+SHA-256 is `11E879CFFD0BE063470DD684C194ED81F7A67DD4F62A2A8CC5CF8709A59EB09D`.
+Luna passed the single receipt-collision regression. The product and both signed
+installers are unchanged.
 
 ## 0.4.13 — audit fixes
 

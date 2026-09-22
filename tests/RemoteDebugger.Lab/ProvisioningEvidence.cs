@@ -18,7 +18,7 @@ namespace RemoteDebugger.Lab;
 /// </summary>
 internal static class ProvisioningEvidence
 {
-    public const string EvidenceFileName = "broker-guest-setup.json";
+    public const string EvidenceFileName = "lab-guest-setup.json";
     public const string ContractName = "GuestSetupV1";
     private const int ExpectedFormatVersion = 1;
     private const uint TokenQuery = 0x0008;

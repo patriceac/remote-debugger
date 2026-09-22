@@ -12,6 +12,15 @@ public sealed class ProvisioningEvidenceTests
     private static readonly string Hash = new('A', 64);
 
     [Fact]
+    public void CollectedSetupCopyDoesNotCollideWithTheBrokersOwnReceipt()
+    {
+        string output = Path.GetFullPath(Path.Combine("outbox", RequestId));
+        string brokerReceipt = Path.Combine(output, "broker-guest-setup.json");
+        Assert.False(string.Equals(brokerReceipt, ProvisioningEvidence.EvidencePath(output), StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("guest-setup.json", Path.GetFileName(ProvisioningEvidence.SourceEvidencePath(output)));
+    }
+
+    [Fact]
     public void GenericSetupBindsTheExactProductProvisionerToItsRequest()
     {
         var receipt = Validate(Evidence());
