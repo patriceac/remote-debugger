@@ -86,8 +86,13 @@ request `executable-test-20260921T173912962Z-6cd8e67e` provisioned successfully.
 
 Actual reboot recovery, one-use sign-in/second boot, and issued shutdown remain
 unqualified. The Hyper-V Harness project's authorized
-Astra Max extension is deployed and Ready: commit `7e6cec567305fb819780a81e2e899c88eda097f5`,
-deployment `deploy-17e5af7867d07efa`. Its Ready receipt was independently read.
+Astra Max extension is deployed and Ready: commit
+`6414c50a50ebc30f96fdb214601dac422780bdf0`, deployment
+`deploy-805bbed3db1ff531`, completed September 21 at 23:56:44 UTC. Its Ready
+receipt was independently read. The release passed 498 deterministic scenarios,
+eight isolated acceptance paths and a separate network peer. It qualifies
+per-boot network restoration, exact terminal-result recognition, setup argument
+expansion and bounded failure evidence. Product power qualification is separate.
 The test-only power adapter binds the elevated setup to
 the exact Lab and Release hashes, retains independent installed-product/service
 verification, and checks the target's account/SID/pool-baseline binding before
@@ -123,8 +128,8 @@ with successful payload/network cleanup. This run used candidate 2BBD and Lab
 `6E68982B9D12273FFC8666D4FA6EE10432034DA9D8BF08C4F658E4975F064216`.
 The controller screenshot was reviewed: Waiting for PC remained visible, with
 about 55 minutes left. The deployed harness discarded guest-only continuation
-evidence on early failure/cancellation; its owner is adding a bounded failure
-harvest. Neither account demotion nor OUTDIR reset was found in the harness.
+evidence on early failure/cancellation; the replacement now retains a bounded
+failure snapshot. Neither account demotion nor OUTDIR reset was found in the harness.
 
 The real-hour Expiry pair ran on C457/Lab 33E8 as requests
 `executable-test-20260921T213626249Z-b4c4269d` and
@@ -145,7 +150,7 @@ product ran: the expected-power-off path passed literal `{PAYLOAD}` tokens to
 the setup executable. Its dependent controller
 `executable-test-20260921T215801617Z-d98c5b76` was canonically cancelled. Both
 workers ended Off with payload deletion and successful network cleanup, without
-evidence warnings. The harness owner is fixing argument expansion. These
+evidence warnings. The replacement harness fixes argument expansion. These
 requests used C457 and Lab
 `B3B93B963F39C8FFF5A004DF556CDE3CD622138C824FC5666DDFC63546008415`.
 The separate Cancel scenario uses the same C457/B3B93 bytes. Controller
@@ -168,9 +173,13 @@ product's one-hour timer. It records the visible stopped wait and removed profil
 before probing the returning target, preserving those results on later failure.
 Current Lab SHA-256 is
 `776A2FFDEA4174F28DF0600A0EEC3224009687F8040E9305398B57FEC282696A`.
-The harness owner also identified a missing post-boot guest-network gate and is
-adding exact before/after network attestation before continuation. Actual
-network-category drift has not been established. See
+Harness canaries subsequently reproduced Public-category drift and loss of the
+request-owned Private interface exemption after reboot, with the leased MAC,
+address, routes, DNS and IPv6 unchanged. The replacement gate restores only that
+request-owned category/exemption before continuation and validates other network
+state. Traffic passed to a separate peer after automatic and manual boots.
+Autonomous product startup may precede this gate, so the product's firewall-prompt
+timing still needs native verification. See
 [support workflow](SUPPORT_WORKFLOW.md). Raw evidence is retained
 under `D:\Disk\VMs\Codex-Harness\Live\Broker\Results\<request-id>`.
 
