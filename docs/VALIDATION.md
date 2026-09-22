@@ -1,5 +1,38 @@
 # Validation record
 
+## 0.5.3 — GPU startup fallback
+
+September 22, 2026: clean Release source `b7eb539` has SHA-256
+`CED01D81E6C5623539B654DBC99079BF41B72284041AACB2101F58A0F65D76D6`.
+The signed private installer has SHA-256
+`BF0FB8ED18A9D985623F71D3925A9EFF8F7E9FCF052DB22BE916CC859750FD9E`.
+Both retain the enrolled publisher and are not publicly trusted.
+
+The host-authorized GPU investigation found that Desktop Duplication can return
+an all-zero initial surface without an API error. That frame now triggers the
+existing GDI fallback. Luna Max passed all five focused capture tests, including
+transparent pixels, valid opaque black, nonzero RGB with zero alpha and padded rows.
+
+On the RTX 3080 Ti with driver 616.92, the Release component probe passed its
+known-color GDI reference, correct first-frame fallback, idle suppression and
+changed-image checks. Automatic NVIDIA H.264 encoding on an MTA worker decoded
+all 45 frames at 1280 x 720, with maximum sampled RGB error 6/255. Source and
+decoded crops were visually reviewed. Evidence is in the local
+`work/gpu-host/gpu-final-report.json` (`passed: true`, source `b7eb539`).
+This tests the same production components, not the packaged executable end to end.
+GPU capture itself remained on GDI fallback; no DXGI speedup is claimed.
+
+Exact private-installer request `executable-test-20260922T163754998Z-4c05de07`
+passed all five installation/first-launch checks. Setup exited zero and the
+installed executable matched the Release SHA-256 above. The passphrase and
+final screenshots were visually reviewed. The disconnected `None` run passed
+harness/application assertions and cleanup, removed its payload child, reported
+no evidence warnings, and ended with its worker Off.
+
+The host driver changed from 581.57 to 616.92 outside this task during testing.
+The existing installed application was left running, and the probe exited.
+Real two-PC LAN/WAN performance remains unvalidated.
+
 ## 0.5.2 — performance improvements
 
 September 22, 2026: signed Release source `37546e8` has SHA-256
