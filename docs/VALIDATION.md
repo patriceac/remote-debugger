@@ -89,7 +89,7 @@ request `executable-test-20260921T173912962Z-6cd8e67e` provisioned successfully.
 
 Usable-input recovery across automatic/manual boots and final shutdown recovery
 evidence remain unqualified. The Hyper-V Harness project's authorized
-Astra Max extension is deployed and Ready: commit
+Astra Max extension last received a verified Ready receipt at commit
 `b67b47e479f2c25775f011824745781afff77631`, deployment
 `deploy-47d275054947b776`, completed September 22 at 00:46:05 UTC. Its Ready
 receipt was independently read. The underlying 6414 release passed 498 deterministic scenarios,
@@ -273,6 +273,17 @@ original receipt and broker overwrite protection are unchanged. The rebuilt Lab
 SHA-256 is `11E879CFFD0BE063470DD684C194ED81F7A67DD4F62A2A8CC5CF8709A59EB09D`.
 Luna passed the single receipt-collision regression. The product and both signed
 installers are unchanged.
+
+New product submissions are held while the harness qualifies its startup-network
+repair. Candidate `6710db1895f37dac2d3ac6712be9e139c90a0005`, deployment
+`deploy-d03a0ef15fd35409`, has not received Ready. Its automatic-boot request
+`executable-test-20260922T014633616Z-50e3f6f9` proves that the network is already
+Private before post-boot observation, with both boot classification policies
+intact and no late restoration. Qualification then failed because the
+request-owned firewall interface exception did not survive reboot. That receipt
+was independently read; this is harness evidence, not a Remote Debugger test.
+The harness owner is correcting the persistence gap. Only the short Once and
+Shutdown checks remain planned for a subsequently verified Ready release.
 
 ## 0.4.13 — audit fixes
 
