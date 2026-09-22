@@ -219,6 +219,8 @@ internal sealed partial class LabForm
             var state = await PowerMessageAsync("POWER_STATUS", 120);
             if (state.Int("boot") != boot || state.Str("bootId") == priorBoot) throw new IOException("The continuation did not observe the expected new boot.");
             if (!Safety.Equal(RemoteClient.Load().Connection.Token, connection.Token)) throw new IOException("Restart silently replaced the authorized support grant.");
+            // The previous boot's persistent input socket is no longer usable.
+            remote = new RemoteClient(connection, await HashFileAsync(application));
             var heartbeat = RemoteClient.Require(await remote.CallAsync("session.heartbeat", ct: stop.Token));
             if (!heartbeat.GetProperty("binaryMatched").GetBoolean()) throw new IOException("The returning executable does not match the controller.");
             var frame = RemoteClient.Require(await remote.CallAsync("screenshot", new { monitor = 0 }, stop.Token)).Deserialize<ScreenFrame>(Json.Options)!;
