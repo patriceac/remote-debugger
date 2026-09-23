@@ -30,6 +30,7 @@ internal sealed class WorkspaceButton : Button
     protected override void OnMouseUp(MouseEventArgs e) { pressed = false; Invalidate(); base.OnMouseUp(e); }
     protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
     protected override void OnLostFocus(EventArgs e) { pressed = false; Invalidate(); base.OnLostFocus(e); }
+    protected override void OnEnabledChanged(EventArgs e) { hovered = pressed = false; Cursor = Enabled ? Cursors.Hand : Cursors.Default; Invalidate(); base.OnEnabledChanged(e); }
     protected override void OnPaint(PaintEventArgs e)
     {
         if (SystemInformation.HighContrast) { base.OnPaint(e); return; }
@@ -52,7 +53,7 @@ internal sealed class WorkspaceButton : Button
         }
         int iconSpace = Glyph.Length == 0 ? 0 : (int)((RailStyle ? 40 : DisclosureStyle ? 28 : 32) * DeviceDpi / 96f);
         var textBounds = new Rectangle(Padding.Left + 4 + iconSpace, Padding.Top, Math.Max(0, Width - Padding.Horizontal - 8 - iconSpace), Height - Padding.Vertical);
-        Color ink = Enabled ? ForeColor : RailStyle ? Color.FromArgb(200, 215, 225) : Color.FromArgb(146, 164, 189);
+        Color ink = Enabled ? ForeColor : RailStyle ? Color.FromArgb(103, 124, 137) : Color.FromArgb(146, 164, 189);
         int iconLeft = DisclosureStyle ? 0 : RailStyle ? Padding.Left : 14;
         if (Glyph.Length > 0) UiGlyph.Draw(e.Graphics, Glyph, Text.Length == 0 ? Rectangle.Inflate(ClientRectangle, -8, -8) : new Rectangle((int)(iconLeft * (RailStyle ? 1 : DeviceDpi / 96f)), 0, iconSpace - 8, Height), RailStyle && Selected && Name == "roleController" ? Color.FromArgb(0, 211, 224) : ink);
         if (RailStyle && Selected && (Name.StartsWith("nav", StringComparison.Ordinal) || Name == "roleAgent"))

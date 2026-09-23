@@ -5,19 +5,22 @@ using RemoteDebugger.Core;
 
 namespace RemoteDebugger;
 
-internal sealed record ExplorerFileContext(string Directory, string[] Paths);
+internal sealed record ExplorerFileContext(string Directory, string[] Paths, bool Desktop = false);
 
 /// <summary>Resolve real Explorer items on the interactive desktop without clipboard shortcuts.</summary>
-internal static class ExplorerFiles
+internal static partial class ExplorerFiles
 {
     private static readonly SemaphoreSlim queries = new(2, 2);
     internal static async Task<ExplorerFileContext> QueryAsync(string operation, int x, int y, CancellationToken ct)
+        => await RunAsync(() => Query(operation, x, y), ct);
+
+    private static async Task<T> RunAsync<T>(Func<T> action, CancellationToken ct)
     {
         await queries.WaitAsync(ct);
-        var completion = new TaskCompletionSource<ExplorerFileContext>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
         var worker = new Thread(() =>
         {
-            try { ct.ThrowIfCancellationRequested(); completion.TrySetResult(Query(operation, x, y)); }
+            try { ct.ThrowIfCancellationRequested(); completion.TrySetResult(action()); }
             catch (Exception ex) { completion.TrySetException(ex); }
             finally { queries.Release(); }
         }) { IsBackground = true, Name = "Explorer file context" };
@@ -66,7 +69,11 @@ internal static class ExplorerFiles
         if (className.ToString() is not ("Progman" or "WorkerW")) throw new InvalidOperationException("Drop over an Explorer folder or the Windows desktop.");
         string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
         dynamic desktop = objects.Own(shell.NameSpace(0));
-        if (operation == "shell.dropTarget") return new ExplorerFileContext(FolderAt(desktop, itemName, desktopPath, objects), Array.Empty<string>());
+        if (operation == "shell.dropTarget")
+        {
+            string directory = FolderAt(desktop, itemName, desktopPath, objects);
+            return new(directory, [], string.Equals(directory, desktopPath, StringComparison.OrdinalIgnoreCase));
+        }
         if (itemElement == null) return new(desktopPath, []);
         var names = new HashSet<string>(StringComparer.Ordinal);
         if (itemElement.TryGetCurrentPattern(SelectionItemPattern.Pattern, out var selectedPattern))

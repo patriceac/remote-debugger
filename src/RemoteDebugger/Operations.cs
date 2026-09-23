@@ -66,7 +66,7 @@ public sealed partial class Operations
         switch (op)
         {
             case "clipboard.begin": case "clipboard.read": case "clipboard.write": return await ClipboardAsync(op, a, ct);
-            case "shell.dropTarget": case "shell.selection": case "files.manifest": case "files.conflicts": case "files.createDirectories": return await FileDropAsync(op, a, ct);
+            case "shell.dropTarget": case "shell.selection": case "shell.positionDesktop": case "files.manifest": case "files.conflicts": case "files.createDirectories": return await FileDropAsync(op, a, ct);
             case "wake.info": return new { wakeAdapters = WakeOnLan.GetAdapters() };
             case "wake": return await WakeOnLan.SendAsync(a.Str("macAddress"), a.Str("destination"), a.Int("port", 9), ct);
             case "status": return new { machine = Environment.MachineName, user = Environment.UserName, version = Version, os = Environment.OSVersion.VersionString, workspace = Workspace, elevated = Native.IsElevated(), processId = Environment.ProcessId, agentBinarySha256 = ExecutableIdentity.Sha256 };

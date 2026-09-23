@@ -34,6 +34,7 @@ internal sealed partial class LabForm
                 "The operational tabs are unavailable before a support session");
 
             await ConnectNavigationSessionAsync(pairingCode, "navigation.connected");
+            if (scope == "runtime" && role == "loopbackappearance") await DesktopDropReviewAsync();
             string savedToken = RemoteClient.Load().Connection.Token;
             loopbackController!.Kill(entireProcessTree: true);
             await loopbackController.WaitForExitAsync(stop.Token);

@@ -8,6 +8,7 @@ public sealed partial class Operations
     private async Task<object> FileDropAsync(string operation, JsonElement args, CancellationToken ct)
     {
         if (operation is "shell.dropTarget" or "shell.selection") return await ExplorerFiles.QueryAsync(operation, args.Int("x"), args.Int("y"), ct);
+        if (operation == "shell.positionDesktop") return await ExplorerFiles.PositionDesktopAsync(args.Str("directory"), args.Strings("names"), args.Int("x"), args.Int("y"), ct);
         if (operation == "files.manifest")
         {
             var paths = args.Strings("paths");

@@ -6,7 +6,7 @@ namespace RemoteDebugger;
 
 public sealed partial class MainForm
 {
-    private sealed record CopyBatch(RemoteClient Target, string[] Sources, string Directory);
+    private sealed record CopyBatch(RemoteClient Target, string[] Sources, string Directory, Point? DesktopPoint);
     private readonly Queue<CopyBatch> copyQueue = new();
     private CopyBatch? pausedCopy;
     private bool copyPump, draggingFiles, preparingDrag;
@@ -39,7 +39,8 @@ public sealed partial class MainForm
             try
             {
                 var data = RemoteClient.Require(await target.CallAsync("shell.dropTarget", new { x = point.Value.X, y = point.Value.Y }, seconds: 15));
-                if (ReferenceEquals(client, target) && CanDropFiles) await EnqueueCopyAsync(files, data.Str("directory"));
+                if (ReferenceEquals(client, target) && CanDropFiles) await EnqueueCopyAsync(files, data.Str("directory"),
+                    data.TryGetProperty("desktop", out var desktop) && desktop.ValueKind == JsonValueKind.True ? new Point(point.Value.X, point.Value.Y) : null);
             }
             catch (Exception ex) { ShowTransferFailure(ex); }
         };
@@ -121,11 +122,11 @@ public sealed partial class MainForm
         return entries;
     }
 
-    private async Task EnqueueCopyAsync(string[] sources, string directory)
+    private async Task EnqueueCopyAsync(string[] sources, string directory, Point? desktopPoint = null)
     {
         if (!CanDropFiles || client is not { } target) return;
         if (fileTransferLifetime != null && !copyPump) { fileState.SetText(() => UiText.TransferAlreadyRunning); return; }
-        copyQueue.Enqueue(new(target, sources, directory));
+        copyQueue.Enqueue(new(target, sources, directory, desktopPoint));
         EnsureTransferWindow();
         transferWindow!.SetState(UiText.Format(UiText.TransferQueueWaiting, copyQueue.Count), indeterminate: true);
         if (!copyPump && pausedCopy == null) await PumpCopyQueueAsync();
@@ -175,6 +176,22 @@ public sealed partial class MainForm
                     transferWindow.SetState(UiText.UploadVerified, complete: true);
                     fileTransferDetails.SetText(() => UiText.UploadVerified);
                     diagnostics.Record("file_copy_verified", DiagnosticContext());
+                    if (batch.DesktopPoint is { } point && generation == sessionGeneration && ReferenceEquals(client, batch.Target))
+                    {
+                        try
+                        {
+                            RemoteClient.Require(await batch.Target.CallAsync("shell.positionDesktop", new
+                            {
+                                directory = batch.Directory, x = point.X, y = point.Y,
+                                names = entries.Select(entry => entry.RelativePath).Where(name => !name.Contains('\\') && !name.Contains('/')).ToArray()
+                            }, lifetime.Token, seconds: 15));
+                        }
+                        catch (Exception ex) // The copy succeeded; a shell-layout failure must not copy the batch again.
+                        {
+                            RecordIncident("desktop_position_failed", ex);
+                            transferWindow.SetState(UiText.UploadVerified + " — " + ex.Message, complete: true);
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
