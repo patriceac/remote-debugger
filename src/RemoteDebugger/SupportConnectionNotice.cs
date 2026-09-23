@@ -33,7 +33,7 @@ internal sealed class SupportConnectionNotice : Forms.Form
         var icon = new Forms.Label { Text = "RD", TextAlign = ContentAlignment.MiddleCenter, ForeColor = Color.White,
             BackColor = Color.FromArgb(8, 127, 131), Font = new Font("Segoe UI", 11, FontStyle.Bold), Bounds = new Rectangle(23, 21, 35, 35) };
         var brand = Label("REMOTE DEBUGGER", 70, 25, 270, 20, 9, Color.FromArgb(92, 115, 124), FontStyle.Bold);
-        var title = Label(UiText.SupportConnectedNoticeTitle, 23, 69, 385, 31, 17, Color.FromArgb(24, 48, 57), FontStyle.Bold);
+        var title = Label(UiText.SupportConnectedNoticeTitle, 23, 69, 385, 32, 17, Color.FromArgb(24, 48, 57), FontStyle.Bold);
         var body = Label(UiText.SupportConnectedNoticeBody, 23, 106, 394, 40, 10, Color.FromArgb(90, 112, 121));
         body.AutoEllipsis = false;
         var divider = new Forms.Panel { BackColor = Color.FromArgb(228, 234, 236), Bounds = new Rectangle(23, 148, 394, 1) };

@@ -153,6 +153,11 @@ internal sealed partial class LabForm
         {
             notice.Show();
             await Task.Delay(150, stop.Token);
+            using (var bitmap = new Bitmap(notice.Width, notice.Height))
+            {
+                notice.DrawToBitmap(bitmap, notice.ClientRectangle);
+                bitmap.Save(Path.Combine(output, "notice-at-display-scale.png"));
+            }
             using (var graphics = notice.CreateGraphics())
             {
                 var labels = notice.Controls.OfType<Forms.Label>().Select(label => new
