@@ -14,8 +14,8 @@ public sealed partial class MainForm
 
     private Forms.Control BuildWakeControls()
     {
-        var row = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Top, AutoSize = true, WrapContents = true, Margin = Forms.Padding.Empty };
-        foreach (var control in new[] { wakePc, configureWake, updateClientButton }) { control.Margin = new(0, 4, 8, 4); row.Controls.Add(control); }
+        var row = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Top, AutoSize = true, AutoSizeMode = Forms.AutoSizeMode.GrowAndShrink, WrapContents = true, Margin = Forms.Padding.Empty };
+        foreach (var control in new[] { wakePc, configureWake, updateClientButton }) { control.Margin = new(0, 0, 8, 0); row.Controls.Add(control); }
         configureWake.Click += (_, _) => ConfigureWake();
         wakePc.Click += async (_, _) => await WakeSelectedPcAsync();
         return row;
@@ -37,7 +37,7 @@ public sealed partial class MainForm
         if (selectedPeer is not { } peer || !configureWake.Enabled) return;
         using var form = new WakeSettingsForm(peer.Name, wakeSettings,
             isUpdateAdmin ? fleet.Values.Where(d => !Safety.Equal(d.Peer.Fingerprint, peer.Fingerprint)).Select(d => d.Peer) : []);
-        if (form.ShowDialog(this) != Forms.DialogResult.OK || form.Settings == null) return;
+        if (form.ShowModal(this) != Forms.DialogResult.OK || form.Settings == null) return;
         try
         {
             DeviceWakeSettings.Save(root, peer.Fingerprint, form.Settings);

@@ -56,9 +56,21 @@ public sealed partial class MainForm
         var progress = connectedUpdateProgress.Snapshot();
         updateProgressFill.Dock = System.Windows.Forms.DockStyle.None;
         updateProgressFill.Bounds = UpdateProgressBounds(updateProgressTrack.ClientRectangle, progress);
-        string stage = connectedUpdateReport.Stage == "transferring" ? UiText.UpdatingDevice : UpdateProgressDescription(connectedUpdateReport);
-        string finished = string.Join(" · ", connectedUpdateProgress.CompletedStages.Select(completed => "✓ " + (completed == "transferring" ? UiText.FileSent : UpdateProgressDescription(new AgentUpdateProgress(completed, 0, 0)))));
-        updateProgressText.SetText(stage + " · " + UpdateStepNumbers(progress) + (finished.Length == 0 ? "" : Environment.NewLine + finished));
-        updateProgressTrack.AccessibleName = updateProgressText.Text;
+        updateProgressText.SetText(ConnectionStageTitle(connectedUpdateReport.Stage));
+        updateExplanation.SetText(connectedUpdateReport.Stage == "transferring"
+            ? UpdateProgressDescription(connectedUpdateReport)
+            : UiText.Get(connectedUpdateReport.Stage is "restarting" or "finalizing" ? "ConnectionWaitingForComputer" : "ConnectionPreparingHelp"));
+        updateElapsed.SetText(FormatTransferEta(connectedUpdateProgress.Elapsed));
+        remainingCaption.SetText(() => UiText.Get(progress.Estimated ? "ConnectionEstimatedRemaining" : "ConnectionRemaining"));
+        updateRemaining.SetText(progress.Remaining is { } eta ? "≈ " + FormatTransferEta(eta) : "—");
+        updateTimeline.SetProgress(connectedUpdateReport.Stage, connectedUpdateProgress.CompletedStages);
+        updateProgressTrack.AccessibleName = updateProgressText.Text + " · " + UpdateStepNumbers(progress);
     }
+
+    private static string ConnectionStageTitle(string stage) => stage switch
+    {
+        "transferring" => UiText.Get("ConnectionTransferring"), "verifying" => UiText.Get("ConnectionVerifying"),
+        "restarting" or "finalizing" => UiText.Reconnecting, "complete" => UiText.VersionSynchronized,
+        _ => UiText.PreparingUpdate
+    };
 }

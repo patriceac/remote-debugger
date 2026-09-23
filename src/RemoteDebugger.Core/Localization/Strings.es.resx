@@ -989,4 +989,48 @@ Puede cancelar durante la cuenta atrás de 10 segundos. No se forzará el cierre
   <data name="SecureAttentionHint" xml:space="preserve"><value>Enviar Ctrl+Alt+Supr mediante el servicio remoto. Requiere mantenimiento de administrador. La pantalla de seguridad de Windows debe manejarse en el PC remoto.</value></data>
   <data name="DiskActivity" xml:space="preserve"><value>Disco</value></data>
   <data name="ResourceChartsHint" xml:space="preserve"><value>CPU, memoria usada, actividad del disco y motor GPU más activo. Actualización cada 5 segundos en conexiones directas LAN/WAN. — indica no disponible o en pausa.</value></data>
+  <data name="ConnectionSelectedComputer" xml:space="preserve"><value>EQUIPO SELECCIONADO</value></data>
+  <data name="ConnectionComputers" xml:space="preserve"><value>Equipos</value></data>
+  <data name="ConnectionInstructions" xml:space="preserve"><value>Elija un equipo para iniciar la asistencia remota.</value></data>
+  <data name="ConnectionSettings" xml:space="preserve"><value>Ajustes de conexión</value></data>
+  <data name="ConnectionWakeSection" xml:space="preserve"><value>Wake-on-LAN</value></data>
+  <data name="ConnectionWakeComputer" xml:space="preserve"><value>Despertar equipo</value></data>
+  <data name="ConnectionSettingsBusy" xml:space="preserve"><value>Los ajustes y el despertar no están disponibles durante esta operación.</value></data>
+  <data name="ConnectionWanHelp" xml:space="preserve"><value>Orden: LAN → WAN → relé.
+Puerto predeterminado: 45832. Deje vacío para omitir WAN.</value></data>
+  <data name="ConnectionElapsed" xml:space="preserve"><value>Transcurrido</value></data>
+  <data name="ConnectionRemaining" xml:space="preserve"><value>Restante</value></data>
+  <data name="ConnectionEstimatedRemaining" xml:space="preserve"><value>Tiempo restante estimado</value></data>
+  <data name="ConnectionOpensWhenReady" xml:space="preserve"><value>La pantalla remota se abre cuando la conexión está lista.</value></data>
+  <data name="ConnectionComputerSummary" xml:space="preserve"><value>{0} en línea · {1} sin conexión · {2} sincronizando</value></data>
+  <data name="ConnectionAgentUpdate" xml:space="preserve"><value>Actualización del agente en curso</value></data>
+  <data name="ConnectionOffline" xml:space="preserve"><value>Sin conexión</value></data>
+  <data name="ConnectionLastKnown" xml:space="preserve"><value>Última versión conocida</value></data>
+  <data name="ConnectionConfirmationPending" xml:space="preserve"><value>Confirmación pendiente</value></data>
+  <data name="ConnectionPrivateNetwork" xml:space="preserve"><value>Red privada de asistencia</value></data>
+  <data name="ConnectionPrepare" xml:space="preserve"><value>Preparar actualización</value></data>
+  <data name="ConnectionTransfer" xml:space="preserve"><value>Transferir archivos</value></data>
+  <data name="ConnectionVerify" xml:space="preserve"><value>Verificar archivos</value></data>
+  <data name="ConnectionRestart" xml:space="preserve"><value>Reiniciar y reconectar</value></data>
+  <data name="ConnectionComplete" xml:space="preserve"><value>Completado</value></data>
+  <data name="ConnectionInProgress" xml:space="preserve"><value>En curso</value></data>
+  <data name="ConnectionPending" xml:space="preserve"><value>Pendiente</value></data>
+  <data name="ConnectionInterrupted" xml:space="preserve"><value>Interrumpido</value></data>
+  <data name="ConnectionWaitingForComputer" xml:space="preserve"><value>Esperando a que el equipo vuelva a estar en línea.</value></data>
+  <data name="ConnectionPreparingHelp" xml:space="preserve"><value>Preparando el equipo para la asistencia remota.</value></data>
+  <data name="ConnectionTransferring" xml:space="preserve"><value>Transfiriendo archivos…</value></data>
+  <data name="ConnectionVerifying" xml:space="preserve"><value>Verificando archivos…</value></data>
+  <data name="ConnectionSaveSettings" xml:space="preserve"><value>Guardar ajustes</value></data>
+  <data name="WakeSenderHelp" xml:space="preserve"><value>Para otra red, elija un equipo auxiliar en línea en la red local del destino.</value></data>
+  <data name="WakeDestinationHelp" xml:space="preserve"><value>Deje la dirección vacía para usar la difusión local del emisor.</value></data>
+  <data name="WakeHelperBroadcastHelp" xml:space="preserve"><value>El equipo auxiliar usa su propia difusión local.</value></data>
+  <data name="WakePrerequisite" xml:space="preserve"><value>Wake-on-LAN debe estar activado en el firmware y el adaptador de red del equipo de destino.</value></data>
+  <data name="WakeAfterSaving" xml:space="preserve"><value>Use Despertar equipo después de guardar.</value></data>
+  <data name="ConnectionUpdateAll" xml:space="preserve"><value>Actualizar todos</value></data>
+  <data name="ConnectionWakeToContinue" xml:space="preserve"><value>Despierte este equipo para que esté disponible.</value></data>
+  <data name="ConnectionComputer" xml:space="preserve"><value>Ordenador</value></data>
+  <data name="ConnectionOnlineCount" xml:space="preserve"><value>{0} en línea</value></data>
+  <data name="ConnectionOfflineCount" xml:space="preserve"><value>{0} sin conexión</value></data>
+  <data name="ConnectionSyncCount" xml:space="preserve"><value>{0} sincronizando</value></data>
+  <data name="ConnectionReconnectingCount" xml:space="preserve"><value>{0} reconectando</value></data>
 </root>

@@ -6,6 +6,15 @@ namespace RemoteDebugger.Platform.Tests;
 
 public sealed class MainFormActionTests
 {
+    [Fact]
+    public void ConnectionTimelineDoesNotInventSkippedVerification()
+    {
+        Assert.Equal("pending", UpdateTimeline.StepState(2, "restarting", ["preparing", "transferring"]));
+        Assert.Equal("complete", UpdateTimeline.StepState(1, "restarting", ["preparing", "transferring"]));
+        Assert.Equal("active", UpdateTimeline.StepState(3, "finalizing", ["restarting"]));
+        Assert.All(Enumerable.Range(0, 4), step => Assert.Equal("complete", UpdateTimeline.StepState(step, "complete", [])));
+    }
+
     [Theory]
     [InlineData(true, false, false, "pairing", false, false, false)]
     [InlineData(true, false, true, "connected", false, false, true)]

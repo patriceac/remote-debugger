@@ -989,4 +989,48 @@ Vous pouvez annuler pendant le compte à rebours de 10 secondes. Les application
   <data name="SecureAttentionHint" xml:space="preserve"><value>Envoyer Ctrl+Alt+Suppr via le service distant. Nécessite la maintenance administrateur. L'écran de sécurité Windows doit être traité sur le PC distant.</value></data>
   <data name="DiskActivity" xml:space="preserve"><value>Disque</value></data>
   <data name="ResourceChartsHint" xml:space="preserve"><value>CPU, mémoire utilisée, activité disque et moteur GPU le plus actif. Actualisation toutes les 5 secondes en connexion directe LAN/WAN. — signifie indisponible ou en pause.</value></data>
+  <data name="ConnectionSelectedComputer" xml:space="preserve"><value>ORDINATEUR SÉLECTIONNÉ</value></data>
+  <data name="ConnectionComputers" xml:space="preserve"><value>Ordinateurs</value></data>
+  <data name="ConnectionInstructions" xml:space="preserve"><value>Choisissez un ordinateur pour démarrer l’assistance.</value></data>
+  <data name="ConnectionSettings" xml:space="preserve"><value>Paramètres de connexion</value></data>
+  <data name="ConnectionWakeSection" xml:space="preserve"><value>Réveil réseau</value></data>
+  <data name="ConnectionWakeComputer" xml:space="preserve"><value>Réveiller</value></data>
+  <data name="ConnectionSettingsBusy" xml:space="preserve"><value>Les paramètres et le réveil sont indisponibles pendant cette opération.</value></data>
+  <data name="ConnectionWanHelp" xml:space="preserve"><value>Ordre de connexion : LAN → WAN → relais.
+Port par défaut : 45832. Laissez vide pour ignorer le WAN.</value></data>
+  <data name="ConnectionElapsed" xml:space="preserve"><value>Écoulé</value></data>
+  <data name="ConnectionRemaining" xml:space="preserve"><value>Restant</value></data>
+  <data name="ConnectionEstimatedRemaining" xml:space="preserve"><value>Temps restant estimé</value></data>
+  <data name="ConnectionOpensWhenReady" xml:space="preserve"><value>L’écran distant s’ouvre dès que la connexion est prête.</value></data>
+  <data name="ConnectionComputerSummary" xml:space="preserve"><value>{0} en ligne · {1} hors ligne · {2} en synchronisation</value></data>
+  <data name="ConnectionAgentUpdate" xml:space="preserve"><value>Mise à jour de l’agent en cours</value></data>
+  <data name="ConnectionOffline" xml:space="preserve"><value>Hors ligne</value></data>
+  <data name="ConnectionLastKnown" xml:space="preserve"><value>Dernière version connue</value></data>
+  <data name="ConnectionConfirmationPending" xml:space="preserve"><value>Confirmation en attente</value></data>
+  <data name="ConnectionPrivateNetwork" xml:space="preserve"><value>Réseau privé d’assistance</value></data>
+  <data name="ConnectionPrepare" xml:space="preserve"><value>Préparer la mise à jour</value></data>
+  <data name="ConnectionTransfer" xml:space="preserve"><value>Transférer les fichiers</value></data>
+  <data name="ConnectionVerify" xml:space="preserve"><value>Vérifier les fichiers</value></data>
+  <data name="ConnectionRestart" xml:space="preserve"><value>Redémarrer et reconnecter</value></data>
+  <data name="ConnectionComplete" xml:space="preserve"><value>Terminé</value></data>
+  <data name="ConnectionInProgress" xml:space="preserve"><value>En cours</value></data>
+  <data name="ConnectionPending" xml:space="preserve"><value>En attente</value></data>
+  <data name="ConnectionInterrupted" xml:space="preserve"><value>Interrompu</value></data>
+  <data name="ConnectionWaitingForComputer" xml:space="preserve"><value>En attente du retour en ligne de l’ordinateur.</value></data>
+  <data name="ConnectionPreparingHelp" xml:space="preserve"><value>Préparation de l’ordinateur pour l’assistance.</value></data>
+  <data name="ConnectionTransferring" xml:space="preserve"><value>Transfert des fichiers…</value></data>
+  <data name="ConnectionVerifying" xml:space="preserve"><value>Vérification des fichiers…</value></data>
+  <data name="ConnectionSaveSettings" xml:space="preserve"><value>Enregistrer</value></data>
+  <data name="WakeSenderHelp" xml:space="preserve"><value>Pour un autre réseau, choisissez un PC relais en ligne sur le réseau local de la cible.</value></data>
+  <data name="WakeDestinationHelp" xml:space="preserve"><value>Laissez l’adresse vide pour diffuser sur le réseau local de l’expéditeur.</value></data>
+  <data name="WakeHelperBroadcastHelp" xml:space="preserve"><value>Le PC relais utilise sa propre diffusion locale.</value></data>
+  <data name="WakePrerequisite" xml:space="preserve"><value>Le réveil réseau doit être activé dans le micrologiciel et la carte réseau de l’ordinateur cible.</value></data>
+  <data name="WakeAfterSaving" xml:space="preserve"><value>Utilisez Réveiller après l’enregistrement.</value></data>
+  <data name="ConnectionUpdateAll" xml:space="preserve"><value>Tout mettre à jour</value></data>
+  <data name="ConnectionWakeToContinue" xml:space="preserve"><value>Réveillez cet ordinateur pour le rendre disponible.</value></data>
+  <data name="ConnectionComputer" xml:space="preserve"><value>Ordinateur</value></data>
+  <data name="ConnectionOnlineCount" xml:space="preserve"><value>{0} en ligne</value></data>
+  <data name="ConnectionOfflineCount" xml:space="preserve"><value>{0} hors ligne</value></data>
+  <data name="ConnectionSyncCount" xml:space="preserve"><value>{0} en synchronisation</value></data>
+  <data name="ConnectionReconnectingCount" xml:space="preserve"><value>{0} en reconnexion</value></data>
 </root>

@@ -989,4 +989,48 @@ You can cancel during the 10-second countdown. Applications with unsaved work wi
   <data name="SecureAttentionHint" xml:space="preserve"><value>Send Ctrl+Alt+Del through the remote support service. Requires administrator maintenance. The Windows security screen must be handled on the remote PC.</value></data>
   <data name="DiskActivity" xml:space="preserve"><value>Disk</value></data>
   <data name="ResourceChartsHint" xml:space="preserve"><value>CPU, used memory, disk busy time and busiest GPU engine. Updates every 5 seconds on direct LAN/WAN connections. — means unavailable or paused.</value></data>
+  <data name="ConnectionSelectedComputer" xml:space="preserve"><value>SELECTED COMPUTER</value></data>
+  <data name="ConnectionComputers" xml:space="preserve"><value>Computers</value></data>
+  <data name="ConnectionInstructions" xml:space="preserve"><value>Choose a computer to start remote support.</value></data>
+  <data name="ConnectionSettings" xml:space="preserve"><value>Connection settings</value></data>
+  <data name="ConnectionWakeSection" xml:space="preserve"><value>Wake-on-LAN</value></data>
+  <data name="ConnectionWakeComputer" xml:space="preserve"><value>Wake computer</value></data>
+  <data name="ConnectionSettingsBusy" xml:space="preserve"><value>Settings and wake actions are unavailable during this operation.</value></data>
+  <data name="ConnectionWanHelp" xml:space="preserve"><value>Connection order: LAN → WAN → relay.
+Default port: 45832. Leave blank to skip WAN.</value></data>
+  <data name="ConnectionElapsed" xml:space="preserve"><value>Elapsed</value></data>
+  <data name="ConnectionRemaining" xml:space="preserve"><value>Remaining</value></data>
+  <data name="ConnectionEstimatedRemaining" xml:space="preserve"><value>Estimated remaining</value></data>
+  <data name="ConnectionOpensWhenReady" xml:space="preserve"><value>Remote screen opens when the connection is ready.</value></data>
+  <data name="ConnectionComputerSummary" xml:space="preserve"><value>{0} online · {1} offline · {2} synchronizing</value></data>
+  <data name="ConnectionAgentUpdate" xml:space="preserve"><value>Agent update in progress</value></data>
+  <data name="ConnectionOffline" xml:space="preserve"><value>Offline</value></data>
+  <data name="ConnectionLastKnown" xml:space="preserve"><value>Last known</value></data>
+  <data name="ConnectionConfirmationPending" xml:space="preserve"><value>Confirmation pending</value></data>
+  <data name="ConnectionPrivateNetwork" xml:space="preserve"><value>Private support network</value></data>
+  <data name="ConnectionPrepare" xml:space="preserve"><value>Prepare update</value></data>
+  <data name="ConnectionTransfer" xml:space="preserve"><value>Transfer files</value></data>
+  <data name="ConnectionVerify" xml:space="preserve"><value>Verify files</value></data>
+  <data name="ConnectionRestart" xml:space="preserve"><value>Restart &amp; reconnect</value></data>
+  <data name="ConnectionComplete" xml:space="preserve"><value>Complete</value></data>
+  <data name="ConnectionInProgress" xml:space="preserve"><value>In progress</value></data>
+  <data name="ConnectionPending" xml:space="preserve"><value>Pending</value></data>
+  <data name="ConnectionInterrupted" xml:space="preserve"><value>Interrupted</value></data>
+  <data name="ConnectionWaitingForComputer" xml:space="preserve"><value>Waiting for the computer to come back online.</value></data>
+  <data name="ConnectionPreparingHelp" xml:space="preserve"><value>Preparing the computer for remote support.</value></data>
+  <data name="ConnectionTransferring" xml:space="preserve"><value>Transferring files…</value></data>
+  <data name="ConnectionVerifying" xml:space="preserve"><value>Verifying files…</value></data>
+  <data name="ConnectionSaveSettings" xml:space="preserve"><value>Save settings</value></data>
+  <data name="WakeSenderHelp" xml:space="preserve"><value>For another network, choose an online helper PC on the target’s local network.</value></data>
+  <data name="WakeDestinationHelp" xml:space="preserve"><value>Leave the address blank to use the sender’s local broadcast.</value></data>
+  <data name="WakeHelperBroadcastHelp" xml:space="preserve"><value>The helper uses its own local broadcast.</value></data>
+  <data name="WakePrerequisite" xml:space="preserve"><value>Wake-on-LAN must be enabled in the target computer’s firmware and network adapter.</value></data>
+  <data name="WakeAfterSaving" xml:space="preserve"><value>Use Wake computer after saving.</value></data>
+  <data name="ConnectionUpdateAll" xml:space="preserve"><value>Update all</value></data>
+  <data name="ConnectionWakeToContinue" xml:space="preserve"><value>Wake this computer to make it available.</value></data>
+  <data name="ConnectionComputer" xml:space="preserve"><value>Computer</value></data>
+  <data name="ConnectionOnlineCount" xml:space="preserve"><value>{0} online</value></data>
+  <data name="ConnectionOfflineCount" xml:space="preserve"><value>{0} offline</value></data>
+  <data name="ConnectionSyncCount" xml:space="preserve"><value>{0} synchronizing</value></data>
+  <data name="ConnectionReconnectingCount" xml:space="preserve"><value>{0} reconnecting</value></data>
 </root>

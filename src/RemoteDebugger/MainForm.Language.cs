@@ -11,10 +11,10 @@ public sealed partial class MainForm
         public override string ToString() => Caption;
     }
 
-    private readonly Forms.ComboBox languageSelector = new()
+    private readonly Forms.ComboBox languageSelector = new ViewerComboBox()
     {
         Name = "languageSelector", DropDownStyle = Forms.ComboBoxStyle.DropDownList,
-        Dock = Forms.DockStyle.Fill, Font = new Font("Segoe UI", 9.5F)
+        Dock = Forms.DockStyle.Fill, Font = new Font("Segoe UI", 10.5F), ItemHeight = 26
     };
     private bool updatingLanguageSelector;
     private bool refreshingMonitorLabels;
@@ -28,13 +28,13 @@ public sealed partial class MainForm
         var section = new Forms.TableLayoutPanel
         {
             Name = "languageSettings", Dock = Forms.DockStyle.Fill, AutoSize = true,
-            ColumnCount = 1, RowCount = 2, Padding = new Forms.Padding(12, 4, 0, 8), Margin = Forms.Padding.Empty
+            ColumnCount = 1, RowCount = 2, Padding = new Forms.Padding(8, 4, 8, 22), Margin = Forms.Padding.Empty
         };
         section.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
         section.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         section.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         section.Controls.Add(new Forms.Label { Name = "languageLabel", AutoSize = true, ForeColor = RailSecondary,
-            Font = new Font("Segoe UI", 9F), Margin = new Forms.Padding(0, 0, 0, 4) }.WithText(() => UiText.Language), 0, 0);
+            Font = new Font("Segoe UI", 10.5F), Margin = new Forms.Padding(0, 0, 0, 4) }.WithText(() => UiText.Language), 0, 0);
         languageSelector.Margin = Forms.Padding.Empty;
         section.Controls.Add(languageSelector, 0, 1);
         return section;

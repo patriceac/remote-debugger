@@ -11,15 +11,15 @@ namespace RemoteDebugger;
 /// </summary>
 public sealed partial class MainForm : Forms.Form
 {
-    private static readonly Color Canvas = Color.FromArgb(247, 249, 250);
+    private static readonly Color Canvas = Color.FromArgb(245, 250, 252);
     private static readonly Color Surface = Color.White;
-    private static readonly Color Rail = Color.FromArgb(24, 33, 43);
+    private static readonly Color Rail = Color.FromArgb(23, 40, 51);
     private static readonly Color RailSecondary = Color.FromArgb(168, 186, 194);
-    private static readonly Color PrimaryText = Color.FromArgb(24, 48, 57);
-    private static readonly Color SecondaryText = Color.FromArgb(99, 119, 128);
-    private static readonly Color Divider = Color.FromArgb(223, 230, 234);
-    private static readonly Color SelectedRail = Color.FromArgb(39, 60, 70);
-    private static readonly Color Teal = Color.FromArgb(8, 127, 131);
+    private static readonly Color PrimaryText = Color.FromArgb(9, 18, 38);
+    private static readonly Color SecondaryText = Color.FromArgb(109, 135, 172);
+    private static readonly Color Divider = Color.FromArgb(218, 230, 237);
+    private static readonly Color SelectedRail = Color.FromArgb(31, 72, 85);
+    private static readonly Color Teal = Color.FromArgb(0, 153, 165);
     private static readonly Color TealHover = Color.FromArgb(7, 108, 112);
     private static readonly Color ConnectedText = Color.FromArgb(32, 107, 69);
     private static readonly Color ConnectedBack = Color.FromArgb(227, 243, 233);
@@ -31,9 +31,10 @@ public sealed partial class MainForm : Forms.Form
     private readonly PageSwitcher rolePages = new() { Dock = Forms.DockStyle.Fill, NavigationVisible = false, Margin = Forms.Padding.Empty };
     private readonly PageSwitcher controllerPages = new() { Dock = Forms.DockStyle.Fill, NavigationVisible = false };
     private readonly Forms.TableLayoutPanel shell = new() { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 3 };
-    private readonly Forms.Panel rail = new() { Dock = Forms.DockStyle.Fill, BackColor = Rail };
+    private readonly Forms.Panel rail = new() { Dock = Forms.DockStyle.Fill, BackColor = Rail, Margin = Forms.Padding.Empty };
     private readonly Forms.Panel header = new() { Dock = Forms.DockStyle.Fill, BackColor = Surface, Margin = Forms.Padding.Empty };
-    private readonly Forms.Panel footer = new() { Dock = Forms.DockStyle.Fill, BackColor = Surface };
+    private readonly Forms.Panel footer = new() { Dock = Forms.DockStyle.Fill, BackColor = Surface, Margin = Forms.Padding.Empty };
+    private readonly Forms.Control connectionFooterIcon = UiGlyph.Icon(UiGlyph.Shield, 20, Color.FromArgb(135, 148, 161));
     private readonly Forms.TableLayoutPanel footerContent = new() { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 1, Padding = new Forms.Padding(24, 0, 24, 0) };
     private readonly Forms.Label headerTitle = new WorkspaceLabel() { Name = "headerTitle", WrapText = false, AutoSize = true, ForeColor = PrimaryText };
     private readonly Forms.Label headerSubtitle = new WorkspaceLabel() { Name = "headerSubtitle", AutoSize = true, ForeColor = SecondaryText };
@@ -41,7 +42,7 @@ public sealed partial class MainForm : Forms.Form
     private readonly Forms.Label statusDot = new() { AutoSize = true, Text = "●", Font = new Font("Segoe UI", 9), Margin = new Forms.Padding(10, 7, 4, 0) };
     private readonly Forms.Label statusLabel = new() { AutoSize = true, Font = new Font("Segoe UI", 9.5F), Margin = new Forms.Padding(0, 7, 8, 0) };
     private readonly Forms.Button terminateSession = Button(() => UiText.EndSupport, "terminateSession", destructive: true);
-    private readonly Forms.Label footerLeft = new() { Name = "footerStatus", Dock = Forms.DockStyle.Fill, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F) };
+    private readonly Forms.Label footerLeft = new() { Name = "footerStatus", Dock = Forms.DockStyle.Fill, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft, ForeColor = SecondaryText, Font = new Font("Segoe UI", 10.5F) };
     private readonly Forms.Label footerRight = new() { Name = "footerDetail", Dock = Forms.DockStyle.Fill, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleRight, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F) };
 
     private readonly Forms.Button roleAgent = RailButton(() => UiText.GiveControl, "roleAgent");
@@ -80,17 +81,17 @@ public sealed partial class MainForm : Forms.Form
     private readonly Forms.Label agentLog = new() { Name = "agentLog", AutoSize = true, ForeColor = SecondaryText, MaximumSize = new Size(720, 0) };
 
     // Connection screen.
-    private readonly RememberedListView peers = new() { Name = "peers", Dock = Forms.DockStyle.Fill, View = Forms.View.Details, FullRowSelect = true, HideSelection = false, MultiSelect = false, BorderStyle = Forms.BorderStyle.None, BackColor = Surface, LogicalRowHeight = 44, FitColumnsToWidth = true };
+    private readonly RememberedListView peers = new() { Name = "peers", Dock = Forms.DockStyle.Fill, View = Forms.View.Details, FullRowSelect = true, HideSelection = false, MultiSelect = false, BorderStyle = Forms.BorderStyle.None, BackColor = Surface, LogicalRowHeight = 44, FitColumnsToWidth = false };
     private readonly Forms.TextBox host = TextBox("host");
     private readonly Forms.TextBox code = TextBox("pairCode");
     private readonly Forms.Button pairButton = Button(() => UiText.Connect, "pair", 110, primary: true);
     private readonly Forms.Button updateClientButton = Button(() => UiText.UpdateClient, "updateClient", 150);
     private readonly Forms.Button discoverButton = Button(() => UiText.Refresh, "discover", 92);
-    private readonly Forms.Label connectionState = new() { Name = "connectionFormState", AutoSize = true, ForeColor = SecondaryText, MaximumSize = new Size(460, 0) };
-    private readonly Forms.TableLayoutPanel updateProgressArea = new() { Dock = Forms.DockStyle.Top, Height = 96, ColumnCount = 1, RowCount = 2, Margin = Forms.Padding.Empty, Visible = false };
+    private readonly Forms.Label connectionState = new WorkspaceLabel() { Name = "connectionFormState", AutoSize = true, ForeColor = SecondaryText, MaximumSize = new Size(460, 0) };
+    private readonly Forms.TableLayoutPanel updateProgressArea = new ConnectionLayoutPanel { Dock = Forms.DockStyle.Top, AutoSize = true, ColumnCount = 1, RowCount = 0, Margin = Forms.Padding.Empty, Visible = false };
     private readonly Forms.Panel updateProgressTrack = new() { Name = "updateProgress", Dock = Forms.DockStyle.Fill, BackColor = Divider, Margin = new Forms.Padding(0, 0, 0, 4) };
     private readonly Forms.Panel updateProgressFill = new() { Dock = Forms.DockStyle.Left, BackColor = Teal, Width = 0 };
-    private readonly Forms.Label updateProgressText = new() { Name = "updateProgressText", Dock = Forms.DockStyle.Fill, AutoSize = false, ForeColor = SecondaryText, Margin = Forms.Padding.Empty };
+    private readonly Forms.Label updateProgressText = new WorkspaceLabel() { Name = "updateProgressText", Dock = Forms.DockStyle.Fill, AutoSize = false, ForeColor = SecondaryText, Margin = Forms.Padding.Empty };
     private readonly Forms.Label selectedPeerName = new WorkspaceLabel { AutoSize = true, Font = new Font("Segoe UI", 15, FontStyle.Bold), ForeColor = PrimaryText }.WithText(() => UiText.ManualConnection);
     private readonly Forms.Label selectedPeerAddress = new WorkspaceLabel { AutoSize = true, ForeColor = SecondaryText }.WithText(() => UiText.TargetAddress);
     private readonly Forms.Label discoveryState = new() { AutoSize = true, ForeColor = SecondaryText };
@@ -275,11 +276,11 @@ public sealed partial class MainForm : Forms.Form
     {
         shell.Padding = Forms.Padding.Empty;
         shell.BackColor = Canvas;
-        shell.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Absolute, 216));
+        shell.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Absolute, 233));
         shell.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
         shell.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 96));
         shell.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
-        shell.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 40));
+        shell.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 48));
         shell.Controls.Add(rail, 0, 0);
         shell.SetRowSpan(rail, 3);
         shell.Controls.Add(header, 1, 0);
@@ -294,35 +295,52 @@ public sealed partial class MainForm : Forms.Form
 
     private void BuildRail(string? languageOverride)
     {
-        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Forms.Padding(12, 16, 12, 8), BackColor = Rail };
+        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Forms.Padding(8, 16, 8, 8), BackColor = Rail };
         layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 76));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 80));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 112));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
         layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, isUpdateAdmin ? 82 : 72));
+        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 128));
 
-        var roles = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false, Margin = Forms.Padding.Empty, Padding = new Forms.Padding(0), BackColor = Rail };
+        var roles = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false, Margin = new(8, 0, 8, 0), Padding = new Forms.Padding(0), BackColor = Rail };
         roles.Controls.Add(roleAgent); roles.Controls.Add(roleController);
-        var brand = new WorkspaceLabel { Name = "appBrand", Text = "Remote\nDebugger", ForeColor = Color.White, Font = new Font("Segoe UI", 17, FontStyle.Bold), Dock = Forms.DockStyle.Fill, Padding = new Forms.Padding(14, 0, 0, 0) };
-        layout.Controls.Add(brand, 0, 0);
+        foreach (var button in new[] { roleAgent, roleController, navConnection, navScreen, navProcesses, navFiles, navDiagnostics }) button.Font = new Font("Segoe UI", 12);
+        var brand = new WorkspaceLabel { Name = "appBrand", Text = "Remote\nDebugger", ForeColor = Color.White, Font = new Font("Segoe UI", 17, FontStyle.Bold), Dock = Forms.DockStyle.Fill, Margin = new(0, 0, 0, 3) };
+        var brandPanel = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = new(8, 0, 8, 0) };
+        brandPanel.ColumnStyles.Add(new(Forms.SizeType.Absolute, 63)); brandPanel.ColumnStyles.Add(new(Forms.SizeType.Percent, 100));
+        brandPanel.RowStyles.Add(new(Forms.SizeType.Percent, 100));
+        var brandIcon = UiGlyph.Icon(UiGlyph.Computer, 42, Color.FromArgb(0, 211, 224)); brandIcon.Margin = new(4, 8, 0, 0);
+        brandPanel.Controls.Add(brandIcon, 0, 0); brandPanel.Controls.Add(brand, 1, 0);
+        layout.Controls.Add(brandPanel, 0, 0);
+        brandPanel.Paint += (_, e) => { using var pen = new Pen(SelectedRail); e.Graphics.DrawLine(pen, 0, brandPanel.Height - 2, brandPanel.Width, brandPanel.Height - 2); };
         layout.Controls.Add(roles, 0, 1);
 
-        var work = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false, Margin = Forms.Padding.Empty, Padding = new Forms.Padding(0, 14, 0, 0), BackColor = Rail };
+        var work = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false, Margin = Forms.Padding.Empty, Padding = new Forms.Padding(0, 10, 0, 0), BackColor = Rail };
+        controllerNavCaption.Margin = new(16, 0, 0, 8);
+        foreach (var button in new[] { navConnection, navScreen, navProcesses, navFiles, navDiagnostics }) { button.Width = 217; button.Padding = new(22, 0, 0, 0); }
         work.Controls.Add(controllerNavCaption);
         work.Controls.Add(navConnection); work.Controls.Add(navScreen); work.Controls.Add(navProcesses); work.Controls.Add(navFiles); work.Controls.Add(navDiagnostics);
         InitializePowerControls(work);
         layout.Controls.Add(work, 0, 2);
 
-        var local = new Forms.Panel { Dock = Forms.DockStyle.Fill };
-        var machine = new Forms.Label { Text = Environment.MachineName, AutoSize = false, Width = 180, Height = 20, ForeColor = RailSecondary, Font = new Font("Segoe UI", 9.5F), Location = new Point(12, 8), AutoEllipsis = true };
-        var version = new Forms.Label { Text = "Remote Debugger · " + (typeof(MainForm).Assembly.GetName().Version?.ToString(3) ?? "0.2"), AutoSize = false, Width = 180, Height = 20, ForeColor = Color.FromArgb(116, 143, 154), Font = new Font("Segoe UI", 8.5F), Location = new Point(12, isUpdateAdmin ? 56 : 32), AutoEllipsis = true };
-        layout.Controls.Add(BuildLanguageSelector(languageOverride), 0, 3);
+        var local = new Forms.Panel { Dock = Forms.DockStyle.Fill, Margin = new(11, 3, 11, 3) };
+        var machine = new Forms.Label { Text = Environment.MachineName, AutoSize = false, Width = 160, Height = 23, ForeColor = RailSecondary, Font = new Font("Segoe UI", 10.5F), Location = new Point(42, 24), AutoEllipsis = true };
+        var version = new Forms.Label { AutoSize = false, Width = 160, Height = 23, ForeColor = RailSecondary, Font = new Font("Segoe UI", 10.5F), Location = new Point(42, isUpdateAdmin ? 74 : 49), AutoEllipsis = true }.WithText(() => UiText.DeviceVersion + " " + typeof(MainForm).Assembly.GetName().Version?.ToString(3));
+        var language = BuildLanguageSelector(languageOverride); language.Margin = new(8, 0, 8, 0); layout.Controls.Add(language, 0, 3);
         local.Controls.Add(machine);
+        var localIcon = UiGlyph.Icon(UiGlyph.Shield, 22, Color.FromArgb(225, 239, 246)); localIcon.Location = new(8, 24); local.Controls.Add(localIcon);
+        local.Paint += (_, e) => { using var pen = new Pen(Color.FromArgb(129, 153, 166)); e.Graphics.DrawLine(pen, 8, 0, local.Width - 8, 0); };
         if (isUpdateAdmin)
-            local.Controls.Add(new Forms.Label { Name = "adminMode", AutoSize = false, Width = 180, Height = 20, ForeColor = Color.FromArgb(121, 200, 182), Font = new Font("Segoe UI", 9F), Location = new Point(12, 32) }.WithText(() => UiText.AdminMode));
+            local.Controls.Add(new Forms.Label { Name = "adminMode", AutoSize = false, Width = 160, Height = 23, ForeColor = RailSecondary, Font = new Font("Segoe UI", 10.5F), Location = new Point(42, 49) }.WithText(() => UiText.AdminMode));
         local.Controls.Add(version); layout.Controls.Add(local, 0, 4);
         rail.Controls.Add(layout);
+        rail.SizeChanged += (_, _) =>
+        {
+            bool compact = rail.Height < HeaderPixels(760);
+            layout.RowStyles[4].Height = HeaderPixels(compact ? 106 : 128);
+            language.Padding = new(HeaderPixels(8), HeaderPixels(4), HeaderPixels(8), HeaderPixels(compact ? 6 : 22));
+        };
     }
 
     private void BuildHeader()
@@ -361,15 +379,25 @@ public sealed partial class MainForm : Forms.Form
 
     private int HeaderPixels(float value) => (int)Math.Round(value * DeviceDpi / 96f);
     private bool HeaderChartsBelow => headerCharts.Visible && shell.ClientSize.Width - shell.ColumnStyles[0].Width < HeaderPixels(1040);
+    private bool OnConnectionPage => rolePages.SelectedIndex == 1 && controllerPages.SelectedIndex == 0;
 
     private void UpdateHeaderHeight()
     {
-        shell.RowStyles[0].Height = HeaderPixels(headerCharts.Visible ? HeaderChartsBelow ? 174 : 116 : 96);
+        shell.RowStyles[0].Height = HeaderPixels(headerCharts.Visible ? HeaderChartsBelow ? 174 : 116 : OnConnectionPage ? 100 : 96);
         LayoutHeader();
     }
 
     private void LayoutHeader()
     {
+        if (OnConnectionPage)
+        {
+            int inset = HeaderPixels(28);
+            if (terminateSession.Font.SizeInPoints != 11.5f) terminateSession.Font = new Font("Segoe UI", 11.5f);
+            terminateSession.SetBounds(header.Width - inset - HeaderPixels(128), HeaderPixels(22), HeaderPixels(128), HeaderPixels(44));
+            headerTitle.Location = new(inset, HeaderPixels(18));
+            headerSubtitle.SetBounds(inset, HeaderPixels(60), Math.Max(0, header.Width - inset * 2 - (terminateSession.Visible ? HeaderPixels(145) : 0)), HeaderPixels(30));
+            header.Invalidate(); return;
+        }
         int center = HeaderPixels(headerCharts.Visible ? HeaderChartsBelow ? 52 : 66 : 48);
         int left = HeaderPixels(18), gap = HeaderPixels(11);
         int buttonWidth = Math.Max(HeaderPixels(104), terminateSession.PreferredSize.Width);
@@ -381,7 +409,7 @@ public sealed partial class MainForm : Forms.Form
         statusLabel.Location = new Point(HeaderPixels(30), (statusPill.Height - statusLabel.Height) / 2);
         headerTitle.Location = new Point(left, center - HeaderPixels(28));
         int titleWidth = Math.Max(HeaderPixels(241), headerTitle.PreferredSize.Width + HeaderPixels(58));
-        headerSubtitle.SetBounds(left, center + HeaderPixels(8), titleWidth - left, HeaderPixels(24));
+        headerSubtitle.SetBounds(left, center + HeaderPixels(8), headerCharts.Visible ? titleWidth - left : Math.Max(0, (statusPill.Visible ? actionsLeft : terminateSession.Visible ? terminateSession.Left : header.Width) - left - gap), HeaderPixels(24));
         int chartLeft = HeaderChartsBelow ? left : titleWidth;
         int chartRight = HeaderChartsBelow ? header.Width - left : actionsLeft - HeaderPixels(10);
         headerCharts.SetBounds(chartLeft, HeaderPixels(HeaderChartsBelow ? 96 : 34), Math.Max(0, chartRight - chartLeft), HeaderPixels(66));
@@ -395,6 +423,7 @@ public sealed partial class MainForm : Forms.Form
         footerLeft.Margin = Forms.Padding.Empty; footerRight.Margin = Forms.Padding.Empty;
         SetScreenFooter(false);
         footer.Controls.Add(footerContent);
+        connectionFooterIcon.Location = new(28, 14); connectionFooterIcon.Visible = false; footer.Controls.Add(connectionFooterIcon); connectionFooterIcon.BringToFront();
     }
 
     private bool screenFooterVisible;
@@ -492,68 +521,6 @@ public sealed partial class MainForm : Forms.Form
         rolePages.TabPages.Add(page);
     }
 
-    private PagePanel BuildConnectionPage()
-    {
-        var page = new PagePanel(() => UiText.Connection) { BackColor = Canvas, Padding = new Forms.Padding(28) };
-        var columns = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
-        columns.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, PrivateInternet ? 62 : 45)); columns.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Absolute, 1)); columns.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, PrivateInternet ? 38 : 55));
-        columns.Controls.Add(BuildPeerList(), 0, 0); columns.Controls.Add(new Forms.Panel { Dock = Forms.DockStyle.Fill, BackColor = Divider }, 1, 0); columns.Controls.Add(BuildConnectionForm(), 2, 0);
-        page.Controls.Add(columns); return page;
-    }
-
-    private Forms.Control BuildPeerList()
-    {
-        var panel = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Forms.Padding(0, 4, 24, 0) };
-        panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 42)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 54)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 40)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
-        panel.Controls.Add(new WorkspaceLabel { AutoSize = true, Font = new Font("Segoe UI", 15, FontStyle.Bold), ForeColor = PrimaryText, Anchor = Forms.AnchorStyles.Left, Margin = new Forms.Padding(0, 0, 0, 8) }.WithText(() => UiText.AvailablePcs), 0, 0);
-        discoverButton.Anchor = Forms.AnchorStyles.Left;
-        panel.Controls.Add(PrivateInternet ? ControlRow(discoverButton, updateAllDevices) : discoverButton, 0, 1);
-        discoveryState.Dock = Forms.DockStyle.Fill; discoveryState.Margin = new Forms.Padding(0, 0, 0, 8); discoveryState.TextAlign = ContentAlignment.MiddleLeft;
-        panel.Controls.Add(discoveryState, 0, 2);
-        peers.Columns.Add("", 110).WithText(() => UiText.Name);
-        if (!PrivateInternet) peers.Columns.Add("", 125).WithText(() => UiText.Address);
-        if (PrivateInternet) peers.Columns.Add("", 62).WithText(() => UiText.DeviceVersion);
-        peers.Columns.Add("", PrivateInternet ? 150 : 90).WithText(() => UiText.State);
-        if (PrivateInternet) peers.Columns.Add("", 180).WithText(() => UiText.DeviceProgress);
-        InitializeFleet();
-        peers.Margin = Forms.Padding.Empty;
-        peers.RememberLayout(root, PrivateInternet ? ["name", "version", "state", "progress"] : ["name", "address", "state"]); panel.Controls.Add(peers, 0, 3);
-        return panel;
-    }
-
-    private Forms.Control BuildConnectionForm()
-    {
-        if (PrivateInternet) { selectedPeerName.SetText(() => UiText.SelectComputer); selectedPeerAddress.SetText(""); }
-        var panel = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 9, Padding = new Forms.Padding(24, 0, 0, 0) };
-        panel.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
-        selectedPeerName.AutoSize = selectedPeerAddress.AutoSize = connectionState.AutoSize = false;
-        selectedPeerName.Dock = selectedPeerAddress.Dock = connectionState.Dock = Forms.DockStyle.Fill;
-        selectedPeerName.AutoEllipsis = selectedPeerAddress.AutoEllipsis = connectionState.AutoEllipsis = true;
-        connectionState.MaximumSize = Size.Empty;
-        panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 34)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 30));
-        for (int i = 2; i < 7; i++) panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
-        panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 60)); panel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
-        panel.Controls.Add(selectedPeerName, 0, 0); panel.Controls.Add(selectedPeerAddress, 0, 1);
-        if (PrivateInternet) BuildWanAddressFields(panel);
-        if (!PrivateInternet)
-        {
-            panel.Controls.Add(new WorkspaceLabel { AutoSize = true, ForeColor = SecondaryText, Margin = Forms.Padding.Empty, Dock = Forms.DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }.WithText(() => UiText.IpOrManual), 0, 2);
-            host.Dock = Forms.DockStyle.Top; host.Margin = new Forms.Padding(0, 4, 0, 18); panel.Controls.Add(host, 0, 3);
-        }
-        if (!PrivateInternet) panel.Controls.Add(new WorkspaceLabel { AutoSize = true, ForeColor = SecondaryText, Margin = Forms.Padding.Empty, Dock = Forms.DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }.WithText(() => UiText.SixDigitCode), 0, 4);
-        code.Width = 150; code.Font = new Font("Consolas", 20); code.MaxLength = 6; code.TextAlign = Forms.HorizontalAlignment.Center;
-        updateClientButton.Visible = false;
-        var codeRow = PrivateInternet ? ControlRow(pairButton, saveWanAddress) : ControlRow(code, pairButton); codeRow.Margin = new Forms.Padding(0, 4, 0, 0); panel.Controls.Add(codeRow, 0, 5);
-        panel.Controls.Add(BuildWakeControls(), 0, 6);
-        connectionState.Margin = new Forms.Padding(0, 7, 0, 0); panel.Controls.Add(connectionState, 0, 7);
-        updateProgressArea.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 10));
-        updateProgressArea.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
-        updateProgressTrack.Controls.Add(updateProgressFill);
-        updateProgressTrack.SizeChanged += (_, _) => RefreshUpdateProgress();
-        updateProgressArea.Controls.Add(updateProgressTrack, 0, 0); updateProgressArea.Controls.Add(updateProgressText, 0, 1);
-        panel.Controls.Add(updateProgressArea, 0, 8); return panel;
-    }
-
     private static string UpdateProgressDescription(AgentUpdateProgress progress) => progress.Stage switch
     {
         "preparing" => UiText.PreparingUpdate,
@@ -574,7 +541,7 @@ public sealed partial class MainForm : Forms.Form
         connectedUpdateReport = progress;
         connectedUpdateProgress.Report(progress.Stage == "idle" ? "preparing" : progress.Stage, progress.TransferredBytes, progress.TotalBytes);
         updateProgressFill.BackColor = Teal;
-        updateProgressText.ForeColor = SecondaryText;
+        updateProgressText.ForeColor = PrimaryText;
         RefreshUpdateProgress();
         if (progress.Stage == "complete") SaveUpdateTimings();
     }
@@ -1187,7 +1154,9 @@ public sealed partial class MainForm : Forms.Form
         {
             var presentation = ControllerPagePresentation(controllerPages.SelectedIndex);
             headerTitle.SetText(presentation.Title);
-            if (PrivateInternet && selectedPeer != null)
+            if (controllerPages.SelectedIndex == 0)
+                headerSubtitle.SetText(() => UiText.Get("ConnectionInstructions"));
+            else if (PrivateInternet && selectedPeer != null)
                 headerSubtitle.SetText(selectedPeer.Name);
             else if (supportSession && client != null)
                 headerSubtitle.SetText(() => selectedPeer == null || selectedPeer.Name == client.Connection.Host
@@ -1210,19 +1179,34 @@ public sealed partial class MainForm : Forms.Form
         statusLabel.ForeColor = connected ? ConnectedText : reconnecting ? WarningText : Color.FromArgb(80, 103, 113);
         statusLabel.SetText(() => connected ? UiText.Connected : reconnecting ? UiText.Reconnecting : synchronizing ? UiText.SynchronizingEllipsis : pairing ? UiText.Pairing : agentIdle && onAgent ? UiText.SessionClosed : UiText.Waiting);
         statusPill.AccessibleName = statusLabel.Text;
+        statusPill.Visible = !(onController && controllerPages.SelectedIndex == 0);
         bool showTerminateSession = ShouldShowTerminateSession(onAgent, agentIdle, agent?.Session.Connected == true,
             agent?.Session.State, supportSession, synchronizingAgent);
         if (terminateSession.Visible != showTerminateSession) terminateSession.Visible = showTerminateSession;
-        LayoutHeader();
+        float titleSize = OnConnectionPage ? 24 : 19.5f, subtitleSize = OnConnectionPage ? 13.5f : 11;
+        if (headerTitle.Font.SizeInPoints != titleSize) headerTitle.Font = new Font("Segoe UI", titleSize, FontStyle.Bold);
+        if (headerSubtitle.Font.SizeInPoints != subtitleSize) headerSubtitle.Font = new Font("Segoe UI", subtitleSize);
+        headerTitle.ForeColor = OnConnectionPage ? PrimaryText : Color.FromArgb(15, 35, 64);
+        headerSubtitle.ForeColor = OnConnectionPage ? SecondaryText : Color.FromArgb(143, 156, 169);
+        UpdateHeaderHeight();
+        ((WorkspaceButton)roleController).Selected = onController;
+        ((WorkspaceButton)navConnection).Selected = onController && controllerPages.SelectedIndex == 0;
+        ((WorkspaceButton)navScreen).Selected = onController && controllerPages.SelectedIndex == 1;
+        ((WorkspaceButton)navProcesses).Selected = onController && controllerPages.SelectedIndex == 2;
+        ((WorkspaceButton)navFiles).Selected = onController && controllerPages.SelectedIndex == 3;
+        ((WorkspaceButton)navDiagnostics).Selected = onController && controllerPages.SelectedIndex == 4;
         roleAgent.BackColor = onAgent ? SelectedRail : Rail; roleController.BackColor = onController ? SelectedRail : Rail; navConnection.BackColor = onController && controllerPages.SelectedIndex == 0 ? SelectedRail : Rail; navScreen.BackColor = onController && controllerPages.SelectedIndex == 1 ? SelectedRail : Rail; navProcesses.BackColor = onController && controllerPages.SelectedIndex == 2 ? SelectedRail : Rail; navFiles.BackColor = onController && controllerPages.SelectedIndex == 3 ? SelectedRail : Rail; navDiagnostics.BackColor = onController && controllerPages.SelectedIndex == 4 ? SelectedRail : Rail;
     }
 
     private void RefreshFooter()
     {
+        connectionFooterIcon.Visible = OnConnectionPage && PrivateInternet;
+        footerLeft.Padding = new(connectionFooterIcon.Visible ? 36 : 0, 0, 0, 0);
         bool screenFooter = rolePages.SelectedIndex == 1 && !terminating && controllerPages.SelectedIndex == 1;
         SetScreenFooter(screenFooter);
         if (rolePages.SelectedIndex != 1 || terminating) { footerLeft.SetText(footerMessage); footerRight.SetText(footerDetail); return; }
         if (screenFooter) return;
+        if (controllerPages.SelectedIndex == 0 && PrivateInternet) { footerLeft.SetText(() => UiText.Get("ConnectionPrivateNetwork")); footerRight.SetText(""); return; }
         var text = WorkspacePresentation.Footer(controllerPages.SelectedIndex, connectionState.Text, streamStatus.Text,
             resourceState.Text, fileState.Text, diagnosticState.Text, PrivateInternet ? selectedPeer?.Name ?? "" : host.Text,
             lastMeasurementUtc is { } measured ? UiText.Format(UiText.ProcessMeasurement, processRows.Count, measured.ToLocalTime()) : UiText.NoMeasurement,
@@ -1378,6 +1362,7 @@ public sealed partial class MainForm : Forms.Form
             peers.EndUpdate();
             renderingPeers = false;
         }
+        RefreshConnectionPresentation();
     }
 
     private void SelectPeerFromList()
@@ -1392,7 +1377,8 @@ public sealed partial class MainForm : Forms.Form
         selectedPeerAddress.SetText(() => PrivateInternet
             ? InternetSettings.IsSupportId(peer.Host) ? UiText.InternetReady : UiText.LanFallbackReady
             : peer.Host);
-        connectionState.SetText(() => PrivateInternet ? UiText.PrivateConnectInstructions : UiText.EnterDisplayedCode); code.SetText("");
+        connectionState.SetText(() => PrivateInternet ? fleet.TryGetValue(DeviceKey(peer), out var device) && !device.Online ? UiText.ConnectionWakeToContinue : UiText.ConnectionInstructions : UiText.EnterDisplayedCode); code.SetText("");
+        RefreshConnectionPresentation();
         if (PrivateInternet) pairButton.Focus(); else code.Focus();
     }
 
@@ -2543,9 +2529,9 @@ public sealed partial class MainForm : Forms.Form
     }
     private static Forms.Label SummaryValue(string name) => new WorkspaceLabel { Name = name, Text = "—", AutoSize = true, ForeColor = PrimaryText, Font = new Font("Segoe UI", 13, FontStyle.Bold) };
     private static Forms.Label Eyebrow(string text) => new WorkspaceLabel() { Name = "agentEyebrow", Text = text, AutoSize = true, ForeColor = Teal, Font = new Font("Segoe UI", 9.5F, FontStyle.Bold) };
-    private static Forms.Label RailCaption(string text) => new() { Text = text, AutoSize = true, ForeColor = RailSecondary, Font = new Font("Segoe UI", 8.5F, FontStyle.Bold), Margin = new Forms.Padding(12, 0, 0, 8) };
-    private static Forms.Button RailButton(string text, string name) => new WorkspaceButton() { Name = name, Text = text, AccessibleName = text, AutoSize = false, Width = 188, Height = 44, FlatStyle = Forms.FlatStyle.Flat, FlatAppearance = { BorderSize = 0 }, ForeColor = Color.White, BackColor = Rail, TextAlign = ContentAlignment.MiddleLeft, Padding = new Forms.Padding(16, 0, 0, 0), Margin = new Forms.Padding(0, 0, 0, 4), UseMnemonic = false };
-    private static Forms.Button RailSubButton(string text, string name) => new WorkspaceButton() { Name = name, Text = text, AccessibleName = text, AutoSize = false, Width = 188, Height = 40, FlatStyle = Forms.FlatStyle.Flat, FlatAppearance = { BorderSize = 0 }, ForeColor = RailSecondary, BackColor = Rail, TextAlign = ContentAlignment.MiddleLeft, Padding = new Forms.Padding(16, 0, 0, 0), Margin = new Forms.Padding(0, 0, 0, 4), UseMnemonic = false };
+    private static Forms.Label RailCaption(string text) => new() { Text = text, AutoSize = true, ForeColor = RailSecondary, Font = new Font("Segoe UI", 9.5F), Margin = new Forms.Padding(8, 0, 0, 8) };
+    private static Forms.Button RailButton(string text, string name) => new WorkspaceButton() { Name = name, Text = text, AccessibleName = text, AutoSize = false, RailStyle = true, Glyph = name == "roleAgent" ? UiGlyph.Give : UiGlyph.Take, Width = 201, Height = 44, Font = new Font("Segoe UI", 11.5f), FlatStyle = Forms.FlatStyle.Flat, FlatAppearance = { BorderSize = 0 }, ForeColor = Color.White, BackColor = Rail, TextAlign = ContentAlignment.MiddleLeft, Padding = new Forms.Padding(14, 0, 0, 0), Margin = new Forms.Padding(0, 0, 0, 4), UseMnemonic = false };
+    private static Forms.Button RailSubButton(string text, string name) => new WorkspaceButton() { Name = name, Text = text, AccessibleName = text, AutoSize = false, RailStyle = true, Glyph = name switch { "navConnection" => UiGlyph.Link, "navScreen" => UiGlyph.Computer, "navProcesses" => UiGlyph.Processes, "navFiles" => UiGlyph.Folder, _ => UiGlyph.Diagnostics }, Width = 201, Height = 46, Font = new Font("Segoe UI", 11.5f), FlatStyle = Forms.FlatStyle.Flat, FlatAppearance = { BorderSize = 0 }, ForeColor = Color.FromArgb(230, 239, 245), BackColor = Rail, TextAlign = ContentAlignment.MiddleLeft, Padding = new Forms.Padding(14, 0, 0, 0), Margin = new Forms.Padding(0, 0, 0, 3), UseMnemonic = false };
     private static Forms.Button Button(string text, string name, int width = 0, bool primary = false, bool destructive = false) => new WorkspaceButton
     {
         Name = name, Text = text, AccessibleName = text, AutoSize = true, AutoSizeMode = Forms.AutoSizeMode.GrowAndShrink,

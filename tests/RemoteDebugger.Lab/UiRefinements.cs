@@ -56,7 +56,7 @@ internal sealed partial class LabForm
                 Capture("fleet-" + width);
                 using var row = new Bitmap(peers.Width, peers.Height);
                 peers.DrawToBitmap(row, peers.ClientRectangle);
-                Require(row.GetPixel(peers.ClientSize.Width - 2, peers.Items[0].Bounds.Top + 12).ToArgb() == peers.BackColor.ToArgb(), "ui.no_blue_selection_" + width);
+                Require(row.GetPixel(peers.Columns[0].Width - 5, peers.Items[0].Bounds.Top + 8).ToArgb() == Color.FromArgb(227, 246, 248).ToArgb(), "ui.teal_selection_" + width);
             }
             Set("supportSession", true); Set("heartbeatHealthy", true); Set("liveFrameFresh", true);
             Call("SelectRole", 1);

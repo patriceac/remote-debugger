@@ -45,8 +45,14 @@ internal sealed partial class LabForm
             bool offlineBefore = UiTexts().Any(IsOfflineText);
             CaptureDesktop("wake-offline-fr.png");
 
-            ClickWake("configureWake");
+            await ClickWakeAsync("configureWake");
             await WaitForUiAsync(() => FindWake("wakeMac") != null, 15);
+            CaptureDesktop("wake-modal-minimum-fr.png", focusProduct: false);
+            foreach (string id in new[] { "wakeMac", "wakeSender", "wakeDestination", "wakePort", "wakeHelp", "saveWakeSettings", "cancelWakeSettings" })
+                if (FindWake(id)?.Current.IsOffscreen != false) throw new IOException("Wake modal control clipped: " + id);
+            var bodyBounds = FindWake("wakeSettingsBody")!.Current.BoundingRectangle;
+            foreach (string id in new[] { "wakeMac", "wakeSender", "wakeDestination", "wakePort", "wakeHelp" })
+                if (!bodyBounds.Contains(FindWake(id)!.Current.BoundingRectangle)) throw new IOException("Wake modal control partially clipped: " + id);
             SetWake("wakeMac", expectedMac);
             SetWake("wakeDestination", "127.0.0.1");
             SetWake("wakePort", port.ToString());
@@ -56,6 +62,7 @@ internal sealed partial class LabForm
             var saved = DeviceWakeSettings.Load(root, fingerprint);
             if (saved == null || saved.MacAddress != expectedMac || saved.Destination != "127.0.0.1" || saved.Port != port)
                 throw new IOException("Wake settings did not persist the normalized loopback target.");
+            if (receiver.Available != 0) throw new IOException("Saving wake settings must not send a wake packet.");
             Pass("wake.settings_saved", "The offline device wake editor saves a normalized MAC, loopback destination and UDP port", new { saved, port });
 
             using var receiveTimeout = CancellationTokenSource.CreateLinkedTokenSource(stop.Token);
@@ -81,17 +88,23 @@ internal sealed partial class LabForm
             else
                 Fail("wake.loopback_packet", "The offline PC wake action sends three valid 102-byte magic packets and reports packet-sent feedback", new { packetCount = packets.Length, packetLengths = packets.Select(packet => packet.Length).ToArray(), packetShape, status, feedback, offlineBefore, offlineAfter });
 
-            ClickWake("configureWake");
+            ResizeProductWindow(1280, 860);
+            await ClickWakeAsync("configureWake");
             await WaitForUiAsync(() => FindWake("wakeMac") != null, 15);
             bool reopened = WakeText("wakeMac") == expectedMac
                 && WakeText("wakeDestination") == "127.0.0.1"
                 && WakeText("wakePort") == port.ToString();
-            CaptureDesktop("wake-settings-reopened-fr.png");
+            CaptureDesktop("wake-settings-reopened-fr.png", focusProduct: false);
             if (reopened)
                 Pass("wake.settings_reopen", "The wake settings dialog restores the saved values after sending", new { mac = WakeText("wakeMac"), destination = WakeText("wakeDestination"), port = WakeText("wakePort") });
             else
                 Fail("wake.settings_reopen", "The wake settings dialog restores the saved values after sending", new { mac = WakeText("wakeMac"), destination = WakeText("wakeDestination"), port = WakeText("wakePort") });
+            SetWake("wakeMac", "00:11:22:33:44:66");
             InvokeWake("cancelWakeSettings");
+            await WaitForUiAsync(() => FindWake("wakeMac", 100) == null, 15);
+            if (DeviceWakeSettings.Load(root, fingerprint)?.MacAddress != expectedMac)
+                throw new IOException("Cancel must preserve the saved wake settings.");
+            Pass("wake.settings_cancel", "Cancel discards the edited MAC address");
             await FinishAsync();
         }
         catch
@@ -112,7 +125,7 @@ internal sealed partial class LabForm
         await Task.Delay(300, stop.Token);
     }
 
-    private AutomationElement? FindWake(string id, int milliseconds = 1200)
+    private AutomationElement? FindWake(string id, int milliseconds = 1200, bool includeOffscreen = false)
     {
         if (product == null || product.HasExited) return null;
         var condition = new AndCondition(
@@ -124,7 +137,7 @@ internal sealed partial class LabForm
             try
             {
                 var found = AutomationElement.RootElement.FindFirst(TreeScope.Descendants, condition);
-                if (found != null && !found.Current.IsOffscreen) return found;
+                if (found != null && (includeOffscreen || !found.Current.IsOffscreen)) return found;
             }
             catch (Exception) { }
             Thread.Sleep(100);
@@ -187,9 +200,11 @@ internal sealed partial class LabForm
         InvokeElement(element);
     }
 
-    private void ClickWake(string id)
+    private async Task ClickWakeAsync(string id)
     {
-        var element = FindWake(id, 5000) ?? throw new InvalidOperationException("Missing wake control: " + id);
+        var element = FindWake(id, 5000, includeOffscreen: true) ?? throw new InvalidOperationException("Missing wake control: " + id);
+        element.SetFocus();
+        await Task.Delay(150, stop.Token);
         var point = element.GetClickablePoint();
         Native.Mouse(0, (int)point.X, (int)point.Y);
     }

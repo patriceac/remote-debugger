@@ -88,6 +88,8 @@ public sealed partial class MainForm
         RefreshWanAddress();
         RefreshWakeControls();
         RefreshPowerControls();
+        RefreshConnectionPresentation();
+        if (synchronizingAgent || clientUpdateBusy) peers.Invalidate();
         navScreen.Enabled = navProcesses.Enabled = navFiles.Enabled = navDiagnostics.Enabled = CanUseControllerWorkspace(supportSession, terminating);
         if (executeButton == null) return;
         var state = WorkspaceAvailability.For(supportSession, heartbeatHealthy, pairingBusy || clientUpdateBusy || FleetBusy || powerBusy, terminating, action != null, selectedFilePath != null);
@@ -98,7 +100,7 @@ public sealed partial class MainForm
         updateClientButton.Enabled = isUpdateAdmin && !NewerDeviceKnown && CanUpdateClient(supportSession, client != null, pairingBusy, clientUpdateBusy, terminating, clientUpToDate) && action == null;
         updateClientButton.SetText(() => clientUpdateBusy ? UiText.Synchronizing : clientUpToDate ? UiText.ClientUpToDate : UiText.UpdateClient);
         updateAllDevices.Enabled = FleetBusy || isUpdateAdmin && !NewerDeviceKnown && !fleetRefreshing && !pairingBusy && !clientUpdateBusy && !terminating && action == null && fleet.Values.Any(d => d.Online && d.State is "available" or "legacy" or "failed");
-        updateAllDevices.SetText(() => fleetRefreshing ? UiText.CheckingVersion : FleetBusy ? UiText.StopUpdates : UiText.UpdateAllDevices);
+        updateAllDevices.SetText(() => fleetRefreshing ? UiText.CheckingVersion : FleetBusy ? UiText.StopUpdates : UiText.ConnectionUpdateAll);
         if (NewerDeviceKnown) discoveryState.SetText(() => UiText.UpdateControllerFirst);
         discoverButton.Enabled = !pairingBusy && !clientUpdateBusy && !FleetBusy && !fleetRefreshing && !terminating && !supportSession;
         if (FleetBusy || fleetRefreshing || wakeBusy || powerBusy) { pairButton.Enabled = false; discoverButton.Enabled = false; updateClientButton.Enabled = false; updateAllDevices.Enabled = false; }
