@@ -267,9 +267,9 @@ public sealed partial class MainForm
 
     private void DrawComputerHeader(object? sender, Forms.DrawListViewColumnHeaderEventArgs e)
     {
-        using var back = new SolidBrush(Color.FromArgb(237, 242, 245)); e.Graphics.FillRectangle(back, e.Bounds);
+        using var back = new SolidBrush(AppTheme.Background(Color.FromArgb(237, 242, 245))); e.Graphics.FillRectangle(back, e.Bounds);
         using var font = new Font("Segoe UI", 9);
-        Forms.TextRenderer.DrawText(e.Graphics, e.Header?.Text.ToUpperInvariant(), font, Rectangle.Inflate(e.Bounds, -12, 0), SecondaryText,
+        Forms.TextRenderer.DrawText(e.Graphics, e.Header?.Text.ToUpperInvariant(), font, Rectangle.Inflate(e.Bounds, -12, 0), AppTheme.Ink(SecondaryText),
             Forms.TextFormatFlags.VerticalCenter | Forms.TextFormatFlags.EndEllipsis | Forms.TextFormatFlags.NoPrefix);
     }
 
@@ -282,9 +282,9 @@ public sealed partial class MainForm
         {
             int width = peers.Columns[index].Width, inset = HeaderPixels(index == 0 ? 28 : 18);
             string caption = index == 0 ? UiText.Get("ConnectionComputer") : peers.Columns[index].Text;
-            Forms.TextRenderer.DrawText(graphics, caption.ToUpperInvariant(), font, new Rectangle(left + inset, 0, Math.Max(0, width - inset), computerHeader.Height), SecondaryText,
+            Forms.TextRenderer.DrawText(graphics, caption.ToUpperInvariant(), font, new Rectangle(left + inset, 0, Math.Max(0, width - inset), computerHeader.Height), AppTheme.Ink(SecondaryText),
                 Forms.TextFormatFlags.NoPadding | Forms.TextFormatFlags.VerticalCenter | Forms.TextFormatFlags.EndEllipsis);
-            using var pen = new Pen(Divider); graphics.DrawLine(pen, left, 0, left, computerHeader.Height);
+            using var pen = new Pen(AppTheme.Line(Divider)); graphics.DrawLine(pen, left, 0, left, computerHeader.Height);
             left += width;
         }
     }
@@ -294,16 +294,16 @@ public sealed partial class MainForm
         if (e.Item?.Tag is not Peer peer || e.ColumnIndex == 3) return;
         bool syncing = PeerIsSynchronizing(peer);
         Color background = e.Item.Selected || syncing ? Color.FromArgb(227, 246, 248) : Surface;
-        using var back = new SolidBrush(background); e.Graphics.FillRectangle(back, e.Bounds);
-        using var border = new Pen(Divider); e.Graphics.DrawLine(border, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
+        using var back = new SolidBrush(AppTheme.Background(background)); e.Graphics.FillRectangle(back, e.Bounds);
+        using var border = new Pen(AppTheme.Line(Divider)); e.Graphics.DrawLine(border, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
         bool compact = peers.Width < HeaderPixels(600);
         var bounds = Rectangle.Inflate(e.Bounds, -HeaderPixels(e.ColumnIndex == 0 ? compact ? 18 : 28 : compact ? 12 : 18), 0);
         string text = e.SubItem?.Text ?? "", detail = "";
         fleet.TryGetValue(DeviceKey(peer), out var device);
         if (e.ColumnIndex == 0)
         {
-            if (e.Item.Selected || syncing) { using var accent = new SolidBrush(Teal); e.Graphics.FillRectangle(accent, e.Bounds.Left, e.Bounds.Top, HeaderPixels(4), e.Bounds.Height); }
-            UiGlyph.Draw(e.Graphics, UiGlyph.Computer, new(bounds.Left, bounds.Top, HeaderPixels(32), bounds.Height), PrimaryText);
+            if (e.Item.Selected || syncing) { using var accent = new SolidBrush(AppTheme.Ink(Teal)); e.Graphics.FillRectangle(accent, e.Bounds.Left, e.Bounds.Top, HeaderPixels(4), e.Bounds.Height); }
+            UiGlyph.Draw(e.Graphics, UiGlyph.Computer, new(bounds.Left, bounds.Top, HeaderPixels(32), bounds.Height), AppTheme.Ink(PrimaryText));
             bounds.X += HeaderPixels(48); bounds.Width = Math.Max(0, bounds.Width - HeaderPixels(48));
         }
         else if (PrivateInternet && e.ColumnIndex == 1)
@@ -325,14 +325,14 @@ public sealed partial class MainForm
             if (syncing)
             {
                 var ring = new Rectangle(bounds.X, bounds.Y + bounds.Height / 2 - HeaderPixels(13), HeaderPixels(26), HeaderPixels(26));
-                using var faded = new Pen(Color.FromArgb(188, 228, 232), HeaderPixels(3));
-                using var active = new Pen(Teal, HeaderPixels(3));
+                using var faded = new Pen(AppTheme.Line(Color.FromArgb(188, 228, 232)), HeaderPixels(3));
+                using var active = new Pen(AppTheme.Ink(Teal), HeaderPixels(3));
                 e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
                 e.Graphics.DrawEllipse(faded, ring); e.Graphics.DrawArc(active, ring, -90, 230);
             }
             else
             {
-                using var dot = new SolidBrush(device?.Online == true ? Teal : Color.FromArgb(129, 151, 174));
+                using var dot = new SolidBrush(AppTheme.Ink(device?.Online == true ? Teal : Color.FromArgb(129, 151, 174)));
                 e.Graphics.FillEllipse(dot, bounds.X, bounds.Y + bounds.Height / 2 - HeaderPixels(6), HeaderPixels(12), HeaderPixels(12));
             }
             int inset = HeaderPixels(syncing ? 38 : 28); bounds.X += inset; bounds.Width = Math.Max(0, bounds.Width - inset);
@@ -340,11 +340,11 @@ public sealed partial class MainForm
         using var titleFont = new Font("Segoe UI", 13.5f, e.ColumnIndex == 0 ? FontStyle.Bold : FontStyle.Regular);
         var flags = Forms.TextFormatFlags.NoPadding | Forms.TextFormatFlags.NoPrefix | Forms.TextFormatFlags.EndEllipsis | Forms.TextFormatFlags.VerticalCenter | Forms.TextFormatFlags.SingleLine;
         var titleBounds = detail.Length == 0 ? bounds : new Rectangle(bounds.X, bounds.Y + HeaderPixels(15), bounds.Width, HeaderPixels(24));
-        Forms.TextRenderer.DrawText(e.Graphics, text, titleFont, titleBounds, PrimaryText, flags);
+        Forms.TextRenderer.DrawText(e.Graphics, text, titleFont, titleBounds, AppTheme.Ink(PrimaryText), flags);
         if (detail.Length > 0)
         {
             using var small = new Font("Segoe UI", 11.5f);
-            Forms.TextRenderer.DrawText(e.Graphics, detail, small, new Rectangle(bounds.X, bounds.Y + HeaderPixels(40), bounds.Width, HeaderPixels(24)), SecondaryText, flags);
+            Forms.TextRenderer.DrawText(e.Graphics, detail, small, new Rectangle(bounds.X, bounds.Y + HeaderPixels(40), bounds.Width, HeaderPixels(24)), AppTheme.Ink(SecondaryText), flags);
             e.Item.ToolTipText = text + " · " + detail;
         }
     }

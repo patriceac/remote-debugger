@@ -30,6 +30,7 @@ public static class Program
         string? dataRoot = rootIndex >= 0 && rootIndex + 1 < args.Length ? args[rootIndex + 1] : null;
         UiCulture.Initialize(languageOverride ?? LanguagePreference.Load(dataRoot ?? Vault.DefaultRoot));
         ApplicationConfiguration.Initialize();
+        AppTheme.SetPreference(ThemePreference.Load(dataRoot ?? Vault.DefaultRoot));
         if (args.Contains("--admin-setup") || !args.Contains("--startup") && !args.Contains("--resume-update") &&
             File.Exists(new UpdateAdminStore(dataRoot ?? Vault.DefaultRoot).PendingPath))
         {

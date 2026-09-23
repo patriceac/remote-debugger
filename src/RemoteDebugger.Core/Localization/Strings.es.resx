@@ -1048,4 +1048,8 @@ Puerto predeterminado: 45832. Deje vacío para omitir WAN.</value></data>
   <data name="GiveMaintenanceHelp" xml:space="preserve"><value>Permitir tareas de administrador durante la asistencia.</value></data>
   <data name="GiveOn" xml:space="preserve"><value>Sí</value></data>
   <data name="GiveOff" xml:space="preserve"><value>No</value></data>
+  <data name="Theme" xml:space="preserve"><value>Tema</value></data>
+  <data name="ThemeLight" xml:space="preserve"><value>Claro</value></data>
+  <data name="ThemeDark" xml:space="preserve"><value>Oscuro</value></data>
+  <data name="ThemeSaveFailed" xml:space="preserve"><value>El tema cambió, pero no se pudo guardar la preferencia.</value></data>
 </root>

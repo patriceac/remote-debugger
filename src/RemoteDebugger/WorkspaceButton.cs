@@ -44,7 +44,7 @@ internal sealed class WorkspaceButton : Button
         path.AddArc(bounds.Right - diameter, bounds.Top, diameter, diameter, 270, 90);
         path.AddArc(bounds.Right - diameter, bounds.Bottom - diameter, diameter, diameter, 0, 90);
         path.AddArc(bounds.Left, bounds.Bottom - diameter, diameter, diameter, 90, 90); path.CloseFigure();
-        Color fill = !Enabled && !RailStyle ? Color.FromArgb(238, 242, 245) : pressed ? ControlPaint.Dark(BackColor, .08f) : hovered && Enabled ? ControlPaint.Light(BackColor, .08f) : BackColor;
+        Color fill = !Enabled && !RailStyle ? AppTheme.Background(Color.FromArgb(238, 242, 245)) : pressed ? ControlPaint.Dark(BackColor, .08f) : hovered && Enabled ? ControlPaint.Light(BackColor, .08f) : BackColor;
         using var brush = new SolidBrush(fill); e.Graphics.FillPath(brush, path);
         if (FlatAppearance.BorderSize > 0 || Focused && !DisclosureStyle)
         {

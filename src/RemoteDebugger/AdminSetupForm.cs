@@ -28,5 +28,6 @@ internal sealed class AdminSetupForm : Forms.Form
             catch (Exception) { state.Text = UiText.AdminCredentialRejected; activate.Enabled = true; }
             finally { secret = ""; }
         };
+        AppTheme.Apply(this);
     }
 }

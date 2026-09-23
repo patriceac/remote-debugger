@@ -198,7 +198,7 @@ internal sealed partial class LabForm
                 {
                     product = process;
                     var context = await OpenTrayContextAsync();
-                    var quit = context.OpenItem == null ? null : FindLoopbackTrayMenuItem("Quitter");
+                    var quit = context.OpenItem == null ? null : FindLoopbackTrayMenuItem(UiText.Quit);
                     if (quit == null) throw new InvalidOperationException("The tray Quit action is unavailable for cleanup.");
                     InvokeElement(quit);
                     await WaitForProcessExitAsync(process, TimeSpan.FromSeconds(8));
@@ -549,7 +549,7 @@ internal sealed partial class LabForm
         while (deadline.Elapsed < TimeSpan.FromSeconds(45))
         {
             poll++;
-            string expectedRole = role is "localization" or "singleinstance" or "languageselection" or "input"
+            string expectedRole = role is "localization" or "singleinstance" or "languageselection" or "input" or "loopbacktheme"
                 ? product == loopbackAgent ? UiText.TrayAssistedPc : UiText.TrayController
                 : role is "agent" or "agent-local" || product == loopbackAgent ? "PC assisté" : "Contrôleur";
             AutomationElement[] icons = FindSystemTrayIcons().Where(icon =>

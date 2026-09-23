@@ -16,6 +16,8 @@
     "roleController": "roleController",
     "languageSelector": "languageSelector",
     "languageLabel": "languageLabel",
+    "themeSelector": "themeSelector",
+    "themeLabel": "themeLabel",
     "headerTitle": "headerTitle",
     "copyAgentCode": "copyAgentCode",
     "streamOverlay": "streamOverlay",

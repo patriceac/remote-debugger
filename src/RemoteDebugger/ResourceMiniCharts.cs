@@ -34,8 +34,8 @@ internal sealed class ResourceMiniCharts : Forms.Control
         float graphHeight = Math.Max(2, bottom - top);
         string[] names = ["CPU", "RAM", UiText.DiskActivity, "GPU"];
         using var valueFont = new Font(Font.FontFamily, compact ? Font.Size : 13, FontStyle.Bold);
-        using var baseline = new Pen(Color.FromArgb(225, 230, 235));
-        using var divider = new Pen(Color.FromArgb(222, 228, 235));
+        using var baseline = new Pen(AppTheme.Line(Color.FromArgb(225, 230, 235)));
+        using var divider = new Pen(AppTheme.Line(Color.FromArgb(222, 228, 235)));
 
         for (int i = 0; i < 4; i++)
         {
@@ -45,8 +45,8 @@ internal sealed class ResourceMiniCharts : Forms.Control
             float left = i * column + inset, right = (i + 1) * column - inset;
             float width = Math.Max(1, right - left);
             string value = stale || history.Count == 0 ? "—" : Format(history[^1][i]);
-            var labelColor = stale ? SystemColors.GrayText : Color.FromArgb(91, 105, 121);
-            var valueColor = stale ? SystemColors.GrayText : ForeColor;
+            var labelColor = AppTheme.Ink(stale ? SystemColors.GrayText : Color.FromArgb(91, 105, 121));
+            var valueColor = stale ? AppTheme.Ink(SystemColors.GrayText) : ForeColor;
             var textFlags = Forms.TextFormatFlags.NoPadding | Forms.TextFormatFlags.NoPrefix | Forms.TextFormatFlags.SingleLine | Forms.TextFormatFlags.EndEllipsis;
             if (compact)
                 Forms.TextRenderer.DrawText(e.Graphics, names[i] + " " + value, Font,

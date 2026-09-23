@@ -250,6 +250,7 @@ public sealed partial class MainForm : Forms.Form
         InitializeFileDrop();
         InitializeWorkspaceState();
         LoadSavedConnection();
+        InitializeTheme();
         SupportPlatform.ManagedRelaunchRequested += OnManagedRelaunchRequested;
 
         renderTimer.Tick += (_, _) => RefreshUiState();
@@ -313,15 +314,16 @@ public sealed partial class MainForm : Forms.Form
         var brandIcon = UiGlyph.Icon(UiGlyph.Computer, 42, Color.FromArgb(0, 211, 224)); brandIcon.Margin = new(4, 8, 0, 0);
         brandPanel.Controls.Add(brandIcon, 0, 0); brandPanel.Controls.Add(brand, 1, 0);
         layout.Controls.Add(brandPanel, 0, 0);
-        brandPanel.Paint += (_, e) => { using var pen = new Pen(SelectedRail); e.Graphics.DrawLine(pen, 0, brandPanel.Height - 2, brandPanel.Width, brandPanel.Height - 2); };
+        brandPanel.Paint += (_, e) => { using var pen = new Pen(AppTheme.Background(SelectedRail)); e.Graphics.DrawLine(pen, 0, brandPanel.Height - 2, brandPanel.Width, brandPanel.Height - 2); };
         layout.Controls.Add(roles, 0, 1);
 
-        var work = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false, Margin = Forms.Padding.Empty, Padding = new Forms.Padding(0, 10, 0, 0), BackColor = Rail };
+        var work = new Forms.FlowLayoutPanel { Name = "workspaceNavigation", Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Margin = Forms.Padding.Empty, Padding = new Forms.Padding(0, 10, 0, 0), BackColor = Rail };
         controllerNavCaption.Margin = new(16, 0, 0, 8);
         foreach (var button in new[] { navConnection, navScreen, navProcesses, navFiles, navDiagnostics }) { button.Width = 217; button.Padding = new(22, 0, 0, 0); }
         work.Controls.Add(controllerNavCaption);
         work.Controls.Add(navConnection); work.Controls.Add(navScreen); work.Controls.Add(navProcesses); work.Controls.Add(navFiles); work.Controls.Add(navDiagnostics);
         InitializePowerControls(work);
+        work.SizeChanged += (_, _) => { foreach (Forms.Control button in work.Controls.OfType<Forms.Button>()) button.Width = Math.Min(HeaderPixels(217), work.ClientSize.Width); };
         layout.Controls.Add(work, 0, 2);
 
         var local = new Forms.Panel { Dock = Forms.DockStyle.Fill, Margin = new(11, 3, 11, 3) };
@@ -330,7 +332,7 @@ public sealed partial class MainForm : Forms.Form
         var language = BuildLanguageSelector(languageOverride); language.Margin = new(8, 0, 8, 0); layout.Controls.Add(language, 0, 3);
         local.Controls.Add(machine);
         var localIcon = UiGlyph.Icon(UiGlyph.Shield, 22, Color.FromArgb(225, 239, 246)); localIcon.Location = new(8, 24); local.Controls.Add(localIcon);
-        local.Paint += (_, e) => { using var pen = new Pen(Color.FromArgb(129, 153, 166)); e.Graphics.DrawLine(pen, 8, 0, local.Width - 8, 0); };
+        local.Paint += (_, e) => { using var pen = new Pen(AppTheme.Line(Color.FromArgb(129, 153, 166))); e.Graphics.DrawLine(pen, 8, 0, local.Width - 8, 0); };
         if (isUpdateAdmin)
             local.Controls.Add(new Forms.Label { Name = "adminMode", AutoSize = false, Width = 160, Height = 23, ForeColor = RailSecondary, Font = new Font("Segoe UI", 10.5F), Location = new Point(42, 49) }.WithText(() => UiText.AdminMode));
         local.Controls.Add(version); layout.Controls.Add(local, 0, 4);
@@ -371,7 +373,7 @@ public sealed partial class MainForm : Forms.Form
         terminateSession.VisibleChanged += (_, _) => LayoutHeader();
         header.Paint += (_, e) =>
         {
-            using var pen = new Pen(Divider);
+            using var pen = new Pen(AppTheme.Line(Divider));
             if (headerCharts.Visible) e.Graphics.DrawLine(pen, 0, HeaderPixels(18), header.Width, HeaderPixels(18));
             e.Graphics.DrawLine(pen, 0, header.Height - 1, header.Width, header.Height - 1);
         };
@@ -600,6 +602,7 @@ public sealed partial class MainForm : Forms.Form
     {
         tray.Icon = Icon; tray.Text = "Remote Debugger"; tray.Visible = true;
         var menu = new Forms.ContextMenuStrip(); menu.Items.Add("", null, (_, _) => RestoreFromTray()).WithText(() => UiText.Open); menu.Items.Add("", null, async (_, _) => await TerminateSupportAsync()).WithText(() => UiText.EndSupport); menu.Items.Add(new Forms.ToolStripSeparator()); menu.Items.Add("", null, (_, _) => RequestQuit()).WithText(() => UiText.Quit); tray.ContextMenuStrip = menu; tray.DoubleClick += (_, _) => RestoreFromTray();
+        AppTheme.ConfigureMenu(menu);
     }
 
     private void WireEvents()
@@ -969,7 +972,7 @@ public sealed partial class MainForm : Forms.Form
         if (!Visible || WindowState == Forms.FormWindowState.Minimized) return;
         UpdateAgentState(); if (PrivateInternet) UpdatePrivateAgentState(); UpdateInternetState(); UpdateAgentPresentation(); UpdateHeader(); RefreshControllerControls(); RefreshFooter(); RefreshInputStatus();
         if (fleetRefreshing || fleet.Values.Any(device => NeedsFleetProgressAnimation(device.State))) peers.Invalidate();
-        if (updateProgressArea.Visible && updateProgressFill.BackColor == Teal) RefreshUpdateProgress();
+        if (updateProgressArea.Visible && updateProgressFill.BackColor == AppTheme.Background(Teal)) RefreshUpdateProgress();
         if (!agentIdle && agent?.Operations.Maintenance is { } maintenance)
         {
             var state = Json.Element(maintenance.Status); bool active = state.TryGetProperty("active", out var a) && a.GetBoolean(); bool brokerAvailable = !state.TryGetProperty("brokerAvailable", out var broker) || broker.GetBoolean(); bool requiresProvisioning = state.TryGetProperty("requiresProvisioning", out var provisioning) && provisioning.GetBoolean(); bool paired = agent?.Session.HasPaired == true;

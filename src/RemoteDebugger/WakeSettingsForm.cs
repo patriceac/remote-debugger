@@ -34,5 +34,6 @@ internal sealed partial class WakeSettingsForm : Forms.Form
             catch (ArgumentException ex) { state.Text = ex.Message; }
         };
         AcceptButton = save; CancelButton = cancel;
+        AppTheme.Apply(this);
     }
 }

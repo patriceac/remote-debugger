@@ -1048,4 +1048,8 @@ Default port: 45832. Leave blank to skip WAN.</value></data>
   <data name="GiveMaintenanceHelp" xml:space="preserve"><value>Allow administrator tasks during support.</value></data>
   <data name="GiveOn" xml:space="preserve"><value>On</value></data>
   <data name="GiveOff" xml:space="preserve"><value>Off</value></data>
+  <data name="Theme" xml:space="preserve"><value>Theme</value></data>
+  <data name="ThemeLight" xml:space="preserve"><value>Light</value></data>
+  <data name="ThemeDark" xml:space="preserve"><value>Dark</value></data>
+  <data name="ThemeSaveFailed" xml:space="preserve"><value>The theme changed, but the preference could not be saved.</value></data>
 </root>

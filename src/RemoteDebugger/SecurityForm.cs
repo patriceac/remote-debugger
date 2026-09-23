@@ -52,6 +52,7 @@ internal sealed class SecurityForm : Forms.Form
         FormClosing += (_, e) => { if (busy) { lifetime.Cancel(); e.Cancel = true; status.Text = UiText.SecurityStopping; } };
         FormClosed += (_, _) => lifetime.Cancel();
         RefreshState(unlock);
+        AppTheme.Apply(this);
     }
 
     private void RefreshState(bool unlock = false)

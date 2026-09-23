@@ -20,7 +20,7 @@ internal sealed partial class WakeSettingsForm
         header.Size = new(ClientSize.Width, 118); close.Location = new(header.Width - 60, 18); close.AccessibleName = UiText.Cancel;
         close.Click += (_, _) => { DialogResult = Forms.DialogResult.Cancel; Close(); };
         header.Controls.AddRange([title, target, icon, close]);
-        header.Paint += (_, e) => { using var pen = new Pen(Line); e.Graphics.DrawLine(pen, 34, header.Height - 1, header.Width - 34, header.Height - 1); };
+        header.Paint += (_, e) => { using var pen = new Pen(AppTheme.Line(Line)); e.Graphics.DrawLine(pen, 34, header.Height - 1, header.Width - 34, header.Height - 1); };
         var body = new Forms.Panel { Name = "wakeSettingsBody", Dock = Forms.DockStyle.Fill, AutoScroll = true, Padding = new(34, 32, 34, 20) };
         var layout = new ConnectionLayoutPanel { Dock = Forms.DockStyle.Top, AutoSize = true, AutoSizeMode = Forms.AutoSizeMode.GrowAndShrink, ColumnCount = 1, RowCount = 0, Margin = Forms.Padding.Empty };
         layout.ColumnStyles.Add(new(Forms.SizeType.Percent, 100));
@@ -60,7 +60,7 @@ internal sealed partial class WakeSettingsForm
         save.MinimumSize = new(148, 48); cancel.MinimumSize = new(110, 48); save.Font = cancel.Font = new Font("Segoe UI", 12);
         save.Margin = new(14, 0, 0, 0);
         footer.Controls.Add(note, 0, 0); footer.Controls.Add(cancel, 1, 0); footer.Controls.Add(save, 2, 0);
-        footer.Paint += (_, e) => { using var pen = new Pen(Line); e.Graphics.DrawLine(pen, 34, 0, footer.Width - 34, 0); };
+        footer.Paint += (_, e) => { using var pen = new Pen(AppTheme.Line(Line)); e.Graphics.DrawLine(pen, 34, 0, footer.Width - 34, 0); };
         Controls.Add(body); Controls.Add(footer); Controls.Add(header);
         SizeChanged += (_, _) => ControlRegions.ApplyRounded(this, ref roundedModalSize, (int)(8 * DeviceDpi / 96f));
         ControlRegions.ApplyRounded(this, ref roundedModalSize, 8);

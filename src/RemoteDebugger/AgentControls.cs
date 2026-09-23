@@ -25,7 +25,7 @@ internal sealed class AgentMaintenanceSwitch : Forms.CheckBox
         using var thumb = new SolidBrush(Color.White);
         e.Graphics.FillPath(track, path); e.Graphics.FillEllipse(thumb, Checked ? width - diameter + 4 * scale : 4 * scale, top + 4 * scale, diameter - 8 * scale, diameter - 8 * scale);
         Forms.TextRenderer.DrawText(e.Graphics, UiText.Get(Checked ? "GiveOn" : "GiveOff"), Font,
-            new Rectangle((int)(78 * scale), 0, Math.Max(0, Width - (int)(78 * scale)), Height), Color.FromArgb(109, 135, 172),
+            new Rectangle((int)(78 * scale), 0, Math.Max(0, Width - (int)(78 * scale)), Height), AppTheme.Ink(Color.FromArgb(109, 135, 172)),
             Forms.TextFormatFlags.NoPadding | Forms.TextFormatFlags.NoPrefix | Forms.TextFormatFlags.VerticalCenter);
         if (Focused && ShowFocusCues) Forms.ControlPaint.DrawFocusRectangle(e.Graphics, Rectangle.Inflate(ClientRectangle, -1, -1));
     }
@@ -36,10 +36,10 @@ internal sealed class AgentStepNumber(int number) : Forms.Control
     protected override void OnPaint(Forms.PaintEventArgs e)
     {
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        using var fill = new SolidBrush(Color.FromArgb(228, 239, 245));
+        using var fill = new SolidBrush(AppTheme.Background(Color.FromArgb(228, 239, 245)));
         using var font = new Font("Segoe UI", 13, FontStyle.Bold);
         e.Graphics.FillEllipse(fill, 0, 0, Width - 1, Height - 1);
-        Forms.TextRenderer.DrawText(e.Graphics, number.ToString(), font, ClientRectangle, Color.FromArgb(9, 18, 38),
+        Forms.TextRenderer.DrawText(e.Graphics, number.ToString(), font, ClientRectangle, AppTheme.Ink(Color.FromArgb(9, 18, 38)),
             Forms.TextFormatFlags.NoPadding | Forms.TextFormatFlags.HorizontalCenter | Forms.TextFormatFlags.VerticalCenter);
     }
 }

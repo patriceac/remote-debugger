@@ -28,15 +28,20 @@ public sealed partial class MainForm
         var section = new Forms.TableLayoutPanel
         {
             Name = "languageSettings", Dock = Forms.DockStyle.Fill, AutoSize = true,
-            ColumnCount = 1, RowCount = 2, Padding = new Forms.Padding(8, 4, 8, 22), Margin = Forms.Padding.Empty
+            ColumnCount = 1, RowCount = 4, Padding = new Forms.Padding(8, 4, 8, 22), Margin = Forms.Padding.Empty
         };
         section.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
         section.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         section.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
+        section.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
+        section.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
+        section.Controls.Add(new Forms.Label { Name = "themeLabel", AutoSize = true, ForeColor = RailSecondary,
+            Font = new Font("Segoe UI", 10.5F), Margin = new Forms.Padding(0, 0, 0, 4) }.WithText(() => UiText.Get("Theme")), 0, 0);
+        section.Controls.Add(themeSelector, 0, 1);
         section.Controls.Add(new Forms.Label { Name = "languageLabel", AutoSize = true, ForeColor = RailSecondary,
-            Font = new Font("Segoe UI", 10.5F), Margin = new Forms.Padding(0, 0, 0, 4) }.WithText(() => UiText.Language), 0, 0);
+            Font = new Font("Segoe UI", 10.5F), Margin = new Forms.Padding(0, 0, 0, 4) }.WithText(() => UiText.Language), 0, 2);
         languageSelector.Margin = Forms.Padding.Empty;
-        section.Controls.Add(languageSelector, 0, 1);
+        section.Controls.Add(languageSelector, 0, 3);
         return section;
     }
 
@@ -67,6 +72,7 @@ public sealed partial class MainForm
             LiveText.Refresh(this);
             foreach (Forms.ToolStripItem item in tray.ContextMenuStrip!.Items) LiveText.Refresh(item);
             PopulateLanguageChoices(choice.Code);
+            themeSelector.RefreshLabels(); themeSelector.AccessibleName = UiText.Get("Theme");
             RefreshLocalizedDescriptions();
             RefreshLocalizedRows();
             RefreshUiState();

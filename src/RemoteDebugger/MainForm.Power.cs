@@ -212,6 +212,7 @@ internal sealed class RestartOptionsForm : Forms.Form
         var cancel = new Forms.Button { Text = UiText.Cancel, AutoSize = true, DialogResult = Forms.DialogResult.Cancel };
         buttons.Controls.Add(ok); buttons.Controls.Add(cancel); layout.Controls.Add(buttons); Controls.Add(layout);
         AcceptButton = ok; CancelButton = cancel;
+        AppTheme.Apply(this);
     }
     protected override void Dispose(bool disposing) { if (disposing) password.Clear(); base.Dispose(disposing); }
 }
@@ -244,6 +245,7 @@ internal sealed class PowerProgressForm : Forms.Form
         layout.Controls.Add(cancel); Controls.Add(layout);
         timer.Tick += (_, _) => RenderCountdown(); timer.Start();
         FormClosing += (_, e) => { if (!closingAllowed && !Finished) { e.Cancel = true; cancel.Enabled = false; cancelOperation(); } };
+        AppTheme.Apply(this);
     }
     internal void SetDeadline(DateTimeOffset value, bool countdown)
     { deadline = value; powerCountdown = countdown; cancel.Text = countdown ? UiText.Cancel : UiText.CancelReconnectWait; RenderCountdown(); }

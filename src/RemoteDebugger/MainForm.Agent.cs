@@ -33,7 +33,7 @@ public sealed partial class MainForm
         {
             e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             e.Graphics.ScaleTransform(DeviceDpi / 96f, DeviceDpi / 96f);
-            using var pen = new Pen(PrimaryText, 4) { StartCap = System.Drawing.Drawing2D.LineCap.Round, EndCap = System.Drawing.Drawing2D.LineCap.Round, LineJoin = System.Drawing.Drawing2D.LineJoin.Round };
+            using var pen = new Pen(AppTheme.Ink(PrimaryText), 4) { StartCap = System.Drawing.Drawing2D.LineCap.Round, EndCap = System.Drawing.Drawing2D.LineCap.Round, LineJoin = System.Drawing.Drawing2D.LineJoin.Round };
             e.Graphics.DrawRectangle(pen, 7, 14, 84, 52); e.Graphics.DrawLine(pen, 49, 66, 49, 82); e.Graphics.DrawLine(pen, 30, 82, 68, 82);
         };
         var caption = Label("agentComputerCaption", () => UiText.Get("GiveThisComputer"), 12.5f, muted: true);
@@ -42,7 +42,7 @@ public sealed partial class MainForm
         agentReadyIcon.Paint += (_, e) =>
         {
             bool ready = agentHeading.Text == UiText.Get("GiveReady") || agent?.Session.Connected == true;
-            UiGlyph.Draw(e.Graphics, ready ? UiGlyph.CheckCircle : UiGlyph.Info, agentReadyIcon.ClientRectangle, ready ? Teal : SecondaryText);
+            UiGlyph.Draw(e.Graphics, ready ? UiGlyph.CheckCircle : UiGlyph.Info, agentReadyIcon.ClientRectangle, AppTheme.Ink(ready ? Teal : SecondaryText));
         };
         agentHeading.Font = new Font("Segoe UI", 19.5f, FontStyle.Bold);
         agentSubtitle.Font = new Font("Segoe UI", 13.5f);
@@ -72,7 +72,7 @@ public sealed partial class MainForm
         var sleepHelp = Label("agentSleepHelp", () => UiText.Get("GiveSleepHelp"), 12, muted: true);
         var adminHelp = Label("agentMaintenanceHelp", () => UiText.Get("GiveMaintenanceHelp"), 12, muted: true);
         var networkDot = new Forms.Panel();
-        networkDot.Paint += (_, e) => { e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias; using var brush = new SolidBrush(agentNetworkState.Text == UiText.Ready ? Teal : agentNetworkState.ForeColor); e.Graphics.FillEllipse(brush, 0, 0, networkDot.Width - 1, networkDot.Height - 1); };
+        networkDot.Paint += (_, e) => { e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias; using var brush = new SolidBrush(agentNetworkState.Text == UiText.Ready ? AppTheme.Ink(Teal) : agentNetworkState.ForeColor); e.Graphics.FillEllipse(brush, 0, 0, networkDot.Width - 1, networkDot.Height - 1); };
         var networkRule = new Forms.Panel { BackColor = Divider }; var sleepRule = new Forms.Panel { BackColor = Divider }; var adminRule = new Forms.Panel { BackColor = Divider };
         foreach (var label in new[] { agentNetworkState, agentSleepState }) { label.Font = new Font("Segoe UI", 13.5f); label.ForeColor = PrimaryText; }
         agentMaintenanceState.Font = new Font("Segoe UI", 11.5f);

@@ -1048,4 +1048,8 @@ Port par défaut : 45832. Laissez vide pour ignorer le WAN.</value></data>
   <data name="GiveMaintenanceHelp" xml:space="preserve"><value>Autoriser les tâches administrateur pendant l’assistance.</value></data>
   <data name="GiveOn" xml:space="preserve"><value>Oui</value></data>
   <data name="GiveOff" xml:space="preserve"><value>Non</value></data>
+  <data name="Theme" xml:space="preserve"><value>Thème</value></data>
+  <data name="ThemeLight" xml:space="preserve"><value>Clair</value></data>
+  <data name="ThemeDark" xml:space="preserve"><value>Sombre</value></data>
+  <data name="ThemeSaveFailed" xml:space="preserve"><value>Le thème a changé, mais la préférence n’a pas pu être enregistrée.</value></data>
 </root>

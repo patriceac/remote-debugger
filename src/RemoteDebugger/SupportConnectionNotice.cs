@@ -48,7 +48,7 @@ internal sealed class SupportConnectionNotice : Forms.Form
         end.Click += (_, _) => { Close(); EndSupportRequested?.Invoke(this, EventArgs.Empty); };
 
         Controls.AddRange([accent, icon, brand, title, body, divider, close, view, end, progress]);
-        Paint += (_, e) => e.Graphics.DrawRectangle(Pens.LightGray, 0, 0, ClientSize.Width - 1, ClientSize.Height - 1);
+        Paint += (_, e) => { using var pen = new Pen(AppTheme.Line(Color.LightGray)); e.Graphics.DrawRectangle(pen, 0, 0, ClientSize.Width - 1, ClientSize.Height - 1); };
         Shown += (_, _) =>
         {
             var area = (Forms.Screen.PrimaryScreen ?? Forms.Screen.FromControl(this)).WorkingArea;
@@ -64,6 +64,7 @@ internal sealed class SupportConnectionNotice : Forms.Form
         };
         FormClosed += (_, _) => timer.Dispose();
         ResumeLayout(true);
+        AppTheme.Apply(this);
     }
 
     private static Forms.Label Label(string text, int x, int y, int width, int height, float size, Color color,

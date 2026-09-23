@@ -360,6 +360,7 @@ internal sealed class TransferQueueForm : Forms.Form
         buttons.Controls.Add(stop); buttons.Controls.Add(resume);
         Controls.Add(items); Controls.Add(progress); Controls.Add(state); Controls.Add(buttons);
         FormClosing += (_, e) => { cancel(); if (e.CloseReason == Forms.CloseReason.UserClosing) { e.Cancel = true; Hide(); } };
+        AppTheme.Apply(this);
     }
     internal void SetItems(string[] names) { progress.Value = 0; items.Items.Clear(); foreach (string name in names) { var row = items.Items.Add(name); row.SubItems.Add(UiText.Waiting); } }
     internal void SetItem(int index, string value) { if (index >= 0 && index < items.Items.Count) items.Items[index].SubItems[1].Text = value; }

@@ -99,7 +99,7 @@ internal static class UiGlyph
     internal static Forms.Control Icon(string glyph, int size, Color color) => new GlyphView(glyph, color) { Size = new(size, size), Margin = Forms.Padding.Empty };
     private sealed class GlyphView(string glyph, Color color) : Forms.Control
     {
-        protected override void OnPaint(Forms.PaintEventArgs e) => Draw(e.Graphics, glyph, ClientRectangle, color);
+        protected override void OnPaint(Forms.PaintEventArgs e) => Draw(e.Graphics, glyph, ClientRectangle, AppTheme.Ink(color));
     }
 }
 
@@ -140,7 +140,7 @@ internal static class ConnectionField
         field.Paint += (_, e) =>
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            using var pen = new Pen(editor.ContainsFocus ? Color.FromArgb(0, 153, 165) : Color.FromArgb(200, 213, 229));
+            using var pen = new Pen(AppTheme.Line(editor.ContainsFocus ? Color.FromArgb(0, 153, 165) : Color.FromArgb(200, 213, 229)));
             using var path = new GraphicsPath();
             path.AddArc(0, 0, 8, 8, 180, 90); path.AddArc(field.Width - 9, 0, 8, 8, 270, 90);
             path.AddArc(field.Width - 9, field.Height - 9, 8, 8, 0, 90); path.AddArc(0, field.Height - 9, 8, 8, 90, 90); path.CloseFigure();
@@ -195,10 +195,10 @@ internal sealed class UpdateTimeline : Forms.Control
         {
             int y = (int)(i * 52 * scale);
             string state = StepState(i, stage, completed);
-            Color accent = Interrupted && state == "active" ? Color.FromArgb(184, 61, 73) : Color.FromArgb(0, 151, 165);
+            Color accent = Interrupted && state == "active" ? AppTheme.Ink(Color.FromArgb(184, 61, 73)) : Color.FromArgb(0, 151, 165);
             var circle = new RectangleF(9 * scale, y + 4 * scale, 26 * scale, 26 * scale);
             using var fill = new SolidBrush(state == "complete" ? accent : BackColor);
-            using var outline = new Pen(state == "pending" ? Color.FromArgb(207, 220, 226) : accent, 2 * scale);
+            using var outline = new Pen(state == "pending" ? AppTheme.Line(Color.FromArgb(207, 220, 226)) : accent, 2 * scale);
             e.Graphics.FillEllipse(fill, circle); e.Graphics.DrawEllipse(outline, circle);
             if (state == "complete")
             {
@@ -206,8 +206,8 @@ internal sealed class UpdateTimeline : Forms.Control
                 e.Graphics.DrawLines(check, new PointF[] { new(16 * scale, y + 17 * scale), new(20 * scale, y + 21 * scale), new(28 * scale, y + 12 * scale) });
             }
             int left = (int)(60 * scale);
-            Forms.TextRenderer.DrawText(e.Graphics, Title(i), titleFont, new Rectangle(left, y, Width - left, (int)(25 * scale)), Color.FromArgb(11, 21, 43), Forms.TextFormatFlags.NoPadding | Forms.TextFormatFlags.NoPrefix);
-            Forms.TextRenderer.DrawText(e.Graphics, Status(i), detailFont, new Rectangle(left, y + (int)(26 * scale), Width - left, (int)(22 * scale)), Color.FromArgb(108, 134, 171), Forms.TextFormatFlags.NoPadding | Forms.TextFormatFlags.NoPrefix);
+            Forms.TextRenderer.DrawText(e.Graphics, Title(i), titleFont, new Rectangle(left, y, Width - left, (int)(25 * scale)), AppTheme.Ink(Color.FromArgb(11, 21, 43)), Forms.TextFormatFlags.NoPadding | Forms.TextFormatFlags.NoPrefix);
+            Forms.TextRenderer.DrawText(e.Graphics, Status(i), detailFont, new Rectangle(left, y + (int)(26 * scale), Width - left, (int)(22 * scale)), AppTheme.Ink(Color.FromArgb(108, 134, 171)), Forms.TextFormatFlags.NoPadding | Forms.TextFormatFlags.NoPrefix);
         }
     }
 }
