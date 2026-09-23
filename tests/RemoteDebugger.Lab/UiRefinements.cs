@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -113,6 +114,9 @@ internal sealed partial class LabForm
             controlToggle.AccessibilityObject.DoDefaultAction(); await Task.Delay(50, stop.Token);
             Require(!controlToggle.Checked, "ui.viewer_checkbox_accessible_toggle");
             controlToggle.AccessibilityObject.DoDefaultAction();
+            for (int i = 0; i < 12; i++)
+                foreach (var control in toolbarControls) control.Refresh();
+            Capture("viewer-after-repaints");
             var selector = Get<Forms.ComboBox>("monitor");
             selector.AccessibilityObject.DoDefaultAction(); await Task.Delay(50, stop.Token);
             Require(selector.DroppedDown, "ui.viewer_selector_accessible_open");
@@ -134,6 +138,39 @@ internal sealed partial class LabForm
             Get<RemoteScreenView>("screen").Image = null;
         }
         finally { form.Close(); }
+        using var notice = (Forms.Form)Activator.CreateInstance(typeof(MainForm).Assembly.GetType("RemoteDebugger.SupportConnectionNotice")!)!;
+        var progress = (Forms.Panel)notice.GetType().GetField("progress", flags)!.GetValue(notice)!;
+        var elapsed = new Stopwatch();
+        double? closedAt = null;
+        notice.Shown += (_, _) => elapsed.Start();
+        notice.FormClosed += (_, _) => closedAt = elapsed.Elapsed.TotalSeconds;
+        var cursor = Forms.Cursor.Position;
+        try
+        {
+            notice.Show();
+            await Task.Delay(150, stop.Token);
+            Forms.Cursor.Position = notice.PointToScreen(new Point(notice.Width / 2, notice.Height / 2));
+            int fullWidth = notice.ClientSize.Width - progress.Left, previousWidth = fullWidth;
+            Thread.Sleep(1200); // A delayed UI tick must not extend the notice's lifetime.
+            while (closedAt == null && elapsed.Elapsed.TotalSeconds < 12)
+            {
+                await Task.Delay(100, stop.Token);
+                if (closedAt != null) break;
+                double expected = Math.Max(0, 1 - elapsed.Elapsed.TotalSeconds / 10);
+                if (progress.Width > previousWidth || Math.Abs(progress.Width / (double)fullWidth - expected) > .035)
+                    throw new IOException("Notice countdown diverged from elapsed time.");
+                previousWidth = progress.Width;
+                if (elapsed.Elapsed.TotalSeconds is > 4.8 and < 5.05)
+                {
+                    using var bitmap = new Bitmap(notice.Width, notice.Height);
+                    notice.DrawToBitmap(bitmap, notice.ClientRectangle);
+                    bitmap.Save(Path.Combine(output, "notice-halfway.png"));
+                }
+            }
+            Require(closedAt is >= 9.9 and < 10.5, "ui.notice_closes_after_ten_seconds_while_hovered",
+                new { closedAt, fullWidth, notice.DeviceDpi });
+        }
+        finally { Forms.Cursor.Position = cursor; notice.Close(); }
         await FinishAsync();
     }
 

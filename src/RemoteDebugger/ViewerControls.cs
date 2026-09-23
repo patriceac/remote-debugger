@@ -70,6 +70,7 @@ internal sealed class ViewerCheckBox : Forms.CheckBox
     protected override void OnPaint(Forms.PaintEventArgs e)
     {
         if (Forms.SystemInformation.HighContrast) { base.OnPaint(e); return; }
+        e.Graphics.Clear(BackColor);
         float scale = DeviceDpi / 96f, size = 15 * scale, top = (Height - size) / 2;
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
         using var path = new GraphicsPath();

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using RemoteDebugger.Core;
 using Forms = System.Windows.Forms;
 
@@ -5,9 +6,9 @@ namespace RemoteDebugger;
 
 internal sealed class SupportConnectionNotice : Forms.Form
 {
-    private readonly Forms.Timer timer = new() { Interval = 100 };
+    private readonly Forms.Timer timer = new() { Interval = 33 };
     private readonly Forms.Panel progress = new() { BackColor = Color.FromArgb(8, 127, 131), Bounds = new Rectangle(4, 218, 436, 4) };
-    private int remainingMilliseconds = 7000;
+    private readonly Stopwatch lifetime = new();
 
     protected override bool ShowWithoutActivation => true;
 
@@ -49,14 +50,14 @@ internal sealed class SupportConnectionNotice : Forms.Form
         {
             var area = (Forms.Screen.PrimaryScreen ?? Forms.Screen.FromControl(this)).WorkingArea;
             Location = new Point(area.Right - Width - 24, area.Bottom - Height - 24);
+            lifetime.Restart();
             timer.Start();
         };
         timer.Tick += (_, _) =>
         {
-            if (Bounds.Contains(Forms.Cursor.Position)) return;
-            remainingMilliseconds -= timer.Interval;
-            progress.Width = Math.Max(0, 436 * remainingMilliseconds / 7000);
-            if (remainingMilliseconds <= 0) Close();
+            double remaining = Math.Max(0, 1 - lifetime.Elapsed.TotalSeconds / 10);
+            progress.Width = (int)Math.Round((ClientSize.Width - progress.Left) * remaining);
+            if (remaining == 0) Close();
         };
         FormClosed += (_, _) => timer.Dispose();
     }
