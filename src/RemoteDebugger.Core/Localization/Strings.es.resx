@@ -890,7 +890,7 @@
   <data name="DeviceVersion" xml:space="preserve"><value>Versión</value></data>
   <data name="DeviceProgress" xml:space="preserve"><value>Progreso / tiempo</value></data>
   <data name="ElapsedTime" xml:space="preserve"><value>transcurrido {0}</value></data>
-  <data name="EstimatedUpdateProgress" xml:space="preserve"><value>tiempo restante estimado ≈ {0}</value></data>
+  <data name="EstimatedUpdateProgress" xml:space="preserve"><value>tiempo restante estimado {0}</value></data>
   <data name="MeasuredUpdateProgress" xml:space="preserve"><value>{0}% · resta {1}</value></data>
   <data name="PreparingUpdatePackage" xml:space="preserve"><value>Preparando el paquete…</value></data>
   <data name="FinalizingUpdate" xml:space="preserve"><value>Finalizando la instalación…</value></data>

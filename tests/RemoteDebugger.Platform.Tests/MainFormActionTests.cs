@@ -130,9 +130,11 @@ public sealed class MainFormActionTests
     {
         string estimate = MainForm.UpdateStepNumbers(new(null, TimeSpan.FromSeconds(15), true, TimeSpan.FromSeconds(5)));
         Assert.DoesNotContain("%", estimate);
-        Assert.Contains("≈", estimate);
+        Assert.DoesNotContain("≈", estimate);
         Assert.Contains("0:05", estimate);
-        Assert.StartsWith("25%", MainForm.UpdateStepNumbers(new(25, TimeSpan.FromSeconds(15), false)));
+        string measured = MainForm.UpdateStepNumbers(new(25, TimeSpan.FromSeconds(15), true, TimeSpan.FromSeconds(5)));
+        Assert.StartsWith("25%", measured);
+        Assert.DoesNotContain("≈", measured);
         string overdue = MainForm.UpdateStepNumbers(new(null, null, true, TimeSpan.FromMinutes(2)));
         Assert.DoesNotContain("ETA", overdue);
         Assert.Contains("2:00", overdue);

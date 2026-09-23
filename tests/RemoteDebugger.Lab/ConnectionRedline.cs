@@ -75,7 +75,7 @@ internal sealed partial class LabForm
                     var tracker = new UpdateProgressTracker(new Dictionary<string, double> { ["restarting"] = 75 }, clock);
                     foreach (string stage in new[] { "preparing", "transferring", "verifying", "restarting" }) tracker.Report(stage);
                     clock.Seconds = 51; Set("connectedUpdateProgress", tracker); Call("RefreshUpdateProgress");
-                    Require(Get<Forms.Label>("updateRemaining").Text == "≈ 0:24", "connection.known_timing_estimate");
+                    Require(Get<Forms.Label>("updateRemaining").Text == "0:24", "connection.known_timing_estimate");
                     Get<Forms.Label>("footerRight").Text = "Design preview · simulated update";
                     await Task.Delay(100, stop.Token); Capture("connection-reference");
                     File.WriteAllText(Path.Combine(output, "connection-layout.json"), JsonSerializer.Serialize(Children(form).Select(control => new { control.Name, Type = control.GetType().Name, control.Bounds, control.Visible, Preferred = control.PreferredSize }), new JsonSerializerOptions { WriteIndented = true }));

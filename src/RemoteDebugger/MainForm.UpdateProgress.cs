@@ -36,7 +36,7 @@ public sealed partial class MainForm
     {
         if (progress.Percent is { } percent)
             return UiText.Format(UiText.MeasuredUpdateProgress, percent,
-                progress.Remaining is { } eta ? "≈ " + FormatTransferEta(eta) : UiText.CalculatingTransferEta);
+                progress.Remaining is { } eta ? FormatTransferEta(eta) : UiText.CalculatingTransferEta);
         string elapsed = UiText.Format(UiText.ElapsedTime, FormatTransferEta(progress.Elapsed));
         return progress.Remaining is { } estimate
             ? elapsed + " · " + UiText.Format(UiText.EstimatedUpdateProgress, FormatTransferEta(estimate)) : elapsed;
@@ -62,7 +62,7 @@ public sealed partial class MainForm
             : UiText.Get(connectedUpdateReport.Stage is "restarting" or "finalizing" ? "ConnectionWaitingForComputer" : "ConnectionPreparingHelp"));
         updateElapsed.SetText(FormatTransferEta(connectedUpdateProgress.Elapsed));
         remainingCaption.SetText(() => UiText.Get(progress.Estimated ? "ConnectionEstimatedRemaining" : "ConnectionRemaining"));
-        updateRemaining.SetText(progress.Remaining is { } eta ? "≈ " + FormatTransferEta(eta) : "—");
+        updateRemaining.SetText(progress.Remaining is { } eta ? FormatTransferEta(eta) : "—");
         updateTimeline.SetProgress(connectedUpdateReport.Stage, connectedUpdateProgress.CompletedStages);
         updateProgressTrack.AccessibleName = updateProgressText.Text + " · " + UpdateStepNumbers(progress);
     }
