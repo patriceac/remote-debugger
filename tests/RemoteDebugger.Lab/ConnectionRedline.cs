@@ -90,7 +90,7 @@ internal sealed partial class LabForm
                 {
                     Get<Forms.Control>("updateProgressArea").Visible = false; Call("RefreshControllerControls"); Call("UpdateHeader"); viewport.AutoScrollPosition = Point.Empty;
                     Get<Forms.Label>("footerRight").Text = "Design preview · simulated devices";
-                    using var dialog = new WakeSettingsForm(selected.Name, null, []);
+                    using var dialog = new WakeSettingsForm(selected.Name, null);
                     using var captureTimer = new Forms.Timer { Interval = 250 };
                     bool modalFits = false;
                     captureTimer.Tick += (_, _) =>
@@ -98,7 +98,9 @@ internal sealed partial class LabForm
                         captureTimer.Stop(); Capture("wake-modal-reference");
                         var body = (Forms.Panel)dialog.Controls.Find("wakeSettingsBody", true).Single();
                         var help = dialog.Controls.Find("wakeHelp", true).Single();
-                        modalFits = !body.VerticalScroll.Visible && body.RectangleToScreen(body.ClientRectangle).Contains(help.RectangleToScreen(help.ClientRectangle))
+                        modalFits = dialog.ClientSize.Height == 726 && !body.VerticalScroll.Visible
+                            && dialog.Controls.Find("wakeSender", true).Length == 0
+                            && body.RectangleToScreen(body.ClientRectangle).Contains(help.RectangleToScreen(help.ClientRectangle))
                             && help.Height >= help.GetPreferredSize(new(help.Width, 0)).Height;
                         dialog.DialogResult = Forms.DialogResult.Cancel; dialog.Close();
                     };

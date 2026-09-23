@@ -6,19 +6,14 @@ is offline. Remembered PCs remain listed after discovery and application restart
 Recent agents provide their active adapter MAC address automatically after
 connection or an administrator's version check; manual settings take precedence.
 
-**Send from: This PC** broadcasts on this computer's active IPv4 Ethernet/Wi-Fi
+**Wake computer** broadcasts from this computer's active IPv4 Ethernet/Wi-Fi
 networks. Leave the destination blank for local broadcasts, or enter a specific
 IPv4 broadcast/router hostname and UDP port (default 9). This UDP port is separate
 from Remote Debugger's TCP connection port. A router must be configured to deliver
 the packets if the destination is on another network.
 
-For a remote LAN, an administrator may choose another saved, online Remote Debugger
-PC on that LAN as the sender. The helper must run 0.4.17 or later. A pinned TLS
-connection and a fresh signed administrator challenge authorize only the wake
-request, without starting or replacing its support session. The helper broadcasts
-on its own local networks; the destination field is ignored in helper mode.
-The cloud relay transports the authenticated request to the awake helper, and
-cannot itself wake a PC when every PC on that LAN is asleep.
+Previously saved helper configurations continue to use the selected helper until
+their Wake settings are saved again. Saving now selects this PC as the sender.
 
 The target's firmware and network adapter must support and enable Wake-on-LAN.
 Sleep/hibernate/shutdown behavior depends on the hardware and Windows settings;

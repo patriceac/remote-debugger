@@ -7,7 +7,7 @@ internal sealed partial class WakeSettingsForm
 {
     private static readonly Color Ink = Color.FromArgb(24, 38, 62), Muted = Color.FromArgb(105, 124, 158), Line = Color.FromArgb(223, 230, 234);
     private Size roundedModalSize;
-    private void BuildModal(string name, Forms.TextBox mac, Forms.ComboBox sender, Forms.TextBox destination,
+    private void BuildModal(string name, Forms.TextBox mac, Forms.TextBox destination,
         Forms.NumericUpDown port, Forms.Label help, Forms.Label state, Forms.Button save, Forms.Button cancel)
     {
         var header = new Forms.Panel { Dock = Forms.DockStyle.Top, Height = 118 };
@@ -25,10 +25,8 @@ internal sealed partial class WakeSettingsForm
         var layout = new ConnectionLayoutPanel { Dock = Forms.DockStyle.Top, AutoSize = true, AutoSizeMode = Forms.AutoSizeMode.GrowAndShrink, ColumnCount = 1, RowCount = 0, Margin = Forms.Padding.Empty };
         layout.ColumnStyles.Add(new(Forms.SizeType.Percent, 100));
         foreach (var edit in new[] { mac, destination }) { edit.BorderStyle = Forms.BorderStyle.None; edit.BackColor = Color.White; edit.ForeColor = Ink; }
-        sender.FlatStyle = Forms.FlatStyle.Flat; sender.BackColor = Color.White; sender.ForeColor = Ink;
         port.BorderStyle = Forms.BorderStyle.None;
         Add(ModalLabel(UiText.WakeMac, "wakeMacLabel")); Add(ModalField(mac), 8);
-        Add(ModalLabel(UiText.WakeSender, "wakeSenderLabel"), 32); Add(ModalField(sender), 8); Add(ModalHelp("WakeSenderHelp", "wakeSenderHelp"), 6);
         var addressRow = new ConnectionLayoutPanel { Dock = Forms.DockStyle.Top, AutoSize = true, AutoSizeMode = Forms.AutoSizeMode.GrowAndShrink, ColumnCount = 2, RowCount = 2, Margin = Forms.Padding.Empty };
         addressRow.RowStyles.Add(new(Forms.SizeType.AutoSize)); addressRow.RowStyles.Add(new(Forms.SizeType.AutoSize));
         addressRow.ColumnStyles.Add(new(Forms.SizeType.Percent, 72)); addressRow.ColumnStyles.Add(new(Forms.SizeType.Percent, 28));
@@ -37,8 +35,6 @@ internal sealed partial class WakeSettingsForm
         addressRow.Controls.Add(addressLabel, 0, 0); addressRow.Controls.Add(ModalLabel(UiText.WakePort, "wakePortLabel"), 1, 0);
         addressRow.Controls.Add(addressField, 0, 1); addressRow.Controls.Add(ModalField(port), 1, 1); Add(addressRow, 38);
         var broadcastHelp = ModalHelp("WakeDestinationHelp", "wakeDestinationHelp"); Add(broadcastHelp, 6);
-        sender.SelectedIndexChanged += (_, _) => broadcastHelp.Text = UiText.Get(sender.SelectedItem is Sender { Fingerprint.Length: 0 } ? "WakeDestinationHelp" : "WakeHelperBroadcastHelp");
-        broadcastHelp.Text = UiText.Get(sender.SelectedItem is Sender { Fingerprint.Length: 0 } ? "WakeDestinationHelp" : "WakeHelperBroadcastHelp");
         var helpRow = new ConnectionLayoutPanel { Name = "wakePrerequisiteRow", Dock = Forms.DockStyle.Top, AutoSize = true, AutoSizeMode = Forms.AutoSizeMode.GrowAndShrink, ColumnCount = 2, RowCount = 1, Size = Size.Empty };
         helpRow.ColumnStyles.Add(new(Forms.SizeType.Absolute, 52)); helpRow.ColumnStyles.Add(new(Forms.SizeType.Percent, 100)); helpRow.RowStyles.Add(new(Forms.SizeType.AutoSize));
         help.ForeColor = Ink; help.Font = new Font("Segoe UI", 12.5f);

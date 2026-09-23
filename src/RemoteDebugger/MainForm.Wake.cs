@@ -35,8 +35,7 @@ public sealed partial class MainForm
     private void ConfigureWake()
     {
         if (selectedPeer is not { } peer || !configureWake.Enabled) return;
-        using var form = new WakeSettingsForm(peer.Name, wakeSettings,
-            isUpdateAdmin ? fleet.Values.Where(d => !Safety.Equal(d.Peer.Fingerprint, peer.Fingerprint)).Select(d => d.Peer) : []);
+        using var form = new WakeSettingsForm(peer.Name, wakeSettings);
         if (form.ShowModal(this) != Forms.DialogResult.OK || form.Settings == null) return;
         try
         {

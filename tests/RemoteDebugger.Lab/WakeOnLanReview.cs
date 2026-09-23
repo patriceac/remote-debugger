@@ -48,10 +48,12 @@ internal sealed partial class LabForm
             await ClickWakeAsync("configureWake");
             await WaitForUiAsync(() => FindWake("wakeMac") != null, 15);
             CaptureDesktop("wake-modal-minimum-fr.png", focusProduct: false);
-            foreach (string id in new[] { "wakeMac", "wakeSender", "wakeDestination", "wakePort", "wakeHelp", "saveWakeSettings", "cancelWakeSettings" })
+            foreach (string id in new[] { "wakeMac", "wakeDestination", "wakePort", "wakeHelp", "saveWakeSettings", "cancelWakeSettings" })
                 if (FindWake(id)?.Current.IsOffscreen != false) throw new IOException("Wake modal control clipped: " + id);
+            if (FindWake("wakeSender", 100, includeOffscreen: true) != null)
+                throw new IOException("Wake sender selector should not be present.");
             var bodyBounds = FindWake("wakeSettingsBody")!.Current.BoundingRectangle;
-            foreach (string id in new[] { "wakeMac", "wakeSender", "wakeDestination", "wakePort", "wakeHelp" })
+            foreach (string id in new[] { "wakeMac", "wakeDestination", "wakePort", "wakeHelp" })
                 if (!bodyBounds.Contains(FindWake(id)!.Current.BoundingRectangle)) throw new IOException("Wake modal control partially clipped: " + id);
             SetWake("wakeMac", expectedMac);
             SetWake("wakeDestination", "127.0.0.1");
