@@ -63,7 +63,8 @@ public sealed partial class MainForm
         bool redrawOnly = fleet.TryGetValue(key, out var previous) && previous.State == device.State &&
             previous.Version == device.Version && previous.Peer.Name == device.Peer.Name &&
             UpdateProgressTracker.IsActiveStage(device.State);
-        if (!fleetProgress.TryGetValue(key, out var progress)) fleetProgress[key] = progress = CreateUpdateProgress(key);
+        if (!fleetProgress.TryGetValue(key, out var progress) || device.State == "hashing" && progress.Stage != "hashing")
+            fleetProgress[key] = progress = CreateUpdateProgress(key);
         progress.Report(device.State, update?.TransferredBytes ?? 0, update?.TotalBytes ?? 0);
         fleet[key] = device;
         if (!IsDisposed)

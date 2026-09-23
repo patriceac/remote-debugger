@@ -58,7 +58,10 @@ internal sealed partial class LabForm
                         Set("fleetLifetime", route == "update-all" ? batch : null!);
                         Set("pairingBusy", route == "connect"); Set("synchronizingAgent", route == "connect");
                         Get<Forms.Control>("updateProgressArea").Visible = false;
-                        foreach (string stage in new[] { "preparing", "transferring", "verifying", "restarting" })
+                        if (route == "connect") Call("ShowUpdateProgress", new AgentUpdateProgress("idle", 0, 0));
+                        else Call("RecordDevice", Activator.CreateInstance(type, selected, "0.5.4.0", "", true, "hashing", 0, ""), null);
+                        string[] stages = ["preparing", "transferring", "verifying", "restarting"];
+                        foreach (string stage in stages)
                         {
                             var report = new AgentUpdateProgress(stage, 5 * 1024 * 1024, 10 * 1024 * 1024);
                             if (route == "connect") Call("ShowUpdateProgress", report);
@@ -70,6 +73,9 @@ internal sealed partial class LabForm
                             string sample = route + "-" + stage + "-" + size.Width;
                             Capture("update-map-" + sample);
                             Require(timeline.Visible && viewport.RectangleToScreen(viewport.ClientRectangle).Contains(timeline.RectangleToScreen(timeline.ClientRectangle)), "connection.map_visible_" + sample);
+                            int activeStep = Array.IndexOf(stages, stage);
+                            var expectedStates = Enumerable.Range(0, 4).Select(i => UiText.Get(i < activeStep ? "ConnectionComplete" : i == activeStep ? "ConnectionInProgress" : "ConnectionPending"));
+                            Require(timeline.AccessibleName!.Split("; ").Select(entry => entry.Split(": ")[1]).SequenceEqual(expectedStates), "connection.map_step_states_" + sample);
                             using var pixels = new Bitmap(timeline.Width, timeline.Height);
                             using (var graphics = Graphics.FromImage(pixels)) graphics.CopyFromScreen(timeline.PointToScreen(Point.Empty), Point.Empty, pixels.Size);
                             int scale = Math.Max(1, timeline.DeviceDpi / 96), painted = 0;
