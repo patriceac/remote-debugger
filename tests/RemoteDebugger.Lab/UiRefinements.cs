@@ -124,8 +124,8 @@ internal sealed partial class LabForm
             if (!redlineOnly)
             {
                 var tips = Get<Forms.ToolTip>("viewerTips");
-                Require(tips.GetToolTip(Get<Forms.Control>("screen")) == "" && tips.GetToolTip(Get<Forms.Control>("fullScreenButton")) == UiText.ReleaseKeyboard && tips.InitialDelay >= 1000 && tips.ReshowDelay >= 1000,
-                    "ui.tooltip_only_buttons_after_one_second");
+                Require(tips.GetToolTip(Get<Forms.Control>("screen")) == "" && tips.GetToolTip(Get<Forms.Control>("fullScreenButton")) == "" && tips.GetToolTip(Get<Forms.Control>("exitFullScreen")) == "",
+                    "ui.no_fullscreen_shortcut_tooltips");
                 foreach (byte[] chord in new byte[][] { [0xA2, 0xA4, 0x7B], [0xA3, 0xA1, 0x7B, 0x7B] })
                 {
                     form.Activate(); Get<Forms.Control>("remoteText").Focus();

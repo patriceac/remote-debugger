@@ -104,11 +104,9 @@ public sealed partial class MainForm
         // Disabled controls do not receive hover messages: the enabled parent owns the tooltip.
         viewerTips.SetToolTip(economyHost, economyTip);
         viewerTips.SetToolTip(relayEconomy, economyTip);
-        viewerTips.SetToolTip(fullScreenButton, UiText.ReleaseKeyboard);
         viewerTips.SetToolTip(typeText, UiText.SendTextHint);
         viewerTips.SetToolTip(enterKey, UiText.RemoteEnterHint);
         viewerTips.SetToolTip(secureAttention, UiText.SecureAttentionHint);
-        viewerTips.SetToolTip(exitFullScreen, UiText.ReleaseKeyboard);
         secureAttention.Enabled = CanSendFocusedInput();
         fullScreenButton.Enabled = supportSession && liveFrameFresh;
         fullScreenStatus.Text = (remoteDeviceName.Length > 0 ? remoteDeviceName : selectedPeer?.Name ?? client?.Connection.Host ?? "") + " · " + streamStatus.Text;
