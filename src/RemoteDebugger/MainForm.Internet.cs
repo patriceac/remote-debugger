@@ -48,11 +48,12 @@ public sealed partial class MainForm
         bool updateOngoing = agent != null && !agentIdle && MainForm.IsOngoingUpdate(agent.UpdateProgress);
         pairingCountdownText.Visible = agentIdle || updateOngoing || agent?.Session.Connected == true && agent.Operations.FileTransfer != null;
         if (agent?.Session.HasPaired == true || updateOngoing) return;
-        agentHeading.SetText(() => agentIdle ? UiText.SupportEnded : active ? UiText.PrivateSupportReady : UiText.EnableOnThisPc);
+        bool ready = IsAgentReadyForSupport(active, agent?.Internet?.Connected == true, agentNetworkPrepared);
+        agentHeading.SetText(() => agentIdle ? UiText.SupportEnded : ready ? UiText.Get("GiveReady") : active ? UiText.Preparing : UiText.EnableOnThisPc);
         agentEyebrow.SetText(() => UiText.GiveControl);
-        agentSubtitle.SetText(() => active ? UiText.InternetInstructions : UiText.PrivateEnableInstructions);
+        agentSubtitle.SetText(() => ready ? UiText.Get("GiveWaiting") : active ? UiText.Get("GivePreparing") : UiText.PrivateEnableInstructions);
         agentState.SetText(() => active ? UiText.WaitingForConnection : UiText.NoActiveConnection);
-        agentSessionNote.SetText(() => active ? UiText.PrivateAccessNote : UiText.PcNoLongerAccessible);
+        agentSessionNote.SetText(() => active ? UiText.Get("GiveAuthorizedOnly") : UiText.PcNoLongerAccessible);
         bool relayConnected = agent?.Internet?.Connected == true;
         agentNetworkState.SetText(() => relayConnected ? UiText.Ready : agentNetworkPrepared ? UiText.LanFallbackReady : active ? UiText.Preparing : UiText.Inactive);
         agentNetworkState.ForeColor = relayConnected || agentNetworkPrepared ? ConnectedText : SecondaryText;
@@ -60,15 +61,10 @@ public sealed partial class MainForm
         setupNotice.Visible = false;
     }
 
-    private Forms.Control BuildInternetSection()
+    private void LoadInternetMode()
     {
         try { internetConfigured = InternetSettings.Load(root) != null || File.Exists(new SecurityMigrationStore(root).PendingSetupPath); }
         catch (Exception ex) { internetSetupError = ex.Message; }
-        var panel = new Forms.TableLayoutPanel { AutoSize = true, Dock = Forms.DockStyle.Top, ColumnCount = 1, RowCount = 2, Margin = Forms.Padding.Empty };
-        panel.Controls.Add(agentSubtitle, 0, 0);
-        internetState.Margin = new Forms.Padding(0, 10, 0, 2);
-        panel.Controls.Add(internetState, 0, 1);
-        return panel;
     }
 
     private void UpdateInternetState()

@@ -1033,4 +1033,19 @@ Default port: 45832. Leave blank to skip WAN.</value></data>
   <data name="ConnectionOfflineCount" xml:space="preserve"><value>{0} offline</value></data>
   <data name="ConnectionSyncCount" xml:space="preserve"><value>{0} synchronizing</value></data>
   <data name="ConnectionReconnectingCount" xml:space="preserve"><value>{0} reconnecting</value></data>
+  <data name="GiveControlSubtitle" xml:space="preserve"><value>Let your support PC connect to this computer.</value></data>
+  <data name="GiveThisComputer" xml:space="preserve"><value>THIS COMPUTER</value></data>
+  <data name="GiveReady" xml:space="preserve"><value>Ready for support</value></data>
+  <data name="GiveWaiting" xml:space="preserve"><value>Waiting for your support PC to connect.</value></data>
+  <data name="GivePreparing" xml:space="preserve"><value>Preparing the connection…</value></data>
+  <data name="GiveConnectHeading" xml:space="preserve"><value>Connect from your support PC</value></data>
+  <data name="GiveInstructionOne" xml:space="preserve"><value>Open Remote Debugger and choose Take control.</value></data>
+  <data name="GiveInstructionTwo" xml:space="preserve"><value>Select {0}, then click Connect.</value></data>
+  <data name="GiveAuthorizedOnly" xml:space="preserve"><value>Only your authorized support PCs can connect.</value></data>
+  <data name="GivePermissions" xml:space="preserve"><value>Status &amp; permissions</value></data>
+  <data name="GiveSleepAllowed" xml:space="preserve"><value>Allowed</value></data>
+  <data name="GiveSleepHelp" xml:space="preserve"><value>Sleep is prevented during an active support session.</value></data>
+  <data name="GiveMaintenanceHelp" xml:space="preserve"><value>Allow administrator tasks during support.</value></data>
+  <data name="GiveOn" xml:space="preserve"><value>On</value></data>
+  <data name="GiveOff" xml:space="preserve"><value>Off</value></data>
 </root>

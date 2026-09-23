@@ -34,11 +34,12 @@ internal static class UiGlyph
 {
     internal const string Computer = "\uE7F4", Link = "\uE71B", Processes = "\uE8FD", Folder = "\uE8B7",
         Diagnostics = "\uE9D9", Give = "\uE72A", Take = "\uE72B", Refresh = "\uE72C", Update = "\uE898",
-        Wake = "\uE7E8", Settings = "\uE713", Down = "\uE70D", Right = "\uE76C", Close = "close", Info = "info", Shield = "shield";
+        Wake = "\uE7E8", Settings = "\uE713", Down = "\uE70D", Right = "\uE76C", Close = "close", Info = "info", Shield = "shield",
+        Globe = "globe", Moon = "moon", CheckCircle = "checkCircle";
 
     internal static void Draw(Graphics graphics, string glyph, Rectangle bounds, Color color)
     {
-        if (glyph is Computer or Processes or Folder or Diagnostics or Wake or Close or Info or Shield or Link or Give or Take or Refresh or Update or Down or Right)
+        if (glyph is Computer or Processes or Folder or Diagnostics or Wake or Close or Info or Shield or Link or Give or Take or Refresh or Update or Down or Right or Globe or Moon or CheckCircle)
         {
             var state = graphics.Save();
             float size = Math.Min(bounds.Width, bounds.Height);
@@ -47,6 +48,14 @@ internal static class UiGlyph
             using var pen = new Pen(color, 1.5f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
             switch (glyph)
             {
+                case Globe:
+                    graphics.DrawEllipse(pen, 2, 2, 20, 20); graphics.DrawEllipse(pen, 7, 2, 10, 20); graphics.DrawLine(pen, 2, 12, 22, 12); break;
+                case Moon:
+                    using (var moon = new GraphicsPath()) { moon.AddArc(2, 2, 20, 20, 270, -270); moon.AddBezier(22, 12, 13, 17, 7, 10, 12, 2); moon.CloseFigure(); graphics.DrawPath(pen, moon); } break;
+                case CheckCircle:
+                    using (var fill = new SolidBrush(color)) graphics.FillEllipse(fill, 0, 0, 24, 24);
+                    using (var check = new Pen(Color.White, 1.6f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round })
+                        graphics.DrawLines(check, new PointF[] { new(6.5f, 12), new(10, 15.5f), new(17.5f, 8) }); break;
                 case Computer:
                     graphics.DrawRectangle(pen, 2, 3, 20, 14); graphics.DrawLine(pen, 12, 17, 12, 21); graphics.DrawLine(pen, 7, 21, 17, 21); break;
                 case Folder:

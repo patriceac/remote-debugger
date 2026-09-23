@@ -133,6 +133,7 @@ internal sealed partial class LabForm : Forms.Form
             {
                 guestElevated = Native.IsElevated();
                 if (role == "connectionredline") { await ConnectionRedlineAsync(); return; }
+                if (role == "giveredline") { await GiveControlRedlineAsync(); return; }
                 if (role == "uirefinements") { await UiRefinementsAsync(); return; }
                 if (role == "viewerredline") { await UiRefinementsAsync(redlineOnly: true); return; }
                 if (role == "loopbackmcp") { await McpReviewAsync(auxiliaryPath ?? throw new ArgumentException("MCP package path is required.")); return; }

@@ -68,11 +68,11 @@ public sealed partial class MainForm : Forms.Form
     private readonly Forms.Label agentNetworkState = new() { Name = "agentNetworkState", AutoSize = true, ForeColor = SecondaryText };
     private readonly Forms.Label agentSleepState = new() { Name = "agentSleepState", AutoSize = true, ForeColor = SecondaryText };
     private readonly Forms.Label agentMaintenanceState = new() { Name = "agentMaintenanceState", AutoSize = true, ForeColor = SecondaryText };
-    private readonly Forms.CheckBox adminMaintenanceToggle = new Forms.CheckBox
+    private readonly Forms.CheckBox adminMaintenanceToggle = new AgentMaintenanceSwitch
     {
         Name = "adminMaintenanceToggle", AutoSize = true, ForeColor = PrimaryText,
         Margin = new Forms.Padding(8, 2, 0, 0)
-    }.WithText(() => UiText.AdminMaintenanceEnabled);
+    };
     private readonly Forms.Label agentSessionNote = new WorkspaceLabel() { Name = "agentSessionNote", AutoSize = true, ForeColor = SecondaryText, MaximumSize = new Size(620, 0) };
     private readonly Forms.Panel setupNotice = new() { Name = "agentSetupNotice", AutoSize = true, Visible = false, Padding = new Forms.Padding(12), BackColor = WarningBack };
     private readonly Forms.Label setupNoticeText = new() { AutoSize = true, ForeColor = WarningText, MaximumSize = new Size(440, 0) };
@@ -383,19 +383,24 @@ public sealed partial class MainForm : Forms.Form
 
     private void UpdateHeaderHeight()
     {
-        shell.RowStyles[0].Height = HeaderPixels(headerCharts.Visible ? HeaderChartsBelow ? 174 : 116 : OnConnectionPage ? 100 : 96);
+        shell.RowStyles[0].Height = HeaderPixels(headerCharts.Visible ? HeaderChartsBelow ? 174 : 116 : OnConnectionPage || rolePages.SelectedIndex == 0 ? 100 : 96);
         LayoutHeader();
     }
 
     private void LayoutHeader()
     {
-        if (OnConnectionPage)
+        if (OnConnectionPage || rolePages.SelectedIndex == 0)
         {
             int inset = HeaderPixels(28);
             if (terminateSession.Font.SizeInPoints != 11.5f) terminateSession.Font = new Font("Segoe UI", 11.5f);
             terminateSession.SetBounds(header.Width - inset - HeaderPixels(128), HeaderPixels(22), HeaderPixels(128), HeaderPixels(44));
+            int primaryPillWidth = Math.Max(HeaderPixels(106), statusLabel.PreferredSize.Width + HeaderPixels(32));
+            int pillLeft = (terminateSession.Visible ? terminateSession.Left - HeaderPixels(12) : header.Width - inset) - primaryPillWidth;
+            statusPill.SetBounds(pillLeft, HeaderPixels(27), primaryPillWidth, HeaderPixels(34));
+            statusDot.Location = new(HeaderPixels(12), (statusPill.Height - statusDot.Height) / 2);
+            statusLabel.Location = new(HeaderPixels(30), (statusPill.Height - statusLabel.Height) / 2);
             headerTitle.Location = new(inset, HeaderPixels(18));
-            headerSubtitle.SetBounds(inset, HeaderPixels(60), Math.Max(0, header.Width - inset * 2 - (terminateSession.Visible ? HeaderPixels(145) : 0)), HeaderPixels(30));
+            headerSubtitle.SetBounds(inset, HeaderPixels(60), Math.Max(0, (statusPill.Visible ? pillLeft - HeaderPixels(12) : terminateSession.Visible ? terminateSession.Left - HeaderPixels(12) : header.Width - inset) - inset), HeaderPixels(30));
             header.Invalidate(); return;
         }
         int center = HeaderPixels(headerCharts.Visible ? HeaderChartsBelow ? 52 : 66 : 48);
@@ -434,79 +439,6 @@ public sealed partial class MainForm : Forms.Form
         footerContent.Controls.Add(visible ? streamStatus : footerLeft, 0, 0);
         footerContent.Controls.Add(visible ? inputStatus : footerRight, 1, 0);
         screenFooterVisible = visible;
-    }
-
-    private void BuildAgentPage()
-    {
-        var page = new PagePanel(() => UiText.GiveControl) { BackColor = Canvas, Padding = new Forms.Padding(0) };
-        var content = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 1, Padding = new Forms.Padding(28, 36, 28, 20), Margin = Forms.Padding.Empty };
-        content.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
-        content.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
-        var heroHost = new Forms.Panel { Name = "agentWorkspace", Dock = Forms.DockStyle.Fill, BackColor = Canvas, Margin = Forms.Padding.Empty, AutoScroll = true };
-        var hero = BuildAgentContent(); hero.Dock = Forms.DockStyle.Top; hero.Width = 760; hero.Anchor = Forms.AnchorStyles.Top | Forms.AnchorStyles.Left;
-        // Docked content is excluded from WinForms' automatic scroll extent.
-        // Preserve access to the final explanation on short/high-DPI displays.
-        hero.SizeChanged += (_, _) => UpdateAgentScrollExtent(heroHost, hero.Height);
-        heroHost.SizeChanged += (_, _) => UpdateAgentScrollExtent(heroHost, hero.Height);
-        heroHost.Controls.Add(hero); content.Controls.Add(heroHost, 0, 0);
-        page.Controls.Add(content); rolePages.TabPages.Add(page);
-    }
-
-    private Forms.Control BuildAgentContent()
-    {
-        var panel = new Forms.Panel { Dock = Forms.DockStyle.Top, Width = 760, AutoSize = true, AutoSizeMode = Forms.AutoSizeMode.GrowAndShrink };
-        var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Top, Width = 760, AutoSize = true, AutoSizeMode = Forms.AutoSizeMode.GrowAndShrink, ColumnCount = 1, RowCount = 11, Margin = Forms.Padding.Empty, Padding = Forms.Padding.Empty };
-        layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 20));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 38));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 90));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 30));
-        layout.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
-
-        agentEyebrow.Dock = Forms.DockStyle.Fill; layout.Controls.Add(agentEyebrow, 0, 0);
-        layout.Controls.Add(agentHeading, 0, 1);
-        layout.Controls.Add(BuildInternetSection(), 0, 2);
-
-        var codeRow = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Top, AutoSize = true, AutoSizeMode = Forms.AutoSizeMode.GrowAndShrink, WrapContents = false, FlowDirection = Forms.FlowDirection.LeftToRight, Padding = new Forms.Padding(0, 10, 0, 0), Margin = Forms.Padding.Empty };
-        agentPairCode.Margin = new Forms.Padding(0, 0, 14, 0); copyAgentCode.Margin = new Forms.Padding(0, 4, 0, 0);
-        if (PrivateInternet) codeRow.Controls.Add(enableSupport);
-        else { codeRow.Controls.Add(agentPairCode); codeRow.Controls.Add(copyAgentCode); }
-        restartAgent.Visible = false; codeRow.Controls.Add(restartAgent); layout.Controls.Add(codeRow, 0, 3);
-        pairingCountdown.Width = 480; pairingCountdown.Height = 12; pairingCountdown.Margin = new Forms.Padding(0, 2, 0, 4);
-        pairingCountdown.Visible = !PrivateInternet; layout.Controls.Add(pairingCountdown, 0, 4);
-        pairingCountdownText.AutoSize = false; pairingCountdownText.Dock = Forms.DockStyle.Fill; pairingCountdownText.Margin = Forms.Padding.Empty; layout.Controls.Add(pairingCountdownText, 0, 5);
-
-        var divider = new Forms.Panel { Dock = Forms.DockStyle.Top, Height = 1, BackColor = Divider, Margin = new Forms.Padding(0, 18, 0, 0) }; layout.Controls.Add(divider, 0, 6);
-        var states = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, Height = 90, ColumnCount = 4, RowCount = 3, Margin = Forms.Padding.Empty };
-        states.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Absolute, 22)); states.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 52)); states.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 28)); states.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
-        for (int row = 0; row < 3; row++) states.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 33.333F));
-        AddAgentStateRow(states, 0, () => PrivateInternet ? UiText.InternetLabel : UiText.PrivateNetwork, agentNetworkState); AddAgentStateRow(states, 1, () => UiText.Sleep, agentSleepState); AddAgentStateRow(states, 2, () => UiText.AdminMaintenance, agentMaintenanceState); states.Controls.Add(adminMaintenanceToggle, 3, 2); layout.Controls.Add(states, 0, 7);
-
-        setupNotice.AutoSize = false; setupNotice.Dock = Forms.DockStyle.Fill; setupNotice.Width = 760; setupNotice.Height = 66; setupNotice.Padding = new Forms.Padding(8); setupNotice.Controls.Clear();
-        var noticeLayout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Forms.Padding.Empty, Padding = Forms.Padding.Empty };
-        noticeLayout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100)); noticeLayout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
-        setupNoticeText.AutoSize = false; setupNoticeText.Dock = Forms.DockStyle.Fill; setupNoticeText.MaximumSize = Size.Empty; setupNoticeText.Margin = Forms.Padding.Empty; setupNoticeText.TextAlign = ContentAlignment.MiddleLeft;
-        preparePlatform.Dock = Forms.DockStyle.Top; preparePlatform.Margin = new Forms.Padding(12, 4, 0, 0);
-        noticeLayout.Controls.Add(setupNoticeText, 0, 0); noticeLayout.Controls.Add(preparePlatform, 1, 0); setupNotice.Controls.Add(noticeLayout); layout.Controls.Add(setupNotice, 0, 8);
-
-        agentState.AutoSize = false; agentState.Dock = Forms.DockStyle.Fill; agentState.Margin = Forms.Padding.Empty; agentState.TextAlign = ContentAlignment.MiddleLeft; layout.Controls.Add(agentState, 0, 9);
-        agentSessionNote.Dock = Forms.DockStyle.Top; agentSessionNote.MaximumSize = new Size(760, 0); agentSessionNote.Margin = Forms.Padding.Empty; layout.Controls.Add(agentSessionNote, 0, 10);
-        panel.Controls.Add(layout);
-        return panel;
-    }
-
-    private static void AddAgentStateRow(Forms.TableLayoutPanel table, int row, Func<string> label, Forms.Label value)
-    {
-        var dot = new Forms.Label { AutoSize = true, Text = "●", ForeColor = SecondaryText, Margin = new Forms.Padding(0, 3, 0, 0) };
-        var name = new Forms.Label { AutoSize = true, ForeColor = SecondaryText, Margin = new Forms.Padding(0, 3, 0, 0) }.WithText(label);
-        value.Margin = new Forms.Padding(0, 3, 0, 0); value.Anchor = Forms.AnchorStyles.Left;
-        table.Controls.Add(dot, 0, row); table.Controls.Add(name, 1, row); table.Controls.Add(value, 2, row);
     }
 
     private void BuildControllerPages()
@@ -975,7 +907,7 @@ public sealed partial class MainForm : Forms.Form
     {
         agentNetworkState.SetText(() => status.FirewallReady ? UiText.Ready : status.RequiresAdministratorConsent ? UiText.ActivationRequired : UiText.Unavailable);
         agentNetworkState.ForeColor = status.FirewallReady ? ConnectedText : WarningText;
-        agentSleepState.SetText(() => powerHold != null ? UiText.Suspended : UiText.Active);
+        agentSleepState.SetText(() => powerHold != null ? UiText.Suspended : UiText.Get("GiveSleepAllowed"));
         agentSleepState.ForeColor = powerHold != null ? PrimaryText : SecondaryText;
         if (PrivateInternet) HideSetupNotice();
         else if (status.RequiresAdministratorConsent) ShowSetupNotice(() => UiText.EnableSupportNotice);
@@ -1035,7 +967,7 @@ public sealed partial class MainForm : Forms.Form
         RefreshPowerHold();
         UpdateSupportConnectionNotice();
         if (!Visible || WindowState == Forms.FormWindowState.Minimized) return;
-        UpdateAgentState(); if (PrivateInternet) UpdatePrivateAgentState(); UpdateInternetState(); UpdateHeader(); RefreshControllerControls(); RefreshFooter(); RefreshInputStatus();
+        UpdateAgentState(); if (PrivateInternet) UpdatePrivateAgentState(); UpdateInternetState(); UpdateAgentPresentation(); UpdateHeader(); RefreshControllerControls(); RefreshFooter(); RefreshInputStatus();
         if (fleetRefreshing || fleet.Values.Any(device => NeedsFleetProgressAnimation(device.State))) peers.Invalidate();
         if (updateProgressArea.Visible && updateProgressFill.BackColor == Teal) RefreshUpdateProgress();
         if (!agentIdle && agent?.Operations.Maintenance is { } maintenance)
@@ -1063,7 +995,7 @@ public sealed partial class MainForm : Forms.Form
         pairingCountdown.Height = updateOngoing || transfer != null ? 12 : 4;
         pairingCountdown.Style = transfer?.Stage == "preparing" && !updateOngoing ? Forms.ProgressBarStyle.Marquee : Forms.ProgressBarStyle.Continuous;
         pairingCountdown.AccessibleName = updateOngoing ? UiText.ClientUpdateProgress : transfer != null ? UiText.FileTransfers : UiText.PairingCodeCaption;
-        agentSleepState.SetText(() => powerHold != null ? UiText.Suspended : UiText.Active);
+        agentSleepState.SetText(() => powerHold != null ? UiText.Suspended : UiText.Get("GiveSleepAllowed"));
         agentSleepState.ForeColor = powerHold != null ? PrimaryText : SecondaryText;
         bool paired = agent?.Session.HasPaired == true;
         if (PrivateInternet && agent != null && !agentIdle && !paired && !updateOngoing) return;
@@ -1148,7 +1080,7 @@ public sealed partial class MainForm : Forms.Form
         tray.Text = onAgent ? UiText.TrayAssistedPc : UiText.TrayController;
         if (onAgent)
         {
-            headerTitle.SetText(() => UiText.GiveControl); headerSubtitle.SetText(() => Environment.MachineName + (internetConfigured && !loopbackOnly ? UiText.InternetSupportSuffix : UiText.PrivateSupportSuffix));
+            headerTitle.SetText(() => UiText.GiveControl); headerSubtitle.SetText(() => UiText.Get("GiveControlSubtitle"));
         }
         else
         {
@@ -1179,17 +1111,27 @@ public sealed partial class MainForm : Forms.Form
         statusLabel.ForeColor = connected ? ConnectedText : reconnecting ? WarningText : Color.FromArgb(80, 103, 113);
         statusLabel.SetText(() => connected ? UiText.Connected : reconnecting ? UiText.Reconnecting : synchronizing ? UiText.SynchronizingEllipsis : pairing ? UiText.Pairing : agentIdle && onAgent ? UiText.SessionClosed : UiText.Waiting);
         statusPill.AccessibleName = statusLabel.Text;
-        statusPill.Visible = !(onController && controllerPages.SelectedIndex == 0);
+        statusPill.Visible = onAgent ? connected || reconnecting || synchronizing : controllerPages.SelectedIndex != 0;
         bool showTerminateSession = ShouldShowTerminateSession(onAgent, agentIdle, agent?.Session.Connected == true,
             agent?.Session.State, supportSession, synchronizingAgent);
         if (terminateSession.Visible != showTerminateSession) terminateSession.Visible = showTerminateSession;
-        float titleSize = OnConnectionPage ? 24 : 19.5f, subtitleSize = OnConnectionPage ? 13.5f : 11;
+        float titleSize = OnConnectionPage || onAgent ? 24 : 19.5f, subtitleSize = OnConnectionPage || onAgent ? 13.5f : 11;
         if (headerTitle.Font.SizeInPoints != titleSize) headerTitle.Font = new Font("Segoe UI", titleSize, FontStyle.Bold);
         if (headerSubtitle.Font.SizeInPoints != subtitleSize) headerSubtitle.Font = new Font("Segoe UI", subtitleSize);
-        headerTitle.ForeColor = OnConnectionPage ? PrimaryText : Color.FromArgb(15, 35, 64);
-        headerSubtitle.ForeColor = OnConnectionPage ? SecondaryText : Color.FromArgb(143, 156, 169);
+        headerTitle.ForeColor = OnConnectionPage || onAgent ? PrimaryText : Color.FromArgb(15, 35, 64);
+        headerSubtitle.ForeColor = OnConnectionPage || onAgent ? SecondaryText : Color.FromArgb(143, 156, 169);
         UpdateHeaderHeight();
         ((WorkspaceButton)roleController).Selected = onController;
+        ((WorkspaceButton)roleAgent).Selected = onAgent;
+        if (roleAgent.Parent is Forms.FlowLayoutPanel roles)
+        {
+            roles.Margin = onAgent ? new(0, HeaderPixels(2), 0, 0) : new(HeaderPixels(8), 0, HeaderPixels(8), 0);
+            foreach (var button in new[] { roleAgent, roleController })
+            {
+                button.Width = HeaderPixels(onAgent ? 217 : 201); button.Height = HeaderPixels(onAgent ? 46 : 44);
+                button.Padding = new(HeaderPixels(onAgent ? 22 : 14), 0, 0, 0);
+            }
+        }
         ((WorkspaceButton)navConnection).Selected = onController && controllerPages.SelectedIndex == 0;
         ((WorkspaceButton)navScreen).Selected = onController && controllerPages.SelectedIndex == 1;
         ((WorkspaceButton)navProcesses).Selected = onController && controllerPages.SelectedIndex == 2;
@@ -1200,10 +1142,14 @@ public sealed partial class MainForm : Forms.Form
 
     private void RefreshFooter()
     {
-        connectionFooterIcon.Visible = OnConnectionPage && PrivateInternet;
+        connectionFooterIcon.Visible = (OnConnectionPage || rolePages.SelectedIndex == 0) && PrivateInternet;
         footerLeft.Padding = new(connectionFooterIcon.Visible ? 36 : 0, 0, 0, 0);
         bool screenFooter = rolePages.SelectedIndex == 1 && !terminating && controllerPages.SelectedIndex == 1;
         SetScreenFooter(screenFooter);
+        if (rolePages.SelectedIndex == 0 && PrivateInternet && !agentIdle && !terminating)
+        {
+            footerLeft.SetText(() => UiText.Get("ConnectionPrivateNetwork")); footerRight.SetText(() => UiText.CloseToTray); return;
+        }
         if (rolePages.SelectedIndex != 1 || terminating) { footerLeft.SetText(footerMessage); footerRight.SetText(footerDetail); return; }
         if (screenFooter) return;
         if (controllerPages.SelectedIndex == 0 && PrivateInternet) { footerLeft.SetText(() => UiText.Get("ConnectionPrivateNetwork")); footerRight.SetText(""); return; }

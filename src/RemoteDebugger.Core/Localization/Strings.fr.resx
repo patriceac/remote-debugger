@@ -1033,4 +1033,19 @@ Port par défaut : 45832. Laissez vide pour ignorer le WAN.</value></data>
   <data name="ConnectionOfflineCount" xml:space="preserve"><value>{0} hors ligne</value></data>
   <data name="ConnectionSyncCount" xml:space="preserve"><value>{0} en synchronisation</value></data>
   <data name="ConnectionReconnectingCount" xml:space="preserve"><value>{0} en reconnexion</value></data>
+  <data name="GiveControlSubtitle" xml:space="preserve"><value>Autorisez votre PC d’assistance à se connecter à cet ordinateur.</value></data>
+  <data name="GiveThisComputer" xml:space="preserve"><value>CET ORDINATEUR</value></data>
+  <data name="GiveReady" xml:space="preserve"><value>Prêt pour l’assistance</value></data>
+  <data name="GiveWaiting" xml:space="preserve"><value>En attente de la connexion de votre PC d’assistance.</value></data>
+  <data name="GivePreparing" xml:space="preserve"><value>Préparation de la connexion…</value></data>
+  <data name="GiveConnectHeading" xml:space="preserve"><value>Connectez-vous depuis votre PC d’assistance</value></data>
+  <data name="GiveInstructionOne" xml:space="preserve"><value>Ouvrez Remote Debugger et choisissez Prendre le contrôle.</value></data>
+  <data name="GiveInstructionTwo" xml:space="preserve"><value>Sélectionnez {0}, puis cliquez sur Connecter.</value></data>
+  <data name="GiveAuthorizedOnly" xml:space="preserve"><value>Seuls vos PC d’assistance autorisés peuvent se connecter.</value></data>
+  <data name="GivePermissions" xml:space="preserve"><value>État et autorisations</value></data>
+  <data name="GiveSleepAllowed" xml:space="preserve"><value>Autorisée</value></data>
+  <data name="GiveSleepHelp" xml:space="preserve"><value>La mise en veille est suspendue pendant une session d’assistance active.</value></data>
+  <data name="GiveMaintenanceHelp" xml:space="preserve"><value>Autoriser les tâches administrateur pendant l’assistance.</value></data>
+  <data name="GiveOn" xml:space="preserve"><value>Oui</value></data>
+  <data name="GiveOff" xml:space="preserve"><value>Non</value></data>
 </root>

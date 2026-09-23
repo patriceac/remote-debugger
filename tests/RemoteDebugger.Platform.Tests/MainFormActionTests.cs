@@ -6,6 +6,16 @@ namespace RemoteDebugger.Platform.Tests;
 
 public sealed class MainFormActionTests
 {
+    [Theory]
+    [InlineData(false, true, true, false)]
+    [InlineData(true, false, false, false)]
+    [InlineData(true, true, false, true)]
+    [InlineData(true, false, true, true)]
+    public void ReadyForSupportRequiresAnActiveListenerAndAnAvailableRoute(bool active, bool internet, bool lan, bool expected)
+    {
+        Assert.Equal(expected, MainForm.IsAgentReadyForSupport(active, internet, lan));
+    }
+
     [Fact]
     public void ConnectionTimelineDoesNotInventSkippedVerification()
     {

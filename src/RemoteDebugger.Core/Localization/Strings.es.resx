@@ -1033,4 +1033,19 @@ Puerto predeterminado: 45832. Deje vacío para omitir WAN.</value></data>
   <data name="ConnectionOfflineCount" xml:space="preserve"><value>{0} sin conexión</value></data>
   <data name="ConnectionSyncCount" xml:space="preserve"><value>{0} sincronizando</value></data>
   <data name="ConnectionReconnectingCount" xml:space="preserve"><value>{0} reconectando</value></data>
+  <data name="GiveControlSubtitle" xml:space="preserve"><value>Permite que tu PC de asistencia se conecte a este equipo.</value></data>
+  <data name="GiveThisComputer" xml:space="preserve"><value>ESTE EQUIPO</value></data>
+  <data name="GiveReady" xml:space="preserve"><value>Listo para recibir asistencia</value></data>
+  <data name="GiveWaiting" xml:space="preserve"><value>Esperando la conexión de tu PC de asistencia.</value></data>
+  <data name="GivePreparing" xml:space="preserve"><value>Preparando la conexión…</value></data>
+  <data name="GiveConnectHeading" xml:space="preserve"><value>Conéctate desde tu PC de asistencia</value></data>
+  <data name="GiveInstructionOne" xml:space="preserve"><value>Abre Remote Debugger y elige Tomar el control.</value></data>
+  <data name="GiveInstructionTwo" xml:space="preserve"><value>Selecciona {0} y haz clic en Conectar.</value></data>
+  <data name="GiveAuthorizedOnly" xml:space="preserve"><value>Solo pueden conectarse tus PC de asistencia autorizados.</value></data>
+  <data name="GivePermissions" xml:space="preserve"><value>Estado y permisos</value></data>
+  <data name="GiveSleepAllowed" xml:space="preserve"><value>Permitida</value></data>
+  <data name="GiveSleepHelp" xml:space="preserve"><value>La suspensión se impide durante una sesión de asistencia activa.</value></data>
+  <data name="GiveMaintenanceHelp" xml:space="preserve"><value>Permitir tareas de administrador durante la asistencia.</value></data>
+  <data name="GiveOn" xml:space="preserve"><value>Sí</value></data>
+  <data name="GiveOff" xml:space="preserve"><value>No</value></data>
 </root>
