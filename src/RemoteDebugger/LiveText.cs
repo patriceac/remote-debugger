@@ -58,7 +58,7 @@ internal static class LiveText
     }
 }
 
-internal sealed class LocalizedComboBox : Forms.ComboBox
+internal class LocalizedComboBox : Forms.ComboBox
 {
     // Refresh cached display strings without changing the selected monitor.
     public void RefreshLabels() => RefreshItems();

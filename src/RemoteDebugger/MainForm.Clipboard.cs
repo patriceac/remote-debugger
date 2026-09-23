@@ -6,7 +6,7 @@ namespace RemoteDebugger;
 
 public sealed partial class MainForm
 {
-    private readonly Forms.CheckBox shareClipboard = new Forms.CheckBox
+    private readonly Forms.CheckBox shareClipboard = new ViewerCheckBox
     { Name = "shareClipboard", Checked = true, AutoSize = true, ForeColor = PrimaryText, Anchor = Forms.AnchorStyles.Left }.WithText(() => UiText.ShareClipboard);
     private DesktopClipboard? localClipboard;
     private CancellationTokenSource? clipboardLifetime;

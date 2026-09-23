@@ -12,7 +12,7 @@ public sealed partial class MainForm
     private readonly Forms.Button fullScreenButton = Button(() => UiText.FullScreen, "fullScreen", 124);
     private readonly Forms.Button exitFullScreen = Button(() => UiText.ExitFullScreen, "exitFullScreen", 190);
     private readonly Forms.Label fullScreenStatus = new() { Name = "fullScreenStatus", Dock = Forms.DockStyle.Fill, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft, ForeColor = SecondaryText };
-    private readonly ResourceMiniCharts headerCharts = new() { Name = "resourceMiniCharts", Dock = Forms.DockStyle.Fill, Visible = false, ForeColor = PrimaryText, Font = new Font("Segoe UI", 9.5F), Margin = new Forms.Padding(24, 12, 24, 12) };
+    private readonly ResourceMiniCharts headerCharts = new() { Name = "resourceMiniCharts", Visible = false, ForeColor = Color.FromArgb(15, 35, 64), BackColor = Surface, Font = new Font("Segoe UI", 9.5F), Margin = Forms.Padding.Empty };
     private readonly ResourceMiniCharts fullScreenCharts = new() { Name = "fullScreenResourceCharts", Width = 264, Height = 34, ForeColor = PrimaryText, Anchor = Forms.AnchorStyles.Left };
     private readonly Forms.Timer resourceRefreshTimer = new() { Interval = 5000 };
     private bool economyPreferred = true, updatingEconomy, loadingViewerPreferences;
@@ -92,7 +92,6 @@ public sealed partial class MainForm
     {
         RefreshReconnectWarning();
         headerCharts.Visible = supportSession && rolePages.SelectedIndex == 1;
-        if (shell.RowStyles.Count > 0) shell.RowStyles[0].Height = (headerCharts.Visible ? 136 : 96) * DeviceDpi / 96f;
         if (!CanRefreshResourcesAutomatically() || lastMeasurementUtc == null || DateTimeOffset.UtcNow - lastMeasurementUtc > TimeSpan.FromSeconds(15))
         { headerCharts.SetStale(); fullScreenCharts.SetStale(); }
         viewerTips.SetToolTip(headerCharts, UiText.ResourceChartsHint);

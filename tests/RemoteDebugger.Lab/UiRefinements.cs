@@ -10,9 +10,10 @@ namespace RemoteDebugger.Lab;
 
 internal sealed partial class LabForm
 {
-    private async Task UiRefinementsAsync()
+    private async Task UiRefinementsAsync(bool redlineOnly = false)
     {
         string root = Path.Combine(output, "ui-fixture");
+        UiCulture.Apply(System.Globalization.CultureInfo.GetCultureInfo("en"));
         Vault.Save(Path.Combine(root, "internet.dpapi"), JsonSerializer.SerializeToUtf8Bytes(new InternetSettings("https://ui.invalid", new string('a', 64), new string('b', 64)), Json.Options));
         TableLayoutStore.Save(root, "peers", [new("name", 210, 0), new("version", 94, 2), new("state", 354, 1), new("progress", 380, 3)]);
         using var form = new MainForm(startAgent: false, dataRoot: root, loopbackOnly: true, languageOverride: "en");
@@ -36,6 +37,7 @@ internal sealed partial class LabForm
         // Keep this a presentation fixture: no listener, discovery, pairing or live session.
         Set("quitting", true);
         form.Show(); form.Activate();
+        await Task.Delay(150, stop.Token); // Let the deferred Shown event select the initial role.
         Get<Forms.Timer>("renderTimer").Stop(); Get<Forms.Timer>("resourceRefreshTimer").Stop();
         try
         {
@@ -45,7 +47,7 @@ internal sealed partial class LabForm
             var device = Activator.CreateInstance(deviceType, peer, "0.5.3.0", "", true, "finalizing", 0, "")!;
             Call("RecordDevice", device, new AgentUpdateProgress("finalizing", 0, 0));
             var peers = Get<RememberedListView>("peers");
-            foreach (int width in new[] { 1280, 1060 })
+            foreach (int width in redlineOnly ? Array.Empty<int>() : new[] { 1280, 1060 })
             {
                 form.Size = new(width, 860); peers.Items[0].Selected = true; peers.Focus();
                 await Task.Delay(150, stop.Token);
@@ -57,9 +59,9 @@ internal sealed partial class LabForm
                 Require(row.GetPixel(peers.ClientSize.Width - 2, peers.Items[0].Bounds.Top + 12).ToArgb() == peers.BackColor.ToArgb(), "ui.no_blue_selection_" + width);
             }
             Set("supportSession", true); Set("heartbeatHealthy", true); Set("liveFrameFresh", true);
+            Call("SelectRole", 1);
             Call("SelectControllerPage", 1);
             var charts = Get<ResourceMiniCharts>("headerCharts");
-            for (int i = 0; i < 36; i++) charts.Add(43 + Math.Sin(i) * 8, 83, 8 + Math.Sin(i * 2) * 5, 10 + Math.Sin(i) * 3);
             using var frame = new Bitmap(900, 700);
             using (var graphics = Graphics.FromImage(frame))
             using (var font = new Font("Segoe UI", 22))
@@ -68,25 +70,66 @@ internal sealed partial class LabForm
                 graphics.DrawString("Isolated UI test\nRemote screen area", font, Brushes.SlateGray, 48, 48);
             }
             Get<RemoteScreenView>("screen").Image = frame;
-            form.Size = new(1800, 1000); await Task.Delay(150, stop.Token);
+            int Pixels(int value) => (int)Math.Round(value * form.DeviceDpi / 96f);
+            form.ClientSize = new(Pixels(216 + 1447), Pixels(900)); await Task.Delay(150, stop.Token);
+            double[] cpu = [32, 42, 47, 38, 38, 37, 10, 10, 8, 4, 8, 15, 11, 7, 7, 7, 4, 6, 6, 5, 6, 4, 5, 4, 6];
+            for (int i = 0; i < 36; i++)
+                charts.Add(cpu[(int)Math.Round(i * (cpu.Length - 1) / 35d)], i < 3 ? 68 + i * 7 : i < 11 ? 88 : i < 22 ? 78 : 82,
+                    i is >= 10 and <= 14 ? 20 - Math.Abs(i - 12) * 8 : 0, i is >= 10 and <= 14 ? 20 - Math.Abs(i - 12) * 8 : 1);
             var chartBounds = Bounds("headerCharts");
             Require(chartBounds.Left >= Bounds("headerTitle").Right && chartBounds.Right <= Bounds("statusPill").Left && charts.Width > 440 && charts.Height > 40,
                 "ui.charts_use_header_gap", new { chartBounds, title = Bounds("headerTitle"), status = Bounds("statusPill") });
+            var toolbarControls = new Forms.Control[]
+            {
+                form.Controls.Find("monitorLabel", true).Single(), Get<Forms.Control>("monitor"), Get<Forms.Control>("mouseEnabled"),
+                Get<Forms.Control>("shareClipboard"), Get<Forms.Control>("relayEconomy")
+            };
+            double[] centers = toolbarControls.Select(control => control.RectangleToScreen(control.ClientRectangle))
+                .Select(bounds => bounds.Top + bounds.Height / 2d).ToArray();
+            Require(centers.Max() - centers.Min() <= 2, "ui.viewer_toolbar_centered", new { centers });
             Capture("viewer-wide");
+            var shell = Get<Forms.TableLayoutPanel>("shell");
+            var headerPanel = Get<Forms.Panel>("header");
+            var toolbar = form.Controls.Find("viewerToolbar", true).Single();
+            using (var image = new Bitmap(headerPanel.Width, headerPanel.Height + toolbar.Height))
+            {
+                headerPanel.DrawToBitmap(image, new Rectangle(0, 0, headerPanel.Width, headerPanel.Height));
+                toolbar.DrawToBitmap(image, new Rectangle(0, headerPanel.Height, toolbar.Width, toolbar.Height));
+                image.Save(Path.Combine(output, "viewer-header-reference.png"));
+            }
+            Require(headerPanel.Height == Pixels(116) && toolbar.Height == Pixels(52), "ui.viewer_header_reference_size",
+                new { height = Bounds("header").Height, dpi = form.DeviceDpi, shellRow = shell.RowStyles[0].Height, shellRowType = shell.RowStyles[0].SizeType,
+                    shellRows = shell.GetRowHeights(), toolbar = toolbar.Bounds,
+                    titlePreferred = Get<Forms.Control>("headerTitle").PreferredSize,
+                    chartsPreferred = charts.PreferredSize, headerPreferred = headerPanel.PreferredSize });
             form.Size = new(1060, 720); await Task.Delay(150, stop.Token);
-            Require(Bounds("headerCharts").Top >= Bounds("headerSubtitle").Bottom && Bounds("headerCharts").Right <= Bounds("header").Right,
+            charts.Add(6, 82, 0, 1);
+            Require(Bounds("headerCharts").Top >= Bounds("headerSubtitle").Bottom && Bounds("headerCharts").Right <= Bounds("header").Right && charts.Height >= 64,
                 "ui.charts_fit_minimum", new { charts = Bounds("headerCharts"), subtitle = Bounds("headerSubtitle") });
             Capture("viewer-minimum");
-            var tips = Get<Forms.ToolTip>("viewerTips");
-            Require(tips.GetToolTip(Get<Forms.Control>("screen")) == "" && tips.GetToolTip(Get<Forms.Control>("fullScreenButton")) == UiText.ReleaseKeyboard && tips.InitialDelay >= 1000 && tips.ReshowDelay >= 1000,
-                "ui.tooltip_only_buttons_after_one_second");
-            foreach (byte[] chord in new byte[][] { [0xA2, 0xA4, 0x7B], [0xA3, 0xA1, 0x7B, 0x7B] })
+            form.ClientSize = new(Pixels(216 + 1447), Pixels(900)); await Task.Delay(150, stop.Token);
+            Require(headerPanel.Height == Pixels(116), "ui.viewer_header_height_restored_after_resize", new { headerPanel.Height });
+            var controlToggle = Get<Forms.CheckBox>("mouseEnabled");
+            controlToggle.AccessibilityObject.DoDefaultAction(); await Task.Delay(50, stop.Token);
+            Require(!controlToggle.Checked, "ui.viewer_checkbox_accessible_toggle");
+            controlToggle.AccessibilityObject.DoDefaultAction();
+            var selector = Get<Forms.ComboBox>("monitor");
+            selector.AccessibilityObject.DoDefaultAction(); await Task.Delay(50, stop.Token);
+            Require(selector.DroppedDown, "ui.viewer_selector_accessible_open");
+            selector.DroppedDown = false;
+            if (!redlineOnly)
             {
-                form.Activate(); Get<Forms.Control>("remoteText").Focus();
-                await ViewerChordAsync(chord);
-                Require(Field("fullScreenHost").GetValue(form) != null, "ui.shortcut_enters_fullscreen_" + chord[1]);
-                await ViewerChordAsync(chord);
-                Require(Field("fullScreenHost").GetValue(form) == null, "ui.shortcut_exits_fullscreen_" + chord[1]);
+                var tips = Get<Forms.ToolTip>("viewerTips");
+                Require(tips.GetToolTip(Get<Forms.Control>("screen")) == "" && tips.GetToolTip(Get<Forms.Control>("fullScreenButton")) == UiText.ReleaseKeyboard && tips.InitialDelay >= 1000 && tips.ReshowDelay >= 1000,
+                    "ui.tooltip_only_buttons_after_one_second");
+                foreach (byte[] chord in new byte[][] { [0xA2, 0xA4, 0x7B], [0xA3, 0xA1, 0x7B, 0x7B] })
+                {
+                    form.Activate(); Get<Forms.Control>("remoteText").Focus();
+                    await ViewerChordAsync(chord);
+                    Require(Field("fullScreenHost").GetValue(form) != null, "ui.shortcut_enters_fullscreen_" + chord[1]);
+                    await ViewerChordAsync(chord);
+                    Require(Field("fullScreenHost").GetValue(form) == null, "ui.shortcut_exits_fullscreen_" + chord[1]);
+                }
             }
             Get<RemoteScreenView>("screen").Image = null;
         }
