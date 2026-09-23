@@ -165,6 +165,7 @@ public sealed partial class AgentServer : IDisposable
     private readonly SupportSession session = new();
     private readonly SessionResumeStore resumeStore;
     private readonly AgentUpdateService updates;
+    private readonly bool ownsMaintenance;
     private readonly SemaphoreSlim updateGate = new(1, 1);
     private ResumableSession? resumed;
     private bool resumeAccepted;
@@ -192,7 +193,7 @@ public sealed partial class AgentServer : IDisposable
     public event Action<string>? Status;
     public event Action<AgentStopReason>? TerminationRequested;
     public SupportSessionSnapshot Session => session.Snapshot;
-    public AgentServer(string root, int port = 45832, bool loopbackOnly = false, bool enableInternet = true, bool enableAdminMaintenance = true)
+    public AgentServer(string root, int port = 45832, bool loopbackOnly = false, bool enableInternet = true, bool enableAdminMaintenance = true, MaintenanceSession? maintenance = null)
     {
         securityRoot = root;
         resumeStore = new(root);
@@ -230,7 +231,8 @@ public sealed partial class AgentServer : IDisposable
             session.AwaitRestart(restart.ExpiresUtc); session.Disconnect();
         }
         else { resumeStore.Clear(); restartStore.Clear(); }
-        Operations = new Operations(root);
+        ownsMaintenance = maintenance == null;
+        Operations = new Operations(root, maintenance);
         Operations.Clipboard = new DesktopClipboard(() => Session.Connected && Session.BinaryMatched && !stop.IsCancellationRequested);
         Operations.Maintenance.SetEnabled(enableAdminMaintenance);
         updates = new AgentUpdateService(root, (context, ct) =>
@@ -271,7 +273,7 @@ public sealed partial class AgentServer : IDisposable
         _ = Task.Run(WatchSessionAsync);
         Status?.Invoke("Agent ready for pairing; access is visible in this window.");
         Internet?.Start();
-        if (Paired) _ = StartMaintenanceAsync();
+        _ = Task.Run(() => StartMaintenanceAsync());
     }
 
     public async Task SetAdminMaintenanceEnabledAsync(bool enabled, CancellationToken ct = default)
@@ -279,7 +281,7 @@ public sealed partial class AgentServer : IDisposable
         ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
         Operations.Maintenance.SetEnabled(enabled);
         if (!enabled) requests.Clear();
-        if (enabled && Paired) await StartMaintenanceAsync(ct);
+        if (enabled) await Task.Run(() => StartMaintenanceAsync(ct), ct);
     }
     public void EnablePrivateNetwork()
     {
@@ -415,7 +417,7 @@ public sealed partial class AgentServer : IDisposable
         lock (authLock) { tokenHash = ""; grantLifetime.Cancel(); grantLifetime = new(); Vault.Save(authPath, []); Pairing.Close(); }
         foreach (var job in running.Values) job.Cancel();
         Native.ReleaseAllInput();
-        Operations.Maintenance.Dispose();
+        Operations.Maintenance.End();
         requests.Clear(); Status?.Invoke("Access revoked. Active operations cancelled.");
     }
     private async Task DiscoverAsync(UdpClient activeDiscovery)
@@ -538,7 +540,7 @@ public sealed partial class AgentServer : IDisposable
                                     session.Pair(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
                                 }
                             }, handshake.Token);
-                            _ = StartMaintenanceAsync(); Status?.Invoke("Controller paired. Synchronizing the support session.");
+                            _ = Task.Run(() => StartMaintenanceAsync()); Status?.Invoke("Controller paired. Synchronizing the support session.");
                         }
                         finally { pairingSlot.Release(); }
                         return;
@@ -607,7 +609,7 @@ public sealed partial class AgentServer : IDisposable
                             session.Observe();
                             reply = Reply.Success(r.Id, new { machine = Environment.MachineName, session = Session, persistent = persistentHeartbeat, agentBinarySha256 = ExecutableIdentity.Sha256, controllerBinarySha256 = controllerBinaryHash, binaryMatched = Session.BinaryMatched, processId = Environment.ProcessId, maintenance = Operations.Maintenance.Status });
                         }
-                        else if (r.Operation == "session.disconnect") { Native.ReleaseAllInput(); Operations.Clipboard?.Pause(); session.Disconnect(); reply = Reply.Success(r.Id, new { session = Session }); }
+                        else if (r.Operation == "session.disconnect") { Native.ReleaseAllInput(); Operations.Maintenance.EndInput(); Operations.Clipboard?.Pause(); session.Disconnect(); reply = Reply.Success(r.Id, new { session = Session }); }
                         else if (r.Operation == "update.resume")
                         {
                             if (resumed == null || resumed.ExpiresUtc <= DateTimeOffset.UtcNow ||
@@ -1007,8 +1009,8 @@ public sealed partial class AgentServer : IDisposable
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(stop.Token, requested);
         try
         {
-            await Operations.Maintenance.StartAsync(linked.Token);
-            if (Operations.Maintenance.Enabled) Status?.Invoke("Administrator maintenance active for this session.");
+            await Operations.Maintenance.PrepareAsync(linked.Token);
+            if (Operations.Maintenance.Enabled) Status?.Invoke("Administrator maintenance ready for authorized support sessions.");
         }
         catch (Exception ex) { if (!stop.IsCancellationRequested) Status?.Invoke("Administrator maintenance unavailable: " + ex.Message); }
     }
@@ -1024,7 +1026,9 @@ public sealed partial class AgentServer : IDisposable
             activeListener = listener;
             activeDiscovery = discovery;
         }
-        Pairing.Close(); stop.Cancel(); Internet?.Dispose(); securityCandidate?.Agent.Dispose(); Operations.Maintenance.Dispose(); Native.ReleaseAllInput();
+        Pairing.Close(); stop.Cancel(); Internet?.Dispose(); securityCandidate?.Agent.Dispose();
+        if (ownsMaintenance) Operations.Maintenance.Dispose(); else Operations.Maintenance.End();
+        Native.ReleaseAllInput();
         try { activeListener.Stop(); } catch { }
         try { activeDiscovery.Dispose(); } catch { }
         updates.Dispose();

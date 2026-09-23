@@ -20,7 +20,7 @@ public sealed partial class Operations
     public MaintenanceSession Maintenance { get; }
     public IncidentLog Diagnostics { get; }
     internal ResourceSampling Resources { get; } = new();
-    public Operations(string root) { Root = root; Maintenance = new(root); Diagnostics = new(root); Directory.CreateDirectory(Workspace); Directory.CreateDirectory(Transfers); PruneHistory(); }
+    public Operations(string root, MaintenanceSession? maintenance = null) { Root = root; Maintenance = maintenance ?? new(root); Diagnostics = new(root); Directory.CreateDirectory(Workspace); Directory.CreateDirectory(Transfers); PruneHistory(); }
     public void Record(string id, string operation, DateTimeOffset start, bool ok, string? error, JsonElement data)
     {
         Diagnostics.Record(operation, new(Environment.MachineName, "agent", Version), error, incident: !ok && error != "cancelled_or_timeout");

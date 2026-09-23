@@ -8,11 +8,12 @@ public sealed record MaintenanceSessionStatus(
     bool BrokerAvailable,
     bool RequiresProvisioning,
     string Message,
-    string? LeaseId = null);
+    string? LeaseId = null,
+    bool InputReady = false);
 
 /// <summary>
-/// One process-bound broker connection. Its lifetime is the paired agent
-/// session; closing it cancels every privileged job started through it.
+/// Process-bound broker connections stay ready between authorized support
+/// sessions. Ending a session releases input and cancels any privileged job.
 /// </summary>
 public sealed class MaintenanceSession(string root) : IDisposable
 {
@@ -26,11 +27,22 @@ public sealed class MaintenanceSession(string root) : IDisposable
     private MaintenanceSessionStatus status = new(false, false, true, "Privileged maintenance has not started.");
     private int enabled = 1;
     private int disposed;
+    private int commandRunning;
 
     public const string DisabledMessage = "Administrator maintenance is disabled for this support session.";
     public bool Enabled => Volatile.Read(ref enabled) != 0;
     public MaintenanceSessionStatus CurrentStatus => Volatile.Read(ref status);
-    public object Status => CurrentStatus;
+    public object Status => CurrentStatus with { InputReady = input.Ready };
+
+    internal async Task PrepareAsync(CancellationToken ct)
+    {
+        if (!Enabled || Volatile.Read(ref disposed) != 0) return;
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct, lifetime.Token);
+        deadline.CancelAfter(TimeSpan.FromSeconds(SupportOperationTimeouts.PlatformStatusRoundTripSeconds));
+        await StartAsync(deadline.Token);
+        if (privilegedInputAvailable)
+            await input.PrepareAsync(() => Enabled && Volatile.Read(ref disposed) == 0, deadline.Token);
+    }
 
     public void SetEnabled(bool value)
     {
@@ -45,7 +57,7 @@ public sealed class MaintenanceSession(string root) : IDisposable
         {
             if (Volatile.Read(ref disposed) == 0 && pipe is null)
                 Volatile.Write(ref status, new(false, CurrentStatus.BrokerAvailable, CurrentStatus.RequiresProvisioning,
-                    "Administrator maintenance is enabled and will start when the support session is paired."));
+                    "Administrator maintenance is enabled and preparing for authorized support sessions."));
         }
     }
 
@@ -62,7 +74,7 @@ public sealed class MaintenanceSession(string root) : IDisposable
                 return;
             }
             if (pipe is { IsConnected: true }) return;
-            DisposePipe();
+            DisposePipe(closeInput: false);
             var platform = await SupportPlatform.GetStatusAsync(ct);
             privilegedInputAvailable = platform.InteractiveInputAvailable;
             if (!platform.Available)
@@ -92,7 +104,7 @@ public sealed class MaintenanceSession(string root) : IDisposable
                     pipe = candidate;
                     Volatile.Write(ref status, new(true, true, false,
                         privilegedInputAvailable
-                            ? "Administrator maintenance is active until the paired agent session ends."
+                            ? "Administrator maintenance is ready for authorized support sessions."
                             : "Administrator maintenance is active. Install the current setup to enable control of elevated windows.", data.Str("leaseId")));
                 }
             }
@@ -129,6 +141,7 @@ public sealed class MaintenanceSession(string root) : IDisposable
             MaintenanceLease.ValidateCommand(request);
             try
             {
+                Volatile.Write(ref commandRunning, 1);
                 await Wire.WriteAsync(current, request, timeout.Token);
                 return RemoteClient.Require(await Wire.ReadAsync<Reply>(current, timeout.Token));
             }
@@ -136,9 +149,10 @@ public sealed class MaintenanceSession(string root) : IDisposable
             {
                 // Closing the lifetime pipe is the cancellation signal observed by
                 // the service, including controller cancellation and app shutdown.
-                DisposePipe();
+                DisposePipe(closeInput: false);
                 throw;
             }
+            finally { Volatile.Write(ref commandRunning, 0); }
         }
         finally { gate.Release(); }
     }
@@ -168,15 +182,19 @@ public sealed class MaintenanceSession(string root) : IDisposable
         return signalPath;
     }
 
-    public void End() => DisposePipe();
-    internal void EndInput() => input.End();
+    public void End()
+    {
+        EndInput();
+        if (Volatile.Read(ref commandRunning) != 0) DisposePipe(closeInput: false);
+    }
+    internal void EndInput() => _ = input.ReleaseAsync();
 
     internal async Task RecoverInputAsync(CancellationToken ct)
     {
         // Reuse the installed, owner-enabled broker after a failed startup or
         // service refresh. Never provision support or replay a click/key here.
         if (Enabled && !CurrentStatus.Active && File.Exists(SupportPlatformPaths.ConfigurationPath))
-            await StartAsync(ct);
+            await PrepareAsync(ct);
     }
 
     internal async Task SendInputAsync(object args, CancellationToken ct)
@@ -201,9 +219,9 @@ public sealed class MaintenanceSession(string root) : IDisposable
         }
     }
 
-    private void DisposePipe()
+    private void DisposePipe(bool closeInput = true)
     {
-        input.End();
+        if (closeInput) input.End();
         NamedPipeClientStream? current;
         lock (stateLock)
         {

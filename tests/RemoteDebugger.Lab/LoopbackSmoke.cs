@@ -549,7 +549,7 @@ internal sealed partial class LabForm
         while (deadline.Elapsed < TimeSpan.FromSeconds(45))
         {
             poll++;
-            string expectedRole = role is "localization" or "singleinstance" or "languageselection"
+            string expectedRole = role is "localization" or "singleinstance" or "languageselection" or "input"
                 ? product == loopbackAgent ? UiText.TrayAssistedPc : UiText.TrayController
                 : role is "agent" or "agent-local" || product == loopbackAgent ? "PC assisté" : "Contrôleur";
             AutomationElement[] icons = FindSystemTrayIcons().Where(icon =>

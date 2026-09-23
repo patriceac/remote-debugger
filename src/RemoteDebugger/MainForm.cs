@@ -208,6 +208,7 @@ public sealed partial class MainForm : Forms.Form
     public RemoteClient? Client => client;
 
     private readonly string? startupPreparationError;
+    private readonly MaintenanceSession agentMaintenance;
 
     public MainForm(bool startAgent = true, string? dataRoot = null, bool loopbackOnly = false, string? startupPreparationError = null, string? languageOverride = null, bool enableSupport = false, bool startInTray = false)
     {
@@ -216,6 +217,7 @@ public sealed partial class MainForm : Forms.Form
         // panels still contain their unscaled design-time dimensions.
         SuspendLayout();
         root = dataRoot ?? Vault.DefaultRoot;
+        agentMaintenance = new MaintenanceSession(root);
         diagnostics = new IncidentLog(root);
         isUpdateAdmin = new UpdateAdminStore(root).IsAdmin;
         this.loopbackOnly = loopbackOnly;
@@ -905,7 +907,7 @@ public sealed partial class MainForm : Forms.Form
             // provisioned broker has verified the Private/LocalSubnet rules.
             agentIdle = false;
             var started = new AgentServer(root, loopbackOnly: loopbackOnly || !agentNetworkPrepared, enableInternet: !loopbackOnly,
-                enableAdminMaintenance: adminMaintenanceEnabled);
+                enableAdminMaintenance: adminMaintenanceEnabled, maintenance: agentMaintenance);
             agent = started;
             started.Status += text => PostUi(() => { if (ReferenceEquals(agent, started)) { agentLog.SetText(text); RefreshFooter(); } });
             started.TerminationRequested += reason =>
@@ -945,6 +947,7 @@ public sealed partial class MainForm : Forms.Form
         catch (Exception ex) { SetFooterMessage(() => UiText.AgentStopIncomplete); footerDetail = ex.Message; RefreshFooter(); return false; }
         finally { suppressTerminationEvent = false; }
         local.Dispose();
+        agentMaintenance.SetEnabled(false);
         if (ReferenceEquals(agent, local)) agent = null;
         privateSupportEnabled = PrivateInternet && HasConfiguredPrivateSupport();
         powerHold?.Dispose(); powerHold = null; CurrentPairingCode = null; RefreshUiState();
@@ -1078,7 +1081,8 @@ public sealed partial class MainForm : Forms.Form
             }
             else
             {
-                agentMaintenanceState.SetText(() => active ? UiText.Active : !paired ? UiText.AfterConnection : requiresProvisioning ? UiText.ActivationRequired : !brokerAvailable ? UiText.Unavailable : UiText.Preparing);
+                bool inputReady = state.TryGetProperty("inputReady", out var input) && input.GetBoolean();
+                agentMaintenanceState.SetText(() => active ? paired ? UiText.Active : inputReady ? UiText.Ready : UiText.Preparing : !paired ? UiText.AfterConnection : requiresProvisioning ? UiText.ActivationRequired : !brokerAvailable ? UiText.Unavailable : UiText.Preparing);
                 agentMaintenanceState.ForeColor = active ? ConnectedText : !paired ? SecondaryText : requiresProvisioning || !brokerAvailable ? WarningText : SecondaryText;
             }
         }
@@ -2458,6 +2462,7 @@ public sealed partial class MainForm : Forms.Form
 
     private void DisposeResources()
     {
+        agentMaintenance.Dispose();
         keyboardCapture?.Dispose(); viewerTips.Dispose(); resourceRefreshTimer.Dispose();
         powerLifetime?.Cancel();
         if (diagnosticRunStarted) diagnostics.EndRun(DiagnosticContext());

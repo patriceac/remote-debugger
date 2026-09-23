@@ -66,8 +66,9 @@ data are preserved. Uninstall refuses to interrupt an active executable replacem
 or its health verification; finish or cancel that update first.
 
 The 0.4.13 broker adds a signed input helper in the authorized interactive session
-for elevated windows such as Task Manager. It runs only while administrator
-maintenance is enabled and an input connection is active. Secure Windows desktops
+for elevated windows such as Task Manager. From 0.5.5, the agent prepares it at startup
+while administrator maintenance is enabled and keeps it ready until disabled or quit.
+Each remote input request still requires an authorized support session. Secure Windows desktops
 remain unavailable and report an input permission error. An agent-only update
 does not replace a pre-0.4.13 broker: run the current installer once on those agents
 to enable the new capability. Normal desktop input remains available meanwhile.

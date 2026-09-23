@@ -89,19 +89,40 @@ internal sealed class PrivilegedInputSession
 {
     private readonly SemaphoreSlim gate = new(1, 1);
     private readonly object sync = new();
-    private NamedPipeClientStream? pipe;
+    private readonly Func<CancellationToken, Task<Stream>> open;
+    private readonly Action releaseLocal;
+    private Stream? pipe;
     private int generation;
+    private int ready;
 
-    public async Task SendAsync(object args, Func<bool> permitted, CancellationToken ct)
+    public PrivilegedInputSession() : this(async ct => await SupportPlatform.OpenBrokerPipeAsync(ct, TokenImpersonationLevel.Impersonation), () => Native.ReleaseAllInput()) { }
+    internal PrivilegedInputSession(Func<CancellationToken, Task<Stream>> open, Action releaseLocal)
+    { this.open = open; this.releaseLocal = releaseLocal; }
+
+    public bool Ready => Volatile.Read(ref ready) != 0;
+    public Task PrepareAsync(Func<bool> permitted, CancellationToken ct) =>
+        SendAsync(new { kind = "release" }, permitted, ct, prepareOnly: true);
+
+    public async Task ReleaseAsync()
+    {
+        if (!Ready) return;
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        try { await SendAsync(new { kind = "release" }, () => true, deadline.Token, releaseOnly: true); }
+        catch { }
+    }
+
+    public async Task SendAsync(object args, Func<bool> permitted, CancellationToken ct, bool prepareOnly = false, bool releaseOnly = false)
     {
         await gate.WaitAsync(ct);
         try
         {
             int expectedGeneration = Volatile.Read(ref generation);
             if (!permitted()) throw new InputBlockedException(MaintenanceSession.DisabledMessage);
+            if (prepareOnly && Ready) return;
             if (pipe == null)
             {
-                var candidate = await SupportPlatform.OpenBrokerPipeAsync(ct, TokenImpersonationLevel.Impersonation);
+                if (releaseOnly) return;
+                var candidate = await open(ct);
                 try
                 {
                     await Wire.WriteAsync(candidate, new Request(Guid.NewGuid().ToString(), "", "input.open", Json.Element(new { })), ct);
@@ -109,7 +130,7 @@ internal sealed class PrivilegedInputSession
                     lock (sync)
                     {
                         if (!permitted() || expectedGeneration != generation) throw new OperationCanceledException("Input session ended.");
-                        Native.ReleaseAllInput(); pipe = candidate;
+                        releaseLocal(); pipe = candidate;
                     }
                 }
                 catch { candidate.Dispose(); throw; }
@@ -118,6 +139,11 @@ internal sealed class PrivilegedInputSession
             var payload = Json.Element(args);
             await Wire.WriteAsync(current, new Request(Guid.NewGuid().ToString(), "", "ui.input", payload, SupportOperationTimeouts.InputSeconds(payload.Str("kind"))), ct);
             RemoteClient.Require(await Wire.ReadAsync<Reply>(current, ct));
+            lock (sync)
+            {
+                if (expectedGeneration != generation || !ReferenceEquals(pipe, current)) throw new OperationCanceledException("Input session ended.");
+                Volatile.Write(ref ready, 1);
+            }
         }
         catch { End(); throw; }
         finally { gate.Release(); }
@@ -125,6 +151,6 @@ internal sealed class PrivilegedInputSession
 
     public void End()
     {
-        lock (sync) { generation++; pipe?.Dispose(); pipe = null; }
+        lock (sync) { generation++; Volatile.Write(ref ready, 0); pipe?.Dispose(); pipe = null; }
     }
 }

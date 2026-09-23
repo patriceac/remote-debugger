@@ -3,8 +3,9 @@ namespace RemoteDebugger.Core;
 /// <summary>
 /// Identifies one interactive, signed desktop process for the lifetime of its
 /// connection to the privileged local broker. There is deliberately no wall
-/// clock expiry: closing the agent, ending pairing, disconnecting the pipe, or
-/// losing the process ends the lease and cancels its work.
+/// clock expiry: closing the agent, disabling maintenance, disconnecting the
+/// pipe, or losing the process ends the lease and cancels its work. Ending a
+/// support session cancels its active work while an idle connection stays ready.
 /// </summary>
 public sealed record MaintenanceLease(
     int ProcessId,
