@@ -1315,7 +1315,7 @@ public sealed partial class MainForm : Forms.Form
     {
         // Headers remain interactive during support so their layout can be
         // adjusted; selecting a row must never replace an active target.
-        if (renderingPeers || supportSession || pairingBusy || FleetBusy || terminating) return;
+        if (renderingPeers || supportSession || pairingBusy || terminating) return;
         if (peers.SelectedItems.Count == 0 || peers.SelectedItems[0].Tag is not Peer peer) return;
         InvalidateInputSession();
         selectedPeer = peer; selectedFingerprint = peer.Fingerprint; host.SetText(peer.Host); selectedPeerName.SetText(peer.Name);

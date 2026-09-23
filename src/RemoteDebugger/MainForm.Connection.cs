@@ -12,6 +12,7 @@ public sealed partial class MainForm
     private readonly Forms.Label updateElapsed = ConnectionLabel("updateElapsed", 22.5f, true);
     private readonly Forms.Label updateRemaining = ConnectionLabel("updateRemaining", 22.5f, true);
     private readonly Forms.Label remainingCaption = ConnectionLabel("updateRemainingCaption", 11.5f);
+    private readonly Forms.Label connectionReadyNote = ConnectionLabel("connectionReadyNote", 10.5f);
     private readonly UpdateTimeline updateTimeline = new() { Dock = Forms.DockStyle.Top, Height = 208, BackColor = Canvas };
     private readonly WorkspaceButton connectionSettingsToggle = new() { Name = "connectionSettingsToggle", Glyph = UiGlyph.Right, Dock = Forms.DockStyle.Top,
         Height = 38, DisclosureStyle = true, Font = new Font("Segoe UI", 12), FlatStyle = Forms.FlatStyle.Flat, FlatAppearance = { BorderSize = 0 }, BackColor = Canvas, ForeColor = PrimaryText, TextAlign = ContentAlignment.MiddleLeft };
@@ -21,6 +22,9 @@ public sealed partial class MainForm
     private Forms.Panel? computerHeader;
     private Forms.Control? connectionPairRow;
     private Size roundedProgressSize;
+    private bool showingFleetUpdate;
+    private FleetDevice? SelectedFleetUpdate => FleetBusy && selectedPeer != null &&
+        fleet.TryGetValue(DeviceKey(selectedPeer), out var device) && NeedsFleetProgressAnimation(device.State) ? device : null;
 
     private static Forms.Label ConnectionLabel(string name, float size = 11.5f, bool bold = false) => new WorkspaceLabel
     {
@@ -210,20 +214,30 @@ public sealed partial class MainForm
         metrics.Controls.Add(ConnectionLabel("updateElapsedCaption", 11.5f).WithText(() => UiText.Get("ConnectionElapsed")), 0, 0);
         metrics.Controls.Add(remainingCaption, 1, 0); metrics.Controls.Add(updateElapsed, 0, 1); metrics.Controls.Add(updateRemaining, 1, 1);
         ConnectionRow(updateProgressArea, metrics, 16); ConnectionRow(updateProgressArea, updateTimeline, 8);
-        ConnectionRow(updateProgressArea, ConnectionLabel("connectionReadyNote", 10.5f).WithText(() => UiText.Get("ConnectionOpensWhenReady")), 4);
+        ConnectionRow(updateProgressArea, connectionReadyNote.WithText(() => UiText.Get("ConnectionOpensWhenReady")), 4);
     }
 
-    private bool PeerIsSynchronizing(Peer peer) => (synchronizingAgent || clientUpdateBusy) &&
-        (client != null && Safety.Equal(peer.Fingerprint, client.Connection.Fingerprint) || selectedPeer?.Fingerprint == peer.Fingerprint);
+    private bool PeerIsSynchronizing(Peer peer) => FleetBusy && fleet.TryGetValue(DeviceKey(peer), out var device) && NeedsFleetProgressAnimation(device.State) ||
+        (synchronizingAgent || clientUpdateBusy) && (client != null && Safety.Equal(peer.Fingerprint, client.Connection.Fingerprint) || selectedPeer?.Fingerprint == peer.Fingerprint);
 
     private void RefreshConnectionPresentation()
     {
+        bool fleetUpdating = SelectedFleetUpdate != null;
+        if (fleetUpdating)
+        {
+            updateProgressArea.Visible = true;
+            updateProgressFill.BackColor = Teal; updateProgressText.ForeColor = PrimaryText;
+            RefreshUpdateProgress();
+        }
+        else if (showingFleetUpdate) updateProgressArea.Visible = false;
+        showingFleetUpdate = fleetUpdating;
+        connectionReadyNote.Visible = !fleetUpdating;
         computerCount.SetText(UiText.Get("ConnectionComputers")); computerTotal.SetText(fleet.Count.ToString());
         int syncing = fleet.Values.Count(d => PeerIsSynchronizing(d.Peer));
         int online = fleet.Values.Count(d => d.Online && !PeerIsSynchronizing(d.Peer));
         int offline = fleet.Count - online - syncing;
         var summary = new List<string>();
-        if (syncing > 0) summary.Add(UiText.Format(UiText.Get(connectedUpdateReport?.Stage is "restarting" or "finalizing" ? "ConnectionReconnectingCount" : "ConnectionSyncCount"), syncing));
+        if (syncing > 0) summary.Add(UiText.Format(UiText.Get(!FleetBusy && (connectedUpdateReport?.Stage is "restarting" or "finalizing") ? "ConnectionReconnectingCount" : "ConnectionSyncCount"), syncing));
         if (online > 0) summary.Add(UiText.Format(UiText.Get("ConnectionOnlineCount"), online));
         if (offline > 0 || fleet.Count == 0) summary.Add(UiText.Format(UiText.Get("ConnectionOfflineCount"), offline));
         computerSummary.SetText(string.Join(" · ", summary));
@@ -232,16 +246,16 @@ public sealed partial class MainForm
             var active = fleet.Values.FirstOrDefault(d => Safety.Equal(d.Peer.Fingerprint, client.Connection.Fingerprint));
             selectedPeerName.SetText(active?.Peer.Name ?? selectedPeer?.Name ?? client.Connection.Host);
         }
-        if (synchronizingAgent || clientUpdateBusy) selectedPeerAddress.SetText(() => UiText.Get("ConnectionAgentUpdate"));
+        if (synchronizingAgent || clientUpdateBusy || fleetUpdating) selectedPeerAddress.SetText(() => UiText.Get("ConnectionAgentUpdate"));
         else if (!pairingBusy && !supportSession && selectedPeer != null && fleet.TryGetValue(DeviceKey(selectedPeer), out var selected))
             selectedPeerAddress.SetText(selected.Online ? UiText.Available : UiText.Get("ConnectionOffline"));
         foreach (Forms.ListViewItem item in peers.Items)
         {
             if (item.Tag is not Peer peer || !fleet.TryGetValue(DeviceKey(peer), out var device)) continue;
-            string state = PeerIsSynchronizing(peer) ? ConnectionStageTitle(connectedUpdateReport?.Stage ?? "preparing") : FleetState(device);
+            string state = PeerIsSynchronizing(peer) ? ConnectionStageTitle(FleetBusy ? device.State : connectedUpdateReport?.Stage ?? "preparing") : FleetState(device);
             if (item.SubItems[2].Text != state) item.SubItems[2].Text = state;
         }
-        bool updating = synchronizingAgent || clientUpdateBusy;
+        bool updating = synchronizingAgent || clientUpdateBusy || fleetUpdating;
         connectionState.Visible = !updating;
         pairButton.Visible = !PrivateInternet || !updating;
         if (connectionPairRow != null) connectionPairRow.Visible = !updating;
@@ -300,7 +314,7 @@ public sealed partial class MainForm
         }
         else if (e.ColumnIndex == 2)
         {
-            if (syncing) text = ConnectionStageTitle(connectedUpdateReport?.Stage ?? "preparing");
+            if (syncing) text = ConnectionStageTitle(FleetBusy ? device!.State : connectedUpdateReport?.Stage ?? "preparing");
             else if (device is { Online: false }) text = UiText.Get("ConnectionOffline");
             if (device != null && fleetProgress.TryGetValue(DeviceKey(peer), out var tracker) && NeedsFleetProgressAnimation(device.State))
             {

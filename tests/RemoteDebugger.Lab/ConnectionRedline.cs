@@ -40,12 +40,60 @@ internal sealed partial class LabForm
             var toggle = Get<WorkspaceButton>("connectionSettingsToggle");
             foreach (var size in new[] { new Size(1586, 992), new Size(1280, 860), new Size(1060, 720) })
             {
+                if (scope == "update-rendering" && size.Width == 1280) continue;
                 if (size.Width == 1586) form.ClientSize = new(1586, 960); else form.Size = size;
                 Set("pairingBusy", false); Set("synchronizingAgent", false); Get<Forms.Control>("updateProgressArea").Visible = false;
                 Call("RefreshControllerControls"); Call("UpdateHeader");
                 if (!Get<Forms.Control>("connectionSettings").Visible) toggle.PerformClick();
                 var viewport = (Forms.Panel)form.Controls.Find("connectionInspector", true).Single();
                 viewport.AutoScrollPosition = Point.Empty;
+                if (scope == "update-rendering")
+                {
+                    // Native rendering with replayed agent reports. Exercise each production
+                    // progress handler separately; this does not claim a network update.
+                    var timeline = Get<UpdateTimeline>("updateTimeline");
+                    foreach (string route in new[] { "connect", "update-all" })
+                    {
+                        using var batch = new CancellationTokenSource();
+                        Set("fleetLifetime", route == "update-all" ? batch : null!);
+                        Set("pairingBusy", route == "connect"); Set("synchronizingAgent", route == "connect");
+                        Get<Forms.Control>("updateProgressArea").Visible = false;
+                        foreach (string stage in new[] { "preparing", "transferring", "verifying", "restarting" })
+                        {
+                            var report = new AgentUpdateProgress(stage, 5 * 1024 * 1024, 10 * 1024 * 1024);
+                            if (route == "connect") Call("ShowUpdateProgress", report);
+                            else Call("RecordDevice", Activator.CreateInstance(type, selected, "0.5.4.0", "", true, stage, report.TransferPercent, "5.0/10.0 MiB"), report);
+                            Call("RefreshControllerControls"); Call("UpdateHeader");
+                            viewport.AutoScrollPosition = Point.Empty;
+                            if (size.Width < 1586) viewport.ScrollControlIntoView(timeline);
+                            await Task.Delay(150, stop.Token);
+                            string sample = route + "-" + stage + "-" + size.Width;
+                            Capture("update-map-" + sample);
+                            Require(timeline.Visible && viewport.RectangleToScreen(viewport.ClientRectangle).Contains(timeline.RectangleToScreen(timeline.ClientRectangle)), "connection.map_visible_" + sample);
+                            using var pixels = new Bitmap(timeline.Width, timeline.Height);
+                            using (var graphics = Graphics.FromImage(pixels)) graphics.CopyFromScreen(timeline.PointToScreen(Point.Empty), Point.Empty, pixels.Size);
+                            int scale = Math.Max(1, timeline.DeviceDpi / 96), painted = 0;
+                            for (int y = 36 * scale; y < Math.Min(170 * scale, pixels.Height); y++)
+                            {
+                                var pixel = pixels.GetPixel(22 * scale, y);
+                                if (pixel.R < 70 && pixel.G > 120 && pixel.B > 120) painted++;
+                            }
+                            Require(painted > 60 * scale, "connection.map_painted_" + sample);
+                        }
+                        if (route == "update-all")
+                        {
+                            var list = Get<RememberedListView>("peers");
+                            list.SelectedIndices.Clear(); list.Items[0].Selected = true; Call("SelectPeerFromList");
+                            Require(Get<Peer>("selectedPeer") == first && !timeline.Visible, "connection.map_follows_selection_" + size.Width);
+                            list.SelectedIndices.Clear(); list.Items[1].Selected = true; Call("SelectPeerFromList");
+                            Require(Get<Peer>("selectedPeer") == selected && timeline.Visible, "connection.map_restored_on_reselection_" + size.Width);
+                            Call("RecordDevice", Activator.CreateInstance(type, selected, "0.5.9.0", "", true, "current", 100, ""), null);
+                            Require(!timeline.Visible, "connection.map_cleared_on_completion_" + size.Width);
+                        }
+                        Set("fleetLifetime", null!);
+                    }
+                    continue;
+                }
                 Get<Forms.Label>("footerRight").Text = "Design preview · simulated devices";
                 await Task.Delay(100, stop.Token); Capture("connection-idle-" + size.Width);
                 File.WriteAllText(Path.Combine(output, "connection-layout-" + size.Width + ".json"), JsonSerializer.Serialize(Children(form).Select(control => new { control.Name, Parent = control.Parent?.Name, Type = control.GetType().Name, control.Bounds, control.Visible }), new JsonSerializerOptions { WriteIndented = true }));

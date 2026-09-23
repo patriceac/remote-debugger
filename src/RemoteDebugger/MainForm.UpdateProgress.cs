@@ -52,18 +52,21 @@ public sealed partial class MainForm
 
     private void RefreshUpdateProgress()
     {
-        if (connectedUpdateProgress == null || connectedUpdateReport == null) return;
-        var progress = connectedUpdateProgress.Snapshot();
+        var fleetUpdate = SelectedFleetUpdate;
+        var tracker = fleetUpdate != null ? fleetProgress.GetValueOrDefault(DeviceKey(fleetUpdate.Peer)) : connectedUpdateProgress;
+        string? stage = fleetUpdate?.State ?? connectedUpdateReport?.Stage;
+        if (tracker == null || stage == null) return;
+        var progress = tracker.Snapshot();
         updateProgressFill.Dock = System.Windows.Forms.DockStyle.None;
         updateProgressFill.Bounds = UpdateProgressBounds(updateProgressTrack.ClientRectangle, progress);
-        updateProgressText.SetText(ConnectionStageTitle(connectedUpdateReport.Stage));
-        updateExplanation.SetText(connectedUpdateReport.Stage == "transferring"
-            ? UpdateProgressDescription(connectedUpdateReport)
-            : UiText.Get(connectedUpdateReport.Stage is "restarting" or "finalizing" ? "ConnectionWaitingForComputer" : "ConnectionPreparingHelp"));
-        updateElapsed.SetText(FormatTransferEta(connectedUpdateProgress.Elapsed));
+        updateProgressText.SetText(ConnectionStageTitle(stage));
+        updateExplanation.SetText(stage == "transferring"
+            ? fleetUpdate?.Detail ?? UpdateProgressDescription(connectedUpdateReport!)
+            : UiText.Get(stage is "restarting" or "finalizing" ? "ConnectionWaitingForComputer" : "ConnectionPreparingHelp"));
+        updateElapsed.SetText(FormatTransferEta(tracker.Elapsed));
         remainingCaption.SetText(() => UiText.Get(progress.Estimated ? "ConnectionEstimatedRemaining" : "ConnectionRemaining"));
         updateRemaining.SetText(progress.Remaining is { } eta ? FormatTransferEta(eta) : "—");
-        updateTimeline.SetProgress(connectedUpdateReport.Stage, connectedUpdateProgress.CompletedStages);
+        updateTimeline.SetProgress(stage, tracker.CompletedStages);
         updateProgressTrack.AccessibleName = updateProgressText.Text + " · " + UpdateStepNumbers(progress);
     }
 

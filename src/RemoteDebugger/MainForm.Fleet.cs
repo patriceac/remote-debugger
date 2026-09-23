@@ -164,8 +164,14 @@ public sealed partial class MainForm
         if (!PrivateInternet || !isUpdateAdmin || FleetBusy || fleetRefreshing || pairingBusy || clientUpdateBusy || terminating || action != null) return;
         if (NewerDeviceKnown)
         { discoveryState.SetText(() => UiText.UpdateControllerFirst); return; }
-        using var lifetime = new CancellationTokenSource(); fleetLifetime = lifetime;
         var targets = fleet.Values.Where(d => d.Online && d.State is "available" or "legacy" or "failed").ToArray();
+        if (targets.Length == 0) return;
+        if (!supportSession && (selectedPeer == null || !targets.Any(d => DeviceKey(d.Peer) == DeviceKey(selectedPeer))))
+        {
+            var first = peers.Items.Cast<Forms.ListViewItem>().FirstOrDefault(item => item.Tag is Peer peer && DeviceKey(peer) == DeviceKey(targets[0].Peer));
+            if (first != null) { peers.SelectedIndices.Clear(); first.Selected = true; SelectPeerFromList(); }
+        }
+        using var lifetime = new CancellationTokenSource(); fleetLifetime = lifetime;
         foreach (var device in targets) RecordDevice(device with { State = "hashing", Detail = "", Percent = 0 });
         discoveryState.SetText(() => UiText.PreparingUpdate);
         RefreshControllerControls();
