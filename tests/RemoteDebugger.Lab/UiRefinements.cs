@@ -138,6 +138,10 @@ internal sealed partial class LabForm
             Get<RemoteScreenView>("screen").Image = null;
         }
         finally { form.Close(); }
+        loopbackController = LaunchLoopbackProduct(false, Path.Combine(output, "notice-scale-data"));
+        product = loopbackController;
+        await WaitUiAsync();
+        await TrySetGuestScaleAsync(125);
         using var notice = (Forms.Form)Activator.CreateInstance(typeof(MainForm).Assembly.GetType("RemoteDebugger.SupportConnectionNotice")!)!;
         var progress = (Forms.Panel)notice.GetType().GetField("progress", flags)!.GetValue(notice)!;
         var elapsed = new Stopwatch();
@@ -149,6 +153,17 @@ internal sealed partial class LabForm
         {
             notice.Show();
             await Task.Delay(150, stop.Token);
+            using (var graphics = notice.CreateGraphics())
+            {
+                var labels = notice.Controls.OfType<Forms.Label>().Select(label => new
+                {
+                    label.Text, label.Size,
+                    measured = Forms.TextRenderer.MeasureText(graphics, label.Text, label.Font, new Size(label.Width, int.MaxValue),
+                        Forms.TextFormatFlags.WordBreak | Forms.TextFormatFlags.NoPrefix)
+                }).ToArray();
+                Require(labels.All(label => label.measured.Height <= label.Size.Height && label.measured.Width <= label.Size.Width),
+                    "ui.notice_text_fits_at_display_scale", new { notice.DeviceDpi, notice.ClientSize, labels });
+            }
             Forms.Cursor.Position = notice.PointToScreen(new Point(notice.Width / 2, notice.Height / 2));
             int fullWidth = notice.ClientSize.Width - progress.Left, previousWidth = fullWidth;
             Thread.Sleep(1200); // A delayed UI tick must not extend the notice's lifetime.
@@ -170,7 +185,7 @@ internal sealed partial class LabForm
             Require(closedAt is >= 9.9 and < 10.5, "ui.notice_closes_after_ten_seconds_while_hovered",
                 new { closedAt, fullWidth, notice.DeviceDpi });
         }
-        finally { Forms.Cursor.Position = cursor; notice.Close(); }
+        finally { Forms.Cursor.Position = cursor; notice.Close(); await CleanupLoopbackProcessesAsync(); }
         await FinishAsync();
     }
 

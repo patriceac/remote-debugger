@@ -17,6 +17,7 @@ internal sealed class SupportConnectionNotice : Forms.Form
 
     public SupportConnectionNotice()
     {
+        SuspendLayout();
         Name = "supportConnectionNotice";
         Text = "Remote Debugger";
         FormBorderStyle = Forms.FormBorderStyle.None;
@@ -26,6 +27,7 @@ internal sealed class SupportConnectionNotice : Forms.Form
         BackColor = Color.White;
         ClientSize = new Size(440, 222);
         AutoScaleMode = Forms.AutoScaleMode.Dpi;
+        AutoScaleDimensions = new SizeF(96, 96);
 
         var accent = new Forms.Panel { BackColor = Color.FromArgb(8, 127, 131), Bounds = new Rectangle(0, 0, 4, 222) };
         var icon = new Forms.Label { Text = "RD", TextAlign = ContentAlignment.MiddleCenter, ForeColor = Color.White,
@@ -33,6 +35,7 @@ internal sealed class SupportConnectionNotice : Forms.Form
         var brand = Label("REMOTE DEBUGGER", 70, 25, 270, 20, 9, Color.FromArgb(92, 115, 124), FontStyle.Bold);
         var title = Label(UiText.SupportConnectedNoticeTitle, 23, 69, 385, 31, 17, Color.FromArgb(24, 48, 57), FontStyle.Bold);
         var body = Label(UiText.SupportConnectedNoticeBody, 23, 106, 394, 40, 10, Color.FromArgb(90, 112, 121));
+        body.AutoEllipsis = false;
         var divider = new Forms.Panel { BackColor = Color.FromArgb(228, 234, 236), Bounds = new Rectangle(23, 148, 394, 1) };
         var close = Button("×", 393, 18, 27, 27, Color.FromArgb(99, 119, 128), Color.White);
         var view = Button(UiText.ViewSession, 23, 163, 150, 40, Color.FromArgb(8, 127, 131), Color.White);
@@ -60,6 +63,7 @@ internal sealed class SupportConnectionNotice : Forms.Form
             if (remaining == 0) Close();
         };
         FormClosed += (_, _) => timer.Dispose();
+        ResumeLayout(true);
     }
 
     private static Forms.Label Label(string text, int x, int y, int width, int height, float size, Color color,
