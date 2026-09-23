@@ -94,8 +94,6 @@ public sealed partial class MainForm
         headerCharts.Visible = supportSession && rolePages.SelectedIndex == 1;
         if (!CanRefreshResourcesAutomatically() || lastMeasurementUtc == null || DateTimeOffset.UtcNow - lastMeasurementUtc > TimeSpan.FromSeconds(15))
         { headerCharts.SetStale(); fullScreenCharts.SetStale(); }
-        viewerTips.SetToolTip(headerCharts, UiText.ResourceChartsHint);
-        viewerTips.SetToolTip(fullScreenCharts, UiText.ResourceChartsHint);
         LoadViewerPreferences();
         bool applicable = supportSession && liveStream != null && client?.ScreenRoute == "Relay";
         updatingEconomy = true;
