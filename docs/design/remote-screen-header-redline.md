@@ -6,8 +6,6 @@ Approved 2026-09-23 and reaffirmed by the supplied blueprint. This image is the 
 
 ## Imagegen prompt
 
-Follow-up adjustment: add 3 logical pixels between the title and subtitle, as requested after the blueprint comparison.
-
 ```text
 Use case: ui-mockup
 Asset type: high-fidelity redesign mockup of the existing Remote Debugger Windows desktop application's top header and screen toolbar.

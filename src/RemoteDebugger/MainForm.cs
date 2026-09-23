@@ -379,7 +379,7 @@ public sealed partial class MainForm : Forms.Form
         statusLabel.Location = new Point(HeaderPixels(30), (statusPill.Height - statusLabel.Height) / 2);
         headerTitle.Location = new Point(left, center - HeaderPixels(28));
         int titleWidth = Math.Max(HeaderPixels(241), headerTitle.PreferredSize.Width + HeaderPixels(58));
-        headerSubtitle.SetBounds(left, center + HeaderPixels(11), titleWidth - left, HeaderPixels(24));
+        headerSubtitle.SetBounds(left, center + HeaderPixels(8), titleWidth - left, HeaderPixels(24));
         int chartLeft = HeaderChartsBelow ? left : titleWidth;
         int chartRight = HeaderChartsBelow ? header.Width - left : actionsLeft - HeaderPixels(10);
         headerCharts.SetBounds(chartLeft, HeaderPixels(HeaderChartsBelow ? 96 : 34), Math.Max(0, chartRight - chartLeft), HeaderPixels(66));
