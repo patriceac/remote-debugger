@@ -80,7 +80,9 @@ internal static class UiGlyph
                     graphics.DrawLine(pen, 3, 9, 21, 9); graphics.DrawLines(pen, new PointF[] { new(16, 4), new(21, 9), new(16, 14) });
                     graphics.DrawLine(pen, 3, 17, 12, 17); graphics.DrawLine(pen, 3, 17, 3, 21); break;
                 case Refresh:
-                    graphics.DrawArc(pen, 3, 3, 18, 18, 35, 300); graphics.DrawLines(pen, new PointF[] { new(16, 5), new(22, 6), new(22, 0) }); break;
+                    graphics.DrawArc(pen, 3, 3, 18, 18, 45, 270);
+                    graphics.DrawLines(pen, new PointF[] { new(18.364f, 5.636f), new(21, 8), new(15, 8) });
+                    graphics.DrawLine(pen, 21, 8, 21, 2); break;
                 case Update:
                     graphics.DrawLine(pen, 12, 3, 12, 17); graphics.DrawLines(pen, new PointF[] { new(7, 8), new(12, 3), new(17, 8) }); graphics.DrawLine(pen, 3, 22, 21, 22); break;
                 case Link:
