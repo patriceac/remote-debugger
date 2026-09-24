@@ -35,7 +35,6 @@ internal sealed class RememberedListView : Forms.ListView
         layout = TableLayoutStore.Load(root, Name, Columns.Cast<Forms.ColumnHeader>()
             .Select((column, i) => new TableColumnLayout(column.Name!, column.Width, i)).ToArray());
         AllowColumnReorder = true;
-        ShowItemToolTips = true;
     }
 
     protected override void OnHandleCreated(EventArgs e)

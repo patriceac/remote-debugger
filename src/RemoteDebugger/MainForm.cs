@@ -42,8 +42,8 @@ public sealed partial class MainForm : Forms.Form
     private readonly Forms.Label statusDot = new() { AutoSize = true, Text = "●", Font = new Font("Segoe UI", 9), Margin = new Forms.Padding(10, 7, 4, 0) };
     private readonly Forms.Label statusLabel = new() { AutoSize = true, Font = new Font("Segoe UI", 9.5F), Margin = new Forms.Padding(0, 7, 8, 0) };
     private readonly Forms.Button terminateSession = Button(() => UiText.EndSupport, "terminateSession", destructive: true);
-    private readonly Forms.Label footerLeft = new() { Name = "footerStatus", Dock = Forms.DockStyle.Fill, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft, ForeColor = SecondaryText, Font = new Font("Segoe UI", 10.5F) };
-    private readonly Forms.Label footerRight = new() { Name = "footerDetail", Dock = Forms.DockStyle.Fill, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleRight, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F) };
+    private readonly Forms.Label footerLeft = new() { Name = "footerStatus", Dock = Forms.DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, ForeColor = SecondaryText, Font = new Font("Segoe UI", 10.5F) };
+    private readonly Forms.Label footerRight = new() { Name = "footerDetail", Dock = Forms.DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F) };
 
     private readonly Forms.Button roleAgent = RailButton(() => UiText.GiveControl, "roleAgent");
     private readonly Forms.Button roleController = RailButton(() => UiText.TakeControl, "roleController");
@@ -110,8 +110,8 @@ public sealed partial class MainForm : Forms.Form
     private readonly Forms.CheckBox mouseEnabled = new ViewerCheckBox { Name = "mouseKeyboard", Checked = true, AutoSize = true, ForeColor = PrimaryText }.WithText(() => UiText.MouseKeyboardControl);
     private readonly Forms.CheckBox relayEconomy = new ViewerCheckBox { Name = "relayEconomy", Enabled = false, AutoSize = true, ForeColor = PrimaryText, Location = Point.Empty, Margin = Forms.Padding.Empty }.WithText(() => UiText.RelayEconomy);
     private bool resumeViewingAfterMinimize;
-    private readonly Forms.Label streamStatus = new() { Name = "streamStatus", AutoSize = false, Dock = Forms.DockStyle.Fill, Margin = Forms.Padding.Empty, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F), AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft };
-    private readonly Forms.Label inputStatus = new() { Name = "inputStatus", AutoSize = false, Dock = Forms.DockStyle.Fill, Margin = Forms.Padding.Empty, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F), AutoEllipsis = true, TextAlign = ContentAlignment.MiddleRight };
+    private readonly Forms.Label streamStatus = new() { Name = "streamStatus", AutoSize = false, Dock = Forms.DockStyle.Fill, Margin = Forms.Padding.Empty, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F), TextAlign = ContentAlignment.MiddleLeft };
+    private readonly Forms.Label inputStatus = new() { Name = "inputStatus", AutoSize = false, Dock = Forms.DockStyle.Fill, Margin = Forms.Padding.Empty, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F), TextAlign = ContentAlignment.MiddleRight };
     private readonly RemoteInputState inputState = new();
     private readonly Forms.TextBox remoteText = TextBox("remoteText");
     private readonly Forms.Button typeText = Button(() => UiText.TypeText, "typeText", 112);
@@ -131,7 +131,7 @@ public sealed partial class MainForm : Forms.Form
     private readonly Forms.Label processSummary = SummaryValue("processSummary");
     private readonly Forms.Label resourceMeasuredAt = SummaryValue("resourceMeasuredAt");
     private readonly Forms.Label resourceState = new() { Name = "resourceState", AutoSize = true, ForeColor = SecondaryText };
-    private readonly Forms.Label volumeSummary = new() { Name = "volumeSummary", AutoSize = false, Dock = Forms.DockStyle.Fill, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F), AutoEllipsis = true };
+    private readonly Forms.Label volumeSummary = new() { Name = "volumeSummary", AutoSize = false, Dock = Forms.DockStyle.Fill, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F) };
     private SortState<ProcessSortColumn> processSort = new(ProcessSortColumn.CpuPercentTotalMachine, true);
     private readonly List<ProcessSortRow> processRows = [];
     private readonly Forms.TextBox fileDirectory = TextBox("remoteDirectory");
@@ -145,8 +145,8 @@ public sealed partial class MainForm : Forms.Form
     private bool fileDirectoryLoaded;
     private Forms.Button openFolderButton = null!;
     private readonly Forms.ProgressBar fileTransferProgress = new() { Name = "fileTransferProgress", Dock = Forms.DockStyle.Top, Height = 12 };
-    private readonly Forms.Label fileTransferStatus = new() { Name = "fileTransferStatus", AutoSize = false, AutoEllipsis = true, Height = 26, ForeColor = PrimaryText };
-    private readonly Forms.Label fileTransferDetails = new() { Name = "fileTransferDetails", AutoSize = false, AutoEllipsis = true, Height = 26, Dock = Forms.DockStyle.Top, ForeColor = SecondaryText };
+    private readonly Forms.Label fileTransferStatus = new() { Name = "fileTransferStatus", AutoSize = false, Height = 26, ForeColor = PrimaryText };
+    private readonly Forms.Label fileTransferDetails = new() { Name = "fileTransferDetails", AutoSize = false, Height = 26, Dock = Forms.DockStyle.Top, ForeColor = SecondaryText };
 
     // Diagnostics.
     private readonly Forms.ComboBox operations = new() { Name = "operation", DropDownStyle = Forms.ComboBoxStyle.DropDownList, Width = 190 };
@@ -193,7 +193,6 @@ public sealed partial class MainForm : Forms.Form
     private bool shutdownStarted;
     private bool suppressTerminationEvent;
     private bool trayVisible;
-    private bool trayNoticeShown;
     private bool shown;
     private readonly DiscoveryRefreshGate discoveryRefreshGate = new();
     private Forms.FormWindowState trayWindowState;
@@ -327,8 +326,8 @@ public sealed partial class MainForm : Forms.Form
         layout.Controls.Add(work, 0, 2);
 
         var local = new Forms.Panel { Dock = Forms.DockStyle.Fill, Margin = new(11, 3, 11, 3) };
-        var machine = new Forms.Label { Text = Environment.MachineName, AutoSize = false, Width = 160, Height = 23, ForeColor = RailSecondary, Font = new Font("Segoe UI", 10.5F), Location = new Point(42, 24), AutoEllipsis = true };
-        var version = new Forms.Label { AutoSize = false, Width = 160, Height = 23, ForeColor = RailSecondary, Font = new Font("Segoe UI", 10.5F), Location = new Point(42, isUpdateAdmin ? 74 : 49), AutoEllipsis = true }.WithText(() => UiText.DeviceVersion + " " + typeof(MainForm).Assembly.GetName().Version?.ToString(3));
+        var machine = new Forms.Label { Text = Environment.MachineName, AutoSize = false, Width = 160, Height = 23, ForeColor = RailSecondary, Font = new Font("Segoe UI", 10.5F), Location = new Point(42, 24) };
+        var version = new Forms.Label { AutoSize = false, Width = 160, Height = 23, ForeColor = RailSecondary, Font = new Font("Segoe UI", 10.5F), Location = new Point(42, isUpdateAdmin ? 74 : 49) }.WithText(() => UiText.DeviceVersion + " " + typeof(MainForm).Assembly.GetName().Version?.ToString(3));
         var language = BuildLanguageSelector(languageOverride); language.Margin = new(8, 0, 8, 0); layout.Controls.Add(language, 0, 3);
         local.Controls.Add(machine);
         var localIcon = UiGlyph.Icon(UiGlyph.Shield, 22, Color.FromArgb(225, 239, 246)); localIcon.Location = new(8, 24); local.Controls.Add(localIcon);
@@ -351,7 +350,7 @@ public sealed partial class MainForm : Forms.Form
         headerTitle.ForeColor = Color.FromArgb(15, 35, 64);
         headerSubtitle.Font = new Font("Segoe UI", 11);
         headerSubtitle.ForeColor = Color.FromArgb(143, 156, 169);
-        headerSubtitle.AutoSize = false; headerSubtitle.AutoEllipsis = true;
+        headerSubtitle.AutoSize = false;
         ((WorkspaceLabel)headerSubtitle).WrapText = false;
         statusDot.Font = new Font("Segoe UI", 9);
         statusLabel.Font = new Font("Segoe UI", 9.5F);
@@ -584,8 +583,8 @@ public sealed partial class MainForm : Forms.Form
         var page = new PagePanel(() => UiText.Diagnostics) { BackColor = Canvas, Padding = new Forms.Padding(28) };
         executeButton = Button(() => UiText.Execute, "execute", 92, primary: true); cancelButton = Button(() => UiText.Cancel, "cancel", 82);
         var top = ControlRow(RowLabel(() => UiText.Action, "operationLabel"), operations, RowLabel("PID", "pidLabel"), pid, executeButton, cancelButton);
-        technicalIdentity.AutoSize = false; technicalIdentity.Dock = Forms.DockStyle.Fill; technicalIdentity.AutoEllipsis = true; technicalIdentity.TextAlign = ContentAlignment.MiddleLeft;
-        diagnosticState.AutoSize = false; diagnosticState.Dock = Forms.DockStyle.Fill; diagnosticState.AutoEllipsis = true; diagnosticState.TextAlign = ContentAlignment.MiddleLeft; diagnosticState.Margin = Forms.Padding.Empty;
+        technicalIdentity.AutoSize = false; technicalIdentity.Dock = Forms.DockStyle.Fill; technicalIdentity.TextAlign = ContentAlignment.MiddleLeft;
+        diagnosticState.AutoSize = false; diagnosticState.Dock = Forms.DockStyle.Fill; diagnosticState.TextAlign = ContentAlignment.MiddleLeft; diagnosticState.Margin = Forms.Padding.Empty;
         operations.Items.AddRange(Templates.Keys.Cast<object>().ToArray()); operations.SelectedIndex = 0;
         var layout = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 6, Margin = Forms.Padding.Empty };
         layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
@@ -600,7 +599,7 @@ public sealed partial class MainForm : Forms.Form
 
     private void BuildTray()
     {
-        tray.Icon = Icon; tray.Text = "Remote Debugger"; tray.Visible = true;
+        tray.Icon = Icon; tray.Visible = true;
         var menu = new Forms.ContextMenuStrip(); menu.Items.Add("", null, (_, _) => RestoreFromTray()).WithText(() => UiText.Open); menu.Items.Add("", null, async (_, _) => await TerminateSupportAsync()).WithText(() => UiText.EndSupport); menu.Items.Add(new Forms.ToolStripSeparator()); menu.Items.Add("", null, (_, _) => RequestQuit()).WithText(() => UiText.Quit); tray.ContextMenuStrip = menu; tray.DoubleClick += (_, _) => RestoreFromTray();
         AppTheme.ConfigureMenu(menu);
     }
@@ -1080,7 +1079,6 @@ public sealed partial class MainForm : Forms.Form
     {
         bool onAgent = rolePages.SelectedIndex == 0;
         bool onController = !onAgent;
-        tray.Text = onAgent ? UiText.TrayAssistedPc : UiText.TrayController;
         if (onAgent)
         {
             headerTitle.SetText(() => UiText.GiveControl); headerSubtitle.SetText(() => UiText.Get("GiveControlSubtitle"));
@@ -1300,7 +1298,7 @@ public sealed partial class MainForm : Forms.Form
                 if (PrivateInternet && fleet.TryGetValue(DeviceKey(peer), out var device))
                 {
                     item.SubItems.Add(device.Version.Length == 0 ? "—" : device.Version);
-                    item.SubItems.Add(FleetState(device)); item.SubItems.Add(device.Detail); item.ToolTipText = device.Detail;
+                    item.SubItems.Add(FleetState(device)); item.SubItems.Add(device.Detail);
                 }
                 else item.SubItems.Add(fleet.TryGetValue(DeviceKey(peer), out var known) && !known.Online ? UiText.DeviceOffline : UiText.Available);
                 item.Tag = peer; peers.Items.Add(item); if (peer.Host == keep) item.Selected = true;
@@ -2315,11 +2313,6 @@ public sealed partial class MainForm : Forms.Form
         if (resumeViewingOnRestore) StopStream(() => UiText.MinimizedConnected);
         ReleaseHeldInputForCurrentSession();
         trayVisible = true; tray.Visible = true; Hide();
-        if (!trayNoticeShown)
-        {
-            trayNoticeShown = true;
-            tray.ShowBalloonTip(3000, "Remote Debugger", UiText.TrayNotice, Forms.ToolTipIcon.Info);
-        }
     }
 
     private void RestoreFromTray()
@@ -2398,7 +2391,7 @@ public sealed partial class MainForm : Forms.Form
     private void DisposeResources()
     {
         agentMaintenance.Dispose();
-        keyboardCapture?.Dispose(); viewerTips.Dispose(); resourceRefreshTimer.Dispose();
+        keyboardCapture?.Dispose(); resourceRefreshTimer.Dispose();
         powerLifetime?.Cancel();
         if (diagnosticRunStarted) diagnostics.EndRun(DiagnosticContext());
         clipboardLifetime?.Cancel(); localClipboard?.Dispose();

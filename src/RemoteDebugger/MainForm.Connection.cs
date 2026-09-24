@@ -100,7 +100,6 @@ public sealed partial class MainForm
         peers.Columns.Add(PrivateInternet ? UiText.DeviceVersion : UiText.Address, 160).WithText(() => PrivateInternet ? UiText.DeviceVersion : UiText.Address);
         peers.Columns.Add(UiText.State, 200).WithText(() => UiText.State);
         if (PrivateInternet) { peers.Columns.Add(UiText.DeviceProgress, 0); peers.Columns[2].DisplayIndex = 1; }
-        peers.ShowItemToolTips = true;
         computerHeader = new Forms.Panel { Name = "computerTableHeader", Height = 38, BackColor = Color.FromArgb(235, 242, 246) };
         computerHeader.Paint += (_, e) => DrawComputerTableHeader(e.Graphics);
         peerViewport.Controls.Add(computerSummary); peerViewport.Controls.Add(peers); peerViewport.Controls.Add(computerHeader);
@@ -139,7 +138,6 @@ public sealed partial class MainForm
         var identityText = ConnectionStack("selectedComputerIdentity");
         ConnectionRow(identityText, ConnectionLabel("selectedComputerCaption", 10.5f).WithText(() => UiText.Get("ConnectionSelectedComputer")));
         selectedPeerName.Name = "selectedPeerName"; selectedPeerName.Dock = Forms.DockStyle.Top; selectedPeerName.Font = new Font("Segoe UI", 21, FontStyle.Bold);
-        selectedPeerName.AutoEllipsis = true;
         selectedPeerAddress.Dock = Forms.DockStyle.Top; selectedPeerAddress.Font = new Font("Segoe UI", 12.5f);
         if (PrivateInternet) { selectedPeerName.SetText(() => UiText.SelectComputer); selectedPeerAddress.SetText(""); }
         ConnectionRow(identityText, selectedPeerName, 4); ConnectionRow(identityText, selectedPeerAddress, 4);
@@ -345,7 +343,6 @@ public sealed partial class MainForm
         {
             using var small = new Font("Segoe UI", 11.5f);
             Forms.TextRenderer.DrawText(e.Graphics, detail, small, new Rectangle(bounds.X, bounds.Y + HeaderPixels(40), bounds.Width, HeaderPixels(24)), AppTheme.Ink(SecondaryText), flags);
-            e.Item.ToolTipText = text + " · " + detail;
         }
     }
 }

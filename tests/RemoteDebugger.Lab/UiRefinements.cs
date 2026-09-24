@@ -121,11 +121,16 @@ internal sealed partial class LabForm
             selector.AccessibilityObject.DoDefaultAction(); await Task.Delay(50, stop.Token);
             Require(selector.DroppedDown, "ui.viewer_selector_accessible_open");
             selector.DroppedDown = false;
+            static IEnumerable<Forms.Control> Descendants(Forms.Control parent) => parent.Controls.Cast<Forms.Control>()
+                .SelectMany(control => new[] { control }.Concat(Descendants(control)));
+            var controls = Descendants(form).ToArray();
+            Require(typeof(MainForm).GetField("viewerTips", flags) == null &&
+                controls.OfType<Forms.Label>().All(label => !label.AutoEllipsis) &&
+                controls.OfType<Forms.ListView>().All(list => !list.ShowItemToolTips &&
+                    list.Items.Cast<Forms.ListViewItem>().All(item => item.ToolTipText.Length == 0)) &&
+                Get<Forms.NotifyIcon>("tray").Text.Length == 0, "ui.no_hover_tooltips");
             if (!redlineOnly)
             {
-                var tips = Get<Forms.ToolTip>("viewerTips");
-                Require(tips.GetToolTip(Get<Forms.Control>("screen")) == "" && tips.GetToolTip(Get<Forms.Control>("fullScreenButton")) == "" && tips.GetToolTip(Get<Forms.Control>("exitFullScreen")) == "",
-                    "ui.no_fullscreen_shortcut_tooltips");
                 foreach (byte[] chord in new byte[][] { [0xA2, 0xA4, 0x7B], [0xA3, 0xA1, 0x7B, 0x7B] })
                 {
                     form.Activate(); Get<Forms.Control>("remoteText").Focus();
@@ -143,6 +148,7 @@ internal sealed partial class LabForm
         await WaitUiAsync();
         await TrySetGuestScaleAsync(125);
         using var notice = (Forms.Form)Activator.CreateInstance(typeof(MainForm).Assembly.GetType("RemoteDebugger.SupportConnectionNotice")!)!;
+        Require(notice.Controls.OfType<Forms.Label>().All(label => !label.AutoEllipsis), "ui.notice_has_no_hover_tooltips");
         var progress = (Forms.Panel)notice.GetType().GetField("progress", flags)!.GetValue(notice)!;
         var elapsed = new Stopwatch();
         double? closedAt = null;

@@ -70,7 +70,7 @@ internal sealed class SupportConnectionNotice : Forms.Form
     private static Forms.Label Label(string text, int x, int y, int width, int height, float size, Color color,
         FontStyle style = FontStyle.Regular) => new()
         {
-            Text = text, Bounds = new Rectangle(x, y, width, height), AutoEllipsis = true,
+            Text = text, Bounds = new Rectangle(x, y, width, height),
             ForeColor = color, BackColor = Color.White, Font = new Font("Segoe UI", size, style)
         };
 

@@ -143,7 +143,7 @@ public sealed partial class MainForm
         if (help != null) section.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Absolute, 24));
         section.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
         section.Controls.Add(new WorkspaceLabel { Name = name, Dock = Forms.DockStyle.Fill, Font = new Font("Segoe UI", 10.5f, FontStyle.Bold), ForeColor = PrimaryText }.WithText(title), 0, 0);
-        if (help != null) section.Controls.Add(new WorkspaceLabel { Dock = Forms.DockStyle.Fill, AutoEllipsis = true, ForeColor = SecondaryText }.WithText(help), 0, 1);
+        if (help != null) section.Controls.Add(new WorkspaceLabel { Dock = Forms.DockStyle.Fill, ForeColor = SecondaryText }.WithText(help), 0, 1);
         editor.Margin = Forms.Padding.Empty;
         section.Controls.Add(editor, 0, help == null ? 1 : 2);
         return section;
