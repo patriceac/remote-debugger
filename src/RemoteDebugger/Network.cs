@@ -129,11 +129,16 @@ internal static class PeerDiscovery
             try { return await discover(deadline.Token).ConfigureAwait(false); }
             catch (Exception) when (!ct.IsCancellationRequested) { return []; }
         }
+        async Task<(List<Peer> Peers, bool Failed)> FindRelay()
+        {
+            try { return (await relayDiscovery(deadline.Token).ConfigureAwait(false), false); }
+            catch (Exception) when (!ct.IsCancellationRequested) { return (new List<Peer>(), true); }
+        }
         var lan = Find(lanDiscovery);
-        var relay = Find(relayDiscovery);
+        var relay = FindRelay();
         await Task.WhenAll(lan, relay).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
-        return new(DistinctPeers(lan.Result.Concat(relay.Result)), relay.Result.Count == 0);
+        return new(DistinctPeers(lan.Result.Concat(relay.Result.Peers)), relay.Result.Failed);
     }
 
     internal static Peer? Rebind(Peer previous, IEnumerable<Peer> peers) => peers.FirstOrDefault(peer =>

@@ -28,12 +28,16 @@ public sealed class AppThemeTests
             AppTheme.SetPreference("dark"); AppTheme.Apply(form);
             Assert.Equal(AppTheme.Canvas, form.BackColor);
             Assert.Equal(form.BackColor, panel.BackColor);
-            Assert.Equal(AppTheme.Surface, editor.BackColor);
+            Assert.Equal(Color.FromArgb(30, 30, 30), AppTheme.Canvas);
+            Assert.Equal(Color.FromArgb(37, 37, 37), AppTheme.Surface);
+            Assert.Equal(Color.FromArgb(32, 32, 32), AppTheme.Background(Color.FromArgb(23, 40, 51)));
+            Assert.Equal(Color.FromArgb(53, 53, 53), AppTheme.Background(Color.FromArgb(227, 246, 248)));
+            Assert.Equal(AppTheme.Input, editor.BackColor);
             Assert.Equal("keep my input", editor.Text); Assert.Equal(bounds, editor.Bounds);
             Assert.Same(image, screen.Image);
             // Status updates still assign light semantic colors while dark mode is active.
             editor.BackColor = Color.FromArgb(255, 240, 241);
-            Assert.Equal(Color.FromArgb(66, 35, 43), editor.BackColor);
+            Assert.Equal(AppTheme.Input, editor.BackColor);
             AppTheme.SetPreference("light"); AppTheme.Apply(form);
             Assert.Equal(Color.FromArgb(245, 250, 252), form.BackColor);
             Assert.Equal(form.BackColor, panel.BackColor);
@@ -55,7 +59,7 @@ public sealed class AppThemeTests
             var editor = new Forms.TextBox { BackColor = Color.White };
             Color originalInk = editor.ForeColor;
             panel.Controls.Add(editor); form.Controls.Add(panel);
-            Assert.Equal(AppTheme.Surface, editor.BackColor);
+            Assert.Equal(AppTheme.Input, editor.BackColor);
             Assert.Equal(AppTheme.Text, editor.ForeColor);
             AppTheme.SetPreference("light"); AppTheme.Apply(form);
             Assert.Equal(Color.White, editor.BackColor);

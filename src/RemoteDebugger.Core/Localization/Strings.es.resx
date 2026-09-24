@@ -823,12 +823,12 @@
   <data name="SystemDefault" xml:space="preserve"><value>Idioma del sistema</value></data>
   <data name="LanguageSaveFailed" xml:space="preserve"><value>Idioma aplicado, pero no se ha podido guardar.</value></data>
   <data name="InternetSetupRequired" xml:space="preserve"><value>Ejecute su instalador privado para activar la asistencia por Internet.</value></data>
-  <data name="InternetReady" xml:space="preserve"><value>Internet listo</value></data>
-  <data name="InternetConnecting" xml:space="preserve"><value>Conectando al relé de Internet…</value></data>
-  <data name="InternetRetrying" xml:space="preserve"><value>Internet no disponible · reintentando…</value></data>
-  <data name="InternetUnavailable" xml:space="preserve"><value>Internet no disponible</value></data>
-  <data name="LanFallbackActive" xml:space="preserve"><value>Internet no disponible · respaldo LAN activo · {0} PC(s) encontrado(s)</value></data>
-  <data name="LanFallbackReady" xml:space="preserve"><value>Respaldo LAN listo</value></data>
+  <data name="InternetReady" xml:space="preserve"><value>Relé de asistencia listo</value></data>
+  <data name="InternetConnecting" xml:space="preserve"><value>Conectando al relé de asistencia…</value></data>
+  <data name="InternetRetrying" xml:space="preserve"><value>Relé de asistencia no disponible · reintentando…</value></data>
+  <data name="InternetUnavailable" xml:space="preserve"><value>Relé de asistencia no disponible</value></data>
+  <data name="LanFallbackActive" xml:space="preserve"><value>Relé de asistencia no disponible · LAN disponible · PC encontrados: {0}</value></data>
+  <data name="LanFallbackReady" xml:space="preserve"><value>Conexión LAN lista</value></data>
   <data name="PrivateLanPeerNeedsUpdate" xml:space="preserve"><value>Este PC cercano debe actualizarse antes del emparejamiento privado por LAN.</value></data>
   <data name="PublicIp" xml:space="preserve"><value>IP pública</value></data>
   <data name="SupportId" xml:space="preserve"><value>ID de asistencia</value></data>

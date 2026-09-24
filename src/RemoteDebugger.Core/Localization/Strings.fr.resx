@@ -823,12 +823,12 @@
   <data name="SystemDefault" xml:space="preserve"><value>Langue du système</value></data>
   <data name="LanguageSaveFailed" xml:space="preserve"><value>Langue appliquée, mais non enregistrée.</value></data>
   <data name="InternetSetupRequired" xml:space="preserve"><value>Exécutez votre programme d’installation privé pour activer l’assistance Internet.</value></data>
-  <data name="InternetReady" xml:space="preserve"><value>Internet prêt</value></data>
-  <data name="InternetConnecting" xml:space="preserve"><value>Connexion au relais Internet…</value></data>
-  <data name="InternetRetrying" xml:space="preserve"><value>Internet indisponible · nouvelle tentative…</value></data>
-  <data name="InternetUnavailable" xml:space="preserve"><value>Internet indisponible</value></data>
-  <data name="LanFallbackActive" xml:space="preserve"><value>Internet indisponible · secours réseau local actif · {0} PC trouvé(s)</value></data>
-  <data name="LanFallbackReady" xml:space="preserve"><value>Secours réseau local prêt</value></data>
+  <data name="InternetReady" xml:space="preserve"><value>Relais d’assistance prêt</value></data>
+  <data name="InternetConnecting" xml:space="preserve"><value>Connexion au relais d’assistance…</value></data>
+  <data name="InternetRetrying" xml:space="preserve"><value>Relais d’assistance indisponible · nouvelle tentative…</value></data>
+  <data name="InternetUnavailable" xml:space="preserve"><value>Relais d’assistance indisponible</value></data>
+  <data name="LanFallbackActive" xml:space="preserve"><value>Relais d’assistance indisponible · réseau local disponible · PC trouvés : {0}</value></data>
+  <data name="LanFallbackReady" xml:space="preserve"><value>Connexion locale prête</value></data>
   <data name="PrivateLanPeerNeedsUpdate" xml:space="preserve"><value>Ce PC voisin doit être mis à jour avant l’association privée sur le réseau local.</value></data>
   <data name="PublicIp" xml:space="preserve"><value>IP publique</value></data>
   <data name="SupportId" xml:space="preserve"><value>Identifiant d’assistance</value></data>

@@ -33,7 +33,7 @@ internal sealed partial class LabForm
             var bounds = Element("headerTitle").Current.BoundingRectangle;
             using var pixel = new Bitmap(1, 1);
             using (var graphics = Graphics.FromImage(pixel)) graphics.CopyFromScreen((int)bounds.Right - 3, (int)bounds.Bottom - 3, 0, 0, new Size(1, 1));
-            Color actual = pixel.GetPixel(0, 0), expected = dark ? Color.FromArgb(25, 42, 53) : Color.White;
+            Color actual = pixel.GetPixel(0, 0), expected = dark ? Color.FromArgb(37, 37, 37) : Color.White;
             Require(actual.ToArgb() == expected.ToArgb(), id, new { expected = expected.ToArgb(), actual = actual.ToArgb() });
         }
         try
@@ -97,7 +97,7 @@ internal sealed partial class LabForm
             using var bitmap = new Bitmap(dialog.Width, dialog.Height);
             using (var graphics = Graphics.FromImage(bitmap)) graphics.CopyFromScreen(dialog.Location, Point.Empty, bitmap.Size);
             bitmap.Save(Path.Combine(output, "theme-dark-wake-dialog.png"));
-            Require(dialog.BackColor == AppTheme.Surface && dialog.Controls.Find("wakeMac", true).Single().BackColor == AppTheme.Surface,
+            Require(dialog.BackColor == AppTheme.Surface && dialog.Controls.Find("wakeMac", true).Single().BackColor == AppTheme.Input,
                 "new_dialog_palette");
             dialog.Close();
             product = loopbackAgent; await QuitLocalizedProductAsync("theme_dark_tray"); loopbackAgent = null;

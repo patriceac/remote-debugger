@@ -53,12 +53,12 @@ internal sealed class WorkspaceButton : Button
         }
         int iconSpace = Glyph.Length == 0 ? 0 : (int)((RailStyle ? 40 : DisclosureStyle ? 28 : 32) * DeviceDpi / 96f);
         var textBounds = new Rectangle(Padding.Left + 4 + iconSpace, Padding.Top, Math.Max(0, Width - Padding.Horizontal - 8 - iconSpace), Height - Padding.Vertical);
-        Color ink = Enabled ? ForeColor : RailStyle ? Color.FromArgb(103, 124, 137) : Color.FromArgb(146, 164, 189);
+        Color ink = Enabled ? ForeColor : AppTheme.Dark ? Color.FromArgb(112, 112, 112) : RailStyle ? Color.FromArgb(103, 124, 137) : Color.FromArgb(146, 164, 189);
         int iconLeft = DisclosureStyle ? 0 : RailStyle ? Padding.Left : 14;
-        if (Glyph.Length > 0) UiGlyph.Draw(e.Graphics, Glyph, Text.Length == 0 ? Rectangle.Inflate(ClientRectangle, -8, -8) : new Rectangle((int)(iconLeft * (RailStyle ? 1 : DeviceDpi / 96f)), 0, iconSpace - 8, Height), RailStyle && Selected && Name == "roleController" ? Color.FromArgb(0, 211, 224) : ink);
+        if (Glyph.Length > 0) UiGlyph.Draw(e.Graphics, Glyph, Text.Length == 0 ? Rectangle.Inflate(ClientRectangle, -8, -8) : new Rectangle((int)(iconLeft * (RailStyle ? 1 : DeviceDpi / 96f)), 0, iconSpace - 8, Height), RailStyle && Selected && Name == "roleController" ? AppTheme.Dark ? AppTheme.Accent : Color.FromArgb(0, 211, 224) : ink);
         if (RailStyle && Selected && (Name.StartsWith("nav", StringComparison.Ordinal) || Name == "roleAgent"))
         {
-            using var accent = new SolidBrush(Color.FromArgb(8, 170, 178));
+            using var accent = new SolidBrush(AppTheme.Dark ? AppTheme.Accent : Color.FromArgb(8, 170, 178));
             e.Graphics.FillRectangle(accent, 0, 0, Math.Max(6, DeviceDpi / 16), Height);
         }
         TextRenderer.DrawText(e.Graphics, Text, Font, textBounds, ink,

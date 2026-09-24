@@ -823,12 +823,12 @@
   <data name="SystemDefault" xml:space="preserve"><value>System default</value></data>
   <data name="LanguageSaveFailed" xml:space="preserve"><value>Language applied, but could not be saved.</value></data>
   <data name="InternetSetupRequired" xml:space="preserve"><value>Run your private installer to enable internet support.</value></data>
-  <data name="InternetReady" xml:space="preserve"><value>Internet ready</value></data>
-  <data name="InternetConnecting" xml:space="preserve"><value>Connecting to the internet relay…</value></data>
-  <data name="InternetRetrying" xml:space="preserve"><value>Internet unavailable · retrying…</value></data>
-  <data name="InternetUnavailable" xml:space="preserve"><value>Internet unavailable</value></data>
-  <data name="LanFallbackActive" xml:space="preserve"><value>Internet unavailable · LAN fallback active · {0} PC(s) found</value></data>
-  <data name="LanFallbackReady" xml:space="preserve"><value>LAN fallback ready</value></data>
+  <data name="InternetReady" xml:space="preserve"><value>Support relay ready</value></data>
+  <data name="InternetConnecting" xml:space="preserve"><value>Connecting to the support relay…</value></data>
+  <data name="InternetRetrying" xml:space="preserve"><value>Support relay unavailable · retrying…</value></data>
+  <data name="InternetUnavailable" xml:space="preserve"><value>Support relay unavailable</value></data>
+  <data name="LanFallbackActive" xml:space="preserve"><value>Support relay unavailable · LAN available · PCs found: {0}</value></data>
+  <data name="LanFallbackReady" xml:space="preserve"><value>LAN connection ready</value></data>
   <data name="PrivateLanPeerNeedsUpdate" xml:space="preserve"><value>This nearby PC must be updated before private LAN pairing.</value></data>
   <data name="PublicIp" xml:space="preserve"><value>Public IP</value></data>
   <data name="SupportId" xml:space="preserve"><value>Support ID</value></data>

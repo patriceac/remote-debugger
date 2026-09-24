@@ -31,7 +31,7 @@ internal sealed class ViewerComboBox : LocalizedComboBox
         path.AddArc(bounds.Right - diameter, bounds.Bottom - diameter, diameter, diameter, 0, 90);
         path.AddArc(bounds.Left, bounds.Bottom - diameter, diameter, diameter, 90, 90); path.CloseFigure();
         using var fill = new SolidBrush(AppTheme.Background(Color.FromArgb(253, 253, 254)));
-        using var pen = new Pen(Focused ? Color.FromArgb(0, 99, 255) : AppTheme.Line(Color.FromArgb(195, 200, 205)), scale);
+        using var pen = new Pen(Focused ? AppTheme.Dark ? AppTheme.Accent : Color.FromArgb(0, 99, 255) : AppTheme.Line(Color.FromArgb(195, 200, 205)), scale);
         e.Graphics.FillPath(fill, path); e.Graphics.DrawPath(pen, path);
         Forms.TextRenderer.DrawText(e.Graphics, Text, Font, new Rectangle((int)(7 * scale), 0, Width - (int)(30 * scale), Height), ForeColor,
             Forms.TextFormatFlags.NoPadding | Forms.TextFormatFlags.NoPrefix | Forms.TextFormatFlags.VerticalCenter | Forms.TextFormatFlags.SingleLine);
@@ -80,7 +80,7 @@ internal sealed class ViewerCheckBox : Forms.CheckBox
         path.AddArc(box.Right - diameter, box.Top, diameter, diameter, 270, 90);
         path.AddArc(box.Right - diameter, box.Bottom - diameter, diameter, diameter, 0, 90);
         path.AddArc(box.Left, box.Bottom - diameter, diameter, diameter, 90, 90); path.CloseFigure();
-        using var fill = new SolidBrush(Checked ? Color.FromArgb(0, 99, 255) : AppTheme.Background(Color.FromArgb(250, 251, 252)));
+        using var fill = new SolidBrush(Checked ? AppTheme.Dark ? AppTheme.Accent : Color.FromArgb(0, 99, 255) : AppTheme.Background(Color.FromArgb(250, 251, 252)));
         using var border = new Pen(Checked ? Color.FromArgb(0, 99, 255) : AppTheme.Line(Color.FromArgb(153, 158, 165)), scale);
         e.Graphics.FillPath(fill, path); e.Graphics.DrawPath(border, path);
         if (Checked)

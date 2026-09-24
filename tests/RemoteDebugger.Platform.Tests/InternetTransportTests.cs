@@ -227,6 +227,19 @@ public sealed class InternetTransportTests
     }
 
     [Fact]
+    public async Task EmptySuccessfulRelaySearchDoesNotReportInternetFailure()
+    {
+        var nearby = new Peer("Nearby", "192.168.1.20", 45832, new string('a', 64), "RD-0123-4567-89AB-CDEF");
+        var result = await PeerDiscovery.FindAsync(
+            privateInternet: true,
+            lanDiscovery: _ => Task.FromResult(new List<Peer> { nearby }),
+            relayDiscovery: _ => Task.FromResult(new List<Peer>()));
+
+        Assert.False(result.UsedLanFallback);
+        Assert.Equal(new[] { nearby }, result.Peers);
+    }
+
+    [Fact]
     public void LanPeerIdentityCollapsesMultipleAddressesAndKeepsAnEndpoint()
     {
         string fingerprint = new string('a', 64);

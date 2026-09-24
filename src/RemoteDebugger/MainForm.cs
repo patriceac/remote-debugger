@@ -1257,7 +1257,7 @@ public sealed partial class MainForm : Forms.Form
             }
             RenderPeers();
             discoveryState.SetText(() => result.UsedLanFallback
-                ? UiText.Format(UiText.LanFallbackActive, discoveredPeers.Count)
+                ? discoveredPeers.Count > 0 ? UiText.Format(UiText.LanFallbackActive, discoveredPeers.Count) : UiText.InternetUnavailable
                 : discoveredPeers.Count == 0
                     ? PrivateInternet ? UiText.NoInternetPcs : UiText.NoPcsFound
                     : UiText.Format(UiText.AvailablePcCount, discoveredPeers.Count));

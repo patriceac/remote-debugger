@@ -12,11 +12,15 @@ internal static class AppTheme
     private static readonly ConditionalWeakTable<Forms.Control, Colors> controls = new();
     internal static string Preference { get; private set; } = "system";
     internal static bool Dark { get; private set; }
-    internal static Color Canvas => Color.FromArgb(17, 28, 37);
-    internal static Color Surface => Color.FromArgb(25, 42, 53);
-    internal static Color Text => Color.FromArgb(230, 237, 243);
-    internal static Color Muted => Color.FromArgb(157, 175, 191);
-    internal static Color Border => Color.FromArgb(49, 70, 83);
+    internal static Color Canvas => Color.FromArgb(30, 30, 30);
+    internal static Color Surface => Color.FromArgb(37, 37, 37);
+    internal static Color Input => Color.FromArgb(43, 43, 43);
+    internal static Color Rail => Color.FromArgb(32, 32, 32);
+    internal static Color Selected => Color.FromArgb(53, 53, 53);
+    internal static Color Text => Color.FromArgb(240, 240, 240);
+    internal static Color Muted => Color.FromArgb(173, 173, 173);
+    internal static Color Border => Color.FromArgb(68, 68, 68);
+    internal static Color Accent => Color.FromArgb(0, 153, 165);
 
     internal static void SetPreference(string value)
     {
@@ -46,14 +50,13 @@ internal static class AppTheme
         {
             (245, 250, 252) => Canvas,
             (218, 230, 237) or (228, 234, 236) => Border,
-            (23, 40, 51) => Color.FromArgb(20, 35, 45),
-            (31, 72, 85) or (227, 246, 248) => Color.FromArgb(21, 61, 71),
-            (227, 243, 233) => Color.FromArgb(24, 58, 44),
-            (255, 242, 219) or (255, 244, 222) => Color.FromArgb(65, 51, 27),
-            (255, 240, 241) => Color.FromArgb(66, 35, 43),
-            (0, 153, 165) => Color.FromArgb(0, 169, 181),
-            (255, 255, 255) or (253, 253, 254) or (248, 253, 253) => Surface,
-            _ when light.R > 195 && light.G > 195 && light.B > 195 => Color.FromArgb(30, 48, 60),
+            (23, 40, 51) => Rail,
+            (31, 72, 85) or (227, 246, 248) => Selected,
+            (227, 243, 233) or (255, 242, 219) or (255, 244, 222) or (255, 240, 241) => Input,
+            (0, 153, 165) => Accent,
+            (255, 255, 255) => Surface,
+            (253, 253, 254) or (248, 253, 253) => Input,
+            _ when light.R > 195 && light.G > 195 && light.B > 195 => Input,
             _ => light
         };
     }
@@ -64,13 +67,14 @@ internal static class AppTheme
         return (light.R, light.G, light.B) switch
         {
             (255, 255, 255) => light,
-            (32, 107, 69) or (50, 137, 91) => Color.FromArgb(139, 215, 174),
+            (32, 107, 69) or (50, 137, 91) => Accent,
             (139, 94, 18) => Color.FromArgb(231, 188, 106),
             (184, 61, 73) or (222, 41, 59) or (178, 34, 34) => Color.FromArgb(244, 138, 151),
-            (0, 153, 165) => Color.FromArgb(0, 169, 181),
-            (103, 124, 137) => light, // Disabled navigation stays clearly muted.
+            (0, 153, 165) => Accent,
+            (103, 124, 137) => Color.FromArgb(112, 112, 112),
             _ when light.R < 60 && light.G < 85 && light.B < 100 => Text,
             _ when Math.Max(light.R, Math.Max(light.G, light.B)) < 195 => Muted,
+            _ when light.R > 195 && light.G > 195 && light.B > 195 => Text,
             _ => light
         };
     }
@@ -94,7 +98,7 @@ internal static class AppTheme
         public override Color ImageMarginGradientBegin => Surface;
         public override Color ImageMarginGradientMiddle => Surface;
         public override Color ImageMarginGradientEnd => Surface;
-        public override Color MenuItemSelected => Color.FromArgb(21, 61, 71);
+        public override Color MenuItemSelected => Selected;
         public override Color MenuItemBorder => Border;
         public override Color MenuBorder => Border;
         public override Color SeparatorDark => Border;
@@ -144,7 +148,7 @@ internal static class AppTheme
                 list.DrawColumnHeader += (_, e) =>
                 {
                     if (!Dark) { e.DrawDefault = true; return; }
-                    using var fill = new SolidBrush(Surface); e.Graphics.FillRectangle(fill, e.Bounds);
+                    using var fill = new SolidBrush(Input); e.Graphics.FillRectangle(fill, e.Bounds);
                     Forms.TextRenderer.DrawText(e.Graphics, e.Header?.Text, list.Font, Rectangle.Inflate(e.Bounds, -6, 0), Muted,
                         Forms.TextFormatFlags.VerticalCenter | Forms.TextFormatFlags.EndEllipsis | Forms.TextFormatFlags.NoPrefix);
                 };
@@ -166,7 +170,13 @@ internal static class AppTheme
             applying = true;
             try
             {
-                if (!background.IsEmpty) control.BackColor = Background(background);
+                if (!background.IsEmpty)
+                {
+                    Color themed = Background(background);
+                    if (Dark && background.ToArgb() == Color.White.ToArgb() &&
+                        (control is Forms.TextBoxBase or Forms.ComboBox or Forms.UpDownBase)) themed = Input;
+                    control.BackColor = themed;
+                }
                 if (!foreground.IsEmpty) control.ForeColor = Ink(foreground);
                 if (control is Forms.Button button)
                 {
