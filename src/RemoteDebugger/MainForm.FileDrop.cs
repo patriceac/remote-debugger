@@ -136,11 +136,12 @@ public sealed partial class MainForm
         if (copyPump || pausedCopy != null) return;
         copyPump = true;
         int generation = sessionGeneration;
+        bool completedWithoutWarnings = true;
         try
         {
             while (generation == sessionGeneration && copyQueue.TryDequeue(out var batch))
             {
-                if (!ReferenceEquals(client, batch.Target) || !supportSession) { copyQueue.Clear(); break; }
+                if (!ReferenceEquals(client, batch.Target) || !supportSession) { completedWithoutWarnings = false; copyQueue.Clear(); break; }
                 using var lifetime = new CancellationTokenSource(); fileTransferLifetime = lifetime;
                 try
                 {
@@ -188,6 +189,7 @@ public sealed partial class MainForm
                         }
                         catch (Exception ex) // The copy succeeded; a shell-layout failure must not copy the batch again.
                         {
+                            completedWithoutWarnings = false;
                             RecordIncident("desktop_position_failed", ex);
                             transferWindow.SetState(UiText.UploadVerified + " — " + ex.Message, complete: true);
                         }
@@ -195,7 +197,7 @@ public sealed partial class MainForm
                 }
                 catch (Exception ex)
                 {
-                    if (generation != sessionGeneration || !ReferenceEquals(client, batch.Target)) break;
+                    if (generation != sessionGeneration || !ReferenceEquals(client, batch.Target)) { completedWithoutWarnings = false; break; }
                     pausedCopy = batch;
                     transferWindow?.SetState(ex is OperationCanceledException ? UiText.TransferPaused : ex.Message);
                     transferWindow?.EnableResume(true);
@@ -206,8 +208,16 @@ public sealed partial class MainForm
             }
         }
         finally { copyPump = false; }
+        if (completedWithoutWarnings && generation == sessionGeneration && pausedCopy == null && copyQueue.Count == 0)
+            CloseSuccessfulTransferWindow();
         if (CanDropFiles && pausedCopy == null)
         { if (copyQueue.Count > 0) await PumpCopyQueueAsync(); else await BrowseFilesAsync(); }
+    }
+
+    private void CloseSuccessfulTransferWindow()
+    {
+        if (transferWindow is { IsDisposed: false } window) window.CloseAfterSuccess();
+        transferWindow = null;
     }
 
     private void EnsureTransferWindow()
@@ -271,6 +281,7 @@ public sealed partial class MainForm
         var tasks = new Dictionary<int, Task<string>>(); long done = 0, total = entries.Sum(entry => entry.Size);
         using var display = new TransferProgressDisplay(this, lifetime);
         using var fetchGate = new SemaphoreSlim(1, 1);
+        bool completedCopy = false;
         async Task<string> FetchAsync(int index)
         {
             await fetchGate.WaitAsync(lifetime.Token);
@@ -322,6 +333,7 @@ public sealed partial class MainForm
                 foreach (var task in tasks.Values.Where(task => task.IsCompletedSuccessfully))
                     try { File.Delete(task.Result); } catch (IOException) { }
                 diagnostics.Record(skipped == 0 ? "file_copy_verified" : "file_copy_finished_with_skips", DiagnosticContext());
+                completedCopy = skipped == 0;
             }
         }
         catch (Exception ex) { string outcome = ex is OperationCanceledException ? UiText.DragAgainToResume : ex.Message; transferWindow.SetState(outcome); fileTransferDetails.SetText(outcome); if (ex is not OperationCanceledException) RecordIncident("file_transfer_failed", ex); }
@@ -331,6 +343,7 @@ public sealed partial class MainForm
             try { await Task.WhenAll(tasks.Values); } catch { }
             if (ReferenceEquals(fileTransferLifetime, lifetime)) fileTransferLifetime = null;
             draggingFiles = false; RefreshControllerControls();
+            if (completedCopy) CloseSuccessfulTransferWindow();
         }
     }
     private void ShowTransferFailure(Exception ex)
@@ -368,4 +381,5 @@ internal sealed class TransferQueueForm : Forms.Form
     { state.Text = value; progress.Style = indeterminate ? Forms.ProgressBarStyle.Marquee : Forms.ProgressBarStyle.Continuous; if (complete) progress.Value = 100; }
     internal void SetProgress(int percent, string text) { progress.Style = Forms.ProgressBarStyle.Continuous; progress.Value = Math.Clamp(percent, 0, 100); state.Text = text; }
     internal void EnableResume(bool enabled) => resume.Enabled = enabled;
+    internal void CloseAfterSuccess() => Dispose();
 }

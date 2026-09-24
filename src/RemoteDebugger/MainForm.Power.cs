@@ -197,13 +197,13 @@ internal sealed class RestartOptionsForm : Forms.Form
     internal RestartOptionsForm(PowerPreflight preflight)
     {
         Text = UiText.RestartRemotePc; Name = "restartOptions"; StartPosition = Forms.FormStartPosition.CenterParent;
-        FormBorderStyle = Forms.FormBorderStyle.FixedDialog; MaximizeBox = MinimizeBox = false; ClientSize = new(590, 270);
+        FormBorderStyle = Forms.FormBorderStyle.FixedDialog; MaximizeBox = MinimizeBox = false; ClientSize = new(640, 340);
         Font = new("Segoe UI", 10); Padding = new(20);
-        var layout = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
-        layout.Controls.Add(new Forms.Label { AutoSize = true, MaximumSize = new(540, 0), Text = preflight.ExpectedReturn == "existing_automatic_desktop" ? UiText.ExistingAutomaticDesktopExpected : UiText.ManualSignInExpected });
+        var layout = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false };
+        layout.Controls.Add(new Forms.Label { AutoSize = true, MaximumSize = new(590, 0), Text = preflight.ExpectedReturn == "existing_automatic_desktop" ? UiText.ExistingAutomaticDesktopExpected : UiText.ManualSignInExpected });
         once = new() { Name = "oneTimeLogin", AutoSize = true, Text = UiText.SignInOnce, Enabled = preflight.OneTimeLoginAvailable, Margin = new(0, 16, 0, 4) };
         layout.Controls.Add(once);
-        layout.Controls.Add(new Forms.Label { AutoSize = true, MaximumSize = new(540, 0), Text = preflight.Account + "\n" +
+        layout.Controls.Add(new Forms.Label { AutoSize = true, MaximumSize = new(590, 0), Text = preflight.Account + "\n" +
             (preflight.OneTimeLoginAvailable ? UiText.WindowsPasswordForOneRestart : UiText.OneTimeLoginUnavailable) });
         password = new() { Name = "oneTimePassword", UseSystemPasswordChar = true, Enabled = false, Width = 360, MaxLength = 512 };
         layout.Controls.Add(password); once.CheckedChanged += (_, _) => { password.Enabled = once.Checked; if (!once.Checked) password.Clear(); };
