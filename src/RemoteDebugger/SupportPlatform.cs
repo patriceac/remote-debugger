@@ -124,10 +124,6 @@ public static class SupportPlatform
 
         _ = PrivilegedPathSafety.RequireUnderNonReparseRoot(configuration.RegisteredApplicationPath, SupportPlatformPaths.ProductDirectory);
         _ = PrivilegedPathSafety.RequireUnderNonReparseRoot(SupportPlatformPaths.ServiceExecutable, SupportPlatformPaths.ProductDirectory);
-        _ = AuthenticodeVerifier.VerifyPinnedTrusted(currentPath, configuration.PublisherThumbprint);
-        ct.ThrowIfCancellationRequested();
-        _ = AuthenticodeVerifier.VerifyPinnedTrusted(configuration.RegisteredApplicationPath, configuration.PublisherThumbprint);
-        _ = AuthenticodeVerifier.VerifyPinnedTrusted(SupportPlatformPaths.ServiceExecutable, configuration.PublisherThumbprint);
         ct.ThrowIfCancellationRequested();
 
         var start = CreateManagedStartInfo(launchArguments);

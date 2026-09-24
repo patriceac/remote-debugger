@@ -74,7 +74,6 @@ internal sealed class SupportBrokerHost : IDisposable
             throw new InvalidDataException("Support service configuration protocol is incompatible.");
         if (!string.Equals(Path.GetFullPath(Environment.ProcessPath!), Path.GetFullPath(SupportPlatformPaths.ServiceExecutable), StringComparison.OrdinalIgnoreCase))
             throw new UnauthorizedAccessException("Support service executable is not running from its protected provisioned path.");
-        _ = AuthenticodeVerifier.VerifyPinnedTrusted(Environment.ProcessPath!, configuration.PublisherThumbprint);
         updates = new PrivilegedUpdateManager(configuration, lifetime);
         power = new PrivilegedPowerManager(configuration, lifetime);
     }
@@ -223,7 +222,7 @@ internal sealed class SupportBrokerHost : IDisposable
         processId = caller.ProcessId,
         sessionId = caller.SessionId,
         firewallReady = await FirewallManager.IsReadyAsync(configuration.RegisteredApplicationPath, ct),
-        message = "Privileged local support is available for this signed interactive application."
+        message = "Privileged local support is available for this registered interactive application."
     };
 
     private static async Task ServeMaintenanceAsync(NamedPipeServerStream pipe, MaintenanceLease lease, CancellationToken lifetime)

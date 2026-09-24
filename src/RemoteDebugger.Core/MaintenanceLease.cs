@@ -1,7 +1,7 @@
 namespace RemoteDebugger.Core;
 
 /// <summary>
-/// Identifies one interactive, signed desktop process for the lifetime of its
+/// Identifies one interactive, registered desktop process for the lifetime of its
 /// connection to the privileged local broker. There is deliberately no wall
 /// clock expiry: closing the agent, disabling maintenance, disconnecting the
 /// pipe, or losing the process ends the lease and cancels its work. Ending a

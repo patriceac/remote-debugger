@@ -33,10 +33,10 @@ internal static class SupportPlatformPaths
 internal static class SupportOperationTimeouts
 {
     // Release cannot inject a delayed click/key; let recovery finish cold broker
-    // and helper signature checks instead of restarting them every three seconds.
+    // and helper startup instead of restarting them every three seconds.
     internal static int InputSeconds(string kind) => kind is "release" or "secureAttention" ? 75 : 3;
 
-    // Cold signature validation and NetSecurity/CIM startup can take materially
+    // Cold service and NetSecurity/CIM startup can take materially
     // longer than an ordinary pipe request. Keep each client alive beyond its
     // broker deadline so the broker returns a verified result or truthful error.
     public const int PlatformStatusExecutionSeconds = 60;
@@ -118,7 +118,6 @@ internal static class SupportPipeSecurity
 
 internal static class SupportPipeIdentity
 {
-    private static readonly RunningImageSignatureCache clientSignature = new(), serverSignature = new(), ownSignature = new();
     [DllImport("kernel32.dll", SetLastError = true)]
     internal static extern bool GetNamedPipeServerProcessId(SafePipeHandle pipe, out uint pid);
 
@@ -133,16 +132,15 @@ internal static class SupportPipeIdentity
             !string.Equals(identity.UserSid, configuration.RegisteredUserSid, StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(Path.GetFullPath(identity.ExecutablePath), Path.GetFullPath(configuration.RegisteredApplicationPath), StringComparison.OrdinalIgnoreCase))
             throw new UnauthorizedAccessException("Broker client process path, user, or interactive session does not match provisioning.");
-        _ = clientSignature.Get(identity.ExecutablePath, configuration.PublisherThumbprint, identity);
+        // Local IPC trusts the provisioned installation and Windows process
+        // identity. Publisher verification belongs to installation and updates.
         return identity;
     }
 
     public static void VerifyServer(NamedPipeClientStream pipe)
     {
         if (!GetNamedPipeServerProcessId(pipe.SafePipeHandle, out uint pid)) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
-        string executablePath = ServiceProcessIdentity.VerifyRunningService(checked((int)pid));
-        var localSigner = ownSignature.Get(Environment.ProcessPath!, null, Environment.ProcessId);
-        _ = serverSignature.Get(executablePath, localSigner.SignerThumbprint, pid);
+        _ = ServiceProcessIdentity.VerifyRunningService(checked((int)pid));
     }
 }
 
@@ -152,8 +150,8 @@ internal static class SupportPipeIdentity
 /// registered service account, protected command line, state, and PID; the pipe
 /// PID must be that exact own-process service. It deliberately does not open the
 /// LocalSystem process, whose process DACL need not grant a desktop user query
-/// access. The configured protected executable is signature-checked by the
-/// caller after this attestation succeeds.
+/// access. The configured executable remains at its protected provisioned path;
+/// signatures are verified when installing or replacing it.
 /// </summary>
 internal static class ServiceProcessIdentity
 {

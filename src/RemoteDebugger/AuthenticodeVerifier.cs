@@ -13,11 +13,7 @@ public sealed record AuthenticodeSignatureInfo(
     string Subject,
     bool WindowsTrusted,
     bool CryptographicallyValid,
-    int TrustStatus)
-{
-    internal DateTime ValidFromUtc { get; init; }
-    internal DateTime ValidUntilUtc { get; init; }
-}
+    int TrustStatus);
 
 /// <summary>
 /// Validates both parts WinVerifyTrust alone does not separate for an initially
@@ -172,8 +168,7 @@ internal static class AuthenticodeVerifier
     }
 
     private static AuthenticodeSignatureInfo Build(X509Certificate2 certificate, int status) =>
-        new(certificate.GetCertHashString(HashAlgorithmName.SHA256), certificate.Subject, status == Success, true, status)
-        { ValidFromUtc = certificate.NotBefore.ToUniversalTime(), ValidUntilUtc = certificate.NotAfter.ToUniversalTime() };
+        new(certificate.GetCertHashString(HashAlgorithmName.SHA256), certificate.Subject, status == Success, true, status);
 
     private static int VerifyTrust(string path)
     {
