@@ -75,13 +75,6 @@ public sealed class MaintenanceSession(string root) : IDisposable
             }
             if (pipe is { IsConnected: true }) return;
             DisposePipe(closeInput: false);
-            var platform = await SupportPlatform.GetStatusAsync(ct);
-            privilegedInputAvailable = platform.InteractiveInputAvailable;
-            if (!platform.Available)
-            {
-                Volatile.Write(ref status, new(false, false, platform.RequiresAdministratorConsent, platform.Message));
-                throw new InvalidOperationException(platform.Message);
-            }
             using var connect = CancellationTokenSource.CreateLinkedTokenSource(ct, lifetime.Token);
             connect.CancelAfter(TimeSpan.FromSeconds(SupportOperationTimeouts.PlatformStatusRoundTripSeconds));
             var candidate = await SupportPlatform.OpenBrokerPipeAsync(connect.Token);
@@ -91,6 +84,7 @@ public sealed class MaintenanceSession(string root) : IDisposable
                 await Wire.WriteAsync(candidate, new Request(id, "", "maintenance.open", Json.Element(new { dataRoot })), connect.Token);
                 var reply = await Wire.ReadAsync<Reply>(candidate, connect.Token);
                 var data = RemoteClient.Require(reply);
+                privilegedInputAvailable = await ReadInputCapabilityAsync(data, SupportPlatform.GetStatusAsync, connect.Token);
                 lock (stateLock)
                 {
                     ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
@@ -120,6 +114,21 @@ public sealed class MaintenanceSession(string root) : IDisposable
             throw;
         }
         finally { gate.Release(); }
+    }
+
+    internal static async Task<bool> ReadInputCapabilityAsync(System.Text.Json.JsonElement opened,
+        Func<CancellationToken, Task<SupportPlatformStatus>> legacyStatus, CancellationToken ct)
+    {
+        if (opened.TryGetProperty("protocolVersion", out var protocol))
+        {
+            if (protocol.GetInt32() != SupportPlatformPaths.ProtocolVersion)
+                throw new InvalidOperationException("The support service protocol is incompatible with this application.");
+            return opened.TryGetProperty("interactiveInput", out var input) && input.GetBoolean();
+        }
+        // Older installed brokers do not include capabilities in maintenance.open.
+        var status = await legacyStatus(ct);
+        if (!status.Available) throw new InvalidOperationException(status.Message);
+        return status.InteractiveInputAvailable;
     }
 
     public async Task<object> RunAsync(string file, string[] arguments, CancellationToken ct)

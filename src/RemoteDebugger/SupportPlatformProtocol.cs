@@ -118,6 +118,7 @@ internal static class SupportPipeSecurity
 
 internal static class SupportPipeIdentity
 {
+    private static readonly RunningImageSignatureCache clientSignature = new(), serverSignature = new(), ownSignature = new();
     [DllImport("kernel32.dll", SetLastError = true)]
     internal static extern bool GetNamedPipeServerProcessId(SafePipeHandle pipe, out uint pid);
 
@@ -132,7 +133,7 @@ internal static class SupportPipeIdentity
             !string.Equals(identity.UserSid, configuration.RegisteredUserSid, StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(Path.GetFullPath(identity.ExecutablePath), Path.GetFullPath(configuration.RegisteredApplicationPath), StringComparison.OrdinalIgnoreCase))
             throw new UnauthorizedAccessException("Broker client process path, user, or interactive session does not match provisioning.");
-        _ = AuthenticodeVerifier.VerifyPinnedTrusted(identity.ExecutablePath, configuration.PublisherThumbprint);
+        _ = clientSignature.Get(identity.ExecutablePath, configuration.PublisherThumbprint, identity);
         return identity;
     }
 
@@ -140,8 +141,8 @@ internal static class SupportPipeIdentity
     {
         if (!GetNamedPipeServerProcessId(pipe.SafePipeHandle, out uint pid)) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
         string executablePath = ServiceProcessIdentity.VerifyRunningService(checked((int)pid));
-        var localSigner = AuthenticodeVerifier.InspectForEnrollment(Environment.ProcessPath!);
-        _ = AuthenticodeVerifier.VerifyPinnedTrusted(executablePath, localSigner.SignerThumbprint);
+        var localSigner = ownSignature.Get(Environment.ProcessPath!, null, Environment.ProcessId);
+        _ = serverSignature.Get(executablePath, localSigner.SignerThumbprint, pid);
     }
 }
 

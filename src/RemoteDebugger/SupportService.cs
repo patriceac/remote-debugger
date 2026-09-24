@@ -155,7 +155,7 @@ internal sealed class SupportBrokerHost : IDisposable
                     {
                         var lease = caller.CreateLease();
                         lease.Validate();
-                        await Wire.WriteAsync(pipe, Reply.Success(request.Id, new { active = true, leaseId = lease.LeaseId, processId = lease.ProcessId, sessionId = lease.SessionId }), requestTimeout.Token);
+                        await Wire.WriteAsync(pipe, Reply.Success(request.Id, new { active = true, leaseId = lease.LeaseId, processId = lease.ProcessId, sessionId = lease.SessionId, protocolVersion = SupportPlatformPaths.ProtocolVersion, interactiveInput = true }), requestTimeout.Token);
                         await ServeMaintenanceAsync(pipe, lease, lifetime);
                         return;
                     }

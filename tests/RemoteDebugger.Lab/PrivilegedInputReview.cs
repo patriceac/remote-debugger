@@ -17,6 +17,7 @@ internal sealed partial class LabForm
         if (brokerProvisioning == null) throw new IOException("Privileged input requires the broker's verified provisioning receipt.");
         var originalCulture = CultureInfo.CurrentUICulture;
         CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("en");
+        var startup = Stopwatch.StartNew();
         loopbackAgent = product = LaunchLoopbackProduct(true, productData, "en");
         try
         {
@@ -24,9 +25,10 @@ internal sealed partial class LabForm
             ProbeProductIdentity("input.agent_medium", "The visible agent remains at medium integrity");
             var preparation = Stopwatch.StartNew();
             await WaitForUiAsync(() => FindVisibleId("agentMaintenanceState") is { } state && Value(state) == "Ready", 90);
+            startup.Stop();
             int helperPid = InputHelperIds().Single();
             CaptureDesktop("input-ready-before-pairing.png");
-            Pass("input.prepared_before_pairing", "The authenticated helper is ready before any controller pairs", new { helperPid, preparation.Elapsed.TotalSeconds });
+            Pass("input.prepared_before_pairing", "The authenticated helper is ready before any controller pairs", new { helperPid, preparation.Elapsed.TotalSeconds, startupSeconds = startup.Elapsed.TotalSeconds });
             string code = await WaitPairingCodeAsync();
             await CliAsync(["pair", "--host", "127.0.0.1"], stdin: code);
             var connection = JsonSerializer.Deserialize<Connection>(Vault.Read(RemoteClient.DefaultPath), Json.Options)!;
