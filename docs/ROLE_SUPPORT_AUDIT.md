@@ -6,6 +6,8 @@ Agreed with Patrice on 2026-09-25. This document is the authoritative handoff fo
 
 Document requirements, test the current application, establish the actual capabilities and failures, and propose a corrective action plan for review. **Do not fix product behavior yet.** Product changes start only after Patrice reviews and agrees to the plan. Test drivers and disposable fixtures are permitted. Parent agent writes code; latest Luna Max agents run tests. Use the Hyper-V SYSTEM broker for executable, installer, and native UI testing. No application-under-test execution on the physical host. No real family PC or production-network experiments.
 
+Follow-up authorization on 2026-09-25: the Hyper-V Harness project, using Astra Max, may implement, qualify and deploy the missing I01/I03/I04 test capabilities. This audit then reruns the blocked installer cases and completes the gap assessment. That authorization does not permit Remote Debugger product fixes.
+
 ## Agreed requirements
 
 1. Agent and controller are authorization roles, not interchangeable navigation views.

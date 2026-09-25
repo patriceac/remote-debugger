@@ -4,11 +4,13 @@ Requirements and scenario IDs: [ROLE_SUPPORT_AUDIT.md](ROLE_SUPPORT_AUDIT.md).
 
 Updated: 2026-09-25. Product fixes are not authorized. This ledger separates observed behavior from untested scope and test-infrastructure failures.
 
+Follow-up in progress: Patrice separately authorized the Hyper-V Harness project to implement and deploy the missing UAC capabilities with Astra Max. That work is not deployed yet. Original packaged MCP, saved-grant reuse after process restart, the complete isolated LAN discovery matrix, and the actual installer controller-checkbox workflow have now been evaluated. Packaged local-relay coverage remains incomplete after two diagnostic setup failures.
+
 ## Status
 
 The original 0.5.21 binary permits agent-originated support without controller authority. The same-source disposable-authority fixture reproduces access to a controller with its current receiving/maintenance switch OFF. All six role combinations have been exercised over loopback and provisioned VM networking; allowed positive controls work, and forbidden combinations also work. Full authorized updates and remote downgrade rejection work, but controller OFF accepts incoming updates and the exact standalone installer permits a downgrade. The original UI reproduces the contradictory failure/progress display. Automatic installer elevation remains unverified because the harness cannot follow this setup bootstrap's UAC handoff.
 
-Of 37 tracked scenarios, **17 fail the agreed requirements, 12 pass within their stated scope, five are partial, and three are blocked**. These are scenario outcomes, not counts of independent bugs. All submitted test runs are terminal. Product code and the original release/installer bytes remain unchanged.
+Of 37 tracked scenarios, **17 fail the agreed requirements, 13 pass within their stated scope, four are partial, and three are blocked**. These are scenario outcomes, not counts of independent bugs. Product code and the original release/installer bytes remain unchanged.
 
 ## Observed capabilities versus required policy
 
@@ -28,9 +30,9 @@ Ordinary support includes the tested system/files/processes/screenshot/command/A
 | Case | Status | Evidence / limitation |
 |---|---|---|
 | E01 | PASS, exact elevated setup | Fresh original setup with /TASKS=!adminpc installs exact Release bytes and reports IsAdmin false. Final self-exiting diagnostic repeat passed application and harness checks. |
-| E02 | PARTIAL | Actual credential import stages ciphertext without authority; masked password UI appears. Exact setup log proves the admin-credential feature payload is included; checkbox UI not exercised. |
+| E02 | PASS, exact setup checkbox | Actual checkbox starts unchecked; selecting it stages the protected pending envelope and launches an empty masked password prompt. With no password entered, before and after cancellation the installed original Release reports Agent and has no controller key. Explicit wrapper elevation only. |
 | E03 | PASS, fixture password gate | Wrong disposable password visibly rejected; IsAdmin remains false. |
-| E04 | PASS, bounded cancellation | Closing the prompt after wrong-password rejection exits and leaves IsAdmin false. |
+| E04 | PASS, exact setup cancellation and fixture | Closing the exact installed password prompt without input leaves Agent and no controller key. Closing after a rejected disposable password also leaves IsAdmin false. |
 | E05 | FAIL overall; password enrollment PASS | Correct password creates controller authority, but incoming maintenance defaults On instead of required Off. |
 | E06 | PARTIAL | Actual credential reimport preserves authority. Exact same-version agent reinstall preserves agent role and saved preference bytes with a clean final harness receipt. Enrolled-controller reinstall not exercised. |
 | P01 | FAIL, original Release | Take control enabled; receiving maintenance On but editable. Required agent controls are disabled. |
@@ -41,11 +43,11 @@ Ordinary support includes the tested system/files/processes/screenshot/command/A
 | C04 | PASS, tested positive control | Controller to agent screen capture/files/processes/commands/admin operations work; supplementary actual text input also succeeds. |
 | C05 | FAIL, fixture | Controller Off accepts ordinary support from another controller; existing elevated-command path alone denies. |
 | C06 | PASS, tested positive control | Controller to controller On ordinary/admin operations work; supplementary actual text input also succeeds. |
-| B01 | FAIL | Agent Take control and --controller UI, manual-IP CLI pairing and connected API permit support. Separate MCP wrapper not tested. |
-| B02 | FAIL, bounded discovery observation | Agent received a controller-Off listing. Empty positive-control listings make other discovery rows inconclusive; corrected repeat blocked by provisioning. |
+| B01 | FAIL, including original packaged MCP | Agent Take control and --controller UI, manual-IP CLI pairing and connected API permit support. Original .21 agent also successfully calls MCP remote_status, remote_system and remote_upload; the authorized-controller positive control passes. |
+| B02 | FAIL, complete isolated discovery matrix | All three agent-origin rows listed the target; controller-to-agent and controller-to-controller-ON positive controls passed. Controller-to-controller-OFF listing was observational. Windows Firewall consent remained open; this proves the isolated cohort's role policy, not deployment firewall readiness. |
 | B03 | FAIL in relay backend unit scope | Shared network bearer lists computers/opens channels without controller proof in four existing relay tests. Packaged relay end-to-end not run. |
 | B04 | FAIL, code and private-secret paths | Both a pairing code and a disposable private-network secret grant original Release agents support without a controller credential. Private-secret case is loopback, not a packaged relay journey. |
-| B05 | FAIL, saved grant after role removal | admin-disable removes source authority but an existing saved connection still completes a system call. Other restart/resume variants not exhaustively tested. |
+| B05 | FAIL, including process restart and MCP | admin-disable removes source authority; after restarting the same profile, the saved connection still completes CLI system and MCP status/system/upload operations. Other restart/resume variants are not exhaustively tested. |
 | S01 | FAIL | Switching controller's current maintenance Off leaves session Connected and ordinary system call succeeds. |
 | S02 | PARTIAL | Authority and explicit legacy Off survive process restart, real reboot and full forward update. Required unified support setting does not exist; enrolled-controller reinstall not exercised. |
 | S03 | PASS, local UI and loopback | Actual agent-local End support rotates the invitation, rejects the old grant, preserves Agent role, and accepts a later session/system call. The separate controller-initiated session.end path also revoked access, but displayed a stale Support active footer. |
@@ -70,9 +72,8 @@ Statuses: PASS / FAIL are behavioral results against the agreed contract. BLOCKE
 ## Coverage still open
 
 - **Normal setup elevation, standard-user credential entry and declining UAC (I01/I03/I04):** blocked by the broker's bootstrap/prompt capabilities. Explicit wrapper consent and elevated GuestSetup are useful comparisons, not substitutes for these journeys. No cause is assigned to the reported family-PC helper error.
-- **Interactive controller checkbox (E02):** source and the exact package log establish the optional credential feature; actual import/password/no-authority behavior was exercised with a disposable credential. The packaged checkbox selection itself was not clicked in this audit.
 - **Enrolled-controller reinstall (E06/S02/U07/I05):** exact original agent install/reinstall and fixture controller restart/reboot/forward upgrade passed their persistence checks. A full reinstall preserving a credential trusted by the shipped executable was not run; real controller credentials were not used.
-- **Transport and entry-point scope:** relay directory/channel behavior was exercised in the local worker simulator, not a complete packaged relay journey. The LAN repeat lost its sender to helper startup failure, so the full positive discovery matrix remains incomplete. A separate MCP wrapper journey and every saved-session restart variant were not run. Existing failing entry-point tests establish the listed failures without qualifying these additional paths.
+- **Transport and entry-point scope:** relay directory/channel behavior was exercised in the local worker simulator; the complete packaged local-relay journey is still unverified. The first attempt stopped at a disposable certificate-trust prompt; the second stopped because the normal driver could not find the elevated setup's receipt. Neither reached a relay policy case. The full isolated LAN discovery matrix, original packaged MCP and saved-grant reuse after authority removal/process restart are now verified. The LAN capture retains a Windows Firewall prompt and `firewallReady:false`, so it does not qualify production firewall setup. No deployed Cloudflare journey or every restart/resume variant has been claimed.
 - **Version scope:** original .21 and clearly marked same-source .21/.22 fixtures were used. The historical .20 installation and every possible version/transport permutation were not exercised.
 
 None of these gaps is a pass. They must remain visible when agreeing the corrective plan and its release checks.
@@ -80,6 +81,41 @@ None of these gaps is a pass. They must remain visible when agreeing the correct
 ## Proposed corrective actions
 
 See [ROLE_SUPPORT_CORRECTIVE_PLAN.md](ROLE_SUPPORT_CORRECTIVE_PLAN.md). It is a proposal for review; no product correction has been made.
+
+## Follow-up VM receipt: actual controller checkbox and password cancellation
+
+- Request `executable-test-20260925T021016947Z-d879ec42`; exact original setup SHA-256 `7F7ABADADA531BC1E547850F855BD53DF1C90C7D5F991F6BFE57A5382F17F353`, read-only VHDX input, Network None. Diagnostic SHA-256 `E139C549BFC6FC5392153A1CEDC52B731438AF5902778356CA0603451830DA53`.
+- The real additional-tasks page showed the controller/admin-PC checkbox initially unchecked. Native accessibility identified the actual checkbox and current rectangle; selection was verified through its checked state and before/after screenshots.
+- Setup installed the original Release hash `95199EA784F4E5D983F770E06D5802F22AD8470104CDDBA0C440E2344D919511`. Before any controller password, actual `admin-status` returned `ok:true,isAdmin:false`; the protected pending envelope existed and `update-admin.dpapi` did not.
+- Finish opened the controller-password dialog. UIA verified `IsPassword:true`; the inspected screenshot shows an empty field. Closing it without input left the role Agent and controller key absent. This closes E02 and corroborates E04 for the exact package.
+- Harness and application assertions passed, no cleanup failure, verified guest process cleanup without survivors, VM Off, payload and read-only input children deleted. Wrapper startup UAC was accepted and hash-verified. This is explicit diagnostic-wrapper elevation, not proof of I01 setup self-elevation.
+- Earlier attempts `executable-test-20260925T015103498Z-6558a999` and `executable-test-20260925T015811680Z-b1c5b874` stopped at diagnostic UIA/MSAA selector limitations before selection or installation. They cleaned up but supply no E02 product verdict. The completed repeat above used the observed accessibility rectangle; product bytes were unchanged.
+
+## Follow-up VM attempts: packaged local relay remains unverified
+
+- `executable-test-20260925T014251771Z-e6bdded1` verified the provisioned fixture, then stopped at Windows certificate-trust consent while importing the disposable local relay certificate into CurrentUser/Root. No prompt input was sent. Broker cancellation completed with VM Off, payload child deleted and Network None disconnected. The cancelled run has no guest process-cleanup assertion or relay policy verdict.
+- `executable-test-20260925T021100610Z-5a9a2052` moved synthetic certificate creation/trust into the manifest-bound elevated GuestSetup. Setup exited zero and its broker-captured receipt confirmed the exact fixture hash and LocalMachine/Root trust. The normal driver then verified the managed product but failed to read `relay-state/fixture-setup.json` before starting the relay. Both phases were passed the same request Outbox path; the receipt was absent from the driver phase and collected evidence. The exact cause of its disappearance was not established by that receipt.
+- The second harness execution succeeded and evaluated the failed driver assertion. Its result has a diagnostic fatal error, not a role-policy result. Verified process cleanup had no survivors, VM Off, payload child deleted, adapters disconnected, no cleanup failure; worker recycling was asynchronous. No relay matrix case ran.
+- Both attempts use the same-source disposable-authority .21 fixture and a proposed local Miniflare/workerd relay with no Internet route. Neither is evidence of deployed Cloudflare behavior. Test-source preparation now keeps synthetic cross-phase state outside the request Outbox; it has not been rerun, and submissions are held for the harness release drain.
+
+## Follow-up VM receipt: packaged MCP and saved grant after restart
+
+- Request: `executable-test-20260925T013239904Z-9a13c5a6`; evidence under the same-named directory in `D:\Disk\VMs\Codex-Harness\Live\Broker\Results`.
+- Original .21 agent-origin case is individually bound to Release SHA-256 `95199EA784F4E5D983F770E06D5802F22AD8470104CDDBA0C440E2344D919511`. Controller positive and authority-removal cases use the same-source disposable-authority .21 fixture SHA-256 `E444270C10BE5D9DF2E6BABB6684CEE707C7797DFD531E431BCA2676D3BA2C24`.
+- Actual packaged Node MCP server and SDK session, separate source/target profiles, Network None. The unenrolled original agent successfully called `remote_status`, `remote_system` and `remote_upload`; the 29-byte marker was verified in the target workspace. All three required denials failed. The enrolled-controller positive control accepted the same operations.
+- After successful `admin-disable` (`changed:true`), CLI role status was false. The same source profile was restarted, remained an agent, and reused its saved connection for a successful CLI system call and the same three MCP operations. This extends B05 to process restart; it is not a reboot or every resumed-session variant.
+- Application result: evaluated, `fatal:null`, `passed:false` from the expected policy checks. Every nested MCP session had `fatal:null`. No transport/SDK failure was classified as a denial.
+- Harness and guest execution succeeded, no infrastructure retry, process cleanup verified with no survivors, VM Off, all adapters disconnected, no host inputs, payload child deleted and path independently absent. Evidence snapshot copied 26/26 files without skips or warnings.
+- Visually inspected captures: `agent-origin.png`, `controller-positive.png`, `B05.restarted-agent.png`, and `mcp-role-final.png`.
+
+## Follow-up VM receipt: all six LAN discovery combinations
+
+- Receiver: `executable-test-20260925T013228701Z-38d244fd`; sender: `executable-test-20260925T013312060Z-7f27c598`. Canonical package `work/role-permission-audit/network-suite`; disposable-authority .21 product SHA-256 `E444270C10BE5D9DF2E6BABB6684CEE707C7797DFD531E431BCA2676D3BA2C24`.
+- Both provisioned guests verified managed product bytes and helper availability. Actual CLI role status matched all source/target fixtures; every receiver UI reported Ready before the paired discovery request. `IsolatedTestNet` cohort `role-audit-b02-20260925-a`; no physical LAN or Internet route.
+- Actual CLI discovery found target `10.254.0.101` for agent-to-agent, agent-to-controller-OFF and agent-to-controller-ON: all three required denials failed. Controller-to-agent and controller-to-controller-ON found the target and passed their positive controls. Controller-to-controller-OFF listing was recorded without inventing a visibility prohibition. All results had `usedLanFallback:false`.
+- This run exercised discovery only. Both terminal screenshots retain a Windows Firewall consent prompt for the diagnostic driver; it was not accepted. Product status recorded `firewallReady:false`. The broker's isolated-cohort networking allowed the exchange. These facts do not invalidate the observed role-policy failure, but they do not prove production firewall readiness or physical-LAN operation.
+- Both harnesses succeeded with no retry; receiver assertion passed, sender assertion failed for the three forbidden listings. Both guest process-cleanup records succeeded and were verified, with no survivors or errors. Both VMs Off, payload children deleted and their paths independently absent, all request adapters disconnected. The terminal schema has no separate disk-attachment inventory. The concurrent sender cleanup recorded the shared switch retained; the final receiver cleanup confirmed that switch and cohort state were removed.
+- Detailed local notes: `work/role-permission-audit/network-followup/b02-discovery-evidence.md`. No product or driver correction was made during this run.
 
 ## VM receipt: original Release role boundary
 
