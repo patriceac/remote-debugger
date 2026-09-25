@@ -2,11 +2,12 @@ using System.Text.Json;
 
 namespace RemoteDebugger.Core;
 
-/// <summary>Per-user choice controlling whether paired sessions may open administrator maintenance.</summary>
+/// <summary>Controller opt-in to incoming support, including administrator operations.</summary>
 public static class AdminMaintenancePreference
 {
-    public const bool DefaultEnabled = true;
-    private const string FileName = "admin-maintenance.json";
+    public const bool DefaultEnabled = false;
+    // Legacy maintenance defaulted ON and was not consent to receiving support.
+    private const string FileName = "support-enabled.json";
 
     public static bool Load(string root)
     {

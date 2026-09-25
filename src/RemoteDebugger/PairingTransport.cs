@@ -2,6 +2,7 @@ using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using RemoteDebugger.Core;
 
@@ -19,27 +20,30 @@ public static class ExecutableIdentity
 
 internal static class PairingTransport
 {
-    public static async Task<Connection> PairAsync(Connection target, string code, CancellationToken ct)
+    public static async Task<Connection> PairAsync(Connection target, string code, CancellationToken ct, string? controllerRoot = null)
     {
+        controllerRoot ??= Vault.DefaultRoot;
+        new UpdateAdminStore(controllerRoot).RequireController();
         if (target.RelayUrl.Length > 0)
         {
             foreach (var endpoint in RemoteClient.PreferredDirectEndpoints(target))
             {
                 using var attempt = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 attempt.CancelAfter(TimeSpan.FromSeconds(5));
-                try { return await PairOnceAsync(target with { DirectHost = endpoint.Host, DirectPort = endpoint.Port }, code, attempt.Token).ConfigureAwait(false); }
+                try { return await PairOnceAsync(target with { DirectHost = endpoint.Host, DirectPort = endpoint.Port }, code, controllerRoot, attempt.Token).ConfigureAwait(false); }
                 catch (Exception ex) when (!ct.IsCancellationRequested && ex is IOException or SocketException or AuthenticationException or OperationCanceledException) { }
             }
             target = target with { DirectHost = "", DirectPort = 0 };
         }
-        return await PairOnceAsync(target, code, ct).ConfigureAwait(false);
+        return await PairOnceAsync(target, code, controllerRoot, ct).ConfigureAwait(false);
     }
 
-    private static async Task<Connection> PairOnceAsync(Connection target, string code, CancellationToken ct)
+    private static async Task<Connection> PairOnceAsync(Connection target, string code, string controllerRoot, CancellationToken ct)
     {
         if (!PairingExchange.ValidSecret(code)) throw new ArgumentException("Invalid pairing secret.");
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct); deadline.CancelAfter(TimeSpan.FromSeconds(30));
-        await using var transport = await ConnectionTransport.OpenAsync(target, deadline.Token).ConfigureAwait(false);
+        using var controllerCertificate = new UpdateAdminStore(controllerRoot).CreateClientCertificate();
+        await using var transport = await ConnectionTransport.OpenAsync(target, deadline.Token, controllerRoot).ConfigureAwait(false);
         string fingerprint = "";
         // This channel is provisional until the code exchange confirms its actual
         // certificate. No reusable credential or plaintext pairing code is sent.
@@ -49,7 +53,13 @@ internal static class PairingTransport
             fingerprint = Convert.ToHexString(SHA256.HashData(certificate.GetRawCertData()));
             return true;
         });
-        await tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions { TargetHost = "RemoteDebugger", EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13 }, deadline.Token).ConfigureAwait(false);
+        await tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions {
+            TargetHost = "RemoteDebugger", EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+            ClientCertificates = new X509CertificateCollection { controllerCertificate },
+            LocalCertificateSelectionCallback = (_, _, _, _, _) => controllerCertificate,
+            AllowRenegotiation = false
+        }, deadline.Token).ConfigureAwait(false);
+        new UpdateAdminStore(controllerRoot).WatchAuthority(tls);
         if (target.Fingerprint.Length != 0 && !Safety.Equal(fingerprint, target.Fingerprint.ToUpperInvariant().Replace(":", "")))
             throw new AuthenticationException("The selected PC identity changed. Refresh discovery and pair again.");
         using var exchange = new PairingExchange("controller", code, fingerprint, ExecutableIdentity.Sha256);

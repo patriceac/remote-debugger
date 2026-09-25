@@ -51,8 +51,8 @@ public sealed class SecurityMigrationStore(string root)
             Convert.ToHexString(RandomNumberGenerator.GetBytes(32)), Guid.NewGuid().ToString("N"));
         current.Validate(true);
         // Verify the new relay credential before changing any local authorization.
-        _ = await current.FindAsync(ct).ConfigureAwait(false);
-        var peers = await previous.FindAsync(ct).ConfigureAwait(false);
+        _ = await current.FindAsync(ct, root).ConfigureAwait(false);
+        var peers = await previous.FindAsync(ct, root).ConfigureAwait(false);
         byte[] plaintext = JsonSerializer.SerializeToUtf8Bytes(current, Json.Options);
         ProtectedSetup envelope;
         try { envelope = await Task.Run(() => ProtectedSetup.Seal(plaintext, passphrase, current.SecurityId), ct).ConfigureAwait(false); }

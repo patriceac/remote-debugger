@@ -5,8 +5,8 @@ Discovery queries LAN and the private relay together and prefers LAN results for
 ## Set up your devices
 
 1. Run your personal `RemoteDebugger-<version>-Private-Setup.exe` on each new PC. It installs the single Program Files application, removes any legacy per-user copy, and embeds an encrypted `.rdrelay` setup for the current Windows user, including during silent installation. Enter your setup passphrase once in the Security window at first normal launch. Existing PCs can instead receive new credentials through [remote security migration](SECURITY_SETUP.md).
-2. Open the app and click **Enable support** on the assisted PC. Approve Windows administrator setup on first use. Opening the app alone does not grant access. The client then appears by computer name on your other PCs.
-3. On the controlling PC, choose **Take control**, select the computer and click **Connect**. No support ID, IP address, authorization code, or Internet setup screen is required.
+2. After setup and passphrase unlock, agents remain available for authorized support. Their **Support enabled** setting is ON and disabled. A controller receives support only when its editable setting is ON; it defaults OFF.
+3. On a controller enrolled with the separate controller password, choose **Take control**, select the computer and click **Connect**. Agents cannot obtain the computer listing or initiate connections, even with the private-network password.
 
 The installer also starts the app in the system tray when you sign in to Windows. Open it from the tray to enable support or take control. A normal Start menu launch opens the window immediately.
 
@@ -14,9 +14,9 @@ The installer contains passphrase-encrypted relay and pairing credentials. After
 
 Use the private installer for the normal setup and for relay configuration updates. The developer CLI can still import a `.rdrelay` profile for a portable build; this is not part of the app's setup flow.
 
-Routing IDs remain internal and change between support sessions. **End support** immediately revokes access; the computer disappears on a subsequent discovery refresh. After an abrupt disconnection, presence can remain stale for up to a minute before the next refresh. A fresh launch waits for **Enable support** again. Transient relay failures reconnect with backoff while the existing support-session grace period applies. If local support is provisioned, the agent also prepares its LAN listener and firewall rule; the controller then discovers it locally and authenticates with the same private session identity. Direct WAN requires an optional configured address reachable through the router and firewalls; otherwise the relay route is used.
+Routing IDs remain internal and change between support sessions. **End support** revokes the current session; an agent becomes available with a new invitation. Switching a controller's **Support enabled** OFF removes its availability and blocks incoming access, including updates. Transient relay failures reconnect with backoff while the existing session grace period applies. If local support is provisioned, the agent also prepares its LAN listener and firewall rule. Direct WAN requires a configured address reachable through the router and firewalls; otherwise the relay route is used.
 
-`--loopback-only` also disables internet registration. Importing a setup file does not enable Windows administrator maintenance; the existing separate Windows provisioning rules still apply.
+`--loopback-only` disables internet registration. Importing a network setup file grants neither controller authority nor Windows administrator rights; the installed support helper still requires Windows provisioning.
 
 ### Optional direct WAN access
 

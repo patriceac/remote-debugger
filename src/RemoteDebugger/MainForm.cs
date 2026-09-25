@@ -164,6 +164,8 @@ public sealed partial class MainForm : Forms.Form
     private readonly bool startInTray;
     private bool adminMaintenanceEnabled;
     private bool changingAdminMaintenance;
+    private long nextRoleCheck;
+    private string ConnectionPath => Path.Combine(root, "controller.connection");
     private readonly Forms.Timer renderTimer = new() { Interval = 250 };
     private readonly Forms.Timer inputRecoveryTimer = new() { Interval = 750 };
     private readonly Forms.NotifyIcon tray = new();
@@ -224,8 +226,9 @@ public sealed partial class MainForm : Forms.Form
         this.startupPreparationError = startupPreparationError;
         startAgentOnLaunch = startAgent;
         this.startInTray = startInTray;
-        adminMaintenanceEnabled = AdminMaintenancePreference.Load(root);
+        adminMaintenanceEnabled = !isUpdateAdmin || AdminMaintenancePreference.Load(root);
         adminMaintenanceToggle.Checked = adminMaintenanceEnabled;
+        adminMaintenanceToggle.Enabled = isUpdateAdmin;
         privateSupportEnabled = enableSupport;
 
         Text = "Remote Debugger";
@@ -655,7 +658,7 @@ public sealed partial class MainForm : Forms.Form
         // computer for a new private-internet session when this resume is absent.
         try
         {
-            client = RemoteClient.Load();
+            client = RemoteClient.Load(ConnectionPath);
             if (!PrivateInternet)
             {
                 host.SetText(client.Connection.Host);
@@ -685,7 +688,8 @@ public sealed partial class MainForm : Forms.Form
         // normal launch without requiring a second button click.
         privateSupportEnabled = WindowLifetime.EnableSupportAtStartup(
             PrivateInternet, HasConfiguredPrivateSupport(), privateSupportEnabled);
-        int initialRole = startAgentOnLaunch && !isUpdateAdmin ? 0 : 1;
+        int initialRole = isUpdateAdmin ? 1 : 0;
+        roleController.Enabled = isUpdateAdmin;
         SelectRole(initialRole);
         if (initialRole == 1)
         {
@@ -699,6 +703,7 @@ public sealed partial class MainForm : Forms.Form
 
     private async Task ResumeSavedSupportAsync()
     {
+        if (!new UpdateAdminStore(root).IsAdmin) return;
         RemoteClient? target = client;
         if (target == null || supportSession || pairingBusy || quitting || terminating) return;
         int generation = ++operationGeneration;
@@ -737,8 +742,7 @@ public sealed partial class MainForm : Forms.Form
             _ = await TryRetainFailedSynchronizationAsync(target, generation);
             if (generation == operationGeneration && ReferenceEquals(target, client))
             {
-                connectionState.SetText(() => UiText.FailurePrefix + ex.Message);
-                SetFooterMessage(() => UiText.ConnectionFailed); footerDetail = ex.Message; RefreshFooter();
+                ShowSynchronizationFailure(ex.Message); RefreshFooter();
             }
         }
         finally
@@ -920,7 +924,7 @@ public sealed partial class MainForm : Forms.Form
 
     private async Task ApplyAdminMaintenancePreferenceAsync()
     {
-        if (changingAdminMaintenance) return;
+        if (changingAdminMaintenance || !isUpdateAdmin) return;
         bool requested = adminMaintenanceToggle.Checked;
         bool previous = adminMaintenanceEnabled;
         if (requested == previous) return;
@@ -938,16 +942,18 @@ public sealed partial class MainForm : Forms.Form
         }
         catch (Exception ex)
         {
-            try { AdminMaintenancePreference.Save(root, previous); } catch { }
-            adminMaintenanceEnabled = previous;
-            adminMaintenanceToggle.Checked = previous;
+            // Failure must never restore permission after the user switched it off.
+            adminMaintenanceEnabled = requested && previous;
+            try { AdminMaintenancePreference.Save(root, adminMaintenanceEnabled); } catch { }
+            if (agent != null) try { await agent.SetAdminMaintenanceEnabledAsync(adminMaintenanceEnabled); } catch { }
+            adminMaintenanceToggle.Checked = adminMaintenanceEnabled;
             SetFooterMessage(() => UiText.AdminMaintenanceChangeFailedPrefix);
             footerDetail = ex.Message;
         }
         finally
         {
             changingAdminMaintenance = false;
-            adminMaintenanceToggle.Enabled = true;
+            adminMaintenanceToggle.Enabled = isUpdateAdmin;
             RefreshUiState();
             RefreshFooter();
         }
@@ -964,6 +970,18 @@ public sealed partial class MainForm : Forms.Form
     private void RefreshUiState()
     {
         if (IsDisposed) return;
+        if (!changingAdminMaintenance && Environment.TickCount64 >= nextRoleCheck)
+        {
+            nextRoleCheck = Environment.TickCount64 + 500;
+            isUpdateAdmin = new UpdateAdminStore(root).IsAdmin;
+            roleController.Enabled = isUpdateAdmin && !terminating;
+            changingAdminMaintenance = true;
+            adminMaintenanceEnabled = agent?.SupportEnabled ?? (!isUpdateAdmin || AdminMaintenancePreference.Load(root));
+            adminMaintenanceToggle.Checked = adminMaintenanceEnabled;
+            adminMaintenanceToggle.Enabled = isUpdateAdmin && !terminating;
+            changingAdminMaintenance = false;
+            if (!isUpdateAdmin && rolePages.SelectedIndex == 1) SelectRole(0);
+        }
         RefreshClipboardSharing();
         SampleDiagnostics();
         RefreshPowerHold();
@@ -991,6 +1009,18 @@ public sealed partial class MainForm : Forms.Form
 
     private void UpdateAgentState()
     {
+        if (agent is { SupportEnabled: false })
+        {
+            agentHeading.SetText(() => UiText.AdminMaintenanceDisabled);
+            agentSubtitle.SetText(() => UiText.AdminMaintenanceDisabledMessage);
+            agentState.SetText(() => UiText.NoActiveConnection);
+            agentSessionNote.SetText(() => UiText.PcNoLongerAccessible);
+            agentPairCode.SetText(""); CurrentPairingCode = null;
+            copyAgentCode.Visible = pairingCountdown.Visible = restartAgent.Visible = false;
+            pairingCountdownText.SetText("");
+            agentNetworkState.SetText(() => UiText.AdminMaintenanceDisabled);
+            return;
+        }
         var transfer = agent?.Session.Connected == true ? agent.Operations.FileTransfer : null;
         bool updateOngoing = agent != null && !agentIdle && IsOngoingUpdate(agent.UpdateProgress);
         pairingCountdown.Visible = !PrivateInternet || !agentIdle && (updateOngoing || transfer != null);
@@ -1164,6 +1194,7 @@ public sealed partial class MainForm : Forms.Form
 
     private void SelectRole(int index)
     {
+        if (index == 1 && !new UpdateAdminStore(root).IsAdmin) index = 0;
         // Role navigation is presentation-only. Keep a local agent and a remote
         // controller session alive independently when the user changes views.
         bool roleChanged = index != rolePages.SelectedIndex;
@@ -1226,6 +1257,7 @@ public sealed partial class MainForm : Forms.Form
 
     private async Task DiscoverAsync(bool explicitRefresh)
     {
+        if (!new UpdateAdminStore(root).IsAdmin) return;
         if (pairingBusy || supportSession || FleetBusy || fleetRefreshing || rolePages.SelectedIndex != 1 || quitting) return;
         discoveryState.SetText(() => explicitRefresh ? UiText.SearchingPcs : UiText.SearchingAtStartup); discoverButton.Enabled = false;
         discoveryLifetime?.Cancel(); discoveryLifetime = new CancellationTokenSource();
@@ -1233,8 +1265,8 @@ public sealed partial class MainForm : Forms.Form
         {
             var result = await PeerDiscovery.FindAsync(
                 PrivateInternet,
-                token => Discovery.FindAsync(2500, token),
-                token => InternetSettings.Load(root)!.FindAsync(token),
+                token => Discovery.FindAsync(2500, token, root),
+                token => InternetSettings.Load(root)!.FindAsync(token, root),
                 discoveryLifetime.Token);
             var found = result.Peers;
             if (pairingBusy || supportSession || rolePages.SelectedIndex != 1) return;
@@ -1247,7 +1279,7 @@ public sealed partial class MainForm : Forms.Form
             {
                 selectedFingerprint = selectedPeer.Fingerprint; host.SetText(selectedPeer.Host); selectedPeerName.SetText(selectedPeer.Name);
             }
-            else
+            else if (PrivateInternet || string.IsNullOrWhiteSpace(host.Text))
             {
                 selectedPeer = null; selectedFingerprint = ""; host.SetText(""); code.SetText("");
                 selectedPeerName.SetText(() => UiText.SelectComputer); selectedPeerAddress.SetText("");
@@ -1331,6 +1363,7 @@ public sealed partial class MainForm : Forms.Form
 
     private async Task PairSelectedAsync()
     {
+        if (!new UpdateAdminStore(root).IsAdmin) return;
         if (supportSession) { connectionState.SetText(() => UiText.EndSupportBeforeNewCode); return; }
         if (pairingBusy || FleetBusy || fleetRefreshing || string.IsNullOrWhiteSpace(host.Text)) { connectionState.SetText(() => PrivateInternet ? UiText.SelectComputer : UiText.ChoosePcPeriod); return; }
         if (!PrivateInternet && (code.Text.Length != 6 || !code.Text.All(char.IsAsciiDigit))) { connectionState.SetText(() => UiText.CodeMustBeSixDigits); code.Focus(); return; }
@@ -1344,8 +1377,8 @@ public sealed partial class MainForm : Forms.Form
             // Rebind before pairing so its authentication secret is never stale.
             if (PrivateInternet && selectedPeer is { } previous)
             {
-                var fresh = await PeerDiscovery.FindAsync(PrivateInternet, token => Discovery.FindAsync(1500, token),
-                    token => InternetSettings.Load(root)!.FindAsync(token), pairingCts.Token);
+                var fresh = await PeerDiscovery.FindAsync(PrivateInternet, token => Discovery.FindAsync(1500, token, root),
+                    token => InternetSettings.Load(root)!.FindAsync(token, root), pairingCts.Token);
                 selectedPeer = PeerDiscovery.Rebind(previous, fresh.Peers)
                     ?? throw new IOException("The selected computer is no longer available. Select its current entry after discovery refreshes.");
                 selectedFingerprint = selectedPeer.Fingerprint;
@@ -1376,7 +1409,7 @@ public sealed partial class MainForm : Forms.Form
                 catch (OperationCanceledException) when (!pairingCts.IsCancellationRequested) { }
                 catch (Exception) when (!pairingCts.IsCancellationRequested) { }
             }
-            pairedClient.Save(); synchronizingAgent = true; connectionState.SetText(() => UiText.AgentSynchronizing); SetFooterMessage(() => UiText.AgentSynchronizing); SetFooterDetail(() => UiText.TransferValidateVersion); ShowUpdateProgress(new AgentUpdateProgress("idle", 0, 0)); UpdateHeader(); RefreshFooter();
+            pairedClient.Save(ConnectionPath); synchronizingAgent = true; connectionState.SetText(() => UiText.AgentSynchronizing); SetFooterMessage(() => UiText.AgentSynchronizing); SetFooterDetail(() => UiText.TransferValidateVersion); ShowUpdateProgress(new AgentUpdateProgress("idle", 0, 0)); UpdateHeader(); RefreshFooter();
             using (var synchronization = CancellationTokenSource.CreateLinkedTokenSource(pairingCts.Token))
             {
                 synchronization.CancelAfter(TimeSpan.FromSeconds(SupportOperationTimeouts.ControllerSynchronizationSeconds));
@@ -1390,7 +1423,7 @@ public sealed partial class MainForm : Forms.Form
         {
             bool retained = pairedClient != null && await TryRetainFailedSynchronizationAsync(pairedClient, generation);
             if (pairedClient != null && !retained) _ = EndSessionBestEffortAsync(pairedClient);
-            if (generation == operationGeneration) { connectionState.SetText(() => UiText.FailurePrefix + ex.Message); SetFooterMessage(() => UiText.ConnectionFailed); footerDetail = ex.Message; RefreshFooter(); }
+            if (generation == operationGeneration) { ShowSynchronizationFailure(ex.Message); RefreshFooter(); }
         }
         finally
         {
@@ -1407,7 +1440,6 @@ public sealed partial class MainForm : Forms.Form
                 pairingCts.Dispose();
             }
             if (ownsPairing || generation == operationGeneration) { pairingBusy = false; discoverButton.Enabled = true; UpdateHeader(); RefreshControllerControls(); RefreshFooter(); }
-            if (!supportSession && !quitting) _ = DiscoverAsync(true);
         }
     }
 
@@ -1448,7 +1480,7 @@ public sealed partial class MainForm : Forms.Form
     internal static bool CanRetainFailedSynchronization(JsonElement heartbeat) =>
         heartbeat.TryGetProperty("session", out var session) &&
         session.TryGetProperty("connected", out var connected) && connected.ValueKind == JsonValueKind.True &&
-        heartbeat.TryGetProperty("binaryMatched", out var matched) && matched.ValueKind is JsonValueKind.True or JsonValueKind.False;
+        heartbeat.TryGetProperty("binaryMatched", out var matched) && matched.ValueKind == JsonValueKind.True;
 
     private async Task UpdateConnectedClientAsync()
     {
@@ -1533,6 +1565,11 @@ public sealed partial class MainForm : Forms.Form
 
     private void ShowSynchronizationFailure(string detail)
     {
+        connectedUpdateProgress = null;
+        connectedUpdateReport = null;
+        updateExplanation.SetText(detail);
+        updateRemaining.SetText("—");
+        selectedPeerAddress.SetText(() => UiText.ConnectionFailed);
         diagnostics.Record("synchronization_failed", DiagnosticContext(), incident: true);
         updateProgressText.SetText(() => UiText.SynchronizationInterrupted);
         updateProgressText.ForeColor = DestructiveText;
@@ -2212,7 +2249,7 @@ public sealed partial class MainForm : Forms.Form
         finally { suppressTerminationEvent = false; }
         if (stopped && ReferenceEquals(agent, oldAgent))
             await RestartAgentAfterSupportEndAsync(oldAgent);
-        roleAgent.Enabled = roleController.Enabled = true;
+        roleAgent.Enabled = true; roleController.Enabled = isUpdateAdmin;
         terminateSession.Enabled = true; terminating = false;
         RefreshUiState();
         if (stopped)
@@ -2243,7 +2280,7 @@ public sealed partial class MainForm : Forms.Form
         }
         catch (Exception ex) { SetFooterDetail(() => UiText.TargetOfflineExpiration); output.SetText(Pretty(new { ok = false, message = ex.Message })); }
         ClearControllerSession();
-        roleAgent.Enabled = roleController.Enabled = true;
+        roleAgent.Enabled = true; roleController.Enabled = isUpdateAdmin;
         terminateSession.Enabled = true; terminating = false;
         RefreshControllerControls();
         SetFooterMessage(() => UiText.SupportEnded); SetFooterDetail(() => UiText.SelectPcToRestart); RefreshFooter();

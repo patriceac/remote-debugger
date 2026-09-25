@@ -48,7 +48,7 @@ public sealed partial class AgentServer
                 return Reply.Success(request.Id, new { waitingStopped = true });
             }
             if (!Operations.Maintenance.Enabled || !Operations.Maintenance.CurrentStatus.Active)
-                throw new InvalidOperationException("Administrator maintenance must be active to manage this PC's power.");
+                throw new InvalidOperationException("The support helper must be active to manage this PC's power.");
             if (request.Operation == "power.cancel")
             {
                 var cancelled = await SupportPlatform.BrokerCallAsync("power.cancel", request.Args, ct);

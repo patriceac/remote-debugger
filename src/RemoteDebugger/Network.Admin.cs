@@ -15,7 +15,7 @@ public sealed partial class AgentServer
     {
         try
         {
-            if (Volatile.Read(ref terminating) != 0 || !PairingExchange.ValidHash(request.BinarySha256))
+            if (!SupportEnabled || Volatile.Read(ref terminating) != 0 || !PairingExchange.ValidHash(request.BinarySha256))
                 throw new UnauthorizedAccessException("This device is not available for updates.");
             // Fresh challenge on this TLS connection: proofs cannot be replayed on
             // another socket, device, operation or executable.
@@ -23,6 +23,7 @@ public sealed partial class AgentServer
             await Wire.WriteAsync(stream, Reply.Success(request.Id, new { nonce }), ct);
             var proof = await Wire.ReadAsync<JsonElement>(stream, ct);
             UpdateAdminProof.Verify(proof.Str("authorization"), nonce, Fingerprint, request.Operation, request.BinarySha256!);
+            if (!SupportEnabled) throw new UnauthorizedAccessException("Receiving support is disabled on this computer.");
             if (request.Operation == "admin.wake")
             {
                 var sent = await WakeOnLan.SendAsync(request.Args.Str("macAddress"), "", request.Args.Int("port", 9), ct);
@@ -45,7 +46,7 @@ public sealed partial class AgentServer
                 ReclaimDisconnectedUpdateSession();
                 lock (authLock)
                 {
-                    if (Session.HasPaired || updates.PendingExitPlan != null)
+                    if (!SupportEnabled || Session.HasPaired || updates.PendingExitPlan != null)
                         throw new InvalidOperationException("This computer is in use. Retry its update after the current session ends.");
                     string token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
                     tokenHash = Safety.Hash(token); controllerBinaryHash = request.BinarySha256!;
@@ -86,7 +87,10 @@ public sealed partial class AgentServer
         grantLifetime.Cancel(); grantLifetime = new(); resumeStore.Clear(); resumed = null;
         Operations.Maintenance.End(); updates.ResetControllerSynchronization();
         session.ResetForPairing();
-        if (Internet != null) Pairing.OpenPrivate(Internet.AuthenticationSecret); else Pairing.Open();
+        if (SupportEnabled)
+        {
+            if (Internet != null) Pairing.OpenPrivate(Internet.AuthenticationSecret); else Pairing.Open();
+        }
     }
 }
 

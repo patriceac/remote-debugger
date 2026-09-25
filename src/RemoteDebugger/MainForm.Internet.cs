@@ -39,6 +39,7 @@ public sealed partial class MainForm
 
     private void UpdatePrivateAgentState()
     {
+        if (agent is { SupportEnabled: false }) { enableSupport.Visible = false; return; }
         CurrentPairingCode = null;
         bool active = agent != null && !agentIdle;
         bool relayUnavailable = agent?.Internet?.Error.Length > 0;
@@ -75,6 +76,7 @@ public sealed partial class MainForm
             : !internetConfigured ? UiText.InternetSetupRequired
             : agentIdle ? UiText.SupportEnded
             : agent == null ? UiText.Inactive
+            : !agent.SupportEnabled ? UiText.AdminMaintenanceDisabled
             : relay?.Connected == true ? UiText.InternetReady
             : relay?.Error.Length > 0 ? UiText.InternetRetrying : UiText.InternetConnecting);
         internetState.ForeColor = relay?.Connected == true ? ConnectedText : SecondaryText;

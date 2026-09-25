@@ -2,6 +2,8 @@
 
 Run the same Release executable on the controlling PC. It talks to the interactive agent through the same `RemoteClient` implementation as **Prendre le contrôle**. No remote action is executed by the local harness or a side channel.
 
+Outgoing commands require an enrolled controller credential, including discovery, pairing, Wake and saved connections. A receiver must have **Support enabled** ON: permanently ON for agents, editable and OFF by default for controllers. Pairing codes and network passwords do not grant controller authority.
+
 ## Discover and pair
 
 ```powershell

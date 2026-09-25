@@ -126,6 +126,7 @@ public static class Program
             string verb = args.FirstOrDefault() ?? "help", config = Option("--connection", RemoteClient.DefaultPath);
             if (verb == "wake")
             {
+                new UpdateAdminStore(Option("--data-root", Vault.DefaultRoot)).RequireController();
                 var sent = await WakeOnLan.SendAsync(Option("--mac"), Option("--address"), int.Parse(Option("--port", "9")), ct.Token);
                 Console.WriteLine(Json.Text(new { ok = true, data = sent }));
                 return 0;
@@ -176,10 +177,12 @@ public static class Program
             }
             if (verb == "discover")
             {
-                var settings = InternetSettings.Load(Option("--data-root", Vault.DefaultRoot));
+                string root = Option("--data-root", Vault.DefaultRoot);
+                new UpdateAdminStore(root).RequireController();
+                var settings = InternetSettings.Load(root);
                 var found = await DiscoverPeersAsync(settings,
-                    token => Discovery.FindAsync(2500, token),
-                    (current, token) => current.FindAsync(token), ct.Token);
+                    token => Discovery.FindAsync(2500, token, root),
+                    (current, token) => current.FindAsync(token, root), ct.Token);
                 Console.WriteLine(Json.Text(new { ok = true, peers = found.Peers, usedLanFallback = found.UsedLanFallback })); return 0;
             }
             if (verb == "pair")
@@ -187,13 +190,13 @@ public static class Program
                 string fingerprint = Option("--fingerprint"); if (fingerprint.Length != 0 && fingerprint.Replace(":", "").Length != 64) throw new ArgumentException("When supplied, --fingerprint must be a SHA-256 certificate fingerprint.");
                 string root = Option("--data-root", Vault.DefaultRoot), address = Option("--host");
                 var settings = InternetSettings.Load(root);
-                var nearby = await Discovery.FindAsync(1500, ct.Token);
+                var nearby = await Discovery.FindAsync(1500, ct.Token, root);
                 var peer = nearby.FirstOrDefault(p => string.Equals(p.Host, address, StringComparison.OrdinalIgnoreCase) || string.Equals(p.SupportId, address, StringComparison.OrdinalIgnoreCase));
                 if (peer != null && fingerprint.Length > 0 && !Safety.Equal(peer.Fingerprint, fingerprint.ToUpperInvariant().Replace(":", "")))
                     throw new System.Security.Authentication.AuthenticationException("The selected PC identity changed.");
                 peer ??= new Peer(address, address, int.Parse(Option("--port", "45832")), fingerprint, Option("--support-id", InternetSettings.IsSupportId(address) ? address : ""));
                 if (settings != null && peer.SupportId.Length == 0) throw new InvalidOperationException(UiText.PrivateLanPeerNeedsUpdate);
-                var client = new RemoteClient(InternetSettings.Target(peer, root));
+                var client = new RemoteClient(InternetSettings.Target(peer, root)) { AdminRoot = root };
                 string secret = settings != null
                     ? settings.AuthenticationSecret(peer.SupportId)
                     : (await Console.In.ReadLineAsync(ct.Token) ?? "").Trim();
@@ -223,11 +226,13 @@ public static class Program
                     Connection? saved = null; ConnectedRemote? cached = null;
                     IConnectedRemote Load()
                     {
+                        string root = Option("--data-root", Path.GetDirectoryName(Path.GetFullPath(config))!);
+                        new UpdateAdminStore(root).RequireController();
                         // Re-read the small protected connection so target changes take effect.
                         var connection = JsonSerializer.Deserialize<Connection>(Vault.Read(config), Json.Options)
                             ?? throw new InvalidDataException("Missing saved connection.");
                         if (cached == null || connection != saved)
-                        { saved = connection; cached = new ConnectedRemote(new RemoteClient(connection)); }
+                        { saved = connection; cached = new ConnectedRemote(new RemoteClient(connection) { AdminRoot = root }); }
                         return cached;
                     }
                     await ConnectedWorker.RunAsync(Console.In, Console.Out, Load, ct.Token,
@@ -294,7 +299,7 @@ public static class Program
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { try { await remote.CallAsync("cancel", new { id }, seconds: 5); } catch (Exception) { } throw; }
             Console.WriteLine(Json.Text(reply)); return reply.Ok ? 0 : 1;
         }
-        catch (Exception ex) { Console.WriteLine(Json.Text(new { ok = false, error = ex is OperationCanceledException ? "cancelled" : "transport_or_input", message = ex.Message })); return 2; }
+        catch (Exception ex) { Console.WriteLine(Json.Text(new { ok = false, error = ex is OperationCanceledException ? "cancelled" : ex is UnauthorizedAccessException ? "access_denied" : "transport_or_input", message = ex.Message })); return 2; }
     }
 
     private static async Task CancelWhenInputClosesAsync(CancellationTokenSource cancellation)

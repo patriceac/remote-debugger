@@ -9,7 +9,7 @@ registers a machine uninstaller. It removes the legacy per-user installation
 from `%LOCALAPPDATA%\Programs\Remote Debugger` if one is present. It also
 creates a shortcut in the initiating user's Windows Startup folder, so the app
 starts in the system tray when that user signs in after boot. Use the tray icon
-to open its window; private support still waits for **Enable support**. Setup
+to open its window. Configured agents remain available for authorized support. Setup
 provisions the protected local broker using the installer's administrator approval.
 The Start
 menu shortcut opens the window normally. The installed app launches at medium
@@ -21,6 +21,11 @@ before files are installed. User migration, profile import and startup integrati
 run as the initiating user even when another administrator supplies credentials.
 `build-info.json` records the source commit, whether local changes were present,
 and the signed application SHA-256.
+
+From 0.5.22, setup rejects an older candidate before stopping the installed app or
+replacing its files. Same-version reinstall preserves enrollment and the receiving
+preference. Original-user helper provisioning also supports a standard user whose
+UAC prompt is approved with a different administrator account.
 
 The personal `RemoteDebugger-<version>-Private-Setup.exe` also embeds the private
 encrypted internet setup file. Installation stages ciphertext for a one-time
@@ -35,6 +40,10 @@ state reflects the current Windows user's saved admin-PC access. Checking it req
 the admin password at launch when access is not already present; unchecking it removes
 that user's existing admin credential. Preserve this personal installer for recovery
 after reinstalling Windows.
+
+Without successful controller enrollment, **Take control** is disabled. Agents have
+**Support enabled** permanently ON. Controllers default OFF and can enable receiving
+support explicitly; this one permission includes administrator operations.
 
 The desktop installer owns the Program Files application. Choosing **Enable
 support** after installation uses the provisioned broker for Private/LocalSubnet
@@ -67,7 +76,7 @@ or its health verification; finish or cancel that update first.
 
 The 0.4.13 broker adds a signed input helper in the authorized interactive session
 for elevated windows such as Task Manager. From 0.5.5, the agent prepares it at startup
-while administrator maintenance is enabled and keeps it ready until disabled or quit.
+while receiving support is enabled and keeps it ready until disabled or quit.
 Each remote input request still requires an authorized support session. Secure Windows desktops
 remain unavailable and report an input permission error. An agent-only update
 does not replace a pre-0.4.13 broker: run the current installer once on those agents

@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using RemoteDebugger.Core;
 
@@ -46,6 +47,54 @@ internal sealed class UpdateAdminStore(string root, string trustedPublicKey = Up
         return UpdateAdminProof.Sign(key, nonce, target, operation, binary);
     }
 
+    public void RequireController()
+    {
+        if (!IsAdmin) throw new UnauthorizedAccessException("Only an enrolled controller can discover or support another computer.");
+    }
+
+    public X509Certificate2 CreateClientCertificate()
+    {
+        RequireController();
+        using var key = Open();
+        var request = new CertificateRequest("CN=RemoteDebugger Controller", key, HashAlgorithmName.SHA256);
+        request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature, true));
+        request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(
+            new OidCollection { new("1.3.6.1.5.5.7.3.2") }, true));
+        using var generated = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddHours(1));
+        byte[] pfx = generated.Export(X509ContentType.Pfx);
+        try { return new X509Certificate2(pfx, (string?)null, X509KeyStorageFlags.UserKeySet); }
+        finally { CryptographicOperations.ZeroMemory(pfx); }
+    }
+
+    // Existing duplex streams must lose authority too, even while no new RPC is sent.
+    public async void WatchAuthority(Stream stream)
+    {
+        try
+        {
+            while (stream.CanRead)
+            {
+                if (!IsAdmin) { stream.Dispose(); return; }
+                await Task.Delay(500).ConfigureAwait(false);
+            }
+        }
+        catch (ObjectDisposedException) { }
+    }
+
+    internal static bool IsControllerCertificate(X509Certificate? certificate,
+        string trustedPublicKey = UpdateAdminProof.TrustedPublicKey)
+    {
+        if (certificate == null) return false;
+        try
+        {
+            using var parsed = new X509Certificate2(certificate);
+            using var key = parsed.GetECDsaPublicKey();
+            return key != null && parsed.NotBefore.ToUniversalTime() <= DateTime.UtcNow &&
+                parsed.NotAfter.ToUniversalTime() > DateTime.UtcNow &&
+                Convert.ToBase64String(key.ExportSubjectPublicKeyInfo()) == trustedPublicKey;
+        }
+        catch (CryptographicException) { return false; }
+    }
+
     public void Export(string path, string password)
     {
         using var key = Open();
@@ -76,6 +125,7 @@ internal sealed class UpdateAdminStore(string root, string trustedPublicKey = Up
             bool completedSetup = recovery.Settings?.SecurityId.Length > 0 && File.Exists(pendingSetup) &&
                 ProtectedSetup.Read(File.ReadAllBytes(pendingSetup)).ProfileId == recovery.Settings.SecurityId;
             // Authenticate and validate the entire recovery before changing saved access.
+            if (!IsAdmin) AdminMaintenancePreference.Save(root, false);
             recovery.Settings?.Save(root);
             Vault.Save(KeyPath, privateKey);
             if (completedSetup) File.Delete(pendingSetup);

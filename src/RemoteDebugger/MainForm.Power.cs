@@ -180,8 +180,8 @@ public sealed partial class MainForm
         // Forget this grant locally, even when the target is unreachable. A new support action must pair again.
         try
         {
-            if (File.Exists(RemoteClient.DefaultPath) && RemoteClient.Load().Connection.Fingerprint == target.Connection.Fingerprint)
-                File.Delete(RemoteClient.DefaultPath);
+            if (File.Exists(ConnectionPath) && RemoteClient.Load(ConnectionPath).Connection.Fingerprint == target.Connection.Fingerprint)
+                File.Delete(ConnectionPath);
         }
         catch (Exception ex) when (ex is IOException or System.Security.Cryptography.CryptographicException) { }
         ClearControllerSession(); SelectControllerPage(0);

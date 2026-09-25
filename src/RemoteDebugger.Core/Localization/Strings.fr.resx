@@ -46,22 +46,22 @@
     <value>Mode administrateur</value>
   </data>
   <data name="AdminMaintenance" xml:space="preserve">
-    <value>Maintenance admin</value>
+    <value>Assistance activée</value>
   </data>
   <data name="AdminMaintenanceChangeFailedPrefix" xml:space="preserve">
-    <value>Impossible de modifier la maintenance administrateur.</value>
+    <value>Impossible de modifier la réception d’assistance.</value>
   </data>
   <data name="AdminMaintenanceDisabled" xml:space="preserve">
-    <value>Désactivée</value>
+    <value>Assistance désactivée</value>
   </data>
   <data name="AdminMaintenanceDisabledMessage" xml:space="preserve">
-    <value>Maintenance administrateur désactivée pour ce PC.</value>
+    <value>Cet ordinateur ne peut pas recevoir d’assistance.</value>
   </data>
   <data name="AdminMaintenanceEnabled" xml:space="preserve">
     <value>Activée</value>
   </data>
   <data name="AdminMaintenanceEnabledMessage" xml:space="preserve">
-    <value>Maintenance administrateur activée.</value>
+    <value>La réception d’assistance est activée.</value>
   </data>
   <data name="AfterConnection" xml:space="preserve">
     <value>Après connexion</value>
@@ -841,7 +841,7 @@
   <data name="InternetSupportSuffix" xml:space="preserve"><value> · Assistance par Internet</value></data>
   <data name="SelectComputer" xml:space="preserve"><value>Sélectionnez un ordinateur</value></data>
   <data name="InternetLabel" xml:space="preserve"><value>Internet</value></data>
-  <data name="InternetMaintenanceNotice" xml:space="preserve"><value>L’activation Windows sert uniquement au réseau local et à la maintenance administrateur.</value></data>
+  <data name="InternetMaintenanceNotice" xml:space="preserve"><value>L’activation Windows sert uniquement au réseau local et à l’assistance administrateur.</value></data>
   <data name="SecurityTitle" xml:space="preserve"><value>Sécurité</value></data>
   <data name="SecurityPassphrase" xml:space="preserve"><value>Phrase secrète</value></data>
   <data name="SecurityConfirmPassphrase" xml:space="preserve"><value>Confirmer la phrase secrète</value></data>
@@ -986,7 +986,7 @@ Vous pouvez annuler pendant le compte à rebours de 10 secondes. Les application
   <data name="EconomyUnavailable" xml:space="preserve"><value>Le mode éco s'applique uniquement au partage d'écran par relais. Les connexions directes LAN/WAN utilisent la qualité normale.</value></data>
   <data name="SendTextHint" xml:space="preserve"><value>Envoyer ce texte dans le champ actif du PC distant. Vous pouvez aussi appuyer sur Entrée ici.</value></data>
   <data name="RemoteEnterHint" xml:space="preserve"><value>Appuyer sur la touche Entrée du PC distant.</value></data>
-  <data name="SecureAttentionHint" xml:space="preserve"><value>Envoyer Ctrl+Alt+Suppr via le service distant. Nécessite la maintenance administrateur. L'écran de sécurité Windows doit être traité sur le PC distant.</value></data>
+  <data name="SecureAttentionHint" xml:space="preserve"><value>Envoyer Ctrl+Alt+Suppr via le service distant. Nécessite le service d’assistance. L'écran de sécurité Windows doit être traité sur le PC distant.</value></data>
   <data name="DiskActivity" xml:space="preserve"><value>Disque</value></data>
   <data name="ResourceChartsHint" xml:space="preserve"><value>CPU, mémoire utilisée, activité disque et moteur GPU le plus actif. Actualisation toutes les 5 secondes en connexion directe LAN/WAN. — signifie indisponible ou en pause.</value></data>
   <data name="ConnectionSelectedComputer" xml:space="preserve"><value>ORDINATEUR SÉLECTIONNÉ</value></data>
@@ -1045,7 +1045,7 @@ Port par défaut : 45832. Laissez vide pour ignorer le WAN.</value></data>
   <data name="GivePermissions" xml:space="preserve"><value>État et autorisations</value></data>
   <data name="GiveSleepAllowed" xml:space="preserve"><value>Autorisée</value></data>
   <data name="GiveSleepHelp" xml:space="preserve"><value>La mise en veille est suspendue pendant une session d’assistance active.</value></data>
-  <data name="GiveMaintenanceHelp" xml:space="preserve"><value>Autoriser les tâches administrateur pendant l’assistance.</value></data>
+  <data name="GiveMaintenanceHelp" xml:space="preserve"><value>Autoriser les contrôleurs habilités à assister cet ordinateur, y compris pour les tâches administrateur.</value></data>
   <data name="GiveOn" xml:space="preserve"><value>Oui</value></data>
   <data name="GiveOff" xml:space="preserve"><value>Non</value></data>
   <data name="Theme" xml:space="preserve"><value>Thème</value></data>

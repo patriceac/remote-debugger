@@ -46,22 +46,22 @@
     <value>Admin mode</value>
   </data>
   <data name="AdminMaintenance" xml:space="preserve">
-    <value>Admin maintenance</value>
+    <value>Support enabled</value>
   </data>
   <data name="AdminMaintenanceChangeFailedPrefix" xml:space="preserve">
-    <value>Could not change administrator maintenance.</value>
+    <value>Could not change receiving support.</value>
   </data>
   <data name="AdminMaintenanceDisabled" xml:space="preserve">
-    <value>Disabled</value>
+    <value>Support disabled</value>
   </data>
   <data name="AdminMaintenanceDisabledMessage" xml:space="preserve">
-    <value>Administrator maintenance disabled for this PC.</value>
+    <value>This computer cannot receive support.</value>
   </data>
   <data name="AdminMaintenanceEnabled" xml:space="preserve">
     <value>Enabled</value>
   </data>
   <data name="AdminMaintenanceEnabledMessage" xml:space="preserve">
-    <value>Administrator maintenance enabled.</value>
+    <value>Receiving support is enabled.</value>
   </data>
   <data name="AfterConnection" xml:space="preserve">
     <value>After connecting</value>
@@ -841,7 +841,7 @@
   <data name="InternetSupportSuffix" xml:space="preserve"><value> · Internet support</value></data>
   <data name="SelectComputer" xml:space="preserve"><value>Select a computer</value></data>
   <data name="InternetLabel" xml:space="preserve"><value>Internet</value></data>
-  <data name="InternetMaintenanceNotice" xml:space="preserve"><value>Windows activation is needed only for local network access and administrator maintenance.</value></data>
+  <data name="InternetMaintenanceNotice" xml:space="preserve"><value>Windows activation is needed only for local network access and administrator support.</value></data>
   <data name="SecurityTitle" xml:space="preserve"><value>Security</value></data>
   <data name="SecurityPassphrase" xml:space="preserve"><value>Passphrase</value></data>
   <data name="SecurityConfirmPassphrase" xml:space="preserve"><value>Confirm passphrase</value></data>
@@ -986,7 +986,7 @@ You can cancel during the 10-second countdown. Applications with unsaved work wi
   <data name="EconomyUnavailable" xml:space="preserve"><value>Economy mode applies only while the remote screen uses the relay. Direct LAN/WAN connections use normal quality.</value></data>
   <data name="SendTextHint" xml:space="preserve"><value>Send this text to the focused field on the remote PC. You can also press Enter here.</value></data>
   <data name="RemoteEnterHint" xml:space="preserve"><value>Press the Enter key on the remote PC.</value></data>
-  <data name="SecureAttentionHint" xml:space="preserve"><value>Send Ctrl+Alt+Del through the remote support service. Requires administrator maintenance. The Windows security screen must be handled on the remote PC.</value></data>
+  <data name="SecureAttentionHint" xml:space="preserve"><value>Send Ctrl+Alt+Del through the remote support service. Requires the support helper. The Windows security screen must be handled on the remote PC.</value></data>
   <data name="DiskActivity" xml:space="preserve"><value>Disk</value></data>
   <data name="ResourceChartsHint" xml:space="preserve"><value>CPU, used memory, disk busy time and busiest GPU engine. Updates every 5 seconds on direct LAN/WAN connections. — means unavailable or paused.</value></data>
   <data name="ConnectionSelectedComputer" xml:space="preserve"><value>SELECTED COMPUTER</value></data>
@@ -1045,7 +1045,7 @@ Default port: 45832. Leave blank to skip WAN.</value></data>
   <data name="GivePermissions" xml:space="preserve"><value>Status &amp; permissions</value></data>
   <data name="GiveSleepAllowed" xml:space="preserve"><value>Allowed</value></data>
   <data name="GiveSleepHelp" xml:space="preserve"><value>Sleep is prevented during an active support session.</value></data>
-  <data name="GiveMaintenanceHelp" xml:space="preserve"><value>Allow administrator tasks during support.</value></data>
+  <data name="GiveMaintenanceHelp" xml:space="preserve"><value>Allow authorized controllers to support this computer, including administrator tasks.</value></data>
   <data name="GiveOn" xml:space="preserve"><value>On</value></data>
   <data name="GiveOff" xml:space="preserve"><value>Off</value></data>
   <data name="Theme" xml:space="preserve"><value>Theme</value></data>

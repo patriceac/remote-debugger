@@ -188,10 +188,10 @@ public sealed partial class MainForm
 
     private void UpdateAgentPresentation()
     {
-        bool privateWaiting = PrivateInternet && !agentIdle && agent?.Session.HasPaired != true && !(agent != null && IsOngoingUpdate(agent.UpdateProgress));
+        bool privateWaiting = PrivateInternet && agent?.SupportEnabled != false && !agentIdle && agent?.Session.HasPaired != true && !(agent != null && IsOngoingUpdate(agent.UpdateProgress));
         agentInstructions.Visible = privateWaiting;
         agentState.Visible = !privateWaiting;
-        agentPairCode.Visible = !PrivateInternet && !agentIdle;
+        agentPairCode.Visible = !PrivateInternet && !agentIdle && agent?.SupportEnabled != false;
         agentMaintenanceState.Visible = adminMaintenanceEnabled;
         internetState.Visible = internetSetupError != null || agent?.Internet?.Error.Length > 0;
         if (agentNetworkState.Text == UiText.Ready) agentNetworkState.ForeColor = PrimaryText;

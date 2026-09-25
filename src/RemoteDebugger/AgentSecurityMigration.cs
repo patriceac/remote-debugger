@@ -25,7 +25,7 @@ public sealed partial class AgentServer
 
     private async Task<object> StageSecurityAsync(JsonElement args, CancellationToken ct)
     {
-        if (Internet == null || Volatile.Read(ref terminating) != 0 || updates.PendingExitPlan != null)
+        if (!SupportEnabled || Internet == null || Volatile.Read(ref terminating) != 0 || updates.PendingExitPlan != null)
             throw new InvalidOperationException("Internet support must be active before migration.");
         var next = args.GetProperty("settings").Deserialize<InternetSettings>(Json.Options) ?? throw new ArgumentException("Missing settings.");
         next.Validate(true);
@@ -58,7 +58,7 @@ public sealed partial class AgentServer
 
     private async Task ServeSecurityCandidateAsync(SslStream tls, Request request, SecurityCandidate candidate, CancellationToken ct)
     {
-        if (candidate.Expires <= DateTimeOffset.UtcNow || Volatile.Read(ref terminating) != 0 ||
+        if (!SupportEnabled || candidate.Expires <= DateTimeOffset.UtcNow || Volatile.Read(ref terminating) != 0 ||
             !ReferenceEquals(securityCandidate, candidate)) throw new AuthenticationException("Security migration expired.");
         if (request.Operation == "pair.v2")
         {
@@ -68,7 +68,11 @@ public sealed partial class AgentServer
                 using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct); deadline.CancelAfter(TimeSpan.FromSeconds(30));
                 await PairingTransport.AcceptAsync(tls, request, candidate.Gate, Fingerprint, (token, binary) =>
                 {
-                    candidate.TokenHash = Safety.Hash(token); candidate.ControllerHash = binary;
+                    lock (authLock)
+                    {
+                        if (!SupportEnabled) throw new AuthenticationException("Receiving support is disabled.");
+                        candidate.TokenHash = Safety.Hash(token); candidate.ControllerHash = binary;
+                    }
                 }, deadline.Token);
             }
             finally { candidate.PairSlot.Release(); }
@@ -86,22 +90,23 @@ public sealed partial class AgentServer
         InternetAgent? previous = null;
         try
         {
-            if (Volatile.Read(ref terminating) != 0 || candidate.Expires <= DateTimeOffset.UtcNow || updates.PendingExitPlan != null)
+            if (!SupportEnabled || Volatile.Read(ref terminating) != 0 || candidate.Expires <= DateTimeOffset.UtcNow || updates.PendingExitPlan != null)
                 throw new AuthenticationException("Security migration is no longer available.");
-            // Persist first. An uncertain reply is recovered using the controller's saved new route and credentials.
-            Vault.Save(Path.Combine(securityRoot, "internet-invitation.dpapi"),
-                Vault.Read(Path.Combine(candidate.Directory, "internet-invitation.dpapi")));
-            candidate.Settings.Save(securityRoot);
-            resumeStore.Clear(); resumed = null; resumeAccepted = false;
             lock (authLock)
             {
+                if (!SupportEnabled) throw new AuthenticationException("Receiving support is disabled.");
+                // Commit consent, persisted settings, and relay ownership atomically.
+                Vault.Save(Path.Combine(securityRoot, "internet-invitation.dpapi"),
+                    Vault.Read(Path.Combine(candidate.Directory, "internet-invitation.dpapi")));
+                candidate.Settings.Save(securityRoot);
+                resumeStore.Clear(); resumed = null; resumeAccepted = false;
                 tokenHash = candidate.TokenHash; controllerBinaryHash = candidate.ControllerHash;
                 grantLifetime.Cancel(); grantLifetime = new();
                 foreach (var job in running.Values) job.Cancel(); requests.Clear();
                 session.Pair(true); Pairing.Close();
+                previous = Internet; Internet = candidate.Agent; candidate.Promoted = true;
             }
             Native.ReleaseAllInput();
-            previous = Internet; Internet = candidate.Agent; candidate.Promoted = true;
             await Wire.WriteAsync(tls, Reply.Success(request.Id, new { securityId = candidate.Settings.SecurityId, protectedAccess = true }), ct);
             Status?.Invoke("Security updated. Previous installer credentials and sessions are no longer accepted.");
         }

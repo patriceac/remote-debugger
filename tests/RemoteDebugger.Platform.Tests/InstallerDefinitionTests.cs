@@ -60,7 +60,13 @@ public sealed class InstallerDefinitionTests
 
         Assert.Contains("RemoteDebugger-InstallerHelper.exe", definition, StringComparison.Ordinal);
         Assert.Contains("--installer-shutdown", definition, StringComparison.Ordinal);
-        Assert.Contains("ExecAsOriginalUser(HelperPath, '--installer-user-cleanup'", definition, StringComparison.Ordinal);
+        Assert.Contains("'--installer-user-cleanup', ExpandConstant('{app}')", definition, StringComparison.Ordinal);
+        Assert.DoesNotContain("ExpandConstant('{tmp}'),\n    SW_HIDE", definition.Replace("\r\n", "\n"));
+        Assert.DoesNotContain("RemoteDebugger-ProvisionRequest.txt", definition);
+        Assert.Contains("Result := CheckInstalledVersion();", definition);
+        Assert.Contains("InstalledMS > CandidateMS", definition);
+        Assert.Contains("InstalledLS > CandidateLS", definition);
+        Assert.DoesNotContain("    MsgBox(", definition);
         Assert.DoesNotContain("{localappdata}", definition, StringComparison.Ordinal);
         Assert.Contains("DisableDirPage=yes", definition, StringComparison.Ordinal);
         Assert.Contains("UsePreviousAppDir=no", definition, StringComparison.Ordinal);

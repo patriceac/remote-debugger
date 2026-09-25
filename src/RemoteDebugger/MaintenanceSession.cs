@@ -24,12 +24,12 @@ public sealed class MaintenanceSession(string root) : IDisposable
     private readonly CancellationTokenSource lifetime = new();
     private readonly PrivilegedInputSession input = new();
     private bool privilegedInputAvailable;
-    private MaintenanceSessionStatus status = new(false, false, true, "Privileged maintenance has not started.");
+    private MaintenanceSessionStatus status = new(false, false, true, "Administrator support has not started.");
     private int enabled = 1;
     private int disposed;
     private int commandRunning;
 
-    public const string DisabledMessage = "Administrator maintenance is disabled for this support session.";
+    public const string DisabledMessage = "Receiving support is disabled on this computer.";
     public bool Enabled => Volatile.Read(ref enabled) != 0;
     public MaintenanceSessionStatus CurrentStatus => Volatile.Read(ref status);
     public object Status => CurrentStatus with { InputReady = input.Ready };
@@ -57,7 +57,7 @@ public sealed class MaintenanceSession(string root) : IDisposable
         {
             if (Volatile.Read(ref disposed) == 0 && pipe is null)
                 Volatile.Write(ref status, new(false, CurrentStatus.BrokerAvailable, CurrentStatus.RequiresProvisioning,
-                    "Administrator maintenance is enabled and preparing for authorized support sessions."));
+                    "Preparing administrator support for authorized sessions."));
         }
     }
 
@@ -98,8 +98,8 @@ public sealed class MaintenanceSession(string root) : IDisposable
                     pipe = candidate;
                     Volatile.Write(ref status, new(true, true, false,
                         privilegedInputAvailable
-                            ? "Administrator maintenance is ready for authorized support sessions."
-                            : "Administrator maintenance is active. Install the current setup to enable control of elevated windows.", data.Str("leaseId")));
+                            ? "Administrator support is ready for authorized support sessions."
+                            : "Administrator support is active. Install the current setup to enable control of elevated windows.", data.Str("leaseId")));
                 }
             }
             catch { candidate.Dispose(); throw; }
@@ -142,7 +142,7 @@ public sealed class MaintenanceSession(string root) : IDisposable
             if (!Enabled) throw new InvalidOperationException(DisabledMessage);
             var current = pipe;
             if (current is not { IsConnected: true } || !CurrentStatus.Active)
-                throw new InvalidOperationException("Administrator maintenance is unavailable. Pair the session after provisioning local support.");
+                throw new InvalidOperationException("Administrator support is unavailable. Pair the session after provisioning local support.");
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct, lifetime.Token);
             timeout.CancelAfter(TimeSpan.FromMinutes(5));
             string id = Guid.NewGuid().ToString();
@@ -238,7 +238,7 @@ public sealed class MaintenanceSession(string root) : IDisposable
             pipe = null;
             if (Volatile.Read(ref disposed) == 0)
                 Volatile.Write(ref status, new(false, CurrentStatus.BrokerAvailable, CurrentStatus.RequiresProvisioning,
-                    Enabled ? "Administrator maintenance ended." : DisabledMessage));
+                    Enabled ? "Administrator support ended." : DisabledMessage));
         }
         try { current?.Dispose(); } catch { }
     }
@@ -252,7 +252,7 @@ public sealed class MaintenanceSession(string root) : IDisposable
             if (Interlocked.Exchange(ref disposed, 1) != 0) return;
             current = pipe;
             pipe = null;
-            Volatile.Write(ref status, new(false, false, false, "Administrator maintenance ended with the agent session."));
+            Volatile.Write(ref status, new(false, false, false, "Administrator support ended with the agent session."));
         }
 
         // Cancellation and pipe closure interrupt in-flight calls. The semaphore

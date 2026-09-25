@@ -32,9 +32,11 @@ public sealed class ConnectedCliTests
         public int ExitCode { get; set; }
         public bool CancelCommand { get; set; }
         public bool MaintenanceAvailable { get; set; } = true;
+        public bool ControllerAuthorized { get; set; } = true;
         public List<(string Operation, string Id, JsonElement Args)> Calls { get; } = [];
         public Task<Reply> CallAsync(string op, object args, CancellationToken ct, string id, int seconds)
         {
+            if (!ControllerAuthorized) throw new UnauthorizedAccessException("Controller authority was revoked.");
             Calls.Add((op, id, Json.Element(args)));
             if (op == "maintenance.session" && CancelCommand) throw new OperationCanceledException();
             if (op == "maintenance.session" && !MaintenanceAvailable)
@@ -153,6 +155,19 @@ public sealed class ConnectedCliTests
     {
         var reply = await ConnectedCli.ExecuteAsync(Json.Element(new { operation = "status" }), () => throw new FileNotFoundException(), default);
         Assert.False(reply.Ok); Assert.Equal("not_connected", reply.Error);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MissingOrRevokedControllerAuthorityIsAnExplicitAccessDenial(bool duringLoad)
+    {
+        var remote = new Remote { ControllerAuthorized = false };
+        var reply = await ConnectedCli.ExecuteAsync(Json.Element(new { operation = "status" }),
+            () => duringLoad ? throw new UnauthorizedAccessException("Controller authority is missing.") : remote, default);
+        Assert.False(reply.Ok);
+        Assert.Equal("access_denied", reply.Error);
+        Assert.Empty(remote.Calls);
     }
 
     [Fact]

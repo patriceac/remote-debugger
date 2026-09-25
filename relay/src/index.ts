@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 
-type RelayEnv = Env & { ACCESS_KEY?: string; PROTECTED_ACCESS_KEY?: string };
+type RelayEnv = Env & { ACCESS_KEY?: string; PROTECTED_ACCESS_KEY?: string; CONTROLLER_PUBLIC_KEY?: string };
+const controllerPublicKey = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEsl7SJeEx4X++vk1jndocVn8NaUgENs8ubXHassqM3Ji9aibaf7etWfDRuvZpWs/JaJ2D33Q8R/omWooWhxR8HA==";
 type SocketState = {
   role: "agent" | "controller" | "stream";
   channel: string;
@@ -21,6 +22,23 @@ const hash = async (value: string) => hex(await crypto.subtle.digest("SHA-256", 
 const equalSecret = (left: string, right?: string) => !!right && left.length === right.length &&
   crypto.subtle.timingSafeEqual(new TextEncoder().encode(left), new TextEncoder().encode(right));
 
+async function authorizeController(request: Request, env: RelayEnv, credential: string, scope: string): Promise<boolean> {
+  const time = request.headers.get("X-Controller-Time") ?? "";
+  const nonce = request.headers.get("X-Controller-Nonce") ?? "";
+  const proof = request.headers.get("X-Controller-Proof") ?? "";
+  if (!/^\d{10,12}$/.test(time) || Math.abs(Date.now() - Number(time) * 1000) > 60000 || !validKey(nonce) || proof.length > 256) return false;
+  try {
+    const url = new URL(request.url);
+    const target = (await hash(credential.toUpperCase())).toUpperCase();
+    const binary = (await hash(time + "\n" + url.pathname + url.search)).toUpperCase();
+    const bytes = (value: string) => Uint8Array.from(atob(value), c => c.charCodeAt(0));
+    const key = await crypto.subtle.importKey("spki", bytes(env.CONTROLLER_PUBLIC_KEY ?? controllerPublicKey), { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
+    const message = new TextEncoder().encode(`RemoteDebugger.UpdateAdmin.v1|${nonce.toUpperCase()}|${target}|support.relay|${binary}`);
+    if (!await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, bytes(proof), message)) return false;
+    return await env.DIRECTORY.getByName(scope === "legacy" ? "private-clients" : `private-clients-${scope}`).consumeControllerNonce(nonce.toUpperCase(), Number(time) * 1000 + 60000);
+  } catch { return false; }
+}
+
 export default {
   async fetch(request: Request, env: RelayEnv): Promise<Response> {
     const url = new URL(request.url);
@@ -33,6 +51,9 @@ export default {
       : equalSecret(credential, env.ACCESS_KEY) ? "legacy" : null;
     if (!scope)
       return new Response("Unauthorized", { status: 401 });
+    const controllerRequest = url.pathname === "/v1/clients" || /^\/v1\/sessions\/[A-F0-9]{16}\/connect$/.test(url.pathname);
+    if (controllerRequest && (request.method !== "GET" || !await authorizeController(request, env, credential, scope)))
+      return new Response("Controller authorization required", { status: 403 });
     if (request.method === "GET" && url.pathname === "/v1/clients")
       return Response.json(await env.DIRECTORY.getByName(scope === "legacy" ? "private-clients" : `private-clients-${scope}`).list(scope), {
         headers: { "Cache-Control": "no-store" }
@@ -49,6 +70,7 @@ export default {
     // open channels to a protected registration, even if they know its ID.
     const forwarded = new Request(request);
     forwarded.headers.set("X-Access-Scope", scope);
+    forwarded.headers.set("X-Controller-Verified", controllerRequest ? "true" : "false");
     return env.SESSIONS.getByName(parts[3]).fetch(forwarded);
   }
 } satisfies ExportedHandler<RelayEnv>;
@@ -61,8 +83,16 @@ export class ClientDirectory extends DurableObject<RelayEnv> {
   constructor(ctx: DurableObjectState, env: RelayEnv) {
     super(ctx, env);
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS clients (id TEXT PRIMARY KEY, registered INTEGER NOT NULL, generation TEXT NOT NULL DEFAULT '')");
+    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS controller_nonces (nonce TEXT PRIMARY KEY, expires INTEGER NOT NULL)");
     if (!ctx.storage.sql.exec<{ name: string }>("PRAGMA table_info(clients)").toArray().some(column => column.name === "generation"))
       ctx.storage.sql.exec("ALTER TABLE clients ADD COLUMN generation TEXT NOT NULL DEFAULT ''");
+  }
+
+  consumeControllerNonce(nonce: string, expires: number): boolean {
+    const now = Date.now();
+    if (!validKey(nonce) || expires <= now || expires > now + 120000) return false;
+    this.ctx.storage.sql.exec("DELETE FROM controller_nonces WHERE expires <= ?", now);
+    return this.ctx.storage.sql.exec("INSERT OR IGNORE INTO controller_nonces VALUES (?, ?) RETURNING nonce", nonce, expires).toArray().length === 1;
   }
 
   register(id: string, generation = ""): void {
@@ -133,6 +163,7 @@ export class SupportSession extends DurableObject<RelayEnv> {
     const agents = this.ctx.getWebSockets("agent").filter(s => s.readyState === WebSocket.OPEN);
     if (agents.length !== 1) return unavailable();
     if (action === "connect") {
+      if (request.headers.get("X-Controller-Verified") !== "true") return new Response("Controller authorization required", { status: 403 });
       if (this.ctx.getWebSockets("controller").length >= 12)
         return new Response("Session busy", { status: 429 });
       const channel = crypto.randomUUID().replaceAll("-", "");

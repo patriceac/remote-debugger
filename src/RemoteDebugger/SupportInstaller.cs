@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO.Pipes;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Cryptography;
@@ -288,10 +289,18 @@ internal static partial class SupportInstaller
         }
     }
 
-    public static int WriteInstallerProvisionRequest(string path)
+    private static void ValidateInstallerPipe(string name)
+    {
+        if (!name.StartsWith("RemoteDebugger-Setup-", StringComparison.Ordinal) || name.Length > 128 ||
+            name.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not ('.' or '-')))
+            throw new ArgumentException("Invalid installer provisioning endpoint.");
+    }
+
+    public static int WriteInstallerProvisionRequest(string pipeName)
     {
         try
         {
+            ValidateInstallerPipe(pipeName);
             string source = Path.GetFullPath(Environment.ProcessPath ?? throw new InvalidOperationException("Current executable path is unavailable."));
             if (!PathsEqual(source, SupportPlatformPaths.ApplicationExecutable))
                 throw new UnauthorizedAccessException("Installer provisioning request must run from the Program Files installation.");
@@ -299,23 +308,45 @@ internal static partial class SupportInstaller
             using var current = Process.GetCurrentProcess();
             using var sourceStream = File.OpenRead(source);
             string hash = Convert.ToHexString(SHA256.HashData(sourceStream));
-            string encoded = Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(
-                new SupportProvisionRequest(hash, sid, current.Id, current.StartTime.ToUniversalTime().Ticks), Json.Options));
-            using (var file = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-            using (var writer = new StreamWriter(file)) writer.Write(encoded);
-            for (int attempt = 0; attempt < 3000 && File.Exists(path); attempt++) Thread.Sleep(100);
-            return 0;
+            var request = new SupportProvisionRequest(hash, sid, current.Id, current.StartTime.ToUniversalTime().Ticks);
+            var security = new PipeSecurity();
+            security.SetAccessRuleProtection(true, false);
+            security.AddAccessRule(new(new SecurityIdentifier(WellKnownSidType.NetworkSid, null), PipeAccessRights.FullControl, AccessControlType.Deny));
+            foreach (var identity in new[] { new SecurityIdentifier(sid), new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null), new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null) })
+                security.AddAccessRule(new(identity, PipeAccessRights.FullControl, AccessControlType.Allow));
+            using var pipe = NamedPipeServerStreamAcl.Create(pipeName, PipeDirection.InOut, 1,
+                PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.FirstPipeInstance, 4096, 4096, security);
+            using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+            pipe.WaitForConnectionAsync(deadline.Token).GetAwaiter().GetResult();
+            // The DACL admits the elevated administrator across account boundaries.
+            // The elevated consumer verifies this pipe's server PID and signed image;
+            // a standard user cannot inspect the separate administrator's process token.
+            Wire.WriteAsync(pipe, request, deadline.Token).GetAwaiter().GetResult();
+            byte[] result = new byte[1];
+            pipe.ReadExactlyAsync(result, deadline.Token).AsTask().GetAwaiter().GetResult();
+            return result[0];
         }
         catch (Exception ex) { Trace.WriteLine(ex); return 2; }
     }
 
-    public static int EnsureSupportFromInstaller(string encodedRequest)
+    public static int EnsureSupportFromInstaller(string pipeName)
     {
         try
         {
             _ = RequireInstalledRefreshHost();
-            return File.Exists(SupportPlatformPaths.ConfigurationPath)
-                ? RefreshService() : ExecuteElevated(encodedRequest);
+            ValidateInstallerPipe(pipeName);
+            using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+            using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+            pipe.ConnectAsync(60000, deadline.Token).GetAwaiter().GetResult();
+            if (!SupportPipeIdentity.GetNamedPipeServerProcessId(pipe.SafePipeHandle, out uint serverPid))
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+            var request = Wire.ReadAsync<SupportProvisionRequest>(pipe, deadline.Token).GetAwaiter().GetResult();
+            if (request.RequestingProcessId != checked((int)serverPid))
+                throw new UnauthorizedAccessException("Provisioning request does not match its pipe owner.");
+            int result = File.Exists(SupportPlatformPaths.ConfigurationPath) ? RefreshService() :
+                ExecuteElevated(Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(request, Json.Options)));
+            pipe.WriteByte(checked((byte)result));
+            return result;
         }
         catch (Exception ex) { TryWriteMaintenanceError("installer-support-error.txt", ex); return 2; }
     }

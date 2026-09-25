@@ -17,12 +17,14 @@ public sealed class AdminMaintenancePreferenceTests : IDisposable
     }
 
     [Fact]
-    public void MissingOrCorruptChoiceKeepsMaintenanceEnabledByDefault()
+    public void MissingCorruptOrLegacyChoiceDoesNotConsentToIncomingSupport()
     {
-        Assert.True(AdminMaintenancePreference.Load(root));
+        Assert.False(AdminMaintenancePreference.Load(root));
         Directory.CreateDirectory(root);
-        File.WriteAllText(Path.Combine(root, "admin-maintenance.json"), "{");
-        Assert.True(AdminMaintenancePreference.Load(root));
+        File.WriteAllText(Path.Combine(root, "admin-maintenance.json"), "{\"Enabled\":true}");
+        Assert.False(AdminMaintenancePreference.Load(root));
+        File.WriteAllText(Path.Combine(root, "support-enabled.json"), "{");
+        Assert.False(AdminMaintenancePreference.Load(root));
     }
 
     public void Dispose()

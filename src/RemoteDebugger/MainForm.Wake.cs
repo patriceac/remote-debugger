@@ -28,7 +28,7 @@ public sealed partial class MainForm
         {
             wakeFingerprint = fingerprint; wakeSettings = DeviceWakeSettings.Load(root, fingerprint);
         }
-        configureWake.Enabled = PairingExchange.ValidHash(fingerprint) && !wakeBusy && !pairingBusy && !FleetBusy && !terminating;
+        configureWake.Enabled = isUpdateAdmin && PairingExchange.ValidHash(fingerprint) && !wakeBusy && !pairingBusy && !FleetBusy && !terminating;
         wakePc.Enabled = configureWake.Enabled && wakeSettings != null && !supportSession && !clientUpdateBusy;
     }
 
@@ -75,6 +75,7 @@ public sealed partial class MainForm
         connectionState.SetText(() => UiText.WakeSending);
         try
         {
+            new UpdateAdminStore(root).RequireController();
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
             if (settings.HelperFingerprint.Length == 0)
                 await WakeOnLan.SendAsync(settings.MacAddress, settings.Destination, settings.Port, deadline.Token);

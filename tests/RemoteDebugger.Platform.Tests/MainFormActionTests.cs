@@ -95,10 +95,10 @@ public sealed class MainFormActionTests
         Assert.False(MainForm.CanUpdateClient(true, true, false, false, false, clientUpToDate: true));
 
     [Theory]
-    [InlineData(true, false, true)]
+    [InlineData(true, false, false)]
     [InlineData(true, true, true)]
     [InlineData(false, false, false)]
-    public void FailedSynchronizationRetainsAnAuthenticatedSession(bool connected, bool binaryMatched, bool expected) =>
+    public void FailedSynchronizationOnlyRetainsAnAlreadySynchronizedSession(bool connected, bool binaryMatched, bool expected) =>
         Assert.Equal(expected, MainForm.CanRetainFailedSynchronization(Json.Element(new
         {
             session = new { connected },

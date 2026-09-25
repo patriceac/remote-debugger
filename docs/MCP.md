@@ -5,6 +5,8 @@ CLI's persistent `connected --worker` process. It uses the existing authenticate
 transfers, and provisioned administrator broker. It adds no listener, remote
 component, credentials, pairing, or automatic synchronization.
 
+Remote tools require an enrolled controller and a receiver with **Support enabled** ON. Each worker request rechecks local controller authority; a saved connection cannot restore revoked authority.
+
 Requires Node 20+ to build and Remote Debugger 0.5.2+ on the controller. The normal
 exact-binary requirement still applies to the receiving agent. Connect and
 synchronize through the Remote Debugger application before using action tools.

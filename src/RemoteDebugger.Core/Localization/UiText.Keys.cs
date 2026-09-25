@@ -3,6 +3,10 @@ namespace RemoteDebugger.Core;
 
 public static partial class UiText
 {
+    public static string Theme => Get(nameof(Theme));
+    public static string ThemeLight => Get(nameof(ThemeLight));
+    public static string ThemeDark => Get(nameof(ThemeDark));
+    public static string ThemeSaveFailed => Get(nameof(ThemeSaveFailed));
     public static string Language => Get(nameof(Language));
     public static string SystemDefault => Get(nameof(SystemDefault));
     public static string LanguageSaveFailed => Get(nameof(LanguageSaveFailed));

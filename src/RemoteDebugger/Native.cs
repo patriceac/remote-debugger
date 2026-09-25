@@ -66,7 +66,7 @@ public static class Native
         if (focused != pid) throw new InvalidOperationException("Windows refused foreground focus; no input was sent."); return h;
     }
     internal static readonly UIntPtr InputTag = (UIntPtr)0x52444247;
-    private static void Input(params INPUT[] input) { for (int i = 0; i < input.Length; i++) if (input[i].type == 1) input[i].data.key.extra = InputTag; if (SendInput((uint)input.Length, input, Marshal.SizeOf<INPUT>()) != input.Length) throw new InputBlockedException("Windows blocked input. Enable administrator maintenance for elevated windows; unlock or handle secure desktop prompts locally."); }
+    private static void Input(params INPUT[] input) { for (int i = 0; i < input.Length; i++) if (input[i].type == 1) input[i].data.key.extra = InputTag; if (SendInput((uint)input.Length, input, Marshal.SizeOf<INPUT>()) != input.Length) throw new InputBlockedException("Windows blocked input. Check that the support helper is ready for elevated windows; unlock or handle secure desktop prompts locally."); }
     public static object Windows(int pid) => AutomationElement.RootElement.FindAll(TreeScope.Children, pid > 0 ? new PropertyCondition(AutomationElement.ProcessIdProperty, pid) : Condition.TrueCondition).Cast<AutomationElement>().Take(100).Select(x => new { pid = x.Current.ProcessId, name = x.Current.Name, handle = x.Current.NativeWindowHandle }).ToArray();
     public static object Inspect(int pid)
     {
@@ -132,7 +132,7 @@ public static class Native
             string kind = a.Str("kind");
             if (kind == "release") { ReleaseAllInput(requireSuccess: true); return; }
             if (kind == "keepAlive") return;
-            if (kind == "secureAttention") throw new InputBlockedException("Ctrl+Alt+Del requires administrator maintenance and the current Remote Debugger support service on the remote PC.");
+            if (kind == "secureAttention") throw new InputBlockedException("Ctrl+Alt+Del requires the current Remote Debugger support service on the remote PC.");
             if (kind == "text") { TypeTextIntoFocusedControl(a.Str("text")); return; }
             if (kind is "move" or "down" or "up" or "wheel")
             {

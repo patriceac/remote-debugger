@@ -36,7 +36,7 @@ public static class UpdateAdminProof
         UpdatePolicy.ValidateSha256(nonce, "update challenge");
         UpdatePolicy.ValidateSha256(target, "target identity");
         UpdatePolicy.ValidateSha256(binary, "controller executable");
-        if (operation is not ("admin.inspect" or "admin.connect" or "admin.wake" or "update.begin"))
+        if (operation is not ("admin.inspect" or "admin.connect" or "admin.wake" or "update.begin" or "support.discover" or "support.relay"))
             throw new ArgumentException("Invalid administrator operation.");
         return Encoding.UTF8.GetBytes($"RemoteDebugger.UpdateAdmin.v1|{nonce.ToUpperInvariant()}|{target.ToUpperInvariant()}|{operation}|{binary.ToUpperInvariant()}");
     }

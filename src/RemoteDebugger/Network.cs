@@ -41,9 +41,13 @@ public sealed record Connection(
 public static class Discovery
 {
     public const int Port = 45833;
-    public const string Query = "REMOTEDEBUGGER_DISCOVER_V1";
-    public static async Task<List<Peer>> FindAsync(int milliseconds = 2500, CancellationToken ct = default)
+    public const string Query = "REMOTEDEBUGGER_DISCOVER_V2";
+    internal sealed record Authorization(string Nonce, string Binary, string Proof);
+    internal static string Identity => Safety.Hash(Query);
+    public static async Task<List<Peer>> FindAsync(int milliseconds = 2500, CancellationToken ct = default, string? controllerRoot = null)
     {
+        var authority = new UpdateAdminStore(controllerRoot ?? Vault.DefaultRoot);
+        authority.RequireController();
         using var udp = new UdpClient(AddressFamily.InterNetwork) { EnableBroadcast = true };
         udp.Client.Bind(new IPEndPoint(IPAddress.Any, 0));
         var endpoints = new HashSet<string> { "255.255.255.255" };
@@ -56,6 +60,8 @@ public static class Discovery
         foreach (string ep in endpoints) try { await udp.SendAsync(Encoding.UTF8.GetBytes(Query), new IPEndPoint(IPAddress.Parse(ep), Port), ct); } catch (SocketException) { }
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(milliseconds);
         var peers = new Dictionary<string, Peer>();
+        var challenges = new HashSet<string>();
+        var pendingPeers = new Dictionary<string, string>();
         try
         {
             while (true)
@@ -64,8 +70,31 @@ public static class Discovery
                 if (r.Buffer.Length > 2048) continue;
                 try
                 {
-                    var p = JsonSerializer.Deserialize<Peer>(r.Buffer, Json.Options);
-                    if (p != null && p.Port is > 0 and < 65536 && p.Fingerprint.Length == 64)
+                    using var message = JsonDocument.Parse(r.Buffer);
+                    if (message.RootElement.TryGetProperty("peer", out var peerJson))
+                    {
+                        string responseNonce = message.RootElement.Str("nonce");
+                        string endpoint = r.RemoteEndPoint.ToString();
+                        if (!pendingPeers.TryGetValue(endpoint, out var expected) || responseNonce != expected) continue;
+                        pendingPeers.Remove(endpoint);
+                    }
+                    else
+                    {
+                    if (message.RootElement.TryGetProperty("nonce", out var challenge))
+                    {
+                        string nonce = challenge.GetString() ?? "";
+                        if (PairingExchange.ValidHash(nonce) && challenges.Count < 128 && challenges.Add(nonce))
+                        {
+                            pendingPeers[r.RemoteEndPoint.ToString()] = nonce;
+                            await udp.SendAsync(JsonSerializer.SerializeToUtf8Bytes(new Authorization(nonce, ExecutableIdentity.Sha256,
+                                authority.Sign(nonce, Identity, "support.discover", ExecutableIdentity.Sha256)), Json.Options), r.RemoteEndPoint, timeout.Token);
+                        }
+                        continue;
+                    }
+                    continue;
+                    }
+                    var p = peerJson.Deserialize<Peer>(Json.Options);
+                    if (p != null && p.Port is > 0 and < 65536 && PairingExchange.ValidHash(p.Fingerprint) && p.Name is { Length: > 0 and <= 128 } && p.SupportId != null)
                     {
                         string supportId = p.SupportId;
                         if (supportId.Length > 0)
@@ -76,7 +105,7 @@ public static class Discovery
                         peers[r.RemoteEndPoint.Address.ToString()] = p with { Host = r.RemoteEndPoint.Address.ToString(), SupportId = supportId };
                     }
                 }
-                catch (JsonException) { }
+                catch (Exception ex) when (ex is JsonException or InvalidOperationException) { }
             }
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
@@ -163,6 +192,7 @@ public sealed partial class AgentServer : IDisposable
     private readonly ConcurrentDictionary<string, (string Signature, Lazy<Task<Reply>> Job)> requests = new();
     private readonly object authLock = new();
     private CancellationTokenSource grantLifetime = new();
+    private CancellationTokenSource supportLifetime = new();
     private readonly string authPath;
     private string tokenHash = "";
     private string controllerBinaryHash = "";
@@ -172,6 +202,7 @@ public sealed partial class AgentServer : IDisposable
     private readonly AgentUpdateService updates;
     private readonly bool ownsMaintenance;
     private readonly SemaphoreSlim updateGate = new(1, 1);
+    private readonly SemaphoreSlim supportGate = new(1, 1);
     private ResumableSession? resumed;
     private bool resumeAccepted;
     private readonly SemaphoreSlim pairingSlot = new(1, 1);
@@ -179,6 +210,8 @@ public sealed partial class AgentServer : IDisposable
     private int terminating;
     private int started;
     private int listening;
+    private volatile bool supportEnabled;
+    private bool observedSupportPermission;
     private long captureEpoch;
     private readonly SemaphoreSlim captureWake = new(0, 1);
     private void WakeCapture(bool force = true)
@@ -195,12 +228,15 @@ public sealed partial class AgentServer : IDisposable
     public AgentUpdateProgress UpdateProgress => updates.Progress;
     public InternetAgent? Internet { get; private set; }
     public bool AdminMaintenanceEnabled => Operations.Maintenance.Enabled;
+    public bool SupportEnabled => supportEnabled;
     public event Action<string>? Status;
     public event Action<AgentStopReason>? TerminationRequested;
     public SupportSessionSnapshot Session => session.Snapshot;
     public AgentServer(string root, int port = 45832, bool loopbackOnly = false, bool enableInternet = true, bool enableAdminMaintenance = true, MaintenanceSession? maintenance = null)
     {
         securityRoot = root;
+        supportEnabled = !new UpdateAdminStore(root).IsAdmin || AdminMaintenancePreference.Load(root);
+        observedSupportPermission = supportEnabled;
         resumeStore = new(root);
         restartStore = new(root);
         Directory.CreateDirectory(root); Port = port; authPath = Path.Combine(root, "agent.auth");
@@ -223,6 +259,7 @@ public sealed partial class AgentServer : IDisposable
             resumed = resumeStore.Restore(launchArguments[resumeIndex + 1]);
         if (launchArguments.Contains("--resume-restart") || launchArguments.Contains("--startup"))
             restartAuthorization = restartStore.Restore(ExecutableIdentity.Sha256);
+        if (!supportEnabled) { resumed = null; restartAuthorization = null; }
         if (resumed != null)
         {
             tokenHash = resumed.GrantHash; controllerBinaryHash = resumed.ControllerHash;
@@ -239,7 +276,7 @@ public sealed partial class AgentServer : IDisposable
         ownsMaintenance = maintenance == null;
         Operations = new Operations(root, maintenance);
         Operations.Clipboard = new DesktopClipboard(() => Session.Connected && Session.BinaryMatched && !stop.IsCancellationRequested);
-        Operations.Maintenance.SetEnabled(enableAdminMaintenance);
+        Operations.Maintenance.SetEnabled(supportEnabled);
         updates = new AgentUpdateService(root, (context, ct) =>
         {
             ct.ThrowIfCancellationRequested();
@@ -266,7 +303,7 @@ public sealed partial class AgentServer : IDisposable
         {
             ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
             if (Volatile.Read(ref started) != 0) throw new InvalidOperationException("The agent listener has already started.");
-            if (!Paired)
+            if (SupportEnabled && !Paired)
             {
                 if (Internet != null) Pairing.OpenPrivate(Internet.AuthenticationSecret);
                 else Pairing.Open();
@@ -277,16 +314,51 @@ public sealed partial class AgentServer : IDisposable
         }
         _ = Task.Run(WatchSessionAsync);
         Status?.Invoke("Agent ready for pairing; access is visible in this window.");
+        Internet?.SetEnabled(SupportEnabled);
         Internet?.Start();
         _ = Task.Run(() => StartMaintenanceAsync());
     }
 
-    public async Task SetAdminMaintenanceEnabledAsync(bool enabled, CancellationToken ct = default)
+    public Task SetAdminMaintenanceEnabledAsync(bool enabled, CancellationToken ct = default) => SetSupportEnabledAsync(enabled, ct);
+
+    private async Task SetSupportEnabledAsync(bool? requested, CancellationToken ct)
     {
+        await supportGate.WaitAsync(ct);
+        try
+        {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
+        bool enabled = !new UpdateAdminStore(securityRoot).IsAdmin || (requested ?? AdminMaintenancePreference.Load(securityRoot));
+        lock (authLock)
+        {
+            if (enabled && !supportEnabled) supportLifetime = new();
+            supportEnabled = enabled;
+            if (!enabled)
+            {
+                supportLifetime.Cancel();
+                Internet?.SetEnabled(false);
+                Operations.Maintenance.SetEnabled(false);
+                session.ResetForPairing(); Revoke();
+            }
+            else if (!Paired)
+            {
+                if (Internet != null) Pairing.OpenPrivate(Internet.AuthenticationSecret); else Pairing.Open();
+            }
+        }
+        Internet?.SetEnabled(enabled);
         Operations.Maintenance.SetEnabled(enabled);
-        if (!enabled) requests.Clear();
+        if (!enabled)
+        {
+            await updateGate.WaitAsync(ct);
+            try
+            {
+                await updates.CancelActiveAsync(ct);
+                await CancelPlannedPowerAsync(ct);
+            }
+            finally { updateGate.Release(); }
+        }
         if (enabled) await Task.Run(() => StartMaintenanceAsync(ct), ct);
+        }
+        finally { supportGate.Release(); }
     }
     public void EnablePrivateNetwork()
     {
@@ -365,7 +437,7 @@ public sealed partial class AgentServer : IDisposable
     {
         lock (authLock)
         {
-            if (tokenHash.Length == 0 || !Safety.Equal(controllerBinaryHash, replacementHash))
+            if (!SupportEnabled || tokenHash.Length == 0 || !Safety.Equal(controllerBinaryHash, replacementHash))
                 throw new UnauthorizedAccessException("Only the authenticated controller binary can replace the agent.");
             return resumeStore.Create(tokenHash, controllerBinaryHash, ExecutableIdentity.Sha256, replacementHash, deadline, updateOnly);
         }
@@ -377,6 +449,13 @@ public sealed partial class AgentServer : IDisposable
             while (!stop.IsCancellationRequested)
             {
                 await Task.Delay(500, stop.Token); _ = Pairing.CurrentCode;
+                bool allowed = !new UpdateAdminStore(securityRoot).IsAdmin || AdminMaintenancePreference.Load(securityRoot);
+                if (allowed != observedSupportPermission)
+                {
+                    observedSupportPermission = allowed;
+                    try { await SetSupportEnabledAsync(null, stop.Token); }
+                    catch (Exception ex) when (!stop.IsCancellationRequested) { Status?.Invoke("Support permission cleanup failed: " + ex.Message); }
+                }
                 if (securityCandidate is { Promoted: false } candidate && candidate.Expires <= DateTimeOffset.UtcNow) candidate.Agent.Dispose();
                 if (session.ShouldExit)
                 {
@@ -415,27 +494,49 @@ public sealed partial class AgentServer : IDisposable
     }
     public void Revoke()
     {
+        lock (authLock) { tokenHash = ""; controllerBinaryHash = ""; grantLifetime.Cancel(); grantLifetime = new(); Pairing.Close(); }
+        foreach (var job in running.Values) job.Cancel();
+        Native.ReleaseAllInput();
+        Operations.Maintenance.End(); requests.Clear();
         Operations.Clipboard?.Pause();
         if (securityCandidate is { Promoted: false } staged) staged.Agent.Dispose();
         resumeStore.Clear(); resumed = null; resumeAccepted = false;
         restartStore.Clear(); restartAuthorization = null;
-        lock (authLock) { tokenHash = ""; grantLifetime.Cancel(); grantLifetime = new(); Vault.Save(authPath, []); Pairing.Close(); }
-        foreach (var job in running.Values) job.Cancel();
-        Native.ReleaseAllInput();
-        Operations.Maintenance.End();
-        requests.Clear(); Status?.Invoke("Access revoked. Active operations cancelled.");
+        Vault.Save(authPath, []);
+        Status?.Invoke("Access revoked. Active operations cancelled.");
     }
     private async Task DiscoverAsync(UdpClient activeDiscovery)
     {
+        var challenges = new Dictionary<string, (string Nonce, DateTimeOffset Expires)>();
         try
         {
             while (!stop.IsCancellationRequested)
             {
                 var r = await activeDiscovery.ReceiveAsync(stop.Token);
+                if (!SupportEnabled || r.Buffer.Length > 2048) continue;
+                string endpoint = r.RemoteEndPoint.ToString();
                 if (r.Buffer.Length == Discovery.Query.Length && Encoding.UTF8.GetString(r.Buffer) == Discovery.Query)
+                {
+                    foreach (string expired in challenges.Where(p => p.Value.Expires < DateTimeOffset.UtcNow).Select(p => p.Key).ToArray()) challenges.Remove(expired);
+                    if (challenges.Count >= 128) continue;
+                    string nonce = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+                    challenges[endpoint] = (nonce, DateTimeOffset.UtcNow.AddSeconds(10));
+                    await activeDiscovery.SendAsync(JsonSerializer.SerializeToUtf8Bytes(new { nonce }), r.RemoteEndPoint, stop.Token);
+                    continue;
+                }
+                if (!challenges.TryGetValue(endpoint, out var pending) || pending.Expires < DateTimeOffset.UtcNow) continue;
+                try
+                {
+                    var proof = JsonSerializer.Deserialize<Discovery.Authorization>(r.Buffer, Json.Options);
+                    if (proof == null || proof.Nonce != pending.Nonce) continue;
+                    UpdateAdminProof.Verify(proof.Proof ?? "", pending.Nonce, Discovery.Identity, "support.discover", proof.Binary ?? "");
+                    challenges.Remove(endpoint);
+                    if (!SupportEnabled) continue;
                     await activeDiscovery.SendAsync(JsonSerializer.SerializeToUtf8Bytes(
-                        new Peer(Environment.MachineName, "", Port, Fingerprint, Internet?.SupportId ?? ""), Json.Options),
+                        new { nonce = pending.Nonce, peer = new Peer(Environment.MachineName, "", Port, Fingerprint, Internet?.SupportId ?? "") }, Json.Options),
                         r.RemoteEndPoint, stop.Token);
+                }
+                catch (Exception ex) when (ex is JsonException or UnauthorizedAccessException or ArgumentException) { }
             }
         }
         catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or SocketException) { }
@@ -494,6 +595,9 @@ public sealed partial class AgentServer : IDisposable
     }
     private async Task ServeAsync(Stream transport, SecurityCandidate? candidate = null)
     {
+        CancellationToken permission;
+        bool allowedAtAccept;
+        lock (authLock) { allowedAtAccept = SupportEnabled; permission = allowedAtAccept ? supportLifetime.Token : CancellationToken.None; }
         bool persistentInput = false;
         CancellationTokenRegistration persistentInputGrant = default;
         bool persistentUpdate = false;
@@ -502,18 +606,26 @@ public sealed partial class AgentServer : IDisposable
         CancellationTokenRegistration heartbeatGrant = default;
         bool persistentCommand = false;
         CancellationTokenRegistration commandGrant = default;
-        using (var tls = new SslStream(transport, true))
-        using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(stop.Token))
+        using (var tls = new SslStream(transport, true, (_, peer, _, _) => UpdateAdminStore.IsControllerCertificate(peer)))
+        using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(stop.Token, permission))
         {
             timeout.CancelAfter(TimeSpan.FromMinutes(6));
             try
             {
                 using var handshake = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token); handshake.CancelAfter(10000);
-                await tls.AuthenticateAsServerAsync(new SslServerAuthenticationOptions { ServerCertificate = certificate, EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13, ClientCertificateRequired = false }, handshake.Token);
+                await tls.AuthenticateAsServerAsync(new SslServerAuthenticationOptions {
+                    ServerCertificate = certificate, EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                    ClientCertificateRequired = true, AllowRenegotiation = false
+                }, handshake.Token);
                 if (transport is WebSocketStream relay) relay.EnableWriteBuffering();
                 var r = await Wire.ReadAsync<Request>(tls, handshake.Token);
                 while (true)
                 {
+                    if (!allowedAtAccept || !SupportEnabled)
+                    {
+                        await Wire.WriteAsync(tls, Reply.Failure(r.Id, "support_disabled", "Receiving support is disabled on this computer."), timeout.Token);
+                        return;
+                    }
                     if (candidate != null && !candidate.Promoted)
                     {
                         await ServeSecurityCandidateAsync(tls, r, candidate, timeout.Token);
@@ -538,6 +650,7 @@ public sealed partial class AgentServer : IDisposable
                             {
                                 lock (authLock)
                                 {
+                                    if (!SupportEnabled) throw new AuthenticationException("Receiving support is disabled on this computer.");
                                     tokenHash = Safety.Hash(token); controllerBinaryHash = controllerHash; grantLifetime.Cancel(); grantLifetime = new();
                                     updateOnly = false;
                                     updates.ResetControllerSynchronization();
@@ -552,7 +665,7 @@ public sealed partial class AgentServer : IDisposable
                     }
                     else
                     {
-                        bool authorized; CancellationToken grant; lock (authLock) { authorized = tokenHash.Length != 0 && Safety.Equal(tokenHash, Safety.Hash(r.Token ?? "")); grant = grantLifetime.Token; }
+                        bool authorized; CancellationToken grant; lock (authLock) { authorized = SupportEnabled && tokenHash.Length != 0 && Safety.Equal(tokenHash, Safety.Hash(r.Token ?? "")); grant = grantLifetime.Token; }
                         if (authorized && !PairingExchange.ValidHash(r.BinarySha256)) authorized = false;
                         if (authorized && Volatile.Read(ref terminating) != 0) authorized = false;
                         if (authorized && !Safety.Equal(controllerBinaryHash, r.BinarySha256!.ToUpperInvariant()))
@@ -1015,9 +1128,9 @@ public sealed partial class AgentServer : IDisposable
         try
         {
             await Operations.Maintenance.PrepareAsync(linked.Token);
-            if (Operations.Maintenance.Enabled) Status?.Invoke("Administrator maintenance ready for authorized support sessions.");
+            if (Operations.Maintenance.Enabled) Status?.Invoke("Administrator support ready for authorized support sessions.");
         }
-        catch (Exception ex) { if (!stop.IsCancellationRequested) Status?.Invoke("Administrator maintenance unavailable: " + ex.Message); }
+        catch (Exception ex) { if (!stop.IsCancellationRequested) Status?.Invoke("Administrator support unavailable: " + ex.Message); }
     }
     public void Dispose()
     {
@@ -1061,27 +1174,34 @@ public sealed partial class RemoteClient
     internal JsonElement StreamNegotiation { get; private set; }
     internal string AdminRoot { get; set; } = Vault.DefaultRoot;
     public static string DefaultPath => Path.Combine(Vault.DefaultRoot, "controller.connection");
-    public RemoteClient(Connection connection) : this(connection, OpenAuthenticatedTransportOnceAsync) { discoverRoutes = true; }
+    public RemoteClient(Connection connection) : this(connection, transportFactory: null) { }
     internal RemoteClient(Connection connection, string controllerBinarySha256) : this(connection)
     {
         UpdatePolicy.ValidateSha256(controllerBinarySha256, "controller executable");
         this.controllerBinarySha256 = controllerBinarySha256;
     }
-    internal RemoteClient(Connection connection, Func<Connection, CancellationToken, Task<Stream>> transportFactory)
+    internal RemoteClient(Connection connection, Func<Connection, CancellationToken, Task<Stream>>? transportFactory)
     {
         Connection = connection ?? throw new ArgumentNullException(nameof(connection));
-        this.transportFactory = transportFactory ?? throw new ArgumentNullException(nameof(transportFactory));
+        discoverRoutes = transportFactory == null;
+        this.transportFactory = transportFactory ?? ((target, ct) => OpenAuthenticatedTransportOnceAsync(target, AdminRoot, ct));
         commands = new(OpenTransportAsync);
     }
-    public static RemoteClient Load(string? path = null) => new(JsonSerializer.Deserialize<Connection>(Vault.Read(path ?? DefaultPath), Json.Options)!);
+    public static RemoteClient Load(string? path = null) => new(JsonSerializer.Deserialize<Connection>(Vault.Read(path ?? DefaultPath), Json.Options)!)
+        { AdminRoot = Path.GetDirectoryName(Path.GetFullPath(path ?? DefaultPath))! };
+    private void RequireController()
+    {
+        if (discoverRoutes) new UpdateAdminStore(AdminRoot).RequireController();
+    }
     public void Save(string? path = null) => Vault.Save(path ?? DefaultPath, JsonSerializer.SerializeToUtf8Bytes(Connection, Json.Options));
     public async Task PairAsync(string code, CancellationToken ct = default)
     {
+        RequireController();
         await CloseHeartbeatChannelAsync().ConfigureAwait(false);
         await CloseInputChannelAsync().ConfigureAwait(false);
         await CloseUpdateChannelAsync().ConfigureAwait(false);
         if (await TryResumeSavedConnectionAsync(ct).ConfigureAwait(false)) return;
-        Connection = await PairingTransport.PairAsync(Connection, code, ct).ConfigureAwait(false);
+        Connection = await PairingTransport.PairAsync(Connection, code, ct, AdminRoot).ConfigureAwait(false);
     }
     public bool UsesDirectTransport => Connection.DirectHost.Length > 0;
     public string ScreenRoute { get; private set; } = "";
@@ -1144,6 +1264,7 @@ public sealed partial class RemoteClient
     }
     public async Task<JsonElement> HeartbeatAsync(CancellationToken ct = default)
     {
+        RequireController();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(20));
         await heartbeatGate.WaitAsync(timeout.Token).ConfigureAwait(false);
         try
@@ -1209,6 +1330,7 @@ public sealed partial class RemoteClient
     }
     public async Task<Reply> CallAsync(string operation, object? args = null, CancellationToken ct = default, string? id = null, int seconds = 60)
     {
+        RequireController();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(seconds, 1, 300) + 15));
         if (discoverRoutes) await RefreshRoutesIfNeededAsync(timeout.Token).ConfigureAwait(false);
         var request = new Request(id ?? Guid.NewGuid().ToString(), Connection.Token, operation, args is JsonElement e ? e : Json.Element(args ?? new { }), seconds, controllerBinarySha256);
@@ -1216,6 +1338,7 @@ public sealed partial class RemoteClient
     }
     public async Task<Reply> SendInputAsync(object? args = null, CancellationToken ct = default, int? seconds = null)
     {
+        RequireController();
         int inputSeconds = seconds ?? SupportOperationTimeouts.InputSeconds(Json.Element(args ?? new { }).Str("kind"));
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(inputSeconds, 1, 300)));
@@ -1271,6 +1394,7 @@ public sealed partial class RemoteClient
     /// <summary>Send update operations over one authenticated connection for the transfer lifetime.</summary>
     internal async Task<Reply> SendUpdateAsync(string operation, object? args = null, CancellationToken ct = default, int seconds = 60, ReadOnlyMemory<byte> binaryChunk = default)
     {
+        RequireController();
         if (string.IsNullOrWhiteSpace(operation)) throw new ArgumentException("An update operation is required.", nameof(operation));
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(seconds, 1, 300)));
@@ -1364,9 +1488,10 @@ public sealed partial class RemoteClient
     private static bool IsLegacyUpdateChannelUnsupported(RemoteOperationException ex) =>
         ex.Code == "binary_mismatch" ||
         (ex.Code == "operation_failed" && ex.Message.Contains("update.open", StringComparison.OrdinalIgnoreCase));
-    private static async Task<Stream> OpenAuthenticatedTransportOnceAsync(Connection connection, CancellationToken ct)
+    private static async Task<Stream> OpenAuthenticatedTransportOnceAsync(Connection connection, string controllerRoot, CancellationToken ct)
     {
-        Stream transport = await ConnectionTransport.OpenAsync(connection, ct).ConfigureAwait(false);
+        using var controllerCertificate = new UpdateAdminStore(controllerRoot).CreateClientCertificate();
+        Stream transport = await ConnectionTransport.OpenAsync(connection, ct, controllerRoot).ConfigureAwait(false);
         SslStream? tls = null;
         try
         {
@@ -1375,9 +1500,13 @@ public sealed partial class RemoteClient
             await tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
             {
                 TargetHost = "RemoteDebugger",
-                EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13
+                EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                ClientCertificates = new X509CertificateCollection { controllerCertificate },
+                LocalCertificateSelectionCallback = (_, _, _, _, _) => controllerCertificate,
+                AllowRenegotiation = false
             }, ct).ConfigureAwait(false);
             if (transport is WebSocketStream relay) relay.EnableWriteBuffering();
+            new UpdateAdminStore(controllerRoot).WatchAuthority(tls);
             return tls;
         }
         catch

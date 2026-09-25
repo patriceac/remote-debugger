@@ -110,18 +110,41 @@ begin
   if not FileExists(Result) then ExtractTemporaryFile('RemoteDebugger-InstallerHelper.exe');
 end;
 
+function CheckInstalledVersion(): String;
+var
+  InstalledPath: String;
+  InstalledMS, InstalledLS, CandidateMS, CandidateLS: Cardinal;
+begin
+  Result := '';
+  InstalledPath := ExpandConstant('{autopf}\RemoteDebugger\{#AppExeName}');
+  if not FileExists(InstalledPath) then Exit;
+  if not GetVersionNumbers(InstalledPath, InstalledMS, InstalledLS) or
+    not GetVersionNumbers(InstallerHelperPath(), CandidateMS, CandidateLS) then
+    Result := 'The installed version could not be verified. Installation was stopped.'
+  else if (InstalledMS > CandidateMS) or ((InstalledMS = CandidateMS) and (InstalledLS > CandidateLS)) then
+    Result := 'A newer version of Remote Debugger is installed. Downgrades are not allowed.';
+end;
+
 function InitializeSetup(): Boolean;
 var
-  HelperPath: String;
+  HelperPath, VersionError: String;
   ResultCode: Integer;
 begin
   Result := True;
+  VersionError := CheckInstalledVersion();
+  if VersionError <> '' then
+  begin
+    SuppressibleMsgBox(VersionError, mbError, MB_OK, IDOK);
+    Result := False;
+    Exit;
+  end;
 #ifdef AdminCredentialPath
-  HelperPath := InstallerHelperPath();
-  if not ExecAsOriginalUser(HelperPath, 'cli admin-status', ExpandConstant('{tmp}'),
+  HelperPath := ExpandConstant('{autopf}\RemoteDebugger\{#AppExeName}');
+  if not FileExists(HelperPath) then Exit;
+  if not ExecAsOriginalUser(HelperPath, 'cli admin-status', ExtractFileDir(HelperPath),
     SW_HIDE, ewWaitUntilTerminated, ResultCode) or ((ResultCode <> 0) and (ResultCode <> 1)) then
   begin
-    MsgBox(CustomMessage('AdminStatusFailed'), mbError, MB_OK);
+    SuppressibleMsgBox(CustomMessage('AdminStatusFailed'), mbError, MB_OK, IDOK);
     Result := False;
     Exit;
   end;
@@ -159,7 +182,8 @@ var
   HelperPath: String;
   ResultCode: Integer;
 begin
-  Result := '';
+  Result := CheckInstalledVersion();
+  if Result <> '' then Exit;
   InitializeAdminPcTask();
   if CompareText(RemoveBackslashUnlessRoot(WizardDirValue), ExpandConstant('{autopf}\RemoteDebugger')) <> 0 then
   begin
@@ -168,16 +192,6 @@ begin
   end;
   HelperPath := InstallerHelperPath();
   try
-    if not ExecAsOriginalUser(HelperPath, '--installer-user-cleanup', ExpandConstant('{tmp}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-    begin
-      Result := CustomMessage('LegacyUninstallFailed');
-      Exit;
-    end;
-    if ResultCode <> 0 then
-    begin
-      Result := CustomMessage('LegacyUninstallFailed');
-      Exit;
-    end;
     if not Exec(HelperPath, '--installer-shutdown', ExpandConstant('{tmp}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
     begin
       Result := CustomMessage('InstallerShutdownFailed');
@@ -197,14 +211,16 @@ end;
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   ProfilePath: String;
-  RequestPath: String;
-  EncodedRequest: AnsiString;
-  Attempt: Integer;
+  RequestPipe: String;
   ResultCode: Integer;
 begin
   if CurStep = ssPostInstall then
   begin
     PostInstallIncomplete := True;
+    if not ExecAsOriginalUser(ExpandConstant('{app}\{#AppExeName}'),
+      '--installer-user-cleanup', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+      RaiseException(CustomMessage('LegacyUninstallFailed'));
+    if ResultCode <> 0 then RaiseException(CustomMessage('LegacyUninstallFailed'));
 #ifdef AdminCredentialPath
     ProfilePath := ExpandConstant('{app}\RemoteDebugger-Admin.rdadmin');
     try
@@ -253,27 +269,16 @@ begin
     end
     else
     begin
-      RequestPath := ExpandConstant('{tmp}\RemoteDebugger-ProvisionRequest.txt');
+      RequestPipe := 'RemoteDebugger-Setup-' + ExtractFileName(ExpandConstant('{tmp}'));
       if not ExecAsOriginalUser(ExpandConstant('{app}\{#AppExeName}'),
-        '--installer-provision-request "' + RequestPath + '"', ExpandConstant('{app}'),
+        '--installer-provision-request "' + RequestPipe + '"', ExpandConstant('{app}'),
         SW_HIDE, ewNoWait, ResultCode) then
         RaiseException(CustomMessage('SupportSetupFailed'));
-      EncodedRequest := '';
-      try
-        for Attempt := 1 to 600 do
-        begin
-          if LoadStringFromFile(RequestPath, EncodedRequest) and (Length(EncodedRequest) > 0) then Break;
-          Sleep(100);
-        end;
-        if Length(EncodedRequest) = 0 then RaiseException(CustomMessage('SupportSetupFailed'));
-        if not Exec(ExpandConstant('{app}\{#AppExeName}'),
-          '--installer-ensure-support "' + String(EncodedRequest) + '"',
-          ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-          RaiseException(CustomMessage('SupportSetupFailed'));
-        if ResultCode <> 0 then RaiseException(CustomMessage('SupportSetupFailed'));
-      finally
-        DeleteFile(RequestPath);
-      end;
+      if not Exec(ExpandConstant('{app}\{#AppExeName}'),
+        '--installer-ensure-support "' + RequestPipe + '"',
+        ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+        RaiseException(CustomMessage('SupportSetupFailed'));
+      if ResultCode <> 0 then RaiseException(CustomMessage('SupportSetupFailed'));
     end;
     Log('Program Files installation and protected support service setup completed.');
     PostInstallIncomplete := False;
@@ -291,5 +296,5 @@ var
 begin
   Result := Exec(ExpandConstant('{app}\{#AppExeName}'), '--support-uninstall', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Result := Result and (ResultCode = 0);
-  if not Result then MsgBox('Protected support could not be removed. Finish any active update and retry uninstall.', mbError, MB_OK);
+  if not Result then SuppressibleMsgBox('Protected support could not be removed. Finish any active update and retry uninstall.', mbError, MB_OK, IDOK);
 end;

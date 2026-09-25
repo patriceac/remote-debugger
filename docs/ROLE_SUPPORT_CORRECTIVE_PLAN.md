@@ -1,6 +1,6 @@
 # Proposed corrective plan: controller authority and receiving support
 
-2026-09-25. **For Patrice's review. No product fix is authorized or implemented.** Requirements: [ROLE_SUPPORT_AUDIT.md](ROLE_SUPPORT_AUDIT.md). Evidence and coverage limits: [ROLE_SUPPORT_AUDIT_RESULTS.md](ROLE_SUPPORT_AUDIT_RESULTS.md).
+2026-09-25. **Approved by Patrice: “fix it all, including the aforementioned installer issue.”** This document retains the reviewed diagnosis and proposed acceptance criteria. The resulting 0.5.23 release and current verification are tracked in [ROLE_SUPPORT_FIX_RESULTS.md](ROLE_SUPPORT_FIX_RESULTS.md). Requirements: [ROLE_SUPPORT_AUDIT.md](ROLE_SUPPORT_AUDIT.md). Historical baseline: [ROLE_SUPPORT_AUDIT_RESULTS.md](ROLE_SUPPORT_AUDIT_RESULTS.md).
 
 ## What is established
 

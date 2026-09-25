@@ -8,6 +8,28 @@ using Xunit;
 public sealed class UpdateAdminTests
 {
     [Fact]
+    public void ControllerCertificateRequiresTheEnrolledKeyAndLocalAuthority()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "rd-controller-cert-" + Guid.NewGuid().ToString("N"));
+        var store = new UpdateAdminStore(root, UpdateAcceptanceAuthority.PublicKey);
+        try
+        {
+            Assert.Throws<UnauthorizedAccessException>(() => store.CreateClientCertificate());
+            UpdateAcceptanceAuthority.Enroll(root);
+            using var certificate = store.CreateClientCertificate();
+            Assert.True(certificate.HasPrivateKey);
+            Assert.True(UpdateAdminStore.IsControllerCertificate(certificate, UpdateAcceptanceAuthority.PublicKey));
+            Assert.False(UpdateAdminStore.IsControllerCertificate(certificate));
+            Assert.False(UpdateAdminStore.IsControllerCertificate(null, UpdateAcceptanceAuthority.PublicKey));
+            store.Disable();
+            Assert.Throws<UnauthorizedAccessException>(() => store.CreateClientCertificate());
+            File.WriteAllText(Path.Combine(root, "update-admin.dpapi"), "corrupt");
+            Assert.Throws<UnauthorizedAccessException>(() => store.RequireController());
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [Fact]
     public void DisposableFixtureAuthorityCannotAuthorizeAProductionRelease()
     {
         string root = Path.Combine(Path.GetTempPath(), "rd-test-authority-" + Guid.NewGuid().ToString("N"));

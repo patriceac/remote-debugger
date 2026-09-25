@@ -61,6 +61,7 @@ public sealed partial class RemoteClient
 
     private async Task<Stream> OpenTransportAsync(CancellationToken ct, Action<string>? selectedRoute)
     {
+        RequireController();
         if (discoverRoutes) await RefreshRoutesIfNeededAsync(ct).ConfigureAwait(false);
         var route = Connection;
         if (route.RelayUrl.Length > 0)
@@ -103,7 +104,7 @@ public sealed partial class RemoteClient
             if (!networkChanged && Connection.DirectHost.Length > 0 && IsLanAddress(Connection.DirectHost)) return;
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
             deadline.CancelAfter(TimeSpan.FromSeconds(5));
-            var nearby = await Discovery.FindAsync(1000, deadline.Token).ConfigureAwait(false);
+            var nearby = await Discovery.FindAsync(1000, deadline.Token, AdminRoot).ConfigureAwait(false);
             var peer = nearby.FirstOrDefault(p => string.Equals(p.Fingerprint, Connection.Fingerprint, StringComparison.OrdinalIgnoreCase));
             if (peer != null)
             {

@@ -14,12 +14,14 @@ public sealed record InternetSettings(string RelayUrl, string AccessKey, string 
 {
     private sealed record OnlineClient(string Id, string Name, string Fingerprint = "");
 
-    public async Task<List<Peer>> FindAsync(CancellationToken ct = default)
+    public async Task<List<Peer>> FindAsync(CancellationToken ct = default, string? controllerRoot = null)
     {
         Validate();
         using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
         { Timeout = TimeSpan.FromSeconds(10), MaxResponseContentBufferSize = 16384 };
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", AccessKey);
+        foreach (var header in ControllerHeaders("/v1/clients", controllerRoot ?? Vault.DefaultRoot))
+            http.DefaultRequestHeaders.Add(header.Key, header.Value);
         using var response = await http.GetAsync(new Uri(new Uri(RelayUrl), "/v1/clients"), ct).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         var clients = JsonSerializer.Deserialize<List<OnlineClient>>(await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false), Json.Options)
@@ -127,20 +129,33 @@ public sealed record InternetSettings(string RelayUrl, string AccessKey, string 
         socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
         return socket;
     }
+    internal Dictionary<string, string> ControllerHeaders(string path, string root)
+    {
+        var authority = new UpdateAdminStore(root);
+        authority.RequireController();
+        string time = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture);
+        string nonce = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+        return new()
+        {
+            ["X-Controller-Time"] = time,
+            ["X-Controller-Nonce"] = nonce,
+            ["X-Controller-Proof"] = authority.Sign(nonce, Safety.Hash(AccessKey.ToUpperInvariant()), "support.relay", Safety.Hash(time + "\n" + path))
+        };
+    }
     internal Uri Address(string id, string suffix) => new(new UriBuilder(RelayUrl) { Scheme = "wss", Port = new Uri(RelayUrl).Port,
         Path = "/v1/sessions/" + SessionId(id) + "/" + suffix }.Uri.AbsoluteUri);
 }
 
 public static class ConnectionTransport
 {
-    public static async Task<Stream> OpenAsync(Connection target, CancellationToken ct)
+    public static async Task<Stream> OpenAsync(Connection target, CancellationToken ct, string? controllerRoot = null)
     {
         if (target.DirectHost.Length > 0)
         {
             return await OpenTcpAsync(target.DirectHost, target.DirectPort, ct).ConfigureAwait(false);
         }
         if (target.RelayUrl.Length == 0) return await OpenTcpAsync(target.Host, target.Port, ct).ConfigureAwait(false);
-        return await OpenRelayAsync(target, ct).ConfigureAwait(false);
+        return await OpenRelayAsync(target, ct, controllerRoot ?? Vault.DefaultRoot).ConfigureAwait(false);
     }
 
     private static async Task<Stream> OpenTcpAsync(string host, int port, CancellationToken ct)
@@ -157,13 +172,16 @@ public static class ConnectionTransport
         catch { tcp.Dispose(); throw; }
     }
 
-    private static async Task<Stream> OpenRelayAsync(Connection target, CancellationToken ct)
+    private static async Task<Stream> OpenRelayAsync(Connection target, CancellationToken ct, string controllerRoot)
     {
         var settings = new InternetSettings(target.RelayUrl, target.RelayAccessKey); settings.Validate();
         var socket = settings.Socket();
         try
         {
-            await socket.ConnectAsync(settings.Address(target.Host, "connect"), ct).ConfigureAwait(false);
+            var address = settings.Address(target.Host, "connect");
+            foreach (var header in settings.ControllerHeaders(address.PathAndQuery, controllerRoot))
+                socket.Options.SetRequestHeader(header.Key, header.Value);
+            await socket.ConnectAsync(address, ct).ConfigureAwait(false);
             string ready = await WebSocketStream.ReadTextAsync(socket, ct).ConfigureAwait(false);
             if (ready != "ready") throw new IOException("Internet session unavailable.");
             return new WebSocketStream(socket);
@@ -305,6 +323,7 @@ public sealed class InternetAgent : IDisposable
     private readonly CancellationTokenSource stop = new();
     private readonly SemaphoreSlim channels = new(12);
     private ClientWebSocket? control;
+    private volatile bool enabled = true;
     public string SupportId => InternetSettings.DisplayId(invitation.Id);
     public string AuthenticationSecret => settings.AuthenticationSecret(invitation.Id);
     public bool Connected { get; private set; }
@@ -320,11 +339,22 @@ public sealed class InternetAgent : IDisposable
         Vault.Save(path, JsonSerializer.SerializeToUtf8Bytes(invitation, Json.Options));
     }
     public void Start() => _ = RunAsync();
+    public void SetEnabled(bool value)
+    {
+        enabled = value;
+        if (!value) { Connected = false; control?.Abort(); }
+    }
     private async Task RunAsync()
     {
         int failures = 0;
         while (!stop.IsCancellationRequested)
         {
+            if (!enabled)
+            {
+                try { await Task.Delay(500, stop.Token).ConfigureAwait(false); }
+                catch (OperationCanceledException) { return; }
+                continue;
+            }
             long connectedAt = 0;
             try
             {

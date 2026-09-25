@@ -12,7 +12,7 @@ public sealed class SecurityMigrationClient(string root)
         var state = store.Load() ?? throw new InvalidOperationException("Create the passphrase-protected setup first.");
         state.Current.Save(root);
         if (!string.IsNullOrEmpty(onlyHost) && state.Devices.Any(d => d.LegacyHost == onlyHost && d.State == "protected")) return state;
-        var peers = await state.Previous.FindAsync(ct).ConfigureAwait(false);
+        var peers = await state.Previous.FindAsync(ct, root).ConfigureAwait(false);
         if (!string.IsNullOrEmpty(onlyHost)) peers = peers.Where(p => p.Host == onlyHost).ToList();
         foreach (var peer in peers)
             if (!state.Devices.Any(d => d.LegacyHost == peer.Host)) state.Devices.Add(new(peer.Name, peer.Host));
@@ -52,7 +52,7 @@ public sealed class SecurityMigrationClient(string root)
                     // Ordinary agent restarts change routing IDs. Recover by
                     // the previously authenticated certificate, never by name.
                     bool found = false;
-                    foreach (var online in await state.Current.FindAsync(ct).ConfigureAwait(false))
+                    foreach (var online in await state.Current.FindAsync(ct, root).ConfigureAwait(false))
                     {
                         if (online.Host == device.NewHost || device.Fingerprint.Length == 0) continue;
                         var recovered = new RemoteClient(new(online.Host, 443, device.Fingerprint, "", state.Current.RelayUrl, state.Current.AccessKey));

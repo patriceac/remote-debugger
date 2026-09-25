@@ -109,6 +109,7 @@ internal static class ConnectedCli
             string error = ex switch
             {
                 RemoteOperationException rpc => rpc.Code,
+                UnauthorizedAccessException => "access_denied",
                 FileNotFoundException when remote == null => "not_connected",
                 OperationCanceledException => "cancelled_or_timeout",
                 ArgumentException or InvalidOperationException or JsonException => "invalid_request",

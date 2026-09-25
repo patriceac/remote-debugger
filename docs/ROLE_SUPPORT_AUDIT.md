@@ -4,9 +4,9 @@ Agreed with Patrice on 2026-09-25. This document is the authoritative handoff fo
 
 ## Scope and stopping point
 
-Document requirements, test the current application, establish the actual capabilities and failures, and propose a corrective action plan for review. **Do not fix product behavior yet.** Product changes start only after Patrice reviews and agrees to the plan. Test drivers and disposable fixtures are permitted. Parent agent writes code; latest Luna Max agents run tests. Use the Hyper-V SYSTEM broker for executable, installer, and native UI testing. No application-under-test execution on the physical host. No real family PC or production-network experiments.
+The initial investigation documented requirements and failures before proposing changes. Patrice subsequently approved implementation on 2026-09-25: **“fix it all, including the aforementioned installer issue.”** The audit results remain the historical 0.5.21 baseline; correction verification is recorded separately in [ROLE_SUPPORT_FIX_RESULTS.md](ROLE_SUPPORT_FIX_RESULTS.md). Parent agent writes code; latest Luna Max agents run tests. Use the Hyper-V SYSTEM broker for executable, installer, and native UI testing. No application-under-test execution on the physical host. No real family PC or production-network experiments.
 
-Follow-up authorization on 2026-09-25: the Hyper-V Harness project, using Astra Max, may implement, qualify and deploy the missing I01/I03/I04 test capabilities. This audit then reruns the blocked installer cases and completes the gap assessment. That authorization does not permit Remote Debugger product fixes.
+The earlier, separate authorization allowed the Hyper-V Harness project, using Astra Max, to implement and qualify the missing I01/I03/I04 test capabilities. Those capabilities were deployed before the product correction tests.
 
 ## Agreed requirements
 
@@ -110,4 +110,4 @@ Repeat representative denial cases with older/equal/newer initiating binaries. R
 
 ## Corrective plan deliverable
 
-For each confirmed failure: record reproduction, scope/artifact, expected vs actual, root-cause evidence, minimal proposed correction, affected interfaces/compatibility, and the exact regression tests. Prioritize role authorization and incoming-support enforcement before presentation symptoms. List harness/capability work separately from product work. Do not implement the proposals before user agreement.
+For each confirmed failure: record reproduction, scope/artifact, expected vs actual, root-cause evidence, correction, affected interfaces/compatibility, and regression tests. Prioritize role authorization and incoming-support enforcement before presentation symptoms. List harness/capability work separately from product work. Product implementation was authorized after the baseline review.
