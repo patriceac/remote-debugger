@@ -4,7 +4,7 @@ Requirements and scenario IDs: [ROLE_SUPPORT_AUDIT.md](ROLE_SUPPORT_AUDIT.md).
 
 Updated: 2026-09-25. Product fixes are not authorized. This ledger separates observed behavior from untested scope and test-infrastructure failures.
 
-Follow-up in progress: Patrice separately authorized the Hyper-V Harness project to implement and deploy the missing UAC capabilities with Astra Max. That work is not deployed yet. Original packaged MCP, saved-grant reuse after process restart, the complete isolated LAN discovery matrix, and the actual installer controller-checkbox workflow have now been evaluated. Packaged local-relay coverage remains incomplete after two diagnostic setup failures.
+Follow-up in progress: Patrice separately authorized the Hyper-V Harness project to implement and deploy the missing UAC capabilities with Astra Max. Deployment is incomplete and the capability remains unqualified: final source qualification passed, but promotion stopped at the pool's payload-lease audit after source/broker installation and worker refresh. The harness team owns recovery; all further audit VM submissions are held until release acceptance and recovery finish. Original packaged MCP, saved-grant reuse after process restart, the complete isolated LAN discovery matrix, and the actual installer controller-checkbox workflow have now been evaluated. Packaged local-relay coverage remains incomplete after two diagnostic setup failures.
 
 ## Status
 
