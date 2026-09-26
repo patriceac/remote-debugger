@@ -157,7 +157,6 @@ public sealed partial class MainForm : Forms.Form
     private readonly Forms.Label technicalIdentity = new() { Name = "technicalIdentity", AutoSize = true, ForeColor = SecondaryText, MaximumSize = new Size(900, 0) };
 
     private readonly RemoteInputQueue<QueuedInput> inputQueue = new();
-    private long lastMove;
     private readonly string root;
     private readonly bool loopbackOnly;
     private readonly bool startAgentOnLaunch;
@@ -638,7 +637,8 @@ public sealed partial class MainForm : Forms.Form
         inputRecoveryTimer.Tick += (_, _) => RetryInputRecovery();
         screen.MouseDown += (_, e) => { screen.Focus(); RefreshInputStatus(); var applied = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously); QueueMouse("down", e, applied); BeginViewerFileGesture(e, applied.Task); };
         screen.MouseUp += (_, e) => { QueueMouse("up", e); viewerDragOrigin = null; viewerDragCandidate = null; };
-        screen.MouseMove += async (_, e) => { if (await ContinueViewerFileGestureAsync(e)) return; long now = Environment.TickCount64; if (now - lastMove < 33) return; lastMove = now; QueueMouse("move", e); };
+        screen.MouseMove += async (_, e) => { if (await ContinueViewerFileGestureAsync(e) || !screen.ShouldForwardMouseMove(e.Location, Environment.TickCount64)) return; QueueMouse("move", e); };
+        screen.MouseLeave += (_, _) => screen.ResetMouseMove();
         screen.MouseWheel += (_, e) => QueueMouse("wheel", e); screen.GotFocus += (_, _) => RefreshInputStatus(); screen.LostFocus += (_, _) => { ReleaseHeldInputForCurrentSession(); RefreshInputStatus(); };
         typeText.Click += (_, _) => QueueFocusedText(); enterKey.Click += (_, _) => { if (!CanSendFocusedInput()) return; QueueInput(new { kind = "keyDown", virtualKey = 13 }); QueueInput(new { kind = "keyUp", virtualKey = 13 }); };
         processList.ColumnClick += (_, e) => { processSort = processSort.Toggle(ProcessColumn(e.Column)); RenderProcesses(); }; processList.SelectedIndexChanged += (_, _) => { if (processList.SelectedItems.Count > 0 && processList.SelectedItems[0].Tag is ProcessSortRow row) { pid.Value = row.Pid; } };

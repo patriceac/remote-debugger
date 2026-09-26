@@ -7,6 +7,33 @@ namespace RemoteDebugger.Platform.Tests;
 
 public sealed class RemoteScreenViewTests
 {
+    [Fact]
+    public void StationaryMouseDoesNotReassertItsPositionButRealMovementStillForwards()
+    {
+        using var view = new RemoteScreenView();
+        var first = new Point(120, 80);
+        var next = new Point(160, 90);
+
+        Assert.True(view.ShouldForwardMouseMove(first, 0));
+        Assert.False(view.ShouldForwardMouseMove(first, 34));
+        Assert.False(view.ShouldForwardMouseMove(first, 5_000));
+        Assert.True(view.ShouldForwardMouseMove(next, 5_034));
+        Assert.True(view.ShouldForwardMouseMove(first, 5_067));
+        Assert.False(view.ShouldForwardMouseMove(first, 5_100));
+        view.ResetMouseMove();
+        Assert.True(view.ShouldForwardMouseMove(first, 5_134));
+    }
+
+    [Fact]
+    public void ThrottledMovementCanStillForwardAfterTheInterval()
+    {
+        using var view = new RemoteScreenView();
+
+        Assert.True(view.ShouldForwardMouseMove(new(120, 80), 0));
+        Assert.False(view.ShouldForwardMouseMove(new(160, 90), 10));
+        Assert.True(view.ShouldForwardMouseMove(new(160, 90), 33));
+    }
+
     [Theory]
     [InlineData(240, 120, 0, 60)]
     [InlineData(120, 240, 60, 0)]

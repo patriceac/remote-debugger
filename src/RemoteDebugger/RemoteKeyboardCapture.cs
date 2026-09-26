@@ -22,7 +22,7 @@ internal sealed class RemoteKeyboardCapture(Func<bool> canCapture, Action<object
         callback = OnKey;
         hook = SetWindowsHookEx(13, callback, GetModuleHandle(null), 0);
         if (hook == IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error());
-        keepAlive.Tick += (_, _) => { Refresh(); if (active && held.Count > 0) send(new { kind = "keepAlive" }); };
+        keepAlive.Tick += (_, _) => { Refresh(); if (active && (held.Count > 0 || Forms.Control.MouseButtons != Forms.MouseButtons.None)) send(new { kind = "keepAlive" }); };
         keepAlive.Start();
     }
 

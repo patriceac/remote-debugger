@@ -6,6 +6,9 @@ namespace RemoteDebugger;
 // surface owns focus, so it must explicitly opt in to keyboard selection.
 internal sealed class RemoteScreenView : PictureBox
 {
+    private Point? lastMousePosition;
+    private long lastMouseMove;
+
     public RemoteScreenView()
     {
         SetStyle(ControlStyles.Selectable, true);
@@ -13,6 +16,17 @@ internal sealed class RemoteScreenView : PictureBox
     }
 
     protected override bool IsInputKey(Keys keyData) => true;
+
+    internal void ResetMouseMove() => lastMousePosition = null;
+
+    internal bool ShouldForwardMouseMove(Point position, long now)
+    {
+        // Windows can repeat MouseMove during frame/layout updates while the mouse is still.
+        if (lastMousePosition == position || lastMousePosition != null && now - lastMouseMove < 33) return false;
+        lastMousePosition = position;
+        lastMouseMove = now;
+        return true;
+    }
 
     protected override void OnPaintBackground(PaintEventArgs e)
     {
