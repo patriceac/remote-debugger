@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Drawing.Drawing2D;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
@@ -83,26 +84,78 @@ internal static class AppTheme
     internal static void ConfigureMenu(Forms.ContextMenuStrip menu)
     {
         var original = menu.Renderer;
-        var themed = new Forms.ToolStripProfessionalRenderer(new MenuColors());
+        var themed = new MenuRenderer();
+        Size roundedSize = Size.Empty;
+        menu.SizeChanged += (_, _) => RoundMenu();
         menu.Opening += (_, _) =>
         {
-            menu.Renderer = Dark ? themed : original;
-            menu.BackColor = Dark ? Surface : SystemColors.Menu;
-            menu.ForeColor = Dark ? Text : SystemColors.MenuText;
+            RefreshSystem();
+            bool highContrast = Forms.SystemInformation.HighContrast;
+            menu.Renderer = highContrast ? original : themed;
+            menu.BackColor = highContrast ? SystemColors.Menu : MenuColors.Background;
+            menu.ForeColor = highContrast ? SystemColors.MenuText : Dark ? Text : Color.Black;
+            RoundMenu();
         };
+
+        void RoundMenu()
+        {
+            if (!Forms.SystemInformation.HighContrast)
+                ControlRegions.ApplyRounded(menu, ref roundedSize, Math.Max(1, 4 * menu.DeviceDpi / 96));
+            else { var previous = menu.Region; menu.Region = null; previous?.Dispose(); }
+        }
     }
 
     private sealed class MenuColors : Forms.ProfessionalColorTable
     {
-        public override Color ToolStripDropDownBackground => Surface;
-        public override Color ImageMarginGradientBegin => Surface;
-        public override Color ImageMarginGradientMiddle => Surface;
-        public override Color ImageMarginGradientEnd => Surface;
-        public override Color MenuItemSelected => Selected;
-        public override Color MenuItemBorder => Border;
-        public override Color MenuBorder => Border;
-        public override Color SeparatorDark => Border;
-        public override Color SeparatorLight => Border;
+        internal static Color Background => Dark ? Color.FromArgb(41, 42, 44) : Color.FromArgb(246, 249, 252);
+        internal static Color Highlight => Dark ? Color.FromArgb(12, 107, 225) : Color.FromArgb(195, 228, 253);
+        public override Color ToolStripDropDownBackground => Background;
+        public override Color ImageMarginGradientBegin => Background;
+        public override Color ImageMarginGradientMiddle => Background;
+        public override Color ImageMarginGradientEnd => Background;
+        public override Color MenuBorder => Dark ? Color.FromArgb(85, 86, 87) : Color.FromArgb(201, 207, 213);
+        public override Color SeparatorDark => Dark ? Border : Color.FromArgb(224, 229, 234);
+        public override Color SeparatorLight => SeparatorDark;
+    }
+
+    private sealed class MenuRenderer() : Forms.ToolStripProfessionalRenderer(new MenuColors())
+    {
+        protected override void OnRenderMenuItemBackground(Forms.ToolStripItemRenderEventArgs e)
+        {
+            if (!e.Item.Selected || !e.Item.Enabled) return;
+            float scale = e.ToolStrip!.DeviceDpi / 96f;
+            using var path = Rounded(new RectangleF(2 * scale, 0, e.Item.Width - 3 * scale, e.Item.Height - 1), 2 * scale);
+            var smoothing = e.Graphics.SmoothingMode; e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using var brush = new SolidBrush(MenuColors.Highlight); e.Graphics.FillPath(brush, path);
+            e.Graphics.SmoothingMode = smoothing;
+        }
+
+        protected override void OnRenderItemText(Forms.ToolStripItemTextRenderEventArgs e)
+        {
+            e.TextColor = !e.Item.Enabled ? (Dark ? Muted : SystemColors.GrayText)
+                : Dark ? (e.Item.Selected ? Color.White : Text) : Color.Black;
+            base.OnRenderItemText(e);
+        }
+
+        protected override void OnRenderToolStripBorder(Forms.ToolStripRenderEventArgs e)
+        {
+            float scale = e.ToolStrip.DeviceDpi / 96f;
+            using var path = Rounded(new RectangleF(.5f, .5f, e.ToolStrip.Width - 1, e.ToolStrip.Height - 1), 4 * scale);
+            var smoothing = e.Graphics.SmoothingMode; e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using var pen = new Pen(ColorTable.MenuBorder, scale); e.Graphics.DrawPath(pen, path);
+            e.Graphics.SmoothingMode = smoothing;
+        }
+
+        private static GraphicsPath Rounded(RectangleF bounds, float radius)
+        {
+            float diameter = Math.Min(radius * 2, Math.Min(bounds.Width, bounds.Height));
+            var path = new GraphicsPath();
+            path.AddArc(bounds.Left, bounds.Top, diameter, diameter, 180, 90);
+            path.AddArc(bounds.Right - diameter, bounds.Top, diameter, diameter, 270, 90);
+            path.AddArc(bounds.Right - diameter, bounds.Bottom - diameter, diameter, diameter, 0, 90);
+            path.AddArc(bounds.Left, bounds.Bottom - diameter, diameter, diameter, 90, 90);
+            path.CloseFigure(); return path;
+        }
     }
 
     internal static void Apply(Forms.Control control)

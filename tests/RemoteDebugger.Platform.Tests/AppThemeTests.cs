@@ -11,6 +11,37 @@ public sealed class ThemeCollection;
 [Collection("Theme")]
 public sealed class AppThemeTests
 {
+    [Theory]
+    [InlineData("light", 195, 228, 253, -16777216)]
+    [InlineData("dark", 12, 107, 225, -1)]
+    public void SelectedTrayRowRendersReadableThemeColors(string theme, int red, int green, int blue, int ink)
+    {
+        string original = AppTheme.Preference;
+        using var menu = new TestMenu();
+        var item = new Forms.ToolStripMenuItem("End support"); menu.Items.Add(item);
+        try
+        {
+            AppTheme.SetPreference(theme); AppTheme.ConfigureMenu(menu); menu.Prepare(); item.Select();
+            Assert.True(item.Selected);
+            using var bitmap = new Bitmap(item.Width, item.Height);
+            using var graphics = Graphics.FromImage(bitmap); graphics.Clear(menu.BackColor);
+            menu.Renderer.DrawMenuItemBackground(new Forms.ToolStripItemRenderEventArgs(graphics, item));
+            Assert.Equal(Color.FromArgb(red, green, blue).ToArgb(), bitmap.GetPixel(8, item.Height / 2).ToArgb());
+            Assert.Equal(menu.BackColor.ToArgb(), bitmap.GetPixel(2, 0).ToArgb());
+            var text = new Forms.ToolStripItemTextRenderEventArgs(graphics, item, item.Text,
+                item.ContentRectangle, Color.Magenta, item.Font, Forms.TextFormatFlags.Left);
+            menu.Renderer.DrawItemText(text);
+            Assert.Equal(ink, text.TextColor.ToArgb());
+            Assert.NotNull(menu.Region); Assert.False(menu.Region.IsVisible(0, 0));
+        }
+        finally { AppTheme.SetPreference(original); }
+    }
+
+    private sealed class TestMenu : Forms.ContextMenuStrip
+    {
+        internal void Prepare() => OnOpening(new System.ComponentModel.CancelEventArgs());
+    }
+
     [Fact]
     public void SwitchingRestoresLightColorsAndPreservesContentAndLayout()
     {
