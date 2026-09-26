@@ -103,6 +103,18 @@ internal sealed class RememberedListView : Forms.ListView
     [StructLayout(LayoutKind.Sequential)]
     private struct NotifyHeader { public IntPtr Window; public UIntPtr Id; public int Code; }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect { public int Left, Top, Right, Bottom; public readonly Rectangle Bounds => Rectangle.FromLTRB(Left, Top, Right, Bottom); }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct HeaderDraw { public NotifyHeader Header; public uint Stage; public IntPtr Dc; public NativeRect Rect; public UIntPtr Item; public uint State; public IntPtr ItemData; }
+
+    [DllImport("user32.dll", EntryPoint = "SendMessageW")]
+    private static extern IntPtr SendMessage(IntPtr window, int message, IntPtr wparam, IntPtr lparam);
+    [DllImport("user32.dll", EntryPoint = "SendMessageW")]
+    private static extern IntPtr HeaderItemRect(IntPtr window, int message, IntPtr item, out NativeRect rectangle);
+    [DllImport("user32.dll")]
+    private static extern bool GetClientRect(IntPtr window, out NativeRect rectangle);
+
     protected override void WndProc(ref Forms.Message message)
     {
         // HDN_ENDTRACK A/W, HDN_ENDDRAG, HDN_DIVIDERDBLCLICK A/W. Save after
@@ -110,6 +122,23 @@ internal sealed class RememberedListView : Forms.ListView
         bool completed = message.Msg == 0x004E && message.LParam != IntPtr.Zero &&
             Marshal.PtrToStructure<NotifyHeader>(message.LParam).Code is -307 or -327 or -311 or -305 or -325;
         base.WndProc(ref message);
+        // DrawColumnHeader only covers actual columns; paint the native header's unused strip too.
+        if (AppTheme.Dark && message.Msg == 0x004E && message.LParam != IntPtr.Zero &&
+            Marshal.PtrToStructure<NotifyHeader>(message.LParam) is { Code: -12 } notification &&
+            notification.Window == SendMessage(Handle, 0x101F /* LVM_GETHEADER */, IntPtr.Zero, IntPtr.Zero))
+        {
+            var draw = Marshal.PtrToStructure<HeaderDraw>(message.LParam);
+            if (draw.Stage == 1 /* CDDS_PREPAINT */) message.Result = (IntPtr)(message.Result.ToInt64() | 0x10 /* CDRF_NOTIFYPOSTPAINT */);
+            if (draw.Stage == 2 /* CDDS_POSTPAINT */ && GetClientRect(notification.Window, out var bounds))
+            {
+                using var graphics = Graphics.FromHdc(draw.Dc);
+                for (int i = 0; i < Columns.Count; i++)
+                    if (HeaderItemRect(notification.Window, 0x1207 /* HDM_GETITEMRECT */, (IntPtr)i, out var column) != IntPtr.Zero)
+                        graphics.ExcludeClip(column.Bounds);
+                using var fill = new SolidBrush(AppTheme.Input);
+                graphics.FillRectangle(fill, bounds.Bounds);
+            }
+        }
         if (completed && !applying && IsHandleCreated && !IsDisposed) BeginInvoke(SaveLayout);
     }
 }

@@ -936,6 +936,18 @@
   <data name="WakeSendFailed" xml:space="preserve"><value>Wake packets could not be sent.</value></data>
   <data name="ShareClipboard" xml:space="preserve"><value>Share clipboard</value></data>
   <data name="RestartRemotePc" xml:space="preserve"><value>Restart remote PC</value></data>
+  <data name="RestartPcQuestion" xml:space="preserve"><value>Restart {0}?</value></data>
+  <data name="ShutdownPcQuestion" xml:space="preserve"><value>Shut down {0}?</value></data>
+  <data name="RestartPcAction" xml:space="preserve"><value>Restart PC</value></data>
+  <data name="ShutdownPcAction" xml:space="preserve"><value>Shut down PC</value></data>
+  <data name="PowerCountdownNotice" xml:space="preserve"><value>10-second countdown · Cancel anytime</value></data>
+  <data name="PowerUnsavedNotice" xml:space="preserve"><value>Apps with unsaved work will not be forced to close.</value></data>
+  <data name="PowerManualReturn" xml:space="preserve"><value>Support reconnects after Windows sign-in.</value></data>
+  <data name="PowerAutomaticReturn" xml:space="preserve"><value>Support reconnects after automatic Windows sign-in.</value></data>
+  <data name="PowerSessionEnds" xml:space="preserve"><value>The support session will end.</value></data>
+  <data name="PowerReconnectStops" xml:space="preserve"><value>Automatic reconnection will stop.</value></data>
+  <data name="PowerSignInOnce" xml:space="preserve"><value>Sign in automatically just once</value></data>
+  <data name="PowerSignInHint" xml:space="preserve"><value>Optional · Requires your Windows account password.</value></data>
   <data name="ShutdownRemotePc" xml:space="preserve"><value>Shut down remote PC</value></data>
   <data name="ManualSignInExpected" xml:space="preserve"><value>Manual Windows sign-in is expected. The user must sign in on the remote PC; support will reconnect afterward.</value></data>
   <data name="AutomaticDesktopExpected" xml:space="preserve"><value>Automatic sign-in and desktop return are expected for this restart only. Normal sign-in settings are restored afterward.</value></data>

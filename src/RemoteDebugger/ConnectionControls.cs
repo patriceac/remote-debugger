@@ -35,11 +35,11 @@ internal static class UiGlyph
     internal const string Computer = "\uE7F4", Link = "\uE71B", Processes = "\uE8FD", Folder = "\uE8B7",
         Diagnostics = "\uE9D9", Give = "\uE72A", Take = "\uE72B", Refresh = "\uE72C", Update = "\uE898",
         Wake = "\uE7E8", Settings = "\uE713", Down = "\uE70D", Right = "\uE76C", Close = "close", Info = "info", Shield = "shield",
-        Globe = "globe", Moon = "moon", CheckCircle = "checkCircle";
+        Globe = "globe", Moon = "moon", CheckCircle = "checkCircle", Restart = "restart";
 
     internal static void Draw(Graphics graphics, string glyph, Rectangle bounds, Color color)
     {
-        if (glyph is Computer or Processes or Folder or Diagnostics or Wake or Close or Info or Shield or Link or Give or Take or Refresh or Update or Down or Right or Globe or Moon or CheckCircle)
+        if (glyph is Computer or Processes or Folder or Diagnostics or Wake or Close or Info or Shield or Link or Give or Take or Refresh or Restart or Update or Down or Right or Globe or Moon or CheckCircle)
         {
             var state = graphics.Save();
             float size = Math.Min(bounds.Width, bounds.Height);
@@ -83,6 +83,10 @@ internal static class UiGlyph
                     graphics.DrawArc(pen, 3, 3, 18, 18, 45, 270);
                     graphics.DrawLines(pen, new PointF[] { new(18.364f, 5.636f), new(21, 8), new(15, 8) });
                     graphics.DrawLine(pen, 21, 8, 21, 2); break;
+                case Restart:
+                    graphics.DrawArc(pen, 3, 3, 18, 18, 190, 135); graphics.DrawArc(pen, 3, 3, 18, 18, 10, 135);
+                    graphics.DrawLines(pen, new PointF[] { new(21, 3), new(21, 8), new(16, 8) });
+                    graphics.DrawLines(pen, new PointF[] { new(3, 21), new(3, 16), new(8, 16) }); break;
                 case Update:
                     graphics.DrawLine(pen, 12, 3, 12, 17); graphics.DrawLines(pen, new PointF[] { new(7, 8), new(12, 3), new(17, 8) }); graphics.DrawLine(pen, 3, 22, 21, 22); break;
                 case Link:

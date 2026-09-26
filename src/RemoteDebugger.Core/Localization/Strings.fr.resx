@@ -936,6 +936,18 @@
   <data name="WakeSendFailed" xml:space="preserve"><value>Les paquets de réveil n'ont pas pu être envoyés.</value></data>
   <data name="ShareClipboard" xml:space="preserve"><value>Partager le presse-papiers</value></data>
   <data name="RestartRemotePc" xml:space="preserve"><value>Redémarrer le PC distant</value></data>
+  <data name="RestartPcQuestion" xml:space="preserve"><value>Redémarrer {0} ?</value></data>
+  <data name="ShutdownPcQuestion" xml:space="preserve"><value>Éteindre {0} ?</value></data>
+  <data name="RestartPcAction" xml:space="preserve"><value>Redémarrer le PC</value></data>
+  <data name="ShutdownPcAction" xml:space="preserve"><value>Éteindre le PC</value></data>
+  <data name="PowerCountdownNotice" xml:space="preserve"><value>Compte à rebours de 10 secondes · Annulable à tout moment</value></data>
+  <data name="PowerUnsavedNotice" xml:space="preserve"><value>Les applications contenant du travail non enregistré ne seront pas forcées à se fermer.</value></data>
+  <data name="PowerManualReturn" xml:space="preserve"><value>L’assistance reprend après la connexion Windows.</value></data>
+  <data name="PowerAutomaticReturn" xml:space="preserve"><value>L’assistance reprend après la connexion automatique à Windows.</value></data>
+  <data name="PowerSessionEnds" xml:space="preserve"><value>La session d’assistance va se terminer.</value></data>
+  <data name="PowerReconnectStops" xml:space="preserve"><value>La reconnexion automatique s’arrêtera.</value></data>
+  <data name="PowerSignInOnce" xml:space="preserve"><value>Se connecter automatiquement une seule fois</value></data>
+  <data name="PowerSignInHint" xml:space="preserve"><value>Facultatif · Nécessite le mot de passe du compte Windows.</value></data>
   <data name="ShutdownRemotePc" xml:space="preserve"><value>Éteindre le PC distant</value></data>
   <data name="ManualSignInExpected" xml:space="preserve"><value>Une connexion Windows manuelle est prévue. L’utilisateur doit se connecter sur le PC distant ; l’assistance reprendra ensuite.</value></data>
   <data name="AutomaticDesktopExpected" xml:space="preserve"><value>La connexion et le retour au bureau devraient être automatiques pour ce redémarrage uniquement. Les paramètres de connexion habituels seront ensuite rétablis.</value></data>

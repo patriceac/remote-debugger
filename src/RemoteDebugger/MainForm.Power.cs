@@ -39,9 +39,8 @@ public sealed partial class MainForm
                 .Deserialize<PowerPreflight>(Json.Options) ?? throw new InvalidDataException("Missing restart preflight.");
             automatic = preflight.ExpectedReturn == "existing_automatic_desktop";
             string expectation = automatic ? UiText.ExistingAutomaticDesktopExpected : UiText.ManualSignInExpected;
-            if (restart)
+            using (var options = new PowerConfirmationForm(preflight, restart))
             {
-                using var options = new RestartOptionsForm(preflight);
                 if (options.ShowDialog(this) != Forms.DialogResult.OK) return;
                 once = options.OneTimeLogin;
                 password = options.Password;
@@ -51,11 +50,6 @@ public sealed partial class MainForm
                     expectation = UiText.AutomaticDesktopExpected; automatic = true;
                 }
             }
-            string question = UiText.Format(restart ? UiText.ConfirmRemoteRestart : UiText.ConfirmRemoteShutdown, preflight.Machine);
-            if (restart) question += "\n\n" + expectation;
-            if (Forms.MessageBox.Show(this, question, restart ? UiText.RestartRemotePc : UiText.ShutdownRemotePc,
-                Forms.MessageBoxButtons.OKCancel, Forms.MessageBoxIcon.Warning, Forms.MessageBoxDefaultButton.Button2) != Forms.DialogResult.OK) return;
-
             progress = new PowerProgressForm(restart, restart ? expectation : preflight.Machine + " · " + UiText.ShutdownRemotePc, lifetime.Cancel);
             progress.Show(this); progress.SetStage(0, UiText.PreparingPowerOperation);
             clipboardLifetime?.Cancel(); localClipboard?.Pause(); heartbeatLifetime?.Cancel();
@@ -188,31 +182,142 @@ public sealed partial class MainForm
     }
 }
 
-internal sealed class RestartOptionsForm : Forms.Form
+internal sealed class PowerConfirmationForm : Forms.Form
 {
-    private readonly Forms.CheckBox once;
-    private readonly Forms.TextBox password;
-    public bool OneTimeLogin => once.Checked;
-    public string Password => password.Text;
-    internal RestartOptionsForm(PowerPreflight preflight)
+    private readonly Forms.CheckBox once = new SignInCheckBox { Name = "oneTimeLogin", TabIndex = 0 };
+    private readonly Forms.TextBox password = new() { Name = "oneTimePassword", UseSystemPasswordChar = true, MaxLength = 512, BorderStyle = Forms.BorderStyle.None };
+    private readonly Forms.Label heading = Copy(), summary = Copy(), countdown = Copy(), unsaved = Copy(), hint = Copy(), account = Copy(), passwordLabel = Copy();
+    private readonly Forms.Panel notice = new(), footer = new(), passwordField;
+    private readonly Forms.Control glyph;
+    private readonly Forms.Button confirm, cancel;
+    private readonly bool restart;
+    private bool arranging, ready;
+    public bool OneTimeLogin => restart && once.Enabled && once.Checked;
+    public string Password => OneTimeLogin ? password.Text : "";
+
+    internal PowerConfirmationForm(PowerPreflight preflight, bool restart)
     {
-        Text = UiText.RestartRemotePc; Name = "restartOptions"; StartPosition = Forms.FormStartPosition.CenterParent;
-        FormBorderStyle = Forms.FormBorderStyle.FixedDialog; MaximizeBox = MinimizeBox = false; ClientSize = new(640, 340);
-        Font = new("Segoe UI", 10); Padding = new(20);
-        var layout = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false };
-        layout.Controls.Add(new Forms.Label { AutoSize = true, MaximumSize = new(590, 0), Text = preflight.ExpectedReturn == "existing_automatic_desktop" ? UiText.ExistingAutomaticDesktopExpected : UiText.ManualSignInExpected });
-        once = new() { Name = "oneTimeLogin", AutoSize = true, Text = UiText.SignInOnce, Enabled = preflight.OneTimeLoginAvailable, Margin = new(0, 16, 0, 4) };
-        layout.Controls.Add(once);
-        layout.Controls.Add(new Forms.Label { AutoSize = true, MaximumSize = new(590, 0), Text = preflight.Account + "\n" +
-            (preflight.OneTimeLoginAvailable ? UiText.WindowsPasswordForOneRestart : UiText.OneTimeLoginUnavailable) });
-        password = new() { Name = "oneTimePassword", UseSystemPasswordChar = true, Enabled = false, Width = 360, MaxLength = 512 };
-        layout.Controls.Add(password); once.CheckedChanged += (_, _) => { password.Enabled = once.Checked; if (!once.Checked) password.Clear(); };
-        var buttons = new Forms.FlowLayoutPanel { AutoSize = true, Margin = new(0, 14, 0, 0) };
-        var ok = new Forms.Button { Name = "continueRestart", Text = UiText.Continue, AutoSize = true, DialogResult = Forms.DialogResult.OK };
-        var cancel = new Forms.Button { Text = UiText.Cancel, AutoSize = true, DialogResult = Forms.DialogResult.Cancel };
-        buttons.Controls.Add(ok); buttons.Controls.Add(cancel); layout.Controls.Add(buttons); Controls.Add(layout);
-        AcceptButton = ok; CancelButton = cancel;
-        AppTheme.Apply(this);
+        this.restart = restart;
+        SuspendLayout();
+        Text = restart ? UiText.RestartRemotePc : UiText.ShutdownRemotePc; Name = restart ? "restartOptions" : "shutdownConfirm";
+        StartPosition = Forms.FormStartPosition.CenterParent; FormBorderStyle = Forms.FormBorderStyle.FixedDialog;
+        MaximizeBox = MinimizeBox = false; ShowInTaskbar = false;
+        AutoScaleDimensions = new(96, 96); AutoScaleMode = Forms.AutoScaleMode.Dpi;
+        Font = new("Segoe UI", 12.5f); BackColor = Color.White; ForeColor = Color.FromArgb(9, 18, 38);
+        ClientSize = new(restart ? 630 : 570, 390);
+        heading.Name = "powerQuestion"; heading.Font = new("Segoe UI", 19.5f, FontStyle.Bold); heading.ForeColor = ForeColor;
+        heading.Text = UiText.Format(UiText.Get(restart ? "RestartPcQuestion" : "ShutdownPcQuestion"), preflight.Machine);
+        glyph = UiGlyph.Icon(restart ? UiGlyph.Restart : UiGlyph.Wake, 42, restart ? AppTheme.Accent : Color.FromArgb(231, 188, 106));
+        countdown.Text = UiText.Get("PowerCountdownNotice"); unsaved.Text = UiText.Get("PowerUnsavedNotice");
+        notice.BackColor = Color.FromArgb(248, 253, 253); notice.Controls.AddRange([countdown, unsaved]);
+        notice.Paint += (_, e) =>
+        {
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            using var path = new System.Drawing.Drawing2D.GraphicsPath();
+            int d = Px(10), w = notice.Width - 1, h = notice.Height - 1;
+            path.AddArc(0, 0, d, d, 180, 90); path.AddArc(w - d, 0, d, d, 270, 90);
+            path.AddArc(w - d, h - d, d, d, 0, 90); path.AddArc(0, h - d, d, d, 90, 90); path.CloseFigure();
+            using var pen = new Pen(AppTheme.Line(Color.FromArgb(218, 230, 237))); e.Graphics.DrawPath(pen, path);
+        };
+        once.Text = UiText.Get("PowerSignInOnce"); once.Enabled = preflight.OneTimeLoginAvailable; once.Visible = restart;
+        hint.Text = restart ? preflight.OneTimeLoginAvailable ? UiText.Get("PowerSignInHint") : UiText.OneTimeLoginUnavailable : UiText.Get("PowerReconnectStops");
+        hint.Font = new("Segoe UI", restart ? 11.5f : 12.5f);
+        account.Name = "oneTimeAccount"; account.Text = preflight.Account;
+        passwordLabel.Text = UiText.WindowsPasswordForOneRestart;
+        password.AccessibleName = UiText.WindowsPasswordForOneRestart;
+        passwordField = ConnectionField.Wrap(password, 42); passwordField.Dock = Forms.DockStyle.None; passwordField.TabIndex = 1;
+        confirm = ActionButton(UiText.Get(restart ? "RestartPcAction" : "ShutdownPcAction"), restart ? AppTheme.Accent : Color.FromArgb(184, 61, 73));
+        confirm.Name = restart ? "continueRestart" : "confirmShutdown"; confirm.DialogResult = Forms.DialogResult.OK; confirm.TabIndex = 1;
+        cancel = ActionButton(UiText.Cancel, Color.FromArgb(237, 242, 245)); cancel.Name = "cancelPower"; cancel.ForeColor = ForeColor;
+        cancel.FlatAppearance.BorderSize = 1; cancel.DialogResult = Forms.DialogResult.Cancel; cancel.TabIndex = 0;
+        footer.TabIndex = 2; footer.Controls.AddRange([cancel, confirm]);
+        footer.Paint += (_, e) => { using var pen = new Pen(AppTheme.Line(Color.FromArgb(218, 230, 237))); e.Graphics.DrawLine(pen, 0, 0, footer.Width, 0); };
+        Controls.AddRange([glyph, heading, summary, notice, once, hint, account, passwordLabel, passwordField, footer]);
+        void UpdateLogin()
+        {
+            password.Enabled = account.Visible = passwordLabel.Visible = passwordField.Visible = OneTimeLogin;
+            if (!OneTimeLogin) password.Clear();
+            summary.Text = UiText.Get(!restart ? "PowerSessionEnds" : OneTimeLogin || preflight.ExpectedReturn == "existing_automatic_desktop" ? "PowerAutomaticReturn" : "PowerManualReturn");
+            PerformLayout();
+        }
+        once.CheckedChanged += (_, _) => { UpdateLogin(); if (OneTimeLogin) password.Focus(); };
+        AcceptButton = cancel; CancelButton = cancel; ActiveControl = cancel;
+        ready = true; UpdateLogin(); ResumeLayout(true); AppTheme.Apply(this);
+    }
+
+    private static Forms.Label Copy() => new() { UseMnemonic = false, ForeColor = Color.FromArgb(74, 93, 107) };
+    private static Forms.Button ActionButton(string text, Color color) => new WorkspaceButton
+    {
+        Text = text, BackColor = color, ForeColor = Color.White, FlatStyle = Forms.FlatStyle.Flat,
+        FlatAppearance = { BorderSize = 0, BorderColor = Color.FromArgb(218, 230, 237) }, UseMnemonic = false
+    };
+    private int Px(int value) => (int)Math.Round(value * DeviceDpi / 96f);
+    private int Place(Forms.Label label, int x, int y, int width)
+    {
+        int height = Forms.TextRenderer.MeasureText(label.Text, label.Font, new(width, 0), Forms.TextFormatFlags.WordBreak | Forms.TextFormatFlags.NoPrefix).Height;
+        label.SetBounds(x, y, width, height); return label.Bottom;
+    }
+    private sealed class SignInCheckBox : Forms.CheckBox
+    {
+        internal SignInCheckBox() { FlatStyle = Forms.FlatStyle.Flat; SetStyle(Forms.ControlStyles.OptimizedDoubleBuffer, true); }
+        protected override void OnPaint(Forms.PaintEventArgs e)
+        {
+            if (Forms.SystemInformation.HighContrast) { base.OnPaint(e); return; }
+            e.Graphics.Clear(BackColor); e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            int size = (int)Math.Round(24 * DeviceDpi / 96f), top = (Height - size) / 2;
+            using var path = new System.Drawing.Drawing2D.GraphicsPath();
+            int d = Math.Max(4, size / 3), right = size - 1, bottom = top + size - 1;
+            path.AddArc(0, top, d, d, 180, 90); path.AddArc(right - d, top, d, d, 270, 90);
+            path.AddArc(right - d, bottom - d, d, d, 0, 90); path.AddArc(0, bottom - d, d, d, 90, 90); path.CloseFigure();
+            using var pen = new Pen(Checked ? AppTheme.Accent : AppTheme.Dark ? AppTheme.Muted : Color.FromArgb(103, 124, 137), DeviceDpi / 96f);
+            if (Checked)
+            {
+                using var fill = new SolidBrush(AppTheme.Accent); e.Graphics.FillPath(fill, path);
+                using var check = new Pen(Color.White, 2 * DeviceDpi / 96f);
+                e.Graphics.DrawLines(check, new PointF[] { new(size * .22f, top + size * .50f), new(size * .43f, top + size * .72f), new(size * .80f, top + size * .28f) });
+            }
+            e.Graphics.DrawPath(pen, path);
+            int indent = (int)Math.Round(44 * DeviceDpi / 96f);
+            var text = new Rectangle(indent, 0, Width - indent, Height);
+            Forms.TextRenderer.DrawText(e.Graphics, Text, Font, text, Enabled ? ForeColor : AppTheme.Ink(Color.Gray),
+                Forms.TextFormatFlags.NoPadding | Forms.TextFormatFlags.NoPrefix | Forms.TextFormatFlags.VerticalCenter);
+            if (Focused && ShowFocusCues) Forms.ControlPaint.DrawFocusRectangle(e.Graphics, text, ForeColor, BackColor);
+        }
+    }
+    protected override void OnLayout(Forms.LayoutEventArgs e)
+    {
+        base.OnLayout(e);
+        if (!ready || arranging) return;
+        arranging = true;
+        try
+        {
+            int pad = Px(30), width = ClientSize.Width - pad * 2, textLeft = pad + Px(68);
+            glyph.SetBounds(pad, Px(47), Px(42), Px(42));
+            int y = Place(heading, textLeft, Px(44), width - Px(68));
+            y = Place(summary, textLeft, y + Px(8), width - Px(68)) + Px(26);
+            int noticeY = Place(countdown, Px(20), Px(16), width - Px(40));
+            noticeY = Place(unsaved, Px(20), noticeY + Px(6), width - Px(40));
+            notice.SetBounds(pad, y, width, noticeY + Px(16)); y = notice.Bottom + Px(26);
+            if (restart)
+            {
+                once.SetBounds(pad, y, width, Math.Max(Px(26), once.GetPreferredSize(new(width, 0)).Height));
+                y = Place(hint, pad + Px(44), once.Bottom + Px(4), width - Px(44));
+                if (OneTimeLogin)
+                {
+                    y = Place(account, pad + Px(44), y + Px(18), width - Px(44));
+                    y = Place(passwordLabel, pad + Px(44), y + Px(6), width - Px(44));
+                    passwordField.SetBounds(pad + Px(44), y + Px(8), width - Px(44), Px(42)); y = passwordField.Bottom;
+                }
+            }
+            else y = Place(hint, pad, y, width);
+            footer.SetBounds(0, y + Px(32), ClientSize.Width, Px(84));
+            int buttonWidth = Math.Max(Px(134), Forms.TextRenderer.MeasureText(confirm.Text, confirm.Font).Width + Px(32));
+            confirm.SetBounds(ClientSize.Width - pad - buttonWidth, Px(20), buttonWidth, Px(44));
+            int cancelWidth = Math.Max(Px(112), Forms.TextRenderer.MeasureText(cancel.Text, cancel.Font).Width + Px(32));
+            cancel.SetBounds(confirm.Left - Px(12) - cancelWidth, confirm.Top, cancelWidth, confirm.Height);
+            ClientSize = new(ClientSize.Width, footer.Bottom);
+        }
+        finally { arranging = false; }
     }
     protected override void Dispose(bool disposing) { if (disposing) password.Clear(); base.Dispose(disposing); }
 }

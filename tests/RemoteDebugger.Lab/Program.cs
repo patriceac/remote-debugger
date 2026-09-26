@@ -107,7 +107,7 @@ internal sealed partial class LabForm : Forms.Form
         if (this.role == "internetinstaller" && this.scope == "demo-hold") stop.CancelAfter(TimeSpan.FromHours(2));
         if (this.role.StartsWith("power", StringComparison.Ordinal)) stop.CancelAfter(TimeSpan.FromHours(2));
         this.updateVariant = updateVariant.Trim().ToLowerInvariant();
-        application = applicationPath == null ? ResolveApplicationPath(this.role, this.updateVariant) : Path.GetFullPath(applicationPath);
+        application = this.role == "powerappearance" ? Environment.ProcessPath! : applicationPath == null ? ResolveApplicationPath(this.role, this.updateVariant) : Path.GetFullPath(applicationPath);
         if (!File.Exists(application)) throw new FileNotFoundException("Release artifact missing.", application);
         productData = Path.Combine(this.output, "product-data");
         contract = LoadContract();
@@ -132,6 +132,7 @@ internal sealed partial class LabForm : Forms.Form
             try
             {
                 guestElevated = Native.IsElevated();
+                if (role == "powerappearance") { await PowerAppearanceAsync(); return; }
                 if (role == "connectionredline") { await ConnectionRedlineAsync(); return; }
                 if (role == "giveredline") { await GiveControlRedlineAsync(); return; }
                 if (role == "uirefinements") { await UiRefinementsAsync(); return; }

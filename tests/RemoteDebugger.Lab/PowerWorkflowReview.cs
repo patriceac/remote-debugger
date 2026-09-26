@@ -274,27 +274,25 @@ internal sealed partial class LabForm
         string buttonId = restart ? "restartRemotePc" : "shutdownRemotePc";
         await WaitWorkflowAsync(() => Task.FromResult(Find(buttonId, 100)?.Current.IsEnabled == true));
         InvokeElement(Find(buttonId, 5000) ?? throw new IOException("Controller power button missing."));
+        var confirmation = await WorkflowDialogAsync(restart ? "restartOptions" : "shutdownConfirm");
         if (restart)
         {
-            var options = await WorkflowDialogAsync("restartOptions");
-            var choice = PowerControl(options, "oneTimeLogin");
+            var choice = PowerControl(confirmation, "oneTimeLogin");
             if (once && !choice.Current.IsEnabled) throw new IOException("The clean guest did not offer one-use sign-in.");
             CaptureDesktop(once ? "power-once-options.png" : "power-manual-options.png");
             if (once)
             {
                 if (enterPassword == null) throw new IOException("The protected guest password fixture is unavailable.");
                 ((TogglePattern)choice.GetCurrentPattern(TogglePattern.Pattern)).Toggle();
-                PowerControl(options, "oneTimePassword").SetFocus();
+                PowerControl(confirmation, "oneTimePassword").SetFocus();
                 enterPassword();
             }
-            InvokeElement(PowerControl(options, "continueRestart"));
         }
-        var confirmation = await WorkflowDialogAsync("#32770");
         string text = string.Join(" ", confirmation.FindAll(TreeScope.Descendants,
             new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Text)).Cast<AutomationElement>().Select(x => x.Current.Name));
         if (!text.Contains(machine, StringComparison.OrdinalIgnoreCase)) throw new IOException("Power confirmation omitted the target PC.");
         CaptureDesktop(restart ? "power-restart-confirmation.png" : "power-shutdown-confirmation.png");
-        InvokeElement(PowerControl(confirmation, "1"));
+        InvokeElement(PowerControl(confirmation, restart ? "continueRestart" : "confirmShutdown"));
         var progress = await WorkflowDialogAsync("powerProgressWindow");
         await WaitWorkflowAsync(() => Task.FromResult(Value(PowerControl(progress, "powerState")) == (restart ? UiText.RestartCountdown : UiText.ShutdownCountdown)));
         CaptureDesktop(restart ? "power-restart-countdown.png" : "power-shutdown-countdown.png");

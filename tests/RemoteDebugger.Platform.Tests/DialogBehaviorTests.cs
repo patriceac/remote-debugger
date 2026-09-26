@@ -6,16 +6,34 @@ namespace RemoteDebugger.Platform.Tests;
 
 public sealed class DialogBehaviorTests
 {
-    [Fact]
-    public void RestartOptionsShowEveryControlWithoutScrolling()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void PowerConfirmationFitsWithoutScrollingAndDefaultsToCancel(bool restart)
     {
-        using var form = new RestartOptionsForm(new PowerPreflight("PC", @"PC\yolande", true, ""));
+        using var form = new PowerConfirmationForm(new PowerPreflight("PC", @"PC\yolande", true, ""), restart);
         form.PerformLayout();
-        var layout = Assert.IsType<FlowLayoutPanel>(Assert.Single(form.Controls));
-        layout.PerformLayout();
+        Assert.False(form.AutoScroll);
+        Assert.Contains("PC", form.Controls.Find("powerQuestion", true).Single().Text);
+        Assert.Same(form.CancelButton, form.AcceptButton);
+        Assert.False(form.OneTimeLogin);
+        Assert.All(form.Controls.Cast<Control>().Where(control => control.Width > 0 && control.Height > 0),
+            control => Assert.True(form.ClientRectangle.Contains(control.Bounds)));
+    }
 
-        Assert.False(layout.AutoScroll);
-        Assert.All(layout.Controls.Cast<Control>(), control => Assert.True(layout.ClientRectangle.Contains(control.Bounds)));
+    [Fact]
+    public void DisablingOneTimeSignInClearsThePasswordAndCollapsesTheDialog()
+    {
+        using var form = new PowerConfirmationForm(new PowerPreflight("PC", @"PC\yolande", true, ""), true);
+        var choice = (CheckBox)form.Controls.Find("oneTimeLogin", true).Single();
+        var password = (TextBox)form.Controls.Find("oneTimePassword", true).Single();
+        int collapsed = form.Height;
+        choice.Checked = true; password.Text = "disposable-test-value";
+        Assert.True(form.OneTimeLogin); Assert.True(password.Enabled); Assert.True(password.UseSystemPasswordChar);
+        Assert.True(form.Height > collapsed);
+        choice.Checked = false;
+        Assert.False(form.OneTimeLogin); Assert.False(password.Enabled); Assert.Empty(password.Text);
+        Assert.Empty(form.Password); Assert.Equal(collapsed, form.Height);
     }
 
     [Fact]

@@ -116,7 +116,7 @@ internal static class AppTheme
             int dark = Dark ? 1 : 0;
             _ = DwmSetWindowAttribute(form.Handle, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, ref dark, sizeof(int));
         }
-        control.Invalidate();
+        control.Invalidate(true);
     }
 
     private sealed class Colors
@@ -149,8 +149,12 @@ internal static class AppTheme
                 {
                     if (!Dark) { e.DrawDefault = true; return; }
                     using var fill = new SolidBrush(Input); e.Graphics.FillRectangle(fill, e.Bounds);
-                    Forms.TextRenderer.DrawText(e.Graphics, e.Header?.Text, list.Font, Rectangle.Inflate(e.Bounds, -6, 0), Muted,
-                        Forms.TextFormatFlags.VerticalCenter | Forms.TextFormatFlags.EndEllipsis | Forms.TextFormatFlags.NoPrefix);
+                    var alignment = e.Header?.TextAlign switch { Forms.HorizontalAlignment.Right => Forms.TextFormatFlags.Right,
+                        Forms.HorizontalAlignment.Center => Forms.TextFormatFlags.HorizontalCenter, _ => Forms.TextFormatFlags.Left };
+                    int inset = (int)Math.Round(4 * list.DeviceDpi / 96f);
+                    Forms.TextRenderer.DrawText(e.Graphics, e.Header?.Text, list.Font, Rectangle.Inflate(e.Bounds, -inset, 0), Muted,
+                        alignment | Forms.TextFormatFlags.VerticalCenter | Forms.TextFormatFlags.EndEllipsis | Forms.TextFormatFlags.NoPrefix |
+                        Forms.TextFormatFlags.NoPadding | Forms.TextFormatFlags.SingleLine);
                 };
                 list.DrawItem += (_, e) => e.DrawDefault = list.View != Forms.View.Details;
                 list.DrawSubItem += (_, e) => e.DrawDefault = true;

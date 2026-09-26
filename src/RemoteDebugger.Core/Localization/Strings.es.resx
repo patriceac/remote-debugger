@@ -936,6 +936,18 @@
   <data name="WakeSendFailed" xml:space="preserve"><value>No se pudieron enviar los paquetes de activación.</value></data>
   <data name="ShareClipboard" xml:space="preserve"><value>Compartir portapapeles</value></data>
   <data name="RestartRemotePc" xml:space="preserve"><value>Reiniciar PC remoto</value></data>
+  <data name="RestartPcQuestion" xml:space="preserve"><value>¿Reiniciar {0}?</value></data>
+  <data name="ShutdownPcQuestion" xml:space="preserve"><value>¿Apagar {0}?</value></data>
+  <data name="RestartPcAction" xml:space="preserve"><value>Reiniciar PC</value></data>
+  <data name="ShutdownPcAction" xml:space="preserve"><value>Apagar PC</value></data>
+  <data name="PowerCountdownNotice" xml:space="preserve"><value>Cuenta atrás de 10 segundos · Puedes cancelar</value></data>
+  <data name="PowerUnsavedNotice" xml:space="preserve"><value>No se forzará el cierre de las aplicaciones con trabajo sin guardar.</value></data>
+  <data name="PowerManualReturn" xml:space="preserve"><value>La asistencia se reconectará tras iniciar sesión en Windows.</value></data>
+  <data name="PowerAutomaticReturn" xml:space="preserve"><value>La asistencia se reconectará tras el inicio de sesión automático en Windows.</value></data>
+  <data name="PowerSessionEnds" xml:space="preserve"><value>La sesión de asistencia finalizará.</value></data>
+  <data name="PowerReconnectStops" xml:space="preserve"><value>La reconexión automática se detendrá.</value></data>
+  <data name="PowerSignInOnce" xml:space="preserve"><value>Iniciar sesión automáticamente una sola vez</value></data>
+  <data name="PowerSignInHint" xml:space="preserve"><value>Opcional · Requiere la contraseña de la cuenta de Windows.</value></data>
   <data name="ShutdownRemotePc" xml:space="preserve"><value>Apagar PC remoto</value></data>
   <data name="ManualSignInExpected" xml:space="preserve"><value>Se requiere iniciar sesión manualmente en Windows. El usuario deberá iniciar sesión en el PC remoto; la asistencia se reconectará después.</value></data>
   <data name="AutomaticDesktopExpected" xml:space="preserve"><value>Se espera el inicio de sesión y el regreso al escritorio automáticos solo para este reinicio. Después se restaurará la configuración de inicio de sesión.</value></data>
