@@ -730,7 +730,11 @@ public sealed partial class MainForm : Forms.Form
             if (generation != operationGeneration || !ReferenceEquals(target, client) || !connected) return;
             clientUpToDate = matched;
             if (!CanAutomaticallyResumeSavedSession(matched, heartbeat.Str("agentBinarySha256"), ExecutableIdentity.Sha256))
-            { SelectControllerPage(0); connectionState.SetText(() => UiText.UpdateAvailable); return; }
+            {
+                await TerminateControllerSessionAsync();
+                connectionState.SetText(() => UiText.UpdateAvailable);
+                return;
+            }
             if (!matched)
             {
                 synchronizingAgent = true;
