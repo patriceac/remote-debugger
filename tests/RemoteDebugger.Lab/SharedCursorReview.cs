@@ -36,6 +36,9 @@ internal sealed partial class LabForm
         Point own = target.PointToScreen(new(85, 155)), other = target.PointToScreen(new(285, 245));
         try
         {
+            // Keep the live capture open before the overlay appears, as a real viewer does.
+            using var buffer = new CaptureBuffer();
+            using (DesktopCapture.CaptureBitmap(0, null, buffer).Capture!) { }
             PhysicalMove(own); await Task.Delay(80, stop.Token);
             await Send("pointer");
             var reply = await Send("move", other);
@@ -44,20 +47,24 @@ internal sealed partial class LabForm
 
             var engine = ((Lazy<SharedMouse>)typeof(SharedMouse).GetField("instance", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!).Value;
             var overlay = (CursorOverlay)typeof(SharedMouse).GetField("overlay", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(engine)!;
-            var overlayEvidence = (JsonElement)overlay.Invoke(() => Json.Element(new { overlay.Visible, overlay.ExcludedFromCapture, pointer = overlay.Pointer.Position }));
-            bool overlayValid = overlayEvidence.GetProperty("visible").GetBoolean() && overlayEvidence.GetProperty("excludedFromCapture").GetBoolean() &&
+            var overlayEvidence = (JsonElement)overlay.Invoke(() => Json.Element(new { overlay.Visible, overlay.ExcludedFromCapture, overlay.ExcludedFromDuplication, pointer = overlay.Pointer.Position }));
+            bool overlayValid = overlayEvidence.GetProperty("visible").GetBoolean() && overlayEvidence.GetProperty("excludedFromCapture").GetBoolean() && overlayEvidence.GetProperty("excludedFromDuplication").GetBoolean() &&
                 overlayEvidence.GetProperty("pointer").Deserialize<CursorPosition>(Json.Options) is { Name: "Controller PC", Visible: true } p && p.X == other.X && p.Y == other.Y;
-            int capturedPixel;
-            using (var buffer = new CaptureBuffer())
-            using (var capture = DesktopCapture.CaptureBitmap(0, null, buffer).Capture!)
+            var captureEvidence = new List<object>();
+            bool cleanCapture = true;
+            foreach (var captureBuffer in new CaptureBuffer?[] { buffer, null })
             {
-                capturedPixel = capture.Bitmap.GetPixel(other.X - capture.Geometry.X + 6, other.Y - capture.Geometry.Y + 12).ToArgb();
-                capture.Bitmap.Save(Path.Combine(output, "shared-cursor-capture.png"), ImageFormat.Png);
+                using var capture = DesktopCapture.CaptureBitmap(0, null, captureBuffer).Capture!;
+                int arrowPixel = capture.Bitmap.GetPixel(other.X - capture.Geometry.X + 6, other.Y - capture.Geometry.Y + 12).ToArgb();
+                int tagPixel = capture.Bitmap.GetPixel(other.X - capture.Geometry.X + 24, other.Y - capture.Geometry.Y + 33).ToArgb();
+                cleanCapture &= arrowPixel == Color.White.ToArgb() && tagPixel == Color.White.ToArgb();
+                captureEvidence.Add(new { capture.CaptureMethod, arrowPixel, tagPixel });
+                capture.Bitmap.Save(Path.Combine(output, captureBuffer == null ? "shared-cursor-capture-gdi.png" : "shared-cursor-capture.png"), ImageFormat.Png);
             }
             long? foregroundAfter = Native.NativeWindows().FirstOrDefault(w => w.Foreground)?.Handle;
-            var evidence = new { overlayEvidence, capturedPixel, expectedExcludedPixel = SharedCursor.Blue.ToArgb(), foregroundBefore, foregroundAfter };
+            var evidence = new { overlayEvidence, captures = captureEvidence, expectedBackground = Color.White.ToArgb(), foregroundBefore, foregroundAfter };
             const string overlayRequirement = "The assisted PC shows the named peer overlay without activation or capture echo";
-            if (overlayValid && capturedPixel != SharedCursor.Blue.ToArgb() && foregroundBefore == foregroundAfter) Pass("cursor.overlay", overlayRequirement, evidence);
+            if (overlayValid && cleanCapture && foregroundBefore == foregroundAfter) Pass("cursor.overlay", overlayRequirement, evidence);
             else Fail("cursor.overlay", overlayRequirement, evidence);
 
             using var frame = new Bitmap(target.Width, target.Height);

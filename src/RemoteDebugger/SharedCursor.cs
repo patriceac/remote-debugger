@@ -77,6 +77,7 @@ internal sealed class CursorOverlay : Forms.Form
     internal Point Tip;
     internal Point? LocalTip;
     internal bool ExcludedFromCapture { get; private set; }
+    internal bool ExcludedFromDuplication { get; private set; }
     internal CursorOverlay()
     {
         FormBorderStyle = Forms.FormBorderStyle.None; ShowInTaskbar = false; TopMost = true;
@@ -88,10 +89,14 @@ internal sealed class CursorOverlay : Forms.Form
     {
         get { var p = base.CreateParams; p.ExStyle |= 0x080800A0; return p; } // No activate, layered, transparent, tool window.
     }
-    protected override void OnHandleCreated(EventArgs e)
+    protected override unsafe void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
         ExcludedFromCapture = SetWindowDisplayAffinity(Handle, 0x11);
+        // Desktop Duplication needs its own exclusion so the controller never sees its overlay echoed back.
+        int exclude = 1;
+        var attribute = new CompositionAttribute { Attribute = 24, Data = (IntPtr)(&exclude), Size = sizeof(int) };
+        ExcludedFromDuplication = SetWindowCompositionAttribute(Handle, ref attribute);
     }
     protected override void OnPaint(Forms.PaintEventArgs e)
     {
@@ -122,6 +127,8 @@ internal sealed class CursorOverlay : Forms.Form
         finally { SelectObject(dc, previous); DeleteObject(pixels); DeleteDC(dc); }
     }
     [StructLayout(LayoutKind.Sequential)] private struct Blend { public byte Operation, Flags, Alpha, Format; }
+    [StructLayout(LayoutKind.Sequential)] private struct CompositionAttribute { public int Attribute; public IntPtr Data; public uint Size; }
+    [DllImport("user32.dll")] private static extern bool SetWindowCompositionAttribute(IntPtr window, ref CompositionAttribute attribute);
     [DllImport("user32.dll", SetLastError = true)] private static extern bool UpdateLayeredWindow(IntPtr window, IntPtr screen, ref Point destination, ref Size size, IntPtr sourceDc, ref Point source, uint key, ref Blend blend, uint flags);
     [DllImport("gdi32.dll")] private static extern IntPtr CreateCompatibleDC(IntPtr dc);
     [DllImport("gdi32.dll")] private static extern IntPtr SelectObject(IntPtr dc, IntPtr value);
