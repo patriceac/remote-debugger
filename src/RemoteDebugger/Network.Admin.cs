@@ -38,7 +38,7 @@ public sealed partial class AgentServer
                     busy = Session.HasPaired && !updateOnly,
                     updating = Session.HasPaired && updateOnly || updates.PendingExitPlan != null,
                     reclaimable = (resumed == null || updates.ControllerSynchronized) &&
-                        CanReclaimUpdateSession(updateOnly, Session, updates.PendingExitPlan),
+                        CanReclaimUpdateSession(updateOnly, Session, updates.PendingExitPlan, HasActiveUpdateOperation),
                     fingerprint = Fingerprint, computer = Environment.MachineName
                 }), ct);
                 return;
@@ -76,13 +76,16 @@ public sealed partial class AgentServer
     {
         lock (authLock)
         {
-            if (CanReclaimUpdateSession(updateOnly, Session, updates.PendingExitPlan))
+            if (CanReclaimUpdateSession(updateOnly, Session, updates.PendingExitPlan, HasActiveUpdateOperation))
                 ReleaseUpdateSessionUnsafe();
         }
     }
 
-    internal static bool CanReclaimUpdateSession(bool updateOnly, SupportSessionSnapshot session, UpdateExitPlan? pendingExitPlan) =>
-        updateOnly && session.HasPaired && !session.Connected && pendingExitPlan == null;
+    private bool HasActiveUpdateOperation => updateGate.CurrentCount == 0 || !running.IsEmpty;
+
+    internal static bool CanReclaimUpdateSession(bool updateOnly, SupportSessionSnapshot session, UpdateExitPlan? pendingExitPlan,
+        bool hasActiveOperation = false) =>
+        updateOnly && session.HasPaired && !session.Connected && pendingExitPlan == null && !hasActiveOperation;
 
     private void ReleaseUpdateSessionUnsafe()
     {

@@ -129,8 +129,10 @@ public sealed class AgentUpdateService : IDisposable
     internal async Task<object> SnapshotAsync(CancellationToken ct, bool versionOnly = false)
     {
         var agent = await currentVersion(ct);
+        string? serviceVersion = File.Exists(SupportPlatformPaths.ServiceExecutable)
+            ? FileVersionInfo.GetVersionInfo(SupportPlatformPaths.ServiceExecutable).FileVersion : null;
         if (versionOnly)
-            return new { agent, wakeAdapters = WakeOnLan.GetAdapters() };
+            return new { agent, serviceVersion, wakeAdapters = WakeOnLan.GetAdapters() };
         // This authenticated update RPC also checks readiness on older brokers,
         // without invoking their general status / PowerShell firewall inventory.
         JsonElement? transaction = null;
@@ -144,7 +146,7 @@ public sealed class AgentUpdateService : IDisposable
         var platform = new SupportPlatformStatus(available ? SupportPlatformAvailability.Ready : SupportPlatformAvailability.Unavailable,
             provisioned, available, available, false, !provisioned, message,
             available ? agent.Path : null, available ? agent.SignerThumbprint : null, null);
-        return new { agent, platform, transaction, requiresUpdateAdmin = true, controllerSynchronized = ControllerSynchronized, actualRunningSha256 = agent.Sha256, wakeAdapters = WakeOnLan.GetAdapters() };
+        return new { agent, serviceVersion, platform, transaction, requiresUpdateAdmin = true, controllerSynchronized = ControllerSynchronized, actualRunningSha256 = agent.Sha256, wakeAdapters = WakeOnLan.GetAdapters() };
     }
 
     private object NewChallenge()

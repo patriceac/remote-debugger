@@ -86,6 +86,7 @@ public sealed class FleetUpdateRecoveryTests
         var connected = disconnected with { Connected = true, State = "connected" };
 
         Assert.True(AgentServer.CanReclaimUpdateSession(true, disconnected, null));
+        Assert.False(AgentServer.CanReclaimUpdateSession(true, disconnected, null, hasActiveOperation: true));
         Assert.False(AgentServer.CanReclaimUpdateSession(false, disconnected, null));
         Assert.False(AgentServer.CanReclaimUpdateSession(true, connected, null));
         Assert.False(AgentServer.CanReclaimUpdateSession(true, disconnected,

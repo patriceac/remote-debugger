@@ -10,6 +10,17 @@ namespace RemoteDebugger.Platform.Tests;
 public sealed class FleetVersionTests
 {
     [Theory]
+    [InlineData("0.5.36.0", false)]
+    [InlineData("0.5.38.0", true)]
+    [InlineData(null, false)]
+    public void MatchingAgentStillNeedsTheCurrentSupportService(string? serviceVersion, bool expected)
+    {
+        var agent = new ExecutableSnapshot("agent.exe", 128, new string('a', 64), "0.5.38", new string('b', 64));
+        Assert.Equal(expected, MainForm.IsFleetServiceCurrent(Json.Element(new { serviceVersion }), agent));
+        Assert.True(MainForm.IsFleetServiceCurrent(Json.Element(new { }), agent));
+    }
+
+    [Theory]
     [InlineData("checking", true)]
     [InlineData("hashing", true)]
     [InlineData("preparing", true)]

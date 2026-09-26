@@ -2433,6 +2433,8 @@ public sealed partial class MainForm : Forms.Form
         directUpdateTimer.Stop(); directUpdateLifetime?.Cancel();
         powerLifetime?.Cancel();
         renderTimer.Stop(); inputRecoveryTimer.Stop(); discoveryLifetime?.Cancel(); heartbeatLifetime?.Cancel(); pairingLifetime?.Cancel(); clientUpdateLifetime?.Cancel(); fleetLifetime?.Cancel(); liveStream?.Cancel(); action?.Cancel(); fileTransferLifetime?.Cancel();
+        // Let each cancelled device send update.release before the controller exits.
+        try { await fleetUpdateTask; } catch (Exception) { }
         // A saved connection only pre-fills the controller form. It is not an
         // active outbound session, and must never delay an agent replacement
         // while trying to contact an unrelated (possibly offline) old peer.

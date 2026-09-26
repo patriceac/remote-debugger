@@ -23,6 +23,7 @@ public sealed partial class MainForm
     private readonly Dictionary<string, UpdateProgressTracker> fleetProgress = new(StringComparer.OrdinalIgnoreCase);
     private readonly Forms.Button updateAllDevices = Button(() => UiText.UpdateAllDevices, "updateAllDevices", 178, primary: true);
     private CancellationTokenSource? fleetLifetime;
+    private Task fleetUpdateTask = Task.CompletedTask;
     private bool fleetRefreshing;
     private bool isUpdateAdmin;
     private Task<ExecutableSnapshot>? controllerSnapshot;
@@ -46,7 +47,7 @@ public sealed partial class MainForm
         directUpdateTimer.Tick += async (_, _) => await RunDirectUpdatesAsync();
         updateAllDevices.Click += async (_, _) =>
         {
-            try { if (FleetBusy) fleetLifetime?.Cancel(); else await UpdateAllDevicesAsync(); }
+            try { if (FleetBusy) fleetLifetime?.Cancel(); else await (fleetUpdateTask = UpdateAllDevicesAsync()); }
             catch (Exception) { discoveryState.SetText(() => UiText.UpdateIncomplete); RefreshControllerControls(); }
         };
         peers.OwnerDraw = true;
@@ -161,9 +162,10 @@ public sealed partial class MainForm
                     }
                     RememberWakeAdapter(device.Peer, snapshot);
                     int comparison = UpdatePolicy.ReleaseVersion(remote.FileVersion).CompareTo(UpdatePolicy.ReleaseVersion(controller.FileVersion));
-                    string state = comparison > 0 ? "newer" : reclaimable ? "available" : busy ? "busy" : Safety.Equal(remote.Sha256, controller.Sha256) ? "current" : comparison < 0 ? "available" : "conflict";
+                    bool serviceCurrent = IsFleetServiceCurrent(snapshot, remote);
+                    string state = comparison > 0 ? "newer" : reclaimable ? (Safety.Equal(remote.Sha256, controller.Sha256) ? "failed" : "available") : busy ? "busy" : Safety.Equal(remote.Sha256, controller.Sha256) ? (serviceCurrent ? "current" : "failed") : comparison < 0 ? "available" : "conflict";
                     RecordDevice(device with { Version = remote.FileVersion ?? "", Sha256 = remote.Sha256, State = state, Online = true,
-                        VerifiedUpdateSha256 = !busy && comparison == 0 && Safety.Equal(remote.Sha256, controller.Sha256) ? remote.Sha256 : "" });
+                        VerifiedUpdateSha256 = state == "current" ? remote.Sha256 : "" });
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
                 catch (RemoteOperationException ex) when (ex.Code is "access_denied" or "unknown_operation")
@@ -275,6 +277,10 @@ public sealed partial class MainForm
             if (!IsDisposed) { RefreshControllerControls(); discoveryState.SetText(() => UiText.UpdateBatchFinished); ScheduleDirectUpdates(); }
         }
     }
+
+    internal static bool IsFleetServiceCurrent(JsonElement snapshot, ExecutableSnapshot agent) =>
+        !snapshot.TryGetProperty("serviceVersion", out var version) || version.ValueKind == JsonValueKind.String &&
+        UpdatePolicy.ReleaseVersion(version.GetString()).Equals(UpdatePolicy.ReleaseVersion(agent.FileVersion));
 
     internal static bool NeedsFleetProgressAnimation(string state) => UpdateProgressTracker.IsActiveStage(state);
 

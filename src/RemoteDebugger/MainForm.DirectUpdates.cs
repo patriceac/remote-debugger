@@ -53,7 +53,7 @@ public sealed partial class MainForm
             }
             await RefreshFleetVersionsAsync(lifetime.Token, pending);
             lifetime.Token.ThrowIfCancellationRequested();
-            await UpdateAllDevicesAsync(pending.Select(device => fleet[DeviceKey(device.Peer)]).ToArray());
+            await (fleetUpdateTask = UpdateAllDevicesAsync(pending.Select(device => fleet[DeviceKey(device.Peer)]).ToArray()));
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         catch (Exception ex)
