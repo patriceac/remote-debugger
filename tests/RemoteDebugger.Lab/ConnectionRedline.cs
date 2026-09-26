@@ -36,7 +36,10 @@ internal sealed partial class LabForm
             var first = new Peer("PC-BEDO", "127.0.0.2", 45832, new string('c', 64));
             var selected = new Peer("PC-YOLANDE", "127.0.0.3", 45832, new string('d', 64));
             foreach (var peer in new[] { first, selected }) Call("RecordDevice", Activator.CreateInstance(type, peer, peer == first ? "0.5.0.0" : "0.5.4.0", "", false, "offline", 0, ""), null);
-            Call("SelectRole", 1); Call("SelectControllerPage", 0);
+            // Presentation fixture only; no enrolled controller credentials or network session.
+            Set("isUpdateAdmin", true); Get<PageSwitcher>("rolePages").SelectedIndex = 1;
+            foreach (string name in new[] { "controllerNavCaption", "navConnection", "navScreen", "navProcesses", "navFiles", "navDiagnostics" }) Get<Forms.Control>(name).Visible = true;
+            Get<Forms.Control>("roleController").Enabled = true; Call("SelectControllerPage", 0);
             Get<RememberedListView>("peers").Items[1].Selected = true; Call("SelectPeerFromList");
             var toggle = Get<WorkspaceButton>("connectionSettingsToggle");
             foreach (var size in new[] { new Size(1586, 992), new Size(1280, 860), new Size(1060, 720) })
