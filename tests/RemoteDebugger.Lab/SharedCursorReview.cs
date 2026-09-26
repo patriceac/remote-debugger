@@ -67,6 +67,20 @@ internal sealed partial class LabForm
             if (overlayValid && cleanCapture && foregroundBefore == foregroundAfter) Pass("cursor.overlay", overlayRequirement, evidence);
             else Fail("cursor.overlay", overlayRequirement, evidence);
 
+            // Verify the actual composed window too: an invisible/broken surface must not pass exclusion checks.
+            overlay.Invoke(() => overlay.SetCaptureExclusion(false));
+            try
+            {
+                await Send("move", other);
+                await Task.Delay(150, stop.Token);
+                using var visible = DesktopCapture.CaptureBitmap(0, null).Capture!;
+                int blue = visible.Bitmap.GetPixel(other.X - visible.Geometry.X + 6, other.Y - visible.Geometry.Y + 12).ToArgb();
+                int clear = visible.Bitmap.GetPixel(other.X - visible.Geometry.X - 15, other.Y - visible.Geometry.Y - 20).ToArgb();
+                visible.Bitmap.Save(Path.Combine(output, "shared-cursor-composed.png"), ImageFormat.Png);
+                Require(blue == SharedCursor.Blue.ToArgb() && clear == Color.White.ToArgb(), "cursor.composed_surface", "The actual desktop shows the blue cursor over a transparent background", new { blue, clear });
+            }
+            finally { overlay.Invoke(() => overlay.SetCaptureExclusion(true)); }
+
             using var frame = new Bitmap(target.Width, target.Height);
             target.DrawToBitmap(frame, target.ClientRectangle); viewer.Image = frame;
             var origin = target.PointToScreen(Point.Empty);

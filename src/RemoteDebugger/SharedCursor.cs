@@ -73,6 +73,7 @@ internal sealed class SharedCursor
 
 internal sealed class CursorOverlay : Forms.Form
 {
+    private CursorSurface? surface;
     internal readonly SharedCursor Pointer = new();
     internal Point Tip;
     internal Point? LocalTip;
@@ -87,16 +88,24 @@ internal sealed class CursorOverlay : Forms.Form
     protected override bool ShowWithoutActivation => true;
     protected override Forms.CreateParams CreateParams
     {
-        get { var p = base.CreateParams; p.ExStyle |= 0x080800A0; return p; } // No activate, layered, transparent, tool window.
+        get { var p = base.CreateParams; p.ExStyle |= 0x082800A0; return p; } // No activate, no redirection bitmap, layered, transparent, tool window.
     }
-    protected override unsafe void OnHandleCreated(EventArgs e)
+    protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
-        ExcludedFromCapture = SetWindowDisplayAffinity(Handle, 0x11);
+        // Constant-alpha layering retains click-through without the UpdateLayeredWindow
+        // surface that Windows 10 cannot exclude from capture.
+        if (!SetLayeredWindowAttributes(Handle, 0, 255, 2))
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        SetCaptureExclusion(true);
+    }
+    internal unsafe void SetCaptureExclusion(bool enabled)
+    {
+        ExcludedFromCapture = SetWindowDisplayAffinity(Handle, enabled ? 0x11u : 0u) && enabled;
         // Desktop Duplication needs its own exclusion so the controller never sees its overlay echoed back.
-        int exclude = 1;
+        int exclude = enabled ? 1 : 0;
         var attribute = new CompositionAttribute { Attribute = 24, Data = (IntPtr)(&exclude), Size = sizeof(int) };
-        ExcludedFromDuplication = SetWindowCompositionAttribute(Handle, ref attribute);
+        ExcludedFromDuplication = SetWindowCompositionAttribute(Handle, ref attribute) && enabled;
     }
     protected override void OnPaint(Forms.PaintEventArgs e)
     {
@@ -116,23 +125,15 @@ internal sealed class CursorOverlay : Forms.Form
     internal void Redraw()
     {
         using var bitmap = RenderSurface();
-        IntPtr dc = CreateCompatibleDC(IntPtr.Zero), pixels = bitmap.GetHbitmap(Color.FromArgb(0)), previous = SelectObject(dc, pixels);
-        try
-        {
-            var destination = Location; var source = Point.Empty; var size = Size;
-            var blend = new Blend { Alpha = 255, Format = 1 };
-            if (!UpdateLayeredWindow(Handle, IntPtr.Zero, ref destination, ref size, dc, ref source, 0, ref blend, 2))
-                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
-        }
-        finally { SelectObject(dc, previous); DeleteObject(pixels); DeleteDC(dc); }
+        (surface ??= new CursorSurface(Handle)).Present(bitmap);
     }
-    [StructLayout(LayoutKind.Sequential)] private struct Blend { public byte Operation, Flags, Alpha, Format; }
+    protected override void OnHandleDestroyed(EventArgs e)
+    {
+        surface?.Dispose(); surface = null;
+        base.OnHandleDestroyed(e);
+    }
     [StructLayout(LayoutKind.Sequential)] private struct CompositionAttribute { public int Attribute; public IntPtr Data; public uint Size; }
     [DllImport("user32.dll")] private static extern bool SetWindowCompositionAttribute(IntPtr window, ref CompositionAttribute attribute);
-    [DllImport("user32.dll", SetLastError = true)] private static extern bool UpdateLayeredWindow(IntPtr window, IntPtr screen, ref Point destination, ref Size size, IntPtr sourceDc, ref Point source, uint key, ref Blend blend, uint flags);
-    [DllImport("gdi32.dll")] private static extern IntPtr CreateCompatibleDC(IntPtr dc);
-    [DllImport("gdi32.dll")] private static extern IntPtr SelectObject(IntPtr dc, IntPtr value);
-    [DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr value);
-    [DllImport("gdi32.dll")] private static extern bool DeleteDC(IntPtr dc);
+    [DllImport("user32.dll", SetLastError = true)] private static extern bool SetLayeredWindowAttributes(IntPtr window, uint key, byte alpha, uint flags);
     [DllImport("user32.dll")] private static extern bool SetWindowDisplayAffinity(IntPtr window, uint affinity);
 }
