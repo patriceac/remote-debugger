@@ -21,8 +21,11 @@ public sealed class MainFormActionTests
     {
         Assert.Equal("pending", UpdateTimeline.StepState(2, "restarting", ["preparing", "transferring"]));
         Assert.Equal("complete", UpdateTimeline.StepState(1, "restarting", ["preparing", "transferring"]));
-        Assert.Equal("active", UpdateTimeline.StepState(3, "finalizing", ["restarting"]));
-        Assert.All(Enumerable.Range(0, 4), step => Assert.Equal("complete", UpdateTimeline.StepState(step, "complete", [])));
+        Assert.Equal("active", UpdateTimeline.StepState(3, "restarting", ["preparing", "transferring", "verifying"]));
+        Assert.Equal("pending", UpdateTimeline.StepState(4, "restarting", ["preparing", "transferring", "verifying"]));
+        Assert.Equal("complete", UpdateTimeline.StepState(3, "finalizing", ["restarting"]));
+        Assert.Equal("active", UpdateTimeline.StepState(4, "finalizing", ["restarting"]));
+        Assert.All(Enumerable.Range(0, UpdateTimeline.StepCount), step => Assert.Equal("complete", UpdateTimeline.StepState(step, "complete", [])));
     }
 
     [Theory]

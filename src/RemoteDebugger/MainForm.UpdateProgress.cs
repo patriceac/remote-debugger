@@ -62,18 +62,20 @@ public sealed partial class MainForm
         updateProgressText.SetText(ConnectionStageTitle(stage));
         updateExplanation.SetText(stage == "transferring"
             ? fleetUpdate?.Detail ?? UpdateProgressDescription(connectedUpdateReport!)
-            : UiText.Get(stage is "restarting" or "finalizing" ? "ConnectionWaitingForComputer" : "ConnectionPreparingHelp"));
+            : UiText.Get(stage == "restarting" ? "ConnectionWaitingForComputer" : "ConnectionPreparingHelp"));
         updateElapsed.SetText(FormatTransferEta(tracker.Elapsed));
         remainingCaption.SetText(() => UiText.Get(progress.Estimated ? "ConnectionEstimatedRemaining" : "ConnectionRemaining"));
         updateRemaining.SetText(progress.Remaining is { } eta ? FormatTransferEta(eta) : "—");
-        updateTimeline.SetProgress(stage, tracker.CompletedStages);
+        updateTimeline.SetProgress(stage, tracker.CompletedStages,
+            tracker.RemainingFor("restarting") is { } restartEta ? FormatTransferEta(restartEta) : "—",
+            tracker.RemainingFor("finalizing") is { } reconnectEta ? FormatTransferEta(reconnectEta) : "—");
         updateProgressTrack.AccessibleName = updateProgressText.Text + " · " + UpdateStepNumbers(progress);
     }
 
     private static string ConnectionStageTitle(string stage) => stage switch
     {
         "transferring" => UiText.Get("ConnectionTransferring"), "verifying" => UiText.Get("ConnectionVerifying"),
-        "restarting" or "finalizing" => UiText.Reconnecting, "complete" => UiText.VersionSynchronized,
+        "restarting" => UiText.Get("ConnectionRestarting"), "finalizing" => UiText.Reconnecting, "complete" => UiText.VersionSynchronized,
         _ => UiText.PreparingUpdate
     };
 }

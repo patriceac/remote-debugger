@@ -13,15 +13,15 @@ public sealed class UpdateProgressTrackerTests
     }
 
     [Theory]
-    [InlineData("hashing")]
-    [InlineData("checking")]
-    [InlineData("preparing")]
-    [InlineData("verifying")]
-    [InlineData("restarting")]
-    [InlineData("finalizing")]
-    public void OpaqueStepsNeverClaimMeasuredProgressAndStopGuessingAfterExpectedDuration(string stage)
+    [InlineData("hashing", "hashing")]
+    [InlineData("checking", "checking")]
+    [InlineData("preparing", "preparing")]
+    [InlineData("verifying", "verifying")]
+    [InlineData("restarting", "restart")]
+    [InlineData("finalizing", "reconnect")]
+    public void OpaqueStepsNeverClaimMeasuredProgressAndStopGuessingAfterExpectedDuration(string stage, string timingKey)
     {
-        var clock = new Clock(); var tracker = new UpdateProgressTracker(new Dictionary<string, double> { [stage] = 20 }, clock);
+        var clock = new Clock(); var tracker = new UpdateProgressTracker(new Dictionary<string, double> { [timingKey] = 20 }, clock);
         tracker.Report(stage, 1000, 1000); // A completed transfer is not completed verification/restart.
         Assert.Equal(new(null, TimeSpan.FromSeconds(20), true), tracker.Snapshot());
         clock.Advance(5); tracker.Report(stage, 1000, 1000);
@@ -36,6 +36,29 @@ public sealed class UpdateProgressTrackerTests
         Assert.Equal(TimeSpan.FromSeconds(35), late.Elapsed);
         tracker.Report("complete");
         Assert.Equal(new(100, TimeSpan.Zero, false), tracker.Snapshot());
+    }
+
+    [Fact]
+    public void RestartAndReconnectLearnSeparateEtasWithoutReusingOldCombinedTimings()
+    {
+        var clock = new Clock();
+        var timings = new Dictionary<string, double> { ["restarting"] = 90, ["finalizing"] = 30 };
+        var first = new UpdateProgressTracker(timings, clock);
+        first.Report("restarting");
+        Assert.Null(first.RemainingFor("restarting")); Assert.Null(first.RemainingFor("finalizing"));
+        clock.Advance(8); first.Report("finalizing");
+        clock.Advance(12); first.Report("complete");
+        var saved = JsonSerializer.Deserialize<Dictionary<string, double>>(JsonSerializer.Serialize(timings))!;
+        var next = new UpdateProgressTracker(saved, clock);
+        next.Report("restarting"); clock.Advance(3);
+        Assert.Equal(TimeSpan.FromSeconds(5), next.RemainingFor("restarting"));
+        Assert.Equal(TimeSpan.FromSeconds(12), next.RemainingFor("finalizing"));
+        next.Report("finalizing"); clock.Advance(4);
+        Assert.Null(next.RemainingFor("restarting"));
+        Assert.Equal(TimeSpan.FromSeconds(8), next.RemainingFor("finalizing"));
+        clock.Advance(20); Assert.Null(next.RemainingFor("finalizing"));
+        next.Report("failed"); Assert.Equal(12, saved["reconnect"]);
+        Assert.Null(next.RemainingFor("finalizing"));
     }
 
     [Fact]

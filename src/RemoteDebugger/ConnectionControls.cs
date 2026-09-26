@@ -156,13 +156,15 @@ internal static class ConnectionField
 
 internal sealed class UpdateTimeline : Forms.Control
 {
+    internal const int StepCount = 5;
     private string stage = "preparing";
     private IReadOnlyList<string> completed = [];
+    private string restartRemaining = "—", reconnectRemaining = "—";
     internal bool Interrupted { get; set; }
     internal static int StepIndex(string value) => value switch
     {
         "idle" or "hashing" or "preparing" => 0, "transferring" => 1, "verifying" => 2,
-        "restarting" or "finalizing" or "complete" => 3, _ => -1
+        "restarting" => 3, "finalizing" or "complete" => 4, _ => -1
     };
     internal static string StepState(int step, string current, IReadOnlyList<string> finished)
     {
@@ -170,10 +172,11 @@ internal sealed class UpdateTimeline : Forms.Control
         if (StepIndex(current) == step) return "active";
         return finished.Any(value => StepIndex(value) == step) ? "complete" : "pending";
     }
-    internal void SetProgress(string current, IReadOnlyList<string> finished)
+    internal void SetProgress(string current, IReadOnlyList<string> finished, string restartEta = "—", string reconnectEta = "—")
     {
         stage = current; completed = finished;
-        AccessibleName = string.Join("; ", Enumerable.Range(0, 4).Select(i => Title(i) + ": " + Status(i)));
+        restartRemaining = restartEta; reconnectRemaining = reconnectEta;
+        AccessibleName = string.Join("; ", Enumerable.Range(0, StepCount).Select(i => Title(i) + ": " + Status(i)));
         Invalidate();
     }
     internal UpdateTimeline()
@@ -181,21 +184,32 @@ internal sealed class UpdateTimeline : Forms.Control
         Name = "updateTimeline"; AccessibleRole = Forms.AccessibleRole.List;
         SetStyle(Forms.ControlStyles.UserPaint | Forms.ControlStyles.OptimizedDoubleBuffer | Forms.ControlStyles.AllPaintingInWmPaint, true);
     }
-    private static string Title(int step) => UiText.Get(new[] { "ConnectionPrepare", "ConnectionTransfer", "ConnectionVerify", "ConnectionRestart" }[step]);
-    private string Status(int step) => UiText.Get(StepState(step, stage, completed) switch
+    internal static Font TextFont(float points, int dpi) => new("Segoe UI", points * dpi / 72f, FontStyle.Regular, GraphicsUnit.Pixel);
+    private static string Title(int step) => UiText.Get(new[] { "ConnectionPrepare", "ConnectionTransfer", "ConnectionVerify", "ConnectionRestart", "ConnectionReconnect" }[step]);
+    private string Status(int step)
     {
-        "complete" => "ConnectionComplete", "active" => Interrupted ? "ConnectionInterrupted" : "ConnectionInProgress", _ => "ConnectionPending"
-    });
+        string state = StepState(step, stage, completed);
+        string status = UiText.Get(state switch
+        {
+            "complete" => "ConnectionComplete", "active" => Interrupted ? "ConnectionInterrupted" : "ConnectionInProgress", _ => "ConnectionPending"
+        });
+        if (step < 3 || state == "complete" || Interrupted) return status;
+        string eta = step == 3 ? restartRemaining : reconnectRemaining;
+        return status + " · " + (state == "active" && eta != "—" ? UiText.Format(UiText.Get("ConnectionTimeLeft"), eta) : eta);
+    }
     protected override void OnPaint(Forms.PaintEventArgs e)
     {
         base.OnPaint(e);
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
         float scale = DeviceDpi / 96f;
-        using var titleFont = new Font("Segoe UI", 12.5f);
-        using var detailFont = new Font("Segoe UI", 11);
+        using var titleFont = TextFont(12.5f, DeviceDpi);
+        using var detailFont = TextFont(11, DeviceDpi);
         using var line = new Pen(Color.FromArgb(6, 156, 168), 2 * scale);
-        e.Graphics.DrawLine(line, 22 * scale, 16 * scale, 22 * scale, 172 * scale);
-        for (int i = 0; i < 4; i++)
+        using var pendingLine = new Pen(AppTheme.Line(Color.FromArgb(207, 220, 226)), 2 * scale);
+        for (int i = 1; i < StepCount; i++)
+            e.Graphics.DrawLine(StepState(i, stage, completed) == "pending" ? pendingLine : line,
+                22 * scale, ((i - 1) * 52 + 17) * scale, 22 * scale, (i * 52 + 17) * scale);
+        for (int i = 0; i < StepCount; i++)
         {
             int y = (int)(i * 52 * scale);
             string state = StepState(i, stage, completed);
@@ -210,8 +224,8 @@ internal sealed class UpdateTimeline : Forms.Control
                 e.Graphics.DrawLines(check, new PointF[] { new(16 * scale, y + 17 * scale), new(20 * scale, y + 21 * scale), new(28 * scale, y + 12 * scale) });
             }
             int left = (int)(60 * scale);
-            Forms.TextRenderer.DrawText(e.Graphics, Title(i), titleFont, new Rectangle(left, y, Width - left, (int)(25 * scale)), AppTheme.Ink(Color.FromArgb(11, 21, 43)), Forms.TextFormatFlags.NoPadding | Forms.TextFormatFlags.NoPrefix);
-            Forms.TextRenderer.DrawText(e.Graphics, Status(i), detailFont, new Rectangle(left, y + (int)(26 * scale), Width - left, (int)(22 * scale)), AppTheme.Ink(Color.FromArgb(108, 134, 171)), Forms.TextFormatFlags.NoPadding | Forms.TextFormatFlags.NoPrefix);
+            Forms.TextRenderer.DrawText(e.Graphics, Title(i), titleFont, new Rectangle(left, y, Width - left, (int)(25 * scale)), AppTheme.Ink(Color.FromArgb(11, 21, 43)), Forms.TextFormatFlags.NoPadding | Forms.TextFormatFlags.NoPrefix | Forms.TextFormatFlags.SingleLine);
+            Forms.TextRenderer.DrawText(e.Graphics, Status(i), detailFont, new Rectangle(left, y + (int)(26 * scale), Width - left, (int)(22 * scale)), AppTheme.Ink(Color.FromArgb(108, 134, 171)), Forms.TextFormatFlags.NoPadding | Forms.TextFormatFlags.NoPrefix | Forms.TextFormatFlags.SingleLine);
         }
     }
 }

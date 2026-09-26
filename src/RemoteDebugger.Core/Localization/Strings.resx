@@ -1023,7 +1023,10 @@ Default port: 45832. Leave blank to skip WAN.</value></data>
   <data name="ConnectionPrepare" xml:space="preserve"><value>Prepare update</value></data>
   <data name="ConnectionTransfer" xml:space="preserve"><value>Transfer files</value></data>
   <data name="ConnectionVerify" xml:space="preserve"><value>Verify files</value></data>
-  <data name="ConnectionRestart" xml:space="preserve"><value>Restart &amp; reconnect</value></data>
+  <data name="ConnectionRestart" xml:space="preserve"><value>Restart</value></data>
+  <data name="ConnectionReconnect" xml:space="preserve"><value>Reconnect</value></data>
+  <data name="ConnectionRestarting" xml:space="preserve"><value>Restarting…</value></data>
+  <data name="ConnectionTimeLeft" xml:space="preserve"><value>{0} left</value></data>
   <data name="ConnectionComplete" xml:space="preserve"><value>Complete</value></data>
   <data name="ConnectionInProgress" xml:space="preserve"><value>In progress</value></data>
   <data name="ConnectionPending" xml:space="preserve"><value>Pending</value></data>

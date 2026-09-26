@@ -1023,7 +1023,10 @@ Puerto predeterminado: 45832. Deje vacío para omitir WAN.</value></data>
   <data name="ConnectionPrepare" xml:space="preserve"><value>Preparar actualización</value></data>
   <data name="ConnectionTransfer" xml:space="preserve"><value>Transferir archivos</value></data>
   <data name="ConnectionVerify" xml:space="preserve"><value>Verificar archivos</value></data>
-  <data name="ConnectionRestart" xml:space="preserve"><value>Reiniciar y reconectar</value></data>
+  <data name="ConnectionRestart" xml:space="preserve"><value>Reiniciar</value></data>
+  <data name="ConnectionReconnect" xml:space="preserve"><value>Reconectar</value></data>
+  <data name="ConnectionRestarting" xml:space="preserve"><value>Reiniciando…</value></data>
+  <data name="ConnectionTimeLeft" xml:space="preserve"><value>faltan {0}</value></data>
   <data name="ConnectionComplete" xml:space="preserve"><value>Completado</value></data>
   <data name="ConnectionInProgress" xml:space="preserve"><value>En curso</value></data>
   <data name="ConnectionPending" xml:space="preserve"><value>Pendiente</value></data>

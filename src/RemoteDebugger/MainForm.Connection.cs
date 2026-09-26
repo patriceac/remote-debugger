@@ -13,7 +13,7 @@ public sealed partial class MainForm
     private readonly Forms.Label updateRemaining = ConnectionLabel("updateRemaining", 22.5f, true);
     private readonly Forms.Label remainingCaption = ConnectionLabel("updateRemainingCaption", 11.5f);
     private readonly Forms.Label connectionReadyNote = ConnectionLabel("connectionReadyNote", 10.5f);
-    private readonly UpdateTimeline updateTimeline = new() { Dock = Forms.DockStyle.Top, Height = 208, BackColor = Canvas };
+    private readonly UpdateTimeline updateTimeline = new() { Dock = Forms.DockStyle.Top, Height = 52 * UpdateTimeline.StepCount, BackColor = Canvas };
     private readonly WorkspaceButton connectionSettingsToggle = new() { Name = "connectionSettingsToggle", Glyph = UiGlyph.Right, Dock = Forms.DockStyle.Top,
         Height = 38, DisclosureStyle = true, Font = new Font("Segoe UI", 12), FlatStyle = Forms.FlatStyle.Flat, FlatAppearance = { BorderSize = 0 }, BackColor = Canvas, ForeColor = PrimaryText, TextAlign = ContentAlignment.MiddleLeft };
     private readonly Forms.TableLayoutPanel connectionSettings = ConnectionStack("connectionSettings");

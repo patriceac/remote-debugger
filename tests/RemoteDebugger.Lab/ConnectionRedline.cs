@@ -13,6 +13,7 @@ internal sealed partial class LabForm
     {
         string root = Path.Combine(output, "connection-presentation-fixture");
         UiCulture.Apply(System.Globalization.CultureInfo.GetCultureInfo("en"));
+        if (scope == "update-rendering") ThemePreference.Save(root, "dark");
         Vault.Save(Path.Combine(root, "internet.dpapi"), JsonSerializer.SerializeToUtf8Bytes(new InternetSettings("https://ui.invalid", new string('a', 64), new string('b', 64)), Json.Options));
         using var form = new MainForm(startAgent: false, dataRoot: root, loopbackOnly: true, languageOverride: "en");
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
@@ -60,7 +61,10 @@ internal sealed partial class LabForm
                         Get<Forms.Control>("updateProgressArea").Visible = false;
                         if (route == "connect") Call("ShowUpdateProgress", new AgentUpdateProgress("idle", 0, 0));
                         else Call("RecordDevice", Activator.CreateInstance(type, selected, "0.5.4.0", "", true, "hashing", 0, ""), null);
-                        string[] stages = ["preparing", "transferring", "verifying", "restarting"];
+                        var timing = new UpdateProgressTracker(new Dictionary<string, double> { ["restart"] = 8, ["reconnect"] = 12 }, new ConnectionPreviewClock());
+                        if (route == "connect") Set("connectedUpdateProgress", timing);
+                        else Get<Dictionary<string, UpdateProgressTracker>>("fleetProgress")[selected.Fingerprint] = timing;
+                        string[] stages = ["preparing", "transferring", "verifying", "restarting", "finalizing"];
                         foreach (string stage in stages)
                         {
                             var report = new AgentUpdateProgress(stage, 5 * 1024 * 1024, 10 * 1024 * 1024);
@@ -74,15 +78,25 @@ internal sealed partial class LabForm
                             Capture("update-map-" + sample);
                             Require(timeline.Visible && viewport.RectangleToScreen(viewport.ClientRectangle).Contains(timeline.RectangleToScreen(timeline.ClientRectangle)), "connection.map_visible_" + sample);
                             int activeStep = Array.IndexOf(stages, stage);
-                            var expectedStates = Enumerable.Range(0, 4).Select(i => UiText.Get(i < activeStep ? "ConnectionComplete" : i == activeStep ? "ConnectionInProgress" : "ConnectionPending"));
-                            Require(timeline.AccessibleName!.Split("; ").Select(entry => entry.Split(": ")[1]).SequenceEqual(expectedStates), "connection.map_step_states_" + sample);
+                            var expectedStates = Enumerable.Range(0, UpdateTimeline.StepCount).Select(i => UiText.Get(i < activeStep ? "ConnectionComplete" : i == activeStep ? "ConnectionInProgress" : "ConnectionPending"));
+                            var entries = timeline.AccessibleName!.Split("; ").Select(entry => entry.Split(": ", 2)).ToArray();
+                            Require(entries.Select(entry => entry[1].Split(" · ")[0]).SequenceEqual(expectedStates), "connection.map_step_states_" + sample);
+                            if (stage == "restarting") Require(entries[3][1] == "In progress · 0:08 left" && entries[4][1] == "Pending · 0:12", "connection.separate_etas_" + sample);
+                            if (stage == "finalizing") Require(entries[3][1] == "Complete" && entries[4][1] == "In progress · 0:12 left", "connection.reconnect_eta_" + sample);
+                            using var textGraphics = timeline.CreateGraphics();
+                            using var titleFont = UpdateTimeline.TextFont(12.5f, timeline.DeviceDpi);
+                            using var detailFont = UpdateTimeline.TextFont(11, timeline.DeviceDpi);
+                            float dpiScale = timeline.DeviceDpi / 96f;
+                            var textFlags = Forms.TextFormatFlags.NoPadding | Forms.TextFormatFlags.NoPrefix | Forms.TextFormatFlags.SingleLine;
+                            Require(entries.All(entry => entry.Select((text, index) => Forms.TextRenderer.MeasureText(textGraphics, text, index == 0 ? titleFont : detailFont, new Size(int.MaxValue, int.MaxValue), textFlags))
+                                .Select((measured, index) => measured.Width <= timeline.Width - (int)(60 * dpiScale) && measured.Height <= (int)((index == 0 ? 25 : 22) * dpiScale)).All(fits => fits)), "connection.text_fits_" + sample);
                             using var pixels = new Bitmap(timeline.Width, timeline.Height);
                             using (var graphics = Graphics.FromImage(pixels)) graphics.CopyFromScreen(timeline.PointToScreen(Point.Empty), Point.Empty, pixels.Size);
                             int scale = Math.Max(1, timeline.DeviceDpi / 96), painted = 0;
                             for (int y = 36 * scale; y < Math.Min(170 * scale, pixels.Height); y++)
                             {
                                 var pixel = pixels.GetPixel(22 * scale, y);
-                                if (pixel.R < 70 && pixel.G > 120 && pixel.B > 120) painted++;
+                                if (pixel.ToArgb() != timeline.BackColor.ToArgb()) painted++;
                             }
                             Require(painted > 60 * scale, "connection.map_painted_" + sample);
                         }
@@ -126,7 +140,7 @@ internal sealed partial class LabForm
                 if (size.Width == 1586)
                 {
                     var clock = new ConnectionPreviewClock();
-                    var tracker = new UpdateProgressTracker(new Dictionary<string, double> { ["restarting"] = 75 }, clock);
+                    var tracker = new UpdateProgressTracker(new Dictionary<string, double> { ["restart"] = 75 }, clock);
                     foreach (string stage in new[] { "preparing", "transferring", "verifying", "restarting" }) tracker.Report(stage);
                     clock.Seconds = 51; Set("connectedUpdateProgress", tracker); Call("RefreshUpdateProgress");
                     Require(Get<Forms.Label>("updateRemaining").Text == "0:24", "connection.known_timing_estimate");

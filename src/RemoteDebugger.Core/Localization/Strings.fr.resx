@@ -1023,7 +1023,10 @@ Port par défaut : 45832. Laissez vide pour ignorer le WAN.</value></data>
   <data name="ConnectionPrepare" xml:space="preserve"><value>Préparer la mise à jour</value></data>
   <data name="ConnectionTransfer" xml:space="preserve"><value>Transférer les fichiers</value></data>
   <data name="ConnectionVerify" xml:space="preserve"><value>Vérifier les fichiers</value></data>
-  <data name="ConnectionRestart" xml:space="preserve"><value>Redémarrer et reconnecter</value></data>
+  <data name="ConnectionRestart" xml:space="preserve"><value>Redémarrer</value></data>
+  <data name="ConnectionReconnect" xml:space="preserve"><value>Reconnecter</value></data>
+  <data name="ConnectionRestarting" xml:space="preserve"><value>Redémarrage…</value></data>
+  <data name="ConnectionTimeLeft" xml:space="preserve"><value>encore {0}</value></data>
   <data name="ConnectionComplete" xml:space="preserve"><value>Terminé</value></data>
   <data name="ConnectionInProgress" xml:space="preserve"><value>En cours</value></data>
   <data name="ConnectionPending" xml:space="preserve"><value>En attente</value></data>

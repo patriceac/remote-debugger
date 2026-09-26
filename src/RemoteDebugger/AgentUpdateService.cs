@@ -520,6 +520,7 @@ internal static class AgentUpdateClient
             if (resumed.ValueKind == JsonValueKind.Undefined)
                 throw new IOException("Updated agent did not reconnect before the authenticated ticket expired.", lastError);
 
+            progress?.Report(new("finalizing", controller.Size, controller.Size));
             JsonElement health = default;
             Exception? healthReconnectError = null;
             while (DateTimeOffset.UtcNow < expires)
@@ -549,7 +550,6 @@ internal static class AgentUpdateClient
             agent = finalSnapshot.GetProperty("agent").Deserialize<ExecutableSnapshot>(Json.Options) ?? throw new InvalidDataException("Updated agent did not return an executable snapshot.");
             UpdatePolicy.RequireExactControllerBinary(controller, agent);
             RemoteClient.Require(await client.CallAsync("update.confirm", new { sha256 = controller.Sha256, transactionId, ticket }, ct, seconds: 30));
-            progress?.Report(new("finalizing", controller.Size, controller.Size));
             RemoteClient.Require(await client.CallAsync("platform.ensureCurrent", ct: ct, seconds: SupportOperationTimeouts.ServiceRefreshSeconds));
             await client.CloseHeartbeatChannelAsync().ConfigureAwait(false);
             progress?.Report(new("complete", controller.Size, controller.Size));

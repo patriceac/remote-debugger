@@ -25,12 +25,12 @@ public sealed class UpdateProgressTracker(IDictionary<string, double> timings, T
             double elapsed = Elapsed.TotalSeconds;
             if (CompletedStep(Stage, stage) && !completed.Contains(Stage)) completed.Add(Stage);
             if (IsEstimatedStage(Stage) && CompletedStep(Stage, stage) && elapsed >= .25 && elapsed < 3600)
-                timings[Stage] = timings.TryGetValue(Stage, out double previous) && Valid(previous)
+                timings[TimingKey(Stage)] = timings.TryGetValue(TimingKey(Stage), out double previous) && Valid(previous)
                     ? (previous + elapsed) / 2 : elapsed;
             Stage = stage;
             started = time.GetTimestamp();
             transferRate = new(time);
-            expectedSeconds = timings.TryGetValue(stage, out double learned) && Valid(learned)
+            expectedSeconds = timings.TryGetValue(TimingKey(stage), out double learned) && Valid(learned)
                 ? learned : 0;
         }
         if (stage == "transferring") transferRate.Report(transferredBytes, totalBytes);
@@ -52,6 +52,12 @@ public sealed class UpdateProgressTracker(IDictionary<string, double> timings, T
         return new(null, remaining, true, Elapsed);
     }
 
+    public TimeSpan? RemainingFor(string stage) => Stage == stage ? Snapshot().Remaining
+        : !completed.Contains(stage) && Stage is not ("complete" or "current" or "failed") &&
+            timings.TryGetValue(TimingKey(stage), out double learned) && Valid(learned) ? TimeSpan.FromSeconds(learned) : null;
+
+    // Old restarting/finalizing samples covered different boundaries.
+    private static string TimingKey(string stage) => stage switch { "restarting" => "restart", "finalizing" => "reconnect", _ => stage };
     private static bool Valid(double seconds) => double.IsFinite(seconds) && seconds >= .25 && seconds < 3600;
     private static bool CompletedStep(string previous, string next) => previous switch
     {
