@@ -60,6 +60,7 @@ public sealed partial class MainForm
     private Forms.Control BuildPeerList()
     {
         var panel = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new(0, 16, 28, 0), Margin = Forms.Padding.Empty };
+        panel.ColumnStyles.Add(new(Forms.SizeType.Percent, 100));
         panel.RowStyles.Add(new(Forms.SizeType.Absolute, 60)); panel.RowStyles.Add(new(Forms.SizeType.Percent, 100)); panel.RowStyles.Add(new(Forms.SizeType.AutoSize));
         var toolbar = new Forms.Panel { Name = "connectionToolbar", Dock = Forms.DockStyle.Top, Height = 44, Margin = new(0, 0, 0, 16) };
         computerCount.Anchor = Forms.AnchorStyles.Top | Forms.AnchorStyles.Left; computerCount.Dock = Forms.DockStyle.None;

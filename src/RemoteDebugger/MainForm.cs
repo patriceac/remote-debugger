@@ -371,6 +371,7 @@ public sealed partial class MainForm : Forms.Form
         headerCharts.VisibleChanged += (_, _) => UpdateHeaderHeight();
         header.SizeChanged += (_, _) => LayoutHeader();
         headerTitle.TextChanged += (_, _) => LayoutHeader();
+        headerTitle.SizeChanged += (_, _) => LayoutHeader();
         statusLabel.TextChanged += (_, _) => LayoutHeader();
         terminateSession.VisibleChanged += (_, _) => LayoutHeader();
         header.Paint += (_, e) =>
@@ -404,7 +405,7 @@ public sealed partial class MainForm : Forms.Form
             statusDot.Location = new(HeaderPixels(12), (statusPill.Height - statusDot.Height) / 2);
             statusLabel.Location = new(HeaderPixels(30), (statusPill.Height - statusLabel.Height) / 2);
             headerTitle.Location = new(inset, HeaderPixels(18));
-            headerSubtitle.SetBounds(inset, HeaderPixels(60), Math.Max(0, (statusPill.Visible ? pillLeft - HeaderPixels(12) : terminateSession.Visible ? terminateSession.Left - HeaderPixels(12) : header.Width - inset) - inset), HeaderPixels(30));
+            headerSubtitle.SetBounds(inset, Math.Max(HeaderPixels(60), headerTitle.Bottom + HeaderPixels(2)), Math.Max(0, (statusPill.Visible ? pillLeft - HeaderPixels(12) : terminateSession.Visible ? terminateSession.Left - HeaderPixels(12) : header.Width - inset) - inset), HeaderPixels(30));
             header.Invalidate(); return;
         }
         int center = HeaderPixels(headerCharts.Visible ? HeaderChartsBelow ? 52 : 66 : 48);
@@ -418,7 +419,7 @@ public sealed partial class MainForm : Forms.Form
         statusLabel.Location = new Point(HeaderPixels(30), (statusPill.Height - statusLabel.Height) / 2);
         headerTitle.Location = new Point(left, center - HeaderPixels(28));
         int titleWidth = Math.Max(HeaderPixels(241), headerTitle.PreferredSize.Width + HeaderPixels(58));
-        headerSubtitle.SetBounds(left, center + HeaderPixels(8), headerCharts.Visible ? titleWidth - left : Math.Max(0, (statusPill.Visible ? actionsLeft : terminateSession.Visible ? terminateSession.Left : header.Width) - left - gap), HeaderPixels(24));
+        headerSubtitle.SetBounds(left, Math.Max(center + HeaderPixels(8), headerTitle.Bottom + HeaderPixels(2)), headerCharts.Visible ? titleWidth - left : Math.Max(0, (statusPill.Visible ? actionsLeft : terminateSession.Visible ? terminateSession.Left : header.Width) - left - gap), HeaderPixels(24));
         int chartLeft = HeaderChartsBelow ? left : titleWidth;
         int chartRight = HeaderChartsBelow ? header.Width - left : actionsLeft - HeaderPixels(10);
         headerCharts.SetBounds(chartLeft, HeaderPixels(HeaderChartsBelow ? 96 : 34), Math.Max(0, chartRight - chartLeft), HeaderPixels(66));

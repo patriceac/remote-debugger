@@ -35,6 +35,13 @@ internal sealed partial class LabForm
             form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, form.Size));
             bitmap.Save(Path.Combine(output, name + ".png"));
         }
+        void HeaderFits(string sample)
+        {
+            var title = Bounds("headerTitle"); var subtitle = Bounds("headerSubtitle");
+            Require(title.Bottom < subtitle.Top && Bounds("header").Contains(subtitle) &&
+                subtitle.Height >= Get<Forms.Control>("headerSubtitle").PreferredSize.Height,
+                "ui.header_text_fits_" + sample, new { title, subtitle, dpi = form.DeviceDpi });
+        }
         // Keep this a presentation fixture: no listener, discovery, pairing or live session.
         Set("quitting", true);
         form.Show(); form.Activate();
@@ -48,6 +55,22 @@ internal sealed partial class LabForm
             var device = Activator.CreateInstance(deviceType, peer, "0.5.3.0", "", true, "finalizing", 0, "")!;
             Call("RecordDevice", device, new AgentUpdateProgress("finalizing", 0, 0));
             var peers = Get<RememberedListView>("peers");
+            if (scope == "header")
+            {
+                AppTheme.SetPreference("dark"); Call("SelectRole", 1); Call("SelectControllerPage", 0);
+                foreach (int width in new[] { 1663, 1060 })
+                {
+                    form.Size = new(width, 860); await Task.Delay(150, stop.Token); HeaderFits("connection-" + width);
+                    foreach (var button in new[] { Get<Forms.Control>("discoverButton"), Get<Forms.Control>("updateAllDevices") })
+                    {
+                        var bounds = button.RectangleToScreen(button.ClientRectangle);
+                        for (var parent = button.Parent; parent != null; parent = parent.Parent)
+                            Require(parent.RectangleToScreen(parent.ClientRectangle).Contains(bounds),
+                                "ui.button_unclipped_" + button.Name + "_" + width + "_" + parent.Name, new { bounds, parent = parent.Bounds });
+                    }
+                    Capture("connection-header-" + width);
+                }
+            }
             foreach (int width in redlineOnly ? Array.Empty<int>() : new[] { 1280, 1060 })
             {
                 form.Size = new(width, 860); peers.Items[0].Selected = true; peers.Focus();
@@ -73,6 +96,13 @@ internal sealed partial class LabForm
             Get<RemoteScreenView>("screen").Image = frame;
             int Pixels(int value) => (int)Math.Round(value * form.DeviceDpi / 96f);
             form.ClientSize = new(Pixels(216 + 1447), Pixels(900)); await Task.Delay(150, stop.Token);
+            if (scope == "header")
+            {
+                var title = Get<Forms.Control>("headerTitle"); var originalFont = title.Font;
+                using var largerFont = new Font(originalFont.FontFamily, originalFont.Size * 1.25f, originalFont.Style);
+                title.Font = largerFont; HeaderFits("viewer-larger-title"); title.Font = originalFont;
+                HeaderFits("viewer-wide");
+            }
             double[] cpu = [32, 42, 47, 38, 38, 37, 10, 10, 8, 4, 8, 15, 11, 7, 7, 7, 4, 6, 6, 5, 6, 4, 5, 4, 6];
             for (int i = 0; i < 36; i++)
                 charts.Add(cpu[(int)Math.Round(i * (cpu.Length - 1) / 35d)], i < 3 ? 68 + i * 7 : i < 11 ? 88 : i < 22 ? 78 : 82,
@@ -105,11 +135,13 @@ internal sealed partial class LabForm
                     chartsPreferred = charts.PreferredSize, headerPreferred = headerPanel.PreferredSize });
             form.Size = new(1060, 720); await Task.Delay(150, stop.Token);
             charts.Add(6, 82, 0, 1);
+            if (scope == "header") HeaderFits("viewer-minimum");
             Require(Bounds("headerCharts").Top >= Bounds("headerSubtitle").Bottom && Bounds("headerCharts").Right <= Bounds("header").Right && charts.Height >= 64,
                 "ui.charts_fit_minimum", new { charts = Bounds("headerCharts"), subtitle = Bounds("headerSubtitle") });
             Capture("viewer-minimum");
             form.ClientSize = new(Pixels(216 + 1447), Pixels(900)); await Task.Delay(150, stop.Token);
             Require(headerPanel.Height == Pixels(116), "ui.viewer_header_height_restored_after_resize", new { headerPanel.Height });
+            if (scope == "header") { Get<RemoteScreenView>("screen").Image = null; await FinishAsync(); return; }
             var controlToggle = Get<Forms.CheckBox>("mouseEnabled");
             controlToggle.AccessibilityObject.DoDefaultAction(); await Task.Delay(50, stop.Token);
             Require(!controlToggle.Checked, "ui.viewer_checkbox_accessible_toggle");
