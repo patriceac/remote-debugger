@@ -17,6 +17,7 @@ internal sealed partial class LabForm
         UiCulture.Apply(System.Globalization.CultureInfo.GetCultureInfo("en"));
         Vault.Save(Path.Combine(root, "internet.dpapi"), JsonSerializer.SerializeToUtf8Bytes(new InternetSettings("https://ui.invalid", new string('a', 64), new string('b', 64)), Json.Options));
         TableLayoutStore.Save(root, "peers", [new("name", 210, 0), new("version", 94, 2), new("state", 354, 1), new("progress", 380, 3)]);
+        if (scope == "startup") ThemePreference.Save(root, "dark");
         using var form = new MainForm(startAgent: false, dataRoot: root, loopbackOnly: true, languageOverride: "en");
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
         FieldInfo Field(string name) => typeof(MainForm).GetField(name, flags)!;
@@ -44,6 +45,49 @@ internal sealed partial class LabForm
         }
         // Keep this a presentation fixture: no listener, discovery, pairing or live session.
         Set("quitting", true);
+        if (scope == "startup")
+        {
+            form.StartPosition = Forms.FormStartPosition.Manual; form.Bounds = new(30, 30, 1060, 720);
+            var area = form.Bounds;
+            bool hiddenAtShown = false;
+            form.Shown += (_, _) =>
+            {
+                hiddenAtShown = form.Opacity == 0;
+                Get<Forms.Timer>("renderTimer").Stop(); Get<Forms.Timer>("resourceRefreshTimer").Stop();
+                Set("isUpdateAdmin", true); Get<PageSwitcher>("rolePages").SelectedIndex = 1;
+                foreach (string name in new[] { "controllerNavCaption", "navConnection", "navScreen", "navProcesses", "navFiles", "navDiagnostics" }) Get<Forms.Control>(name).Visible = true;
+                Get<Forms.Control>("roleController").Enabled = true;
+                Call("SelectControllerPage", 0);
+            };
+            var frames = new List<(long Milliseconds, Bitmap Image)>();
+            var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var startupElapsed = Stopwatch.StartNew();
+            // Sample the composed desktop concurrently, including while the UI thread is busy starting.
+            var capture = Task.Run(async () =>
+            {
+                for (int i = 0; i < 24; i++)
+                {
+                    var bitmap = new Bitmap(area.Width, area.Height);
+                    using (var graphics = Graphics.FromImage(bitmap)) graphics.CopyFromScreen(area.Location, Point.Empty, area.Size);
+                    frames.Add((startupElapsed.ElapsedMilliseconds, bitmap)); started.TrySetResult();
+                    await Task.Delay(16);
+                }
+            });
+            try
+            {
+                await Task.WhenAny(started.Task, capture); form.Show(); form.Activate();
+                await capture;
+                await Task.Delay(100, stop.Token);
+                Require(hiddenAtShown, "ui.startup_hidden_until_ready");
+                Require(form.Visible && form.Opacity == 1, "ui.startup_revealed");
+                for (int i = 0; i < frames.Count; i++) frames[i].Image.Save(Path.Combine(output, $"startup-{i:00}-{frames[i].Milliseconds}ms.png"));
+                using var settled = new Bitmap(area.Width, area.Height);
+                using (var graphics = Graphics.FromImage(settled)) graphics.CopyFromScreen(area.Location, Point.Empty, area.Size);
+                settled.Save(Path.Combine(output, "startup-settled.png"));
+                await FinishAsync(); return;
+            }
+            finally { foreach (var frame in frames) frame.Image.Dispose(); form.Close(); }
+        }
         form.Show(); form.Activate();
         await Task.Delay(150, stop.Token); // Let the deferred Shown event select the initial role.
         Get<Forms.Timer>("renderTimer").Stop(); Get<Forms.Timer>("resourceRefreshTimer").Stop();

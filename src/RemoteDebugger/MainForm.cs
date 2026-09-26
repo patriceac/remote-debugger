@@ -219,6 +219,7 @@ public sealed partial class MainForm : Forms.Form
         // Otherwise early layout can consume the scale factor while later
         // panels still contain their unscaled design-time dimensions.
         SuspendLayout();
+        Opacity = 0; // Reveal only after the initial layout and native controls have painted.
         root = dataRoot ?? Vault.DefaultRoot;
         agentMaintenance = new MaintenanceSession(root);
         diagnostics = new IncidentLog(root);
@@ -701,6 +702,7 @@ public sealed partial class MainForm : Forms.Form
         shown = true;
         RefreshDiscoveryOnOpen();
         await Task.Yield();
+        if (!IsDisposed) { Refresh(); Opacity = 1; }
     }
 
     private async Task ResumeSavedSupportAsync()
