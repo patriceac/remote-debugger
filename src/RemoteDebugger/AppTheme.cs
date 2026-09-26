@@ -94,6 +94,7 @@ internal static class AppTheme
             menu.Renderer = highContrast ? original : themed;
             menu.BackColor = highContrast ? SystemColors.Menu : MenuColors.Background;
             menu.ForeColor = highContrast ? SystemColors.MenuText : Dark ? Text : Color.Black;
+            menu.MinimumSize = new Size((int)Math.Ceiling(menu.PreferredSize.Height * 1.92), 0);
             RoundMenu();
         };
 
@@ -108,7 +109,7 @@ internal static class AppTheme
     private sealed class MenuColors : Forms.ProfessionalColorTable
     {
         internal static Color Background => Dark ? Color.FromArgb(41, 42, 44) : Color.FromArgb(246, 249, 252);
-        internal static Color Highlight => Dark ? Color.FromArgb(12, 107, 225) : Color.FromArgb(195, 228, 253);
+        internal static Color Highlight => Dark ? Color.FromArgb(7, 108, 112) : Color.FromArgb(227, 246, 248);
         public override Color ToolStripDropDownBackground => Background;
         public override Color ImageMarginGradientBegin => Background;
         public override Color ImageMarginGradientMiddle => Background;

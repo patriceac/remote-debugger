@@ -12,8 +12,8 @@ public sealed class ThemeCollection;
 public sealed class AppThemeTests
 {
     [Theory]
-    [InlineData("light", 195, 228, 253, -16777216)]
-    [InlineData("dark", 12, 107, 225, -1)]
+    [InlineData("light", 227, 246, 248, -16777216)]
+    [InlineData("dark", 7, 108, 112, -1)]
     public void SelectedTrayRowRendersReadableThemeColors(string theme, int red, int green, int blue, int ink)
     {
         string original = AppTheme.Preference;
