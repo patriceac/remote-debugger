@@ -167,6 +167,8 @@ public sealed partial class MainForm : Forms.Form
     private string ConnectionPath => Path.Combine(root, "controller.connection");
     private readonly Forms.Timer renderTimer = new() { Interval = 250 };
     private readonly Forms.Timer inputRecoveryTimer = new() { Interval = 750 };
+    private readonly Forms.Timer cursorTimer = new() { Interval = 50 };
+    private bool cursorPolling;
     private readonly Forms.NotifyIcon tray = new();
     private SupportConnectionNotice? connectionNotice;
     private DateTimeOffset? notifiedAgentSession;
@@ -635,10 +637,11 @@ public sealed partial class MainForm : Forms.Form
         Deactivate += (_, _) => { ReleaseHeldInputForCurrentSession(); RefreshInputStatus(); };
         Activated += (_, _) => RefreshInputStatus();
         inputRecoveryTimer.Tick += (_, _) => RetryInputRecovery();
+        cursorTimer.Tick += async (_, _) => await RefreshSharedCursorAsync(); cursorTimer.Start();
         screen.MouseDown += (_, e) => { screen.Focus(); RefreshInputStatus(); var applied = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously); QueueMouse("down", e, applied); BeginViewerFileGesture(e, applied.Task); };
         screen.MouseUp += (_, e) => { QueueMouse("up", e); viewerDragOrigin = null; viewerDragCandidate = null; };
         screen.MouseMove += async (_, e) => { if (await ContinueViewerFileGestureAsync(e) || !screen.ShouldForwardMouseMove(e.Location, Environment.TickCount64)) return; QueueMouse("move", e); };
-        screen.MouseLeave += (_, _) => screen.ResetMouseMove();
+        screen.MouseLeave += (_, _) => { screen.ResetMouseMove(); if (geometry != null && Forms.Control.MouseButtons == Forms.MouseButtons.None) QueueInput(new { kind = "pointerLeave", layoutId = geometry.LayoutId }); };
         screen.MouseWheel += (_, e) => QueueMouse("wheel", e); screen.GotFocus += (_, _) => RefreshInputStatus(); screen.LostFocus += (_, _) => { ReleaseHeldInputForCurrentSession(); RefreshInputStatus(); };
         typeText.Click += (_, _) => QueueFocusedText(); enterKey.Click += (_, _) => { if (!CanSendFocusedInput()) return; QueueInput(new { kind = "keyDown", virtualKey = 13 }); QueueInput(new { kind = "keyUp", virtualKey = 13 }); };
         processList.ColumnClick += (_, e) => { processSort = processSort.Toggle(ProcessColumn(e.Column)); RenderProcesses(); }; processList.SelectedIndexChanged += (_, _) => { if (processList.SelectedItems.Count > 0 && processList.SelectedItems[0].Tag is ProcessSortRow row) { pid.Value = row.Pid; } };
@@ -1839,7 +1842,25 @@ public sealed partial class MainForm : Forms.Form
         if (!CanSendInput() || geometry == null) { applied?.TrySetResult(false); return; }
         var point = geometry.MapLetterbox(screen.Width, screen.Height, e.X, e.Y);
         if (point == null) { applied?.TrySetResult(false); if (kind == "up") QueueInput(new { kind = "release" }); return; }
-        QueueInput(new { kind, x = point.Value.X, y = point.Value.Y, layoutId = geometry.LayoutId, button = e.Button == Forms.MouseButtons.Right ? "right" : e.Button == Forms.MouseButtons.Middle ? "middle" : "left", delta = e.Delta }, applied);
+        QueueInput(new { kind, x = point.Value.X, y = point.Value.Y, layoutId = geometry.LayoutId, button = e.Button == Forms.MouseButtons.Right ? "right" : e.Button == Forms.MouseButtons.Middle ? "middle" : "left", delta = e.Delta, sharedPointer = true, pointerName = Environment.MachineName }, applied);
+    }
+
+    private async Task RefreshSharedCursorAsync()
+    {
+        screen.Invalidate();
+        if (!CanSendFocusedInput() || liveStream == null || geometry == null || inputState.Suspended)
+        { screen.UpdateCursor(null, null); return; }
+        if (cursorPolling || client is not { } target) return;
+        int generation = sessionGeneration; string layout = geometry.LayoutId;
+        cursorPolling = true;
+        try
+        {
+            var data = RemoteClient.Require(await target.SendInputAsync(new { kind = "pointer", layoutId = layout }, seconds: 3));
+            if (generation == sessionGeneration && ReferenceEquals(target, client) && liveStream != null && geometry?.LayoutId == layout && CanSendFocusedInput())
+                screen.UpdateCursor(data.TryGetProperty("cursor", out var cursor) ? cursor.Deserialize<CursorPosition>(Json.Options) : null, geometry);
+        }
+        catch { screen.UpdateCursor(null, null); }
+        finally { cursorPolling = false; }
     }
 
     private void RefreshPowerHold()
@@ -2003,8 +2024,9 @@ public sealed partial class MainForm : Forms.Form
             try
             {
                 object payload = batch.Count == 1 ? item.Payload : new { kind = "batch", events = batch.Select(value => value.Payload).ToArray() };
-                RemoteClient.Require(await target.SendInputAsync(payload));
-                foreach (var queued in batch) queued.Applied?.TrySetResult(true);
+                var reply = RemoteClient.Require(await target.SendInputAsync(payload));
+                bool applied = !reply.TryGetProperty("applied", out var accepted) || accepted.ValueKind != JsonValueKind.False;
+                foreach (var queued in batch) queued.Applied?.TrySetResult(applied);
                 if (!release) inputBlockMessage = null;
                 if (release && item.Generation == sessionGeneration && ReferenceEquals(target, client))
                 {
@@ -2403,6 +2425,7 @@ public sealed partial class MainForm : Forms.Form
 
     private async Task<bool> ShutdownAsync()
     {
+        cursorTimer.Stop();
         directUpdateTimer.Stop(); directUpdateLifetime?.Cancel();
         powerLifetime?.Cancel();
         renderTimer.Stop(); inputRecoveryTimer.Stop(); discoveryLifetime?.Cancel(); heartbeatLifetime?.Cancel(); pairingLifetime?.Cancel(); clientUpdateLifetime?.Cancel(); fleetLifetime?.Cancel(); liveStream?.Cancel(); action?.Cancel(); fileTransferLifetime?.Cancel();
@@ -2443,6 +2466,7 @@ public sealed partial class MainForm : Forms.Form
 
     private void DisposeResources()
     {
+        cursorTimer.Dispose();
         directUpdateTimer.Dispose(); directUpdateLifetime?.Cancel();
         agentMaintenance.Dispose();
         keyboardCapture?.Dispose(); resourceRefreshTimer.Dispose();

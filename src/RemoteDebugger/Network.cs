@@ -1113,7 +1113,7 @@ public sealed partial class AgentServer : IDisposable
         running[r.Id] = cts; var begin = DateTimeOffset.UtcNow; Reply reply;
         bool noisy = r.Operation is "ui.input" or "upload.chunk" or "file.read" || r.Operation.StartsWith("clipboard.", StringComparison.Ordinal);
         if (!noisy) Status?.Invoke($"{begin:HH:mm:ss}  {r.Operation}  {r.Id[..8]}");
-        try { cts.Token.ThrowIfCancellationRequested(); reply = Reply.Success(r.Id, await Operations.ExecuteAsync(r.Operation, r.Args, cts.Token)); if (r.Operation.StartsWith("ui.", StringComparison.Ordinal)) WakeCapture(false); }
+        try { cts.Token.ThrowIfCancellationRequested(); reply = Reply.Success(r.Id, await Operations.ExecuteAsync(r.Operation, r.Args, cts.Token)); if (r.Operation.StartsWith("ui.", StringComparison.Ordinal) && !(r.Operation == "ui.input" && r.Args.Str("kind") is "pointer" or "pointerLeave")) WakeCapture(false); }
         catch (OperationCanceledException) { reply = Reply.Failure(r.Id, "cancelled_or_timeout", "Operation cancelled or its deadline expired. Inspect state before retrying a mutation."); }
         catch (InputBlockedException ex) { reply = Reply.Failure(r.Id, "input_blocked", ex.Message); }
         catch (UnauthorizedAccessException) { reply = Reply.Failure(r.Id, "permission_denied", "Windows denied access. An elevated operation may be required."); }

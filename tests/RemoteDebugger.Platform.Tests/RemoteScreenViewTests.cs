@@ -1,12 +1,47 @@
 using System.Drawing;
 using System.Windows.Forms;
 using RemoteDebugger;
+using RemoteDebugger.Core;
 using Xunit;
 
 namespace RemoteDebugger.Platform.Tests;
 
 public sealed class RemoteScreenViewTests
 {
+    [Fact]
+    public void PeerLabelFadesWithoutLosingPositionAndClicksAnimateOnce()
+    {
+        var cursor = new SharedCursor();
+        var state = new CursorPosition(120, 80, "Remote PC", true, 1, 0);
+        cursor.Update(state, 100);
+        cursor.Update(state, 2000);
+        Assert.True(cursor.LabelVisible(2099));
+        Assert.Equal(0.5f, cursor.LabelOpacity(1850));
+        Assert.False(cursor.LabelVisible(2100));
+        Assert.Equal(0, cursor.LabelOpacity(2100));
+        Assert.True(cursor.Visible(2100));
+        cursor.Update(state with { Activity = 2, Click = 1 }, 2200);
+        Assert.True(cursor.LabelVisible(2200));
+        Assert.Equal(0, cursor.Pulse(2200));
+        cursor.Update(state with { Activity = 2, Click = 1 }, 2400);
+        Assert.Equal(1, cursor.Pulse(2650));
+        Assert.Equal((120, 80), (cursor.Position!.X, cursor.Position.Y));
+        Assert.False(cursor.Visible(5400));
+        cursor.Update(null, 5500);
+        Assert.False(cursor.Visible(5500));
+    }
+
+    [Theory]
+    [InlineData(-1920, 0, -960, 540, 400, 300)]
+    [InlineData(0, 0, 960, 540, 400, 300)]
+    [InlineData(0, -1080, 0, -1080, 0, 75)]
+    public void PeerCursorMapsThroughLetterboxingAndNegativeMonitorOrigins(int x, int y, int px, int py, float expectedX, float expectedY)
+    {
+        var geometry = new DesktopGeometry(x, y, 1920, 1080, "layout");
+        Assert.Equal(new PointF(expectedX, expectedY), RemoteScreenView.MapCursor(geometry, new(800, 600), new(px, py)));
+        Assert.Null(RemoteScreenView.MapCursor(geometry, new(800, 600), new(x - 1, y)));
+    }
+
     [Fact]
     public void StationaryMouseDoesNotReassertItsPositionButRealMovementStillForwards()
     {

@@ -206,16 +206,15 @@ public sealed class MaintenanceSession(string root) : IDisposable
             await PrepareAsync(ct);
     }
 
-    internal async Task SendInputAsync(object args, CancellationToken ct)
+    internal async Task<object> SendInputAsync(object args, CancellationToken ct)
     {
         if (!Enabled || !CurrentStatus.Active) throw new InputBlockedException(DisabledMessage);
         if (!privilegedInputAvailable)
         {
-            try { Native.HandleInput(args is System.Text.Json.JsonElement element ? element : Json.Element(args)); }
+            try { return Native.HandleSharedInput(args is System.Text.Json.JsonElement element ? element : Json.Element(args)); }
             catch (InputBlockedException) { throw new InputBlockedException("Windows blocked input. Install the current Remote Debugger setup on this agent to enable control of elevated windows."); }
-            return;
         }
-        try { await input.SendAsync(args, () => Enabled && CurrentStatus.Active, ct); }
+        try { return await input.SendAsync(args, () => Enabled && CurrentStatus.Active, ct); }
         catch (RemoteOperationException ex) { throw new InputBlockedException(ex.Message); }
     }
 

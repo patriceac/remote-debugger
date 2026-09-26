@@ -73,7 +73,7 @@ internal static class InteractiveInputBroker
             {
                 var request = await Wire.ReadAsync<Request>(pipe, CancellationToken.None);
                 Reply reply;
-                try { ValidateRequest(request); Native.HandleInput(request.Args); reply = Reply.Success(request.Id, new { sent = true }); }
+                try { ValidateRequest(request); reply = Reply.Success(request.Id, Native.HandleSharedInput(request.Args)); }
                 catch (Exception ex) { reply = Reply.Failure(request.Id, "input_blocked", ex.Message); }
                 await Wire.WriteAsync(pipe, reply, CancellationToken.None);
             }
@@ -111,17 +111,17 @@ internal sealed class PrivilegedInputSession
         catch { }
     }
 
-    public async Task SendAsync(object args, Func<bool> permitted, CancellationToken ct, bool prepareOnly = false, bool releaseOnly = false)
+    public async Task<System.Text.Json.JsonElement> SendAsync(object args, Func<bool> permitted, CancellationToken ct, bool prepareOnly = false, bool releaseOnly = false)
     {
         await gate.WaitAsync(ct);
         try
         {
             int expectedGeneration = Volatile.Read(ref generation);
             if (!permitted()) throw new InputBlockedException(MaintenanceSession.DisabledMessage);
-            if (prepareOnly && Ready) return;
+            if (prepareOnly && Ready) return Json.Element(new { ready = true });
             if (pipe == null)
             {
-                if (releaseOnly) return;
+                if (releaseOnly) return Json.Element(new { sent = true });
                 var candidate = await open(ct);
                 try
                 {
@@ -138,12 +138,13 @@ internal sealed class PrivilegedInputSession
             var current = pipe ?? throw new OperationCanceledException("Input session ended.");
             var payload = Json.Element(args);
             await Wire.WriteAsync(current, new Request(Guid.NewGuid().ToString(), "", "ui.input", payload, SupportOperationTimeouts.InputSeconds(payload.Str("kind"))), ct);
-            RemoteClient.Require(await Wire.ReadAsync<Reply>(current, ct));
+            var result = RemoteClient.Require(await Wire.ReadAsync<Reply>(current, ct));
             lock (sync)
             {
                 if (expectedGeneration != generation || !ReferenceEquals(pipe, current)) throw new OperationCanceledException("Input session ended.");
                 Volatile.Write(ref ready, 1);
             }
+            return result;
         }
         catch { End(); throw; }
         finally { gate.Release(); }

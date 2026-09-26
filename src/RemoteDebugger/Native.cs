@@ -66,7 +66,7 @@ public static class Native
         if (focused != pid) throw new InvalidOperationException("Windows refused foreground focus; no input was sent."); return h;
     }
     internal static readonly UIntPtr InputTag = (UIntPtr)0x52444247;
-    private static void Input(params INPUT[] input) { for (int i = 0; i < input.Length; i++) if (input[i].type == 1) input[i].data.key.extra = InputTag; if (SendInput((uint)input.Length, input, Marshal.SizeOf<INPUT>()) != input.Length) throw new InputBlockedException("Windows blocked input. Check that the support helper is ready for elevated windows; unlock or handle secure desktop prompts locally."); }
+    private static void Input(params INPUT[] input) { for (int i = 0; i < input.Length; i++) { if (input[i].type == 1) input[i].data.key.extra = InputTag; else input[i].data.mouse.extra = InputTag; } if (SendInput((uint)input.Length, input, Marshal.SizeOf<INPUT>()) != input.Length) throw new InputBlockedException("Windows blocked input. Check that the support helper is ready for elevated windows; unlock or handle secure desktop prompts locally."); }
     public static object Windows(int pid) => AutomationElement.RootElement.FindAll(TreeScope.Children, pid > 0 ? new PropertyCondition(AutomationElement.ProcessIdProperty, pid) : Condition.TrueCondition).Cast<AutomationElement>().Take(100).Select(x => new { pid = x.Current.ProcessId, name = x.Current.Name, handle = x.Current.NativeWindowHandle }).ToArray();
     public static object Inspect(int pid)
     {
@@ -121,7 +121,35 @@ public static class Native
     private static readonly Dictionary<ushort, KEY> HeldKeys = new();
     private static readonly HashSet<string> HeldButtons = new();
     private static DateTime lastInput = DateTime.UtcNow;
-    private static readonly System.Threading.Timer InputWatchdog = new(_ => { lock (InputLock) if (DateTime.UtcNow - lastInput > TimeSpan.FromSeconds(3)) ReleaseAllInput(); }, null, 1000, 1000);
+    private static readonly System.Threading.Timer InputWatchdog = new(_ => { lock (InputLock) if ((HeldKeys.Count > 0 || HeldButtons.Count > 0 || SharedMouse.Dragging) && DateTime.UtcNow - lastInput > TimeSpan.FromSeconds(3)) ReleaseAllInput(); }, null, 1000, 1000);
+    internal static object HandleSharedInput(JsonElement a)
+    {
+        string kind = a.Str("kind");
+        if (kind is "pointer" or "pointerLeave" || a.TryGetProperty("sharedPointer", out var shared) && shared.ValueKind == JsonValueKind.True && kind is "move" or "down" or "up" or "wheel")
+        {
+            lock (InputLock)
+            {
+                DesktopCapture.RequireDesktop();
+                if (a.Str("layoutId") != DesktopCapture.LayoutId()) { ReleaseAllInput(); throw new InvalidOperationException("Display geometry changed. Refresh the screen before sending input."); }
+                if (kind is not ("pointer" or "pointerLeave"))
+                {
+                    if (!System.Windows.Forms.Screen.AllScreens.Any(s => s.Bounds.Contains(a.Int("x"), a.Int("y")))) throw new ArgumentException("Pointer is outside all displays.");
+                    lastInput = DateTime.UtcNow;
+                }
+                return SharedMouse.Apply(a);
+            }
+        }
+        HandleInput(a); return new { sent = true };
+    }
+
+    internal static void InjectPointer(Point point, string kind, string button, int delta)
+    {
+        var bounds = System.Windows.Forms.SystemInformation.VirtualScreen;
+        var move = new INPUT { data = new UNION { mouse = new MOUSE { x = (int)((((long)point.X - bounds.Left) * 65536 + 32768) / bounds.Width), y = (int)((((long)point.Y - bounds.Top) * 65536 + 32768) / bounds.Height), flags = 0xC001 } } };
+        if (kind == "move") { Input(move); return; }
+        uint flags = (button, kind) switch { ("left", "down") => 2, ("left", "up") => 4, ("right", "down") => 8, ("right", "up") => 16, ("middle", "down") => 32, ("middle", "up") => 64, (_, "wheel") => 0x800, _ => throw new ArgumentException("Invalid mouse button.") };
+        Input(move, new INPUT { data = new UNION { mouse = new MOUSE { flags = flags, data = unchecked((uint)Math.Clamp(delta, -1200, 1200)) } } });
+    }
     public static void HandleInput(JsonElement a)
     {
         lock (InputLock)
@@ -161,6 +189,7 @@ public static class Native
     {
         lock (InputLock)
         {
+            SharedMouse.Release();
             foreach (var entry in HeldKeys.ToArray())
             {
                 var key = entry.Value; key.flags |= 2;

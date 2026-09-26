@@ -58,6 +58,8 @@ Header remote PC name and IP, Connected pill, terminate button. Toolbar under he
 
 Input defaults enabled but events only forward with viewer focus and valid frame geometry. The checkbox represents user preference and never changes on a transport error. A separate input status explains waiting or recovery. Coalesce adjacent mouse moves, preserve click/key order, and serialize release after input already in flight. Focus loss, pause, tab switch, update, disconnect, or termination releases keys/buttons. Footer frame rate, bandwidth, and latency uses actual values.
 
+Each side sees the other person's independent blue pointer (#2563EB), with a white outline and a compact device-name tag. Fade the tag from 1.5 to 2 seconds idle, retain the arrow, and show a brief ring on clicks. Moving the controller's pointer only points; clicks, scrolling and dragging use its selected position. Windows interaction remains shared: the person starting a drag owns it until release, with the assisted person's position restored afterward. Pointer overlays never activate windows or appear in captured frames; hide them on leaving the shared surface, release, or loss of contact.
+
 Both roles hide to tray on X, including repeated close messages. Explicit Quit and Windows shutdown exit. Keep the heartbeat alive while hidden, pause unnecessary frame presentation, and resume viewing on restore if it was previously running. Tray menu Ouvrir / Terminer l'assistance / Quitter. Restoring retains the selected tab and maximized state. Exit ends controller activity and revokes the remote session if reachable; otherwise its heartbeat timeout handles the grace period.
 
 ## Processes and files

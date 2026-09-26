@@ -117,14 +117,17 @@ public sealed partial class Operations
                     if (events.ValueKind != JsonValueKind.Array || events.GetArrayLength() is < 1 or > 16 ||
                         events.EnumerateArray().Any(e => e.Str("kind") is "batch" or "release" or "secureAttention"))
                         throw new ArgumentException("Invalid input batch.");
+                    bool applied = true;
                     foreach (var item in events.EnumerateArray())
-                    { ct.ThrowIfCancellationRequested(); await ExecuteAsync("ui.input", item, ct); }
-                    return new { sent = true };
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        var result = Json.Element(await ExecuteAsync("ui.input", item, ct));
+                        if (result.TryGetProperty("applied", out var accepted) && accepted.ValueKind == JsonValueKind.False) applied = false;
+                    }
+                    return new { sent = true, applied };
                 }
                 if (a.Str("kind") == "release") await Maintenance.RecoverInputAsync(ct);
-                if (Maintenance.Enabled && Maintenance.CurrentStatus.Active) await Maintenance.SendInputAsync(a, ct);
-                else Native.HandleInput(a);
-                return new { sent = true };
+                return Maintenance.Enabled && Maintenance.CurrentStatus.Active ? await Maintenance.SendInputAsync(a, ct) : Native.HandleSharedInput(a);
             case "monitors": return DesktopCapture.Monitors();
             case "screenshot": return DesktopCapture.Capture(a.Int("monitor"), a.Int("maxWidth"), a.Int("quality", 85));
             case "debug.attach": return await Task.Run(() => Native.Debug(a.Int("pid"), Math.Clamp(a.Int("seconds", 3), 1, 30), ct), ct);

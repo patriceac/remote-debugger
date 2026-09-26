@@ -7,6 +7,16 @@ using Xunit;
 public sealed class PrivilegedInputSessionTests
 {
     [Fact]
+    public async Task CursorStateReturnsThroughThePrivilegedHelperWithoutDroppingItsPayload()
+    {
+        using var stream = new BrokerStream();
+        var input = new PrivilegedInputSession(_ => Task.FromResult<Stream>(stream), () => { });
+        var reply = await input.SendAsync(new { kind = "pointer" }, () => true, default);
+        Assert.Equal(123, reply.GetProperty("cursor").Int("x"));
+        Assert.Equal("Remote PC", reply.GetProperty("cursor").Str("name"));
+        input.End();
+    }
+    [Fact]
     public async Task StartupPreparationAndLaterSessionsReuseOneAuthenticatedHelper()
     {
         using var stream = new BrokerStream();
@@ -87,7 +97,7 @@ public sealed class PrivilegedInputSessionTests
             cancellationToken.ThrowIfCancellationRequested();
             var request = JsonSerializer.Deserialize<Request>(buffer.Span[4..], Json.Options)!;
             Requests.Add(request);
-            byte[] reply = JsonSerializer.SerializeToUtf8Bytes(Reply.Success(request.Id, new { ready = true }), Json.Options);
+            byte[] reply = JsonSerializer.SerializeToUtf8Bytes(Reply.Success(request.Id, new { ready = true, cursor = new { x = 123, y = 45, name = "Remote PC" } }), Json.Options);
             SetLength(0); Position = 0;
             byte[] prefix = new byte[4]; BinaryPrimitives.WriteInt32BigEndian(prefix, reply.Length);
             Write(prefix); Write(reply); Position = 0;
