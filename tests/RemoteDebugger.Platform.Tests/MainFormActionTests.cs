@@ -68,12 +68,13 @@ public sealed class MainFormActionTests
     }
 
     [Theory]
-    [InlineData(true, false, true)]
-    [InlineData(true, true, false)]
     [InlineData(false, false, false)]
-    public void SavedConnectedSessionSynchronizesOnlyWhenItsBinaryDiffers(bool connected, bool binaryMatched, bool expected)
+    [InlineData(false, true, true)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, true)]
+    public void AutomaticSessionResumeRequiresMatchingOrAlreadyInstalledBinary(bool binaryMatched, bool sameExecutable, bool expected)
     {
-        Assert.Equal(expected, MainForm.ShouldSynchronizeSavedSession(connected, binaryMatched));
+        Assert.Equal(expected, MainForm.CanAutomaticallyResumeSavedSession(binaryMatched, new string(sameExecutable ? 'a' : 'b', 64), new string('a', 64)));
     }
 
     [Fact]

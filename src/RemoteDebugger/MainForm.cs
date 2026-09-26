@@ -722,7 +722,9 @@ public sealed partial class MainForm : Forms.Form
             bool matched = heartbeat.TryGetProperty("binaryMatched", out var matchedValue) && matchedValue.GetBoolean();
             if (generation != operationGeneration || !ReferenceEquals(target, client) || !connected) return;
             clientUpToDate = matched;
-            if (ShouldSynchronizeSavedSession(connected, matched))
+            if (!CanAutomaticallyResumeSavedSession(matched, heartbeat.Str("agentBinarySha256"), ExecutableIdentity.Sha256))
+            { SelectControllerPage(0); connectionState.SetText(() => UiText.UpdateAvailable); return; }
+            if (!matched)
             {
                 synchronizingAgent = true;
                 connectionState.SetText(() => UiText.AgentSynchronizing); SetFooterMessage(() => UiText.AgentSynchronizing); SetFooterDetail(() => UiText.TransferValidateVersion);
@@ -777,7 +779,8 @@ public sealed partial class MainForm : Forms.Form
             _ = DiscoverAsync(true);
     }
 
-    internal static bool ShouldSynchronizeSavedSession(bool connected, bool binaryMatched) => connected && !binaryMatched;
+    internal static bool CanAutomaticallyResumeSavedSession(bool binaryMatched, string agentSha256, string controllerSha256) =>
+        binaryMatched || Safety.Equal(agentSha256, controllerSha256);
 
     private void OnManagedRelaunchRequested()
     {
