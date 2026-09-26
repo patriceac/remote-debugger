@@ -139,7 +139,7 @@ public sealed partial class MainForm
                     if (directTargets != null && IsActiveDevice(device.Peer))
                     { RecordDevice(device with { State = "busy" }); return; }
                     JsonElement snapshot;
-                    bool busy = false;
+                    bool busy = false, reclaimable = false;
                     if (IsActiveDevice(device.Peer)) snapshot = RemoteClient.Require(await client!.CallAsync("update.snapshot", new { versionOnly = true }, ct: ct, seconds: 15));
                     else
                     {
@@ -148,6 +148,7 @@ public sealed partial class MainForm
                             directOnly: directTargets != null).AdminRequestAsync("admin.inspect", ct, new { versionOnly = true });
                         snapshot = inspected.GetProperty("snapshot"); busy = inspected.GetProperty("busy").GetBoolean();
                         if (inspected.TryGetProperty("updating", out var updating)) busy |= updating.GetBoolean();
+                        reclaimable = inspected.TryGetProperty("reclaimable", out var recovery) && recovery.ValueKind == JsonValueKind.True;
                     }
                     var remote = snapshot.GetProperty("agent").Deserialize<ExecutableSnapshot>(Json.Options)!;
                     remote.Validate();
@@ -160,7 +161,7 @@ public sealed partial class MainForm
                     }
                     RememberWakeAdapter(device.Peer, snapshot);
                     int comparison = UpdatePolicy.ReleaseVersion(remote.FileVersion).CompareTo(UpdatePolicy.ReleaseVersion(controller.FileVersion));
-                    string state = comparison > 0 ? "newer" : busy ? "busy" : Safety.Equal(remote.Sha256, controller.Sha256) ? "current" : comparison < 0 ? "available" : "conflict";
+                    string state = comparison > 0 ? "newer" : reclaimable ? "available" : busy ? "busy" : Safety.Equal(remote.Sha256, controller.Sha256) ? "current" : comparison < 0 ? "available" : "conflict";
                     RecordDevice(device with { Version = remote.FileVersion ?? "", Sha256 = remote.Sha256, State = state, Online = true,
                         VerifiedUpdateSha256 = !busy && comparison == 0 && Safety.Equal(remote.Sha256, controller.Sha256) ? remote.Sha256 : "" });
                 }
