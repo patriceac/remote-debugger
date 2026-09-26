@@ -147,7 +147,7 @@ public sealed partial class MainForm
                         var inspected = await RemoteClient.ForDiscoveredPeer(directTargets != null ? device.DirectPeer : device.Peer, root,
                             directOnly: directTargets != null).AdminRequestAsync("admin.inspect", ct, new { versionOnly = true });
                         snapshot = inspected.GetProperty("snapshot"); busy = inspected.GetProperty("busy").GetBoolean();
-                        if (directTargets != null && inspected.TryGetProperty("updating", out var updating)) busy |= updating.GetBoolean();
+                        if (inspected.TryGetProperty("updating", out var updating)) busy |= updating.GetBoolean();
                     }
                     var remote = snapshot.GetProperty("agent").Deserialize<ExecutableSnapshot>(Json.Options)!;
                     remote.Validate();
@@ -162,7 +162,7 @@ public sealed partial class MainForm
                     int comparison = UpdatePolicy.ReleaseVersion(remote.FileVersion).CompareTo(UpdatePolicy.ReleaseVersion(controller.FileVersion));
                     string state = comparison > 0 ? "newer" : busy ? "busy" : Safety.Equal(remote.Sha256, controller.Sha256) ? "current" : comparison < 0 ? "available" : "conflict";
                     RecordDevice(device with { Version = remote.FileVersion ?? "", Sha256 = remote.Sha256, State = state, Online = true,
-                        VerifiedUpdateSha256 = comparison == 0 && Safety.Equal(remote.Sha256, controller.Sha256) ? remote.Sha256 : "" });
+                        VerifiedUpdateSha256 = !busy && comparison == 0 && Safety.Equal(remote.Sha256, controller.Sha256) ? remote.Sha256 : "" });
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
                 catch (RemoteOperationException ex) when (ex.Code is "access_denied" or "unknown_operation")
