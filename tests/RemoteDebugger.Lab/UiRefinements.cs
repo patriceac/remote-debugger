@@ -47,6 +47,10 @@ internal sealed partial class LabForm
         form.Show(); form.Activate();
         await Task.Delay(150, stop.Token); // Let the deferred Shown event select the initial role.
         Get<Forms.Timer>("renderTimer").Stop(); Get<Forms.Timer>("resourceRefreshTimer").Stop();
+        // Select synthetic presentation state directly; this fixture has no enrolled controller credentials.
+        Set("isUpdateAdmin", true); Get<PageSwitcher>("rolePages").SelectedIndex = 1;
+        foreach (string name in new[] { "controllerNavCaption", "navConnection", "navScreen", "navProcesses", "navFiles", "navDiagnostics" }) Get<Forms.Control>(name).Visible = true;
+        Get<Forms.Control>("roleController").Enabled = true;
         try
         {
             var peer = new Peer("PC-YOLANDE", "127.0.0.2", 45832, new string('c', 64));
@@ -57,18 +61,17 @@ internal sealed partial class LabForm
             var peers = Get<RememberedListView>("peers");
             if (scope == "header")
             {
-                AppTheme.SetPreference("dark"); Call("SelectRole", 1); Call("SelectControllerPage", 0);
+                AppTheme.SetPreference("dark"); Call("SelectControllerPage", 0);
                 foreach (int width in new[] { 1663, 1060 })
                 {
-                    form.Size = new(width, 860); await Task.Delay(150, stop.Token); HeaderFits("connection-" + width);
+                    form.Size = new(width, 860); await Task.Delay(150, stop.Token); Capture("connection-header-" + width); HeaderFits("connection-" + width);
                     foreach (var button in new[] { Get<Forms.Control>("discoverButton"), Get<Forms.Control>("updateAllDevices") })
                     {
-                        var bounds = button.RectangleToScreen(button.ClientRectangle);
+                        var bounds = button.RectangleToScreen(button.ClientRectangle); bool visible = button.Visible;
                         for (var parent = button.Parent; parent != null; parent = parent.Parent)
-                            Require(parent.RectangleToScreen(parent.ClientRectangle).Contains(bounds),
-                                "ui.button_unclipped_" + button.Name + "_" + width + "_" + parent.Name, new { bounds, parent = parent.Bounds });
+                            visible &= parent.RectangleToScreen(parent.ClientRectangle).Contains(bounds);
+                        Require(visible, "ui.button_unclipped_" + button.Name + "_" + width, new { bounds });
                     }
-                    Capture("connection-header-" + width);
                 }
             }
             foreach (int width in redlineOnly ? Array.Empty<int>() : new[] { 1280, 1060 })
@@ -83,7 +86,6 @@ internal sealed partial class LabForm
                 Require(row.GetPixel(peers.Columns[0].Width - 5, peers.Items[0].Bounds.Top + 8).ToArgb() == Color.FromArgb(227, 246, 248).ToArgb(), "ui.teal_selection_" + width);
             }
             Set("supportSession", true); Set("heartbeatHealthy", true); Set("liveFrameFresh", true);
-            Call("SelectRole", 1);
             Call("SelectControllerPage", 1);
             var charts = Get<ResourceMiniCharts>("headerCharts");
             using var frame = new Bitmap(900, 700);
