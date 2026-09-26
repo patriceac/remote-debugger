@@ -1,6 +1,6 @@
 # Controller, support permission and installer corrections
 
-2026-09-25. Implementation authorized by Patrice after the 0.5.21 audit. **Verification in progress; this is not a release acceptance declaration.** The original 37-case audit remains in [ROLE_SUPPORT_AUDIT_RESULTS.md](ROLE_SUPPORT_AUDIT_RESULTS.md).
+2026-09-25–26. Implementation authorized by Patrice after the 0.5.21 audit. **Implementation and product verification are complete.** Exact production installer evidence below includes a broker cleanup failure followed by separately verified recovery; the original failed verdict is preserved. The original 37-case audit remains in [ROLE_SUPPORT_AUDIT_RESULTS.md](ROLE_SUPPORT_AUDIT_RESULTS.md).
 
 ## Implemented behavior
 
@@ -13,7 +13,7 @@
 
 ## Compatibility and limits
 
-The final production release is 0.5.23; the intermediate 0.5.22 package was already copied to Drive, so a new version avoids conflicting with the strict remote replacement policy. Upgrade the controller first. The new controller can contact an older agent to update it; older controllers cannot authenticate to a hardened receiver or the hardened relay. Every endpoint needs the new version to enforce the new incoming boundary on direct connections.
+The final production release is 0.5.23; the intermediate 0.5.22 package was already copied to Drive, so a new version avoids conflicting with the strict remote replacement policy. Upgrade the controller first. The new controller can contact an older agent to update it; older controllers cannot authenticate to a hardened receiver or the hardened relay. An older LAN-only agent may need its address entered manually for that first upgrade because discovery now requires the authenticated V2 exchange. Every endpoint needs the new version to enforce the new incoming boundary on direct connections.
 
 The new installer refuses a newer installed version. Previously distributed installers do not acquire this guard retroactively, and an administrator can independently replace application files. The application updater continues to accept only strictly newer releases; equal-version different bytes are rejected and identical bytes require no replacement.
 
@@ -23,13 +23,13 @@ LAN discovery proves requester authority and correlates replies. It does not est
 
 | Artifact | SHA-256 |
 |---|---|
-| Production 0.5.22 Release | `990A280581BDD888C6CEF016E28487D337D6E4E74FAAC3C684048C2EB93F4D15` |
-| Production private setup | `CB36F3026B74E0D196428465ABB5BA4C5FAC4ED5A5487DF79037CCE8DE7A7E51` |
-| Same-source 0.5.22 disposable-authority fixture | `2BB2853358F260D871C7B82FB929BD3D5DB5696A1DC5E5EA4AA1227AF04CF30A` |
-| Synthetic future 0.5.23 fixture | `BD41BB22FE6BEA6D7888CEAEFA78E52350203D1DA15716BC96F04B2379D3830B` |
-| Distinct same-version 0.5.22 fixture | `B1AF6782F92FC8CEE3F30E144593441F779069E34880499E4DBAB48CAEC82BB4` |
+| Production 0.5.23 Release, source `b642c9c` | `09BB2843B388287DE26249E36ABA5E6893142C0D35802D3E06E33C9AF28035AC` |
+| Production 0.5.23 private setup | `BCADA7FC44B4DA74DEF84ADF8073BE3F89D27FD7D2E3ECBB9D689D6075F3ADD8` |
+| Current 0.5.22 disposable-authority fixture | `744D7E7D476B2C32D4B59BC6D5F31552261AAA05117DAB769A526BFFF0AE29FA` |
+| Synthetic future 0.5.23 fixture | `1C29D3BED692A5BFB08A72B4948225E03F3B741A325B64DC00CC6B778AF11587` |
+| Distinct same-version 0.5.22 fixture | `C7B7DEA0B68217B29379ABF88813F7BF8E11684DB15FC01B261E9F1764F94C62` |
 
-Diagnostic fixtures use the repository's public test authority and must never be distributed or installed on real PCs. Production setup was copied to `C:\Users\patri\My Drive\Dev` with its hash verified; the previous production installer there was removed. No test fixture is published there.
+Diagnostic fixtures use the repository's public test authority and must never be distributed or installed on real PCs. Production 0.5.23 setup was copied to `C:\Users\patri\My Drive\Dev` with its hash verified; the previous production installer there was removed. Its normal elevation, different-administrator elevation, declined elevation and checkbox/password-gate evidence is listed below, with separate validator/recovery evidence for the two outer harness failures. Earlier scoped tests retain their original fixture identities in the evidence. No test fixture is published to Drive.
 
 ## Completed verification
 
@@ -47,6 +47,59 @@ Latest Luna Max agents execute tests; the parent writes all product/test code. L
 | Two-VM LAN matrix | Receiver `executable-test-20260925T145858338Z-0793e5d3` (15 checks) and sender `executable-test-20260925T145858453Z-3f2a0e00` (38 assertions plus one directory observation): all pass. Six role combinations, controller-only discovery, authorized system/command/admin/text input/connected API, and update metadata policy. IsolatedTestNet, no host/LAN/Internet route. Firewall prompt handling, network boundary and cleanup all verified. |
 | E06 / I02 / I05 / U06 / U07 reinstall and local downgrade | `executable-test-20260925T144901902Z-98e507db`: 18/18 pass. Fresh agent and agent reinstall remain agents with Ready helper; controller reinstall preserves OFF; forward .22-to-.23 installation preserves OFF; older .22 installer exits 1 without replacing .23 bytes. Explicitly elevated signed disposable-authority fixture. |
 | Password enrollment, consent recovery, End support and live CLI/MCP revocation | `executable-test-20260925T152149830Z-3b34bf74`: 48/48 pass, including wrong/cancelled/correct controller password, missing/corrupt/legacy consent, agent session termination and cached CLI/MCP denial after authority removal. Fixture executable SHA-256 `744D7E7D476B2C32D4B59BC6D5F31552261AAA05117DAB769A526BFFF0AE29FA`. |
+| F01 terminal version refusal | `executable-test-20260925T153406401Z-dd6916c2`: 3/3 pass with a provisioned .23 receiver and older .22 controller. The actual UI explains the newer-only rule and shows interrupted synchronization without ongoing preparation/reconnection. |
+| U04 equal-version replacement refusal | `executable-test-20260925T153740557Z-7e9dc076`: different executable bytes with the same version are refused; receiver hash and modification time remain unchanged; ordinary support cannot bypass the synchronization rule. |
+| U01 / U02 / U03 forward update, identical build and downgrade | Agent `executable-test-20260925T154141250Z-464d9918` and controller with support ON `executable-test-20260925T154629965Z-933b5b8f`: both pass. Installed bytes match the .23 candidate, automatic reconnection returns system data, role is preserved, ON remains ON, identical builds are not replaced, and the older .22 build is refused. |
+| Legacy .21 agent upgrade | `executable-test-20260925T160029392Z-eac6973e`: 9/9 pass. The current controller upgrades the signed .21 fixture to the exact .22 candidate, reconnects and preserves the agent role. The old client is then rejected at transport authentication; newer bytes remain unchanged and a current controller still returns system data. |
+| S02 / S03 / S04 reboot and saved state | `executable-test-20260925T160442613Z-7e4daac3`: 19/19 pass. One actual VM reboot and manual sign-in, with no replay of the pre-reboot action. Controller authority and OFF/editable support persist, outgoing UI remains available, corrupt consent stays OFF, corrupt credentials do not enroll, and End support leaves an available agent with its old grant revoked. |
+| Exact final .23 I01 | `executable-test-20260925T161015869Z-36317b17`: product Before/After pass (19/19 After), guest UAC contract and cleanup pass. The initial outer validator failed on timestamp parsing; separate read-only revalidation with corrected harness source `9861579` proves the complete saved receipt in both supported PowerShell versions and both tested cultures. Original verdict and evidence remain unchanged; no installer replay. |
+| Exact final .23 I03 | `executable-test-20260926T093237568Z-ffe0e9d2`: full broker, guest, UAC V2, verifier, evidence and cleanup pass. The initiating standard user is medium-integrity/non-admin; a different administrator supplies the elevated token. All six Before path checks and six After observations pass. Original-user configuration, startup link and helper registration retain the initiating SID; no corresponding elevation-account profile entries appear. Product check `install.helper_ready` passes with availability Ready, verified identity, interactive input available and helper version 0.5.23.0; the LocalSystem service runs the exact production bytes. No retries, skipped files or warnings; VM Off and staged payload removed. |
+| Exact final .23 I04 | `executable-test-20260926T094154674Z-9d28a11e`: full broker, guest, UAC V2, Before/After verifier, evidence and cleanup pass. Decline enters no credentials and produces no elevated installer; setup exits 2 as expected while the successful runner exits 0. All four exact privileged observations remain absent; additional checks confirm no application/support executable, product configuration/profile directory, provisioning receipt, shortcut, uninstall record, service or helper registration. The secure-UI broker task's Ready/result 0 is distinct from product readiness. No retries, skipped files or warnings; VM Off and staged payload removed. |
+| Exact final .23 checkbox/password gate | `executable-test-20260926T094427051Z-0c326518`: product audit evaluates 11/11 assertions true; visual review confirms the checkbox was selected and the controller-password prompt remained blank/masked. No password was entered; selection alone and canceling the prompt leave `isAdmin=false`. Exact production setup was used through the signed diagnostic wrapper, whose accepted UAC contract is proven; this is not setup self-elevation evidence. Guest harness, process cleanup (no survivor PIDs), actions and evidence transfer succeed. The outer broker fails `HarnessCleanup` at `CleaningPayloadChild`, recording VM Running and payload deletion false after a Hyper-V invalid-state error. All 13 requested guest files and all 20 broker files are preserved with no missing/skipped evidence or copy mismatch. The subsequent broker recycle and separate canonical audit (30/30 checks) establish all four VMs Off/disconnected, with no payload children or leases. This closes resource recovery without changing the original failed contract or replaying installation. |
+
+## Coverage of the 37 agreed cases
+
+The rows below map requirements to the evidence above. A boundary check means the request was rejected before remote operations could be dispatched; it does not mean every operation/version combination was executed separately. Runtime fixtures exercise the production source with disposable authority; exact production setup qualification is identified separately.
+
+| ID | Coverage and outcome |
+|---|---|
+| E01 | Fresh unchecked setup remains an agent, with no controller key: exact final .23 I01 and reinstall checks pass. |
+| E02 | Staging controller enrollment grants no authority: extended check passes; exact final production checkbox/password assertions also evaluate true with visual confirmation. That run's outer harness cleanup failed and was recovered separately; the original failed verdict is preserved. |
+| E03 | Wrong controller password rejected without enrollment: extended pass. |
+| E04 | Cancelled password prompt leaves an agent: extended pass. |
+| E05 | Correct disposable controller password enrolls, with incoming support OFF: extended pass. |
+| E06 | Agent/controller enrollment survives reinstall without elevation-driven promotion: reinstall and credential-reimport checks pass. |
+| P01 | Agent support ON/disabled and Take control disabled: role UI checks pass. |
+| P02 | Controller support OFF/editable and outgoing control available: role and enrollment checks pass; actual outgoing GUI stream works while OFF. |
+| C01 | Agent to agent denied: local authority, receiver TLS, LAN and relay boundary checks pass. |
+| C02 | Agent to controller OFF denied: local authority, receiver TLS, LAN and relay boundary checks pass. |
+| C03 | Agent to controller ON denied: local authority, receiver TLS, LAN and relay boundary checks pass. |
+| C04 | Controller to agent allowed: screen/files/processes/upload/admin operations, LAN text input/commands/API and relay operations pass. |
+| C05 | Controller to controller OFF denied: pairing, relay connection and incoming admin/update fast paths pass. |
+| C06 | Controller to controller ON allowed: ordinary/admin operations, LAN text input/commands/API and relay operations pass. |
+| B01 | Disabled UI, explicit controller flag, manual addressing, CLI/API and MCP cannot promote or bypass an agent: role, LAN and extended checks pass. |
+| B02 | Agent LAN discovery/Wake denied, controller discovery succeeds: two-VM LAN and extended checks pass. |
+| B03 | Membership-only relay listing denied, signed controller discovery succeeds: isolated Worker pass. |
+| B04 | Pairing code/private-network membership cannot replace controller authority: certificate-less TLS and relay directory/manual-ID checks pass. |
+| B05 | Saved grants, a running CLI worker and MCP cannot reuse removed controller authority: role and extended checks pass, including a newly launched CLI using a saved grant. |
+| S01 | Actual OFF toggle closes active screen/input/heartbeat/update channels and revokes saved grants; an OFF-accepted socket cannot cross into ON: role and extended checks pass. |
+| S02 | OFF survives process restart, real VM reboot/manual sign-in, reinstall and upgrade: role, lifecycle and reinstall checks pass. |
+| S03 | End support revokes the session and rotates the code while preserving an available agent: extended pass. |
+| S04 | Missing/corrupt/legacy controller consent stays OFF; corrupt credentials do not enroll: extended and lifecycle checks pass. |
+| U01 | Current controller upgrades an old agent and reconnects to the exact candidate bytes: current and legacy update checks pass. |
+| U02 | Identical build needs no replacement and support remains usable: current/legacy update checks pass. |
+| U03 | Older current-code candidate rejected by version policy; old .21 client rejected by the new TLS boundary after upgrade: update checks pass with unchanged target bytes. |
+| U04 | Same version/different bytes rejected, hash and modification time unchanged: equal-version pass. |
+| U05 | Agent rejected before any update RPC for both target roles: authority/TLS/relay boundary verified. Candidate ordering is irrelevant at that boundary; older/equal/newer policy was tested separately with an authorized source. |
+| U06 | New installer guard refuses an older .22 installer against installed .23: reinstall pass. Previously distributed .21 installers and independent administrator file replacement remain outside this guard. |
+| U07 | Same-version local reinstall preserves role, OFF preference and helper: reinstall pass. |
+| U08 | Support OFF denies update begin/resume and admin fast paths, and closes an active update channel: extended and live-revocation checks pass. |
+| I01 | Automatic elevation before protected writes and successful helper provisioning: exact final .23 product/guest checks pass, with its complete saved contract proven by corrected-validator revalidation. The original .21 failure remains in the baseline audit. |
+| I02 | Explicit elevated setup preserves agent/controller role and provisions the helper: reinstall pass; distinct from automatic UAC qualification. |
+| I03 | Standard-user setup with a different administrator preserves original-user ownership and provisions the helper: exact final .23 passes the complete UAC V2 contract, Before/After verification and cleanup. |
+| I04 | Declined UAC leaves no installation effects or false-ready state: exact final .23 passes the complete UAC V2 contract, Before/After verification and cleanup, with expected setup exit 2. |
+| I05 | Existing installation/helper refresh preserves role/settings and reaches Ready: reinstall/upgrade pass. |
+| F01 | Version refusal is visible and terminal without stale preparing/reconnecting progress: final failure-UI pass. |
 
 The initial I01/I03 verifier expected helper version 0.5.21.0 and rejected a correctly installed 0.5.22.0. After fixing that diagnostic predicate, both accepted-install cases passed on the unchanged setup bytes. `firewallReady=false` in disconnected installer runs is an observation, not a failed helper assertion or proof of LAN firewall readiness.
 
@@ -56,8 +109,18 @@ Initial two-VM LAN receiver `...140603237Z-c952ea33` passed 15 checks; sender `.
 
 Reinstall request `...142143116Z-e6acaebf` passed fresh-agent and agent-reinstall checks, then its diagnostic omitted the directory needed for disposable controller enrollment. Its elevated wrapper also remained running at cleanup; VM shutdown and payload deletion still completed. Corrected request `...144901902Z-98e507db` passed all 18 assertions and cleanup. An unintended duplicate `...145040943Z-cdf3f594` used the wrong package root and failed before assertions; it is excluded from product results. Result files and screenshots are retained under `work/role-permission-fix` and the broker's per-request Results directories.
 
-## In progress
+## Harness qualification and relay deployment
 
-Full remote update/reconnect and same-version replacement refusal; reboot persistence; terminal failure UI; exact final 0.5.23 installer acceptance. One Luna Max test coordinator runs one scenario at a time, with two workers together only for the LAN pair. The deployed relay has not yet been updated; publication is blocked on Cloudflare sign-in.
+All planned product scenarios have been exercised. Final exact-installer qualification used one Luna Max coordinator, one scenario at a time. I03 and I04 passed their complete contracts; the checkbox run completed its product assertions and visual evidence review, then failed outer broker cleanup. The broker subsequently recycled the worker, and the harness owner separately verified recovery with all 30 canonical audit checks passing. No installer was replayed. The original failed receipt remains unchanged. The earlier LAN pair used two workers together without another scenario in parallel.
+
+The separate cleanup recovery receipt and its five hash-bound inputs are preserved in `work/role-permission-fix/installer-revalidation/checkbox-cleanup-recovery`. Receipt SHA-256 is `B5C3AE509A82138D57A1E570A41B8A9EFFA892A4E36D420252AA056C49E6B90B`; the original failed broker result remains `CFDF076CC8CE15C8979AA2DE764AB4576E4E1E73F906246D891472407E9A5010`. The canonical audit completed at 2026-09-26 09:57:20 UTC: every worker Off/disconnected, the exact old payload child absent/not attached, and payload children, leases, queue and processing counts zero. Hyper-V's invalid-state rejection is confirmed; a guest-shutdown/host-stop timing conflict is likely, but the internal transition was not logged. Recovery used the existing broker's recycle, idle shutdown and lease collection, with no manual VM mutation, source change, deployment or product replay. This recovery does not convert the original overall execution into a passing harness run.
+
+The harness's two-line timestamp correction is committed as `98615791b3c4d4754b1aaa753bcfba6d85e21dee`; its 47 contract checks pass under each supported PowerShell runtime. The complete saved I01 receipt passes the corrected validator in Windows PowerShell 5.1 and PowerShell 7 under `fr-FR` and `en-US`, with request/installer/verifier identity and copy-manifest binding verified. All five input files remain byte-identical, including result SHA-256 `0DA8704CB2856331358E202D30B67A5C2C5BF7B7F3945BB5AD26697B3B49D953`. Separate supplements are retained in `work/role-permission-fix/installer-revalidation`; the historical false outer verdict is preserved. The interrupted harness deployment was superseded by Ready deployment `deploy-20fd4a75936e26d8`, candidate `f7aa04900fe9d9b820a6cced6b5f27fcb5dcd3ed`, completed 2026-09-26 03:43 UTC with all 12 canonical acceptance paths and recovery/finalization successful. The deployed validator hash is `837665F26DD42CF34A1E39551CDC3ED9642E10E3D87BF2F53B77CD9843EF3DEB`; its line-ending-normalized content matches the focused tested correction. A fresh idle-pool check preceded the resumed product tests.
+
+The relay authorization fix is deployed at 100% through the existing authenticated Cloudflare connector: version `6c1f19c0-5e93-404f-a799-84eba19ccd7f`, deployment `7d39e657-c7bc-4fc9-90ab-3d62ef120251`. A read-only deployment metadata check on 2026-09-26 at 09:37 UTC confirms that version still receives 100% of traffic. The downloaded deployed module exactly matches bundle SHA-256 `E4C529D3778DE092D46F50F0CF5A4CC63B5EB6781610D276E15D6153FFA9525B`. Both Durable Object namespaces, the protected secret binding and protocol variable were preserved. Luna's four public HTTP checks passed: health 200 and three missing/invalid-membership requests rejected with 401. These do not replace the isolated authorized relay interoperability evidence. No production credentials were extracted and no family-PC session was opened.
 
 Extended request `...150727343Z-f1de72ed` stopped after three passing checks because its diagnostic package omitted BouncyCastle. The corrected package `...151243464Z-82f087e0` passed 46/48 checks: enrollment, settings recovery, session end and initial MCP status/system/upload passed; the two revocation checks found access correctly denied but mislabeled `transport_or_input`. The CLI/MCP error mapping now returns `access_denied`, with 21 focused unit checks and the final 48/48 runtime check passing. Both earlier attempts had complete isolation/evidence/cleanup; their failures remain recorded and are superseded only by the scoped final pass.
+
+Failure-UI request `...152720712Z-b7d10815` reached a truthful terminal cancellation but did not reach the expected version refusal: its newer receiver ran outside the helper's registered application path while setup provisioned the older build. The corrected diagnostic provisions the newer managed receiver and launches the older outgoing controller. Product bytes are unchanged; the scoped rerun passed all three checks.
+
+Legacy-upgrade request `...155038548Z-459a056d` stopped before application testing because the old test-authority executable was unsigned. The fixture was signed with the normal publisher, SHA-256 `E444270C10BE5D9DF2E6BABB6684CEE707C7797DFD531E431BCA2676D3BA2C24`; its source remains .21. Request `...155338324Z-eb653e6d` passed the upgrade and byte-preservation checks but expected handshake-specific wording for the old client's rejection; Windows instead reported a transport-read connection abort. The diagnostic now accepts that explicit EN/FR abort/forced-close outcome, while retaining unchanged-byte and successful-current-controller checks. Timeouts and arbitrary errors are not accepted. The final scoped run passed 9/9; earlier failed receipts remain intact.
