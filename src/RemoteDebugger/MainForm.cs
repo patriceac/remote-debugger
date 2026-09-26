@@ -180,6 +180,7 @@ public sealed partial class MainForm : Forms.Form
     private string? inputBlockMessage;
     private CancellationTokenSource? heartbeatLifetime;
     private CancellationTokenSource? discoveryLifetime;
+    private bool discoveryBusy;
     private CancellationTokenSource? pairingLifetime;
     private CancellationTokenSource? clientUpdateLifetime;
     private Task? heartbeatTask;
@@ -1262,7 +1263,8 @@ public sealed partial class MainForm : Forms.Form
     private async Task DiscoverAsync(bool explicitRefresh)
     {
         if (!new UpdateAdminStore(root).IsAdmin) return;
-        if (pairingBusy || supportSession || FleetBusy || fleetRefreshing || rolePages.SelectedIndex != 1 || quitting) return;
+        if (discoveryBusy || pairingBusy || supportSession || FleetBusy || fleetRefreshing || rolePages.SelectedIndex != 1 || quitting) return;
+        discoveryBusy = true;
         discoveryState.SetText(() => explicitRefresh ? UiText.SearchingPcs : UiText.SearchingAtStartup); discoverButton.Enabled = false;
         discoveryLifetime?.Cancel(); discoveryLifetime = new CancellationTokenSource();
         try
@@ -1308,7 +1310,7 @@ public sealed partial class MainForm : Forms.Form
             }
             discoveryState.SetText(() => UiText.SearchUnavailablePrefix + ex.Message);
         }
-        finally { discoverButton.Enabled = true; }
+        finally { discoveryBusy = false; if (!IsDisposed) RefreshControllerControls(); }
     }
 
     private bool IsRemotePeer(Peer peer)
