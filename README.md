@@ -12,6 +12,8 @@ Screen sharing uses DXGI capture on supported single displays and tries hardware
 
 For your personal internet-enabled installation, use `RemoteDebugger-<version>-Private-Setup.exe` on each PC. Enter your setup passphrase once at first launch; this Windows account then remembers access. Remote Debugger starts in the system tray after sign-in or an automatic update; shortcuts and the installer's launch button open its window. On your support PC, **Take control** resumes your saved active session when available; otherwise select a computer and click **Connect**. To create a protected setup or remotely migrate existing computers, quit any running Remote Debugger instance (including the tray instance), then launch `RemoteDebugger.exe --security` on the controlling PC. See [security setup and migration](docs/SECURITY_SETUP.md).
 
+The controller automatically updates known direct LAN/WAN computers to its own installed signed release. It checks at startup and retries pending computers every five minutes, waiting for active support sessions or updates to finish. Verified computers stop being polled, including across controller restarts; a newer controller release or newly known direct computer starts checks again. Automatic updates never fall back to relay. Relay-only computers retain the existing connection/manual update workflow.
+
 Build with .NET SDK 8 on Windows:
 
 ```powershell

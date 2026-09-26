@@ -700,6 +700,7 @@ public sealed partial class MainForm : Forms.Form
             if (client != null) _ = ResumeSavedSupportAsync();
         }
         shown = true;
+        ScheduleDirectUpdates();
         RefreshDiscoveryOnOpen();
         await Task.Yield();
         if (!IsDisposed) { Refresh(); Opacity = 1; }
@@ -980,7 +981,13 @@ public sealed partial class MainForm : Forms.Form
         if (!changingAdminMaintenance && Environment.TickCount64 >= nextRoleCheck)
         {
             nextRoleCheck = Environment.TickCount64 + 500;
+            bool wasUpdateAdmin = isUpdateAdmin;
             isUpdateAdmin = new UpdateAdminStore(root).IsAdmin;
+            if (wasUpdateAdmin != isUpdateAdmin)
+            {
+                if (!isUpdateAdmin) directUpdateLifetime?.Cancel();
+                ScheduleDirectUpdates();
+            }
             roleController.Enabled = isUpdateAdmin && !terminating;
             changingAdminMaintenance = true;
             adminMaintenanceEnabled = agent?.SupportEnabled ?? (!isUpdateAdmin || AdminMaintenancePreference.Load(root));
@@ -1312,7 +1319,7 @@ public sealed partial class MainForm : Forms.Form
             }
             discoveryState.SetText(() => UiText.SearchUnavailablePrefix + ex.Message);
         }
-        finally { discoveryBusy = false; if (!IsDisposed) RefreshControllerControls(); }
+        finally { discoveryBusy = false; if (!IsDisposed) { RefreshControllerControls(); ScheduleDirectUpdates(); } }
     }
 
     private bool IsRemotePeer(Peer peer)
@@ -2396,6 +2403,7 @@ public sealed partial class MainForm : Forms.Form
 
     private async Task<bool> ShutdownAsync()
     {
+        directUpdateTimer.Stop(); directUpdateLifetime?.Cancel();
         powerLifetime?.Cancel();
         renderTimer.Stop(); inputRecoveryTimer.Stop(); discoveryLifetime?.Cancel(); heartbeatLifetime?.Cancel(); pairingLifetime?.Cancel(); clientUpdateLifetime?.Cancel(); fleetLifetime?.Cancel(); liveStream?.Cancel(); action?.Cancel(); fileTransferLifetime?.Cancel();
         // A saved connection only pre-fills the controller form. It is not an
@@ -2435,6 +2443,7 @@ public sealed partial class MainForm : Forms.Form
 
     private void DisposeResources()
     {
+        directUpdateTimer.Dispose(); directUpdateLifetime?.Cancel();
         agentMaintenance.Dispose();
         keyboardCapture?.Dispose(); resourceRefreshTimer.Dispose();
         powerLifetime?.Cancel();

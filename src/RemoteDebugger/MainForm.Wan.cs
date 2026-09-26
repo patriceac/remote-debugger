@@ -51,7 +51,11 @@ public sealed partial class MainForm
         try
         {
             var address = DeviceWanAddress.Parse(wanAddress.Text);
-            if (address != DeviceWanAddress.Load(root, wanDeviceFingerprint)) DeviceWanAddress.Save(root, wanDeviceFingerprint, address);
+            if (address != DeviceWanAddress.Load(root, wanDeviceFingerprint))
+            {
+                DeviceWanAddress.Save(root, wanDeviceFingerprint, address);
+                ScheduleDirectUpdates();
+            }
             wanAddress.SetText(DeviceWanAddress.Format(address));
             connectionState.SetText(() => UiText.WanAddressSaved);
             return true;

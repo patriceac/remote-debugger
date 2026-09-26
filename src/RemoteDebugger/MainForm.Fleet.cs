@@ -6,8 +6,19 @@ namespace RemoteDebugger;
 
 public sealed partial class MainForm
 {
-    private sealed record FleetDevice(Peer Peer, string Version = "", string Sha256 = "", bool Online = false,
-        string State = "unknown", int Percent = 0, string Detail = "");
+    internal sealed record FleetDevice(Peer Peer, string Version = "", string Sha256 = "", bool Online = false,
+        string State = "unknown", int Percent = 0, string Detail = "")
+    {
+        public DirectEndpoint? DirectAddress { get; init; }
+        public string VerifiedUpdateSha256 { get; init; } = "";
+        internal DirectEndpoint? KnownDirectAddress => DirectAddress ?? AddressOf(Peer);
+        private static DirectEndpoint? AddressOf(Peer peer) => peer.Host.Length > 0 && !InternetSettings.IsSupportId(peer.Host)
+            ? new(peer.Host, peer.Port) : null;
+        internal FleetDevice Observe(Peer peer) => this with { Peer = peer, DirectAddress = AddressOf(peer) ?? KnownDirectAddress };
+        internal bool NeedsDirectUpdate(string controllerSha256, DirectEndpoint? wan) => PairingExchange.ValidHash(Peer.Fingerprint)
+            && (KnownDirectAddress != null || wan != null) && !Safety.Equal(VerifiedUpdateSha256, controllerSha256);
+        internal Peer DirectPeer => KnownDirectAddress is { } address ? Peer with { Host = address.Host, Port = address.Port } : Peer;
+    }
     private readonly Dictionary<string, FleetDevice> fleet = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, UpdateProgressTracker> fleetProgress = new(StringComparer.OrdinalIgnoreCase);
     private readonly Forms.Button updateAllDevices = Button(() => UiText.UpdateAllDevices, "updateAllDevices", 178, primary: true);
@@ -32,6 +43,7 @@ public sealed partial class MainForm
         }
         catch (Exception ex) when (ex is IOException or System.Security.Cryptography.CryptographicException or JsonException) { }
         LoadUpdateTimings();
+        directUpdateTimer.Tick += async (_, _) => await RunDirectUpdatesAsync();
         updateAllDevices.Click += async (_, _) =>
         {
             try { if (FleetBusy) fleetLifetime?.Cancel(); else await UpdateAllDevicesAsync(); }
@@ -52,7 +64,7 @@ public sealed partial class MainForm
             string key = DeviceKey(peer);
             string state = isUpdateAdmin ? "checking" : "unknown";
             fleet[key] = fleet.TryGetValue(key, out var previous)
-                ? previous with { Peer = peer, Online = true, State = state, Detail = "" }
+                ? previous.Observe(peer) with { Online = true, State = state, Detail = "" }
                 : new(peer, Online: true, State: state);
         }
     }
@@ -78,6 +90,7 @@ public sealed partial class MainForm
     {
         Vault.Save(Path.Combine(root, "devices.dpapi"), JsonSerializer.SerializeToUtf8Bytes(fleet.Values, Json.Options));
         SaveUpdateTimings();
+        ScheduleDirectUpdates();
     }
 
     private string FleetState(FleetDevice device) => device.State switch
@@ -107,29 +120,34 @@ public sealed partial class MainForm
         }));
     }
 
-    private async Task RefreshFleetVersionsAsync(CancellationToken ct)
+    private async Task RefreshFleetVersionsAsync(CancellationToken ct, FleetDevice[]? directTargets = null)
     {
         if (!PrivateInternet || !isUpdateAdmin || FleetBusy || fleetRefreshing) return;
         fleetRefreshing = true;
-        foreach (var device in fleet.Values.Where(device => device.Online).ToArray())
+        var targets = directTargets ?? fleet.Values.Where(device => device.Online).ToArray();
+        foreach (var device in targets)
             RecordDevice(device with { State = "checking", Percent = 0, Detail = "" });
         RefreshControllerControls();
         try
         {
             var controller = await (controllerSnapshot ??= SupportPlatform.GetCurrentVersionAsync(CancellationToken.None)).WaitAsync(ct);
-            await RunFleetOperationsAsync(fleet.Values.Where(d => d.Online).ToArray(), async device =>
+            await RunFleetOperationsAsync(targets, async device =>
             {
                 ct.ThrowIfCancellationRequested();
                 try
                 {
+                    if (directTargets != null && IsActiveDevice(device.Peer))
+                    { RecordDevice(device with { State = "busy" }); return; }
                     JsonElement snapshot;
                     bool busy = false;
                     if (IsActiveDevice(device.Peer)) snapshot = RemoteClient.Require(await client!.CallAsync("update.snapshot", new { versionOnly = true }, ct: ct, seconds: 15));
                     else
                     {
                         // Older clients ignore this optional flag and return their full snapshot.
-                        var inspected = await RemoteClient.ForDiscoveredPeer(device.Peer, root).AdminRequestAsync("admin.inspect", ct, new { versionOnly = true });
+                        var inspected = await RemoteClient.ForDiscoveredPeer(directTargets != null ? device.DirectPeer : device.Peer, root,
+                            directOnly: directTargets != null).AdminRequestAsync("admin.inspect", ct, new { versionOnly = true });
                         snapshot = inspected.GetProperty("snapshot"); busy = inspected.GetProperty("busy").GetBoolean();
+                        if (directTargets != null && inspected.TryGetProperty("updating", out var updating)) busy |= updating.GetBoolean();
                     }
                     var remote = snapshot.GetProperty("agent").Deserialize<ExecutableSnapshot>(Json.Options)!;
                     remote.Validate();
@@ -143,7 +161,8 @@ public sealed partial class MainForm
                     RememberWakeAdapter(device.Peer, snapshot);
                     int comparison = UpdatePolicy.ReleaseVersion(remote.FileVersion).CompareTo(UpdatePolicy.ReleaseVersion(controller.FileVersion));
                     string state = comparison > 0 ? "newer" : busy ? "busy" : Safety.Equal(remote.Sha256, controller.Sha256) ? "current" : comparison < 0 ? "available" : "conflict";
-                    RecordDevice(device with { Version = remote.FileVersion ?? "", Sha256 = remote.Sha256, State = state });
+                    RecordDevice(device with { Version = remote.FileVersion ?? "", Sha256 = remote.Sha256, State = state, Online = true,
+                        VerifiedUpdateSha256 = comparison == 0 && Safety.Equal(remote.Sha256, controller.Sha256) ? remote.Sha256 : "" });
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
                 catch (RemoteOperationException ex) when (ex.Code is "access_denied" or "unknown_operation")
@@ -156,23 +175,25 @@ public sealed partial class MainForm
         {
             foreach (var device in fleet.Values.Where(d => d.State == "checking").ToArray())
                 RecordDevice(device with { State = "failed" });
-            fleetRefreshing = false; RefreshControllerControls();
+            fleetRefreshing = false; RefreshControllerControls(); ScheduleDirectUpdates();
         }
     }
 
-    private async Task UpdateAllDevicesAsync()
+    private async Task UpdateAllDevicesAsync(FleetDevice[]? directTargets = null)
     {
         if (!PrivateInternet || !isUpdateAdmin || FleetBusy || fleetRefreshing || pairingBusy || clientUpdateBusy || terminating || action != null) return;
-        if (NewerDeviceKnown)
+        if (directTargets == null && NewerDeviceKnown)
         { discoveryState.SetText(() => UiText.UpdateControllerFirst); return; }
-        var targets = fleet.Values.Where(d => d.Online && d.State is "available" or "legacy" or "failed").ToArray();
+        var targets = directTargets == null ? fleet.Values.Where(d => d.Online && d.State is "available" or "legacy" or "failed").ToArray()
+            : directTargets.Where(d => d.Online && d.State == "available" && !IsActiveDevice(d.Peer)).ToArray();
         if (targets.Length == 0) return;
-        if (!supportSession && (selectedPeer == null || !targets.Any(d => DeviceKey(d.Peer) == DeviceKey(selectedPeer))))
+        if (directTargets == null && !supportSession && (selectedPeer == null || !targets.Any(d => DeviceKey(d.Peer) == DeviceKey(selectedPeer))))
         {
             var first = peers.Items.Cast<Forms.ListViewItem>().FirstOrDefault(item => item.Tag is Peer peer && DeviceKey(peer) == DeviceKey(targets[0].Peer));
             if (first != null) { peers.SelectedIndices.Clear(); first.Selected = true; SelectPeerFromList(); }
         }
-        using var lifetime = new CancellationTokenSource(); fleetLifetime = lifetime;
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(directTargets != null ? directUpdateLifetime!.Token : CancellationToken.None);
+        fleetLifetime = lifetime;
         foreach (var device in targets) RecordDevice(device with { State = "hashing", Detail = "", Percent = 0 });
         discoveryState.SetText(() => UiText.PreparingUpdate);
         RefreshControllerControls();
@@ -186,9 +207,9 @@ public sealed partial class MainForm
             discoveryState.SetText(() => UiText.UpdatingDevice);
             await RunFleetOperationsAsync(targets, async initial =>
             {
-                if (NewerDeviceKnown) return;
+                if (directTargets == null && NewerDeviceKnown) return;
                 var device = initial with { State = "preparing", Detail = "", Percent = 0 }; RecordDevice(device);
-                var target = RemoteClient.ForDiscoveredPeer(device.Peer, root);
+                var target = RemoteClient.ForDiscoveredPeer(directTargets != null ? device.DirectPeer : device.Peer, root, directOnly: directTargets != null);
                 bool acquired = false;
                 bool updated = false;
                 try
@@ -237,7 +258,8 @@ public sealed partial class MainForm
                         try { await target.ReleaseUpdateAsync(release.Token); }
                         catch { try { await target.DisconnectAsync(release.Token); } catch { } }
                     }
-                    if (updated) RecordDevice(device with { Version = controller.FileVersion ?? "", Sha256 = controller.Sha256, State = "current", Percent = 100, Detail = "" });
+                    if (updated) RecordDevice(device with { Version = controller.FileVersion ?? "", Sha256 = controller.Sha256,
+                        VerifiedUpdateSha256 = controller.Sha256, State = "current", Percent = 100, Detail = "" });
                     SaveFleet();
                 }
             }, lifetime.Token);
@@ -249,7 +271,7 @@ public sealed partial class MainForm
                 RecordDevice(device with { State = "failed", Detail = lifetime.IsCancellationRequested ? UiText.TransferPaused :
                     NewerDeviceKnown ? UiText.UpdateControllerFirst : UiText.UpdateIncomplete });
             fleetLifetime = null;
-            if (!IsDisposed) { RefreshControllerControls(); discoveryState.SetText(() => UiText.UpdateBatchFinished); }
+            if (!IsDisposed) { RefreshControllerControls(); discoveryState.SetText(() => UiText.UpdateBatchFinished); ScheduleDirectUpdates(); }
         }
     }
 

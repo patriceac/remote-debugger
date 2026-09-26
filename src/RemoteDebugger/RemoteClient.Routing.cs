@@ -14,10 +14,14 @@ public sealed partial class RemoteClient
     private int observedNetworkVersion;
     private static int networkVersion;
     public string ActiveRoute { get; private set; } = "";
+    internal bool DirectOnly { get; init; }
 
-    internal static RemoteClient ForDiscoveredPeer(Peer peer, string root) => new(InternetSettings.Target(peer, root))
+    internal static RemoteClient ForDiscoveredPeer(Peer peer, string root, bool directOnly = false) => new(
+        directOnly ? InternetSettings.Target(peer, root) with { WanEndpoint = DeviceWanAddress.Load(root, peer.Fingerprint) }
+            : InternetSettings.Target(peer, root))
     {
         AdminRoot = root,
+        DirectOnly = directOnly,
         // The fleet just ran LAN/relay discovery; do not repeat it for every PC.
         nextRouteProbe = DateTimeOffset.UtcNow.AddMinutes(1),
         observedNetworkVersion = Volatile.Read(ref networkVersion)
@@ -62,6 +66,29 @@ public sealed partial class RemoteClient
     private async Task<Stream> OpenTransportAsync(CancellationToken ct, Action<string>? selectedRoute)
     {
         RequireController();
+        if (DirectOnly)
+        {
+            var directRoute = Connection;
+            var first = directRoute.DirectHost.Length > 0 ? new DirectEndpoint(directRoute.DirectHost, directRoute.DirectPort)
+                : directRoute.RelayUrl.Length == 0 && !InternetSettings.IsSupportId(directRoute.Host) ? new DirectEndpoint(directRoute.Host, directRoute.Port) : null;
+            Exception? lastError = null;
+            foreach (var endpoint in new[] { first, directRoute.WanEndpoint }.OfType<DirectEndpoint>().Distinct())
+            {
+                using var attempt = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                attempt.CancelAfter(TimeSpan.FromSeconds(2));
+                try
+                {
+                    var stream = await transportFactory(directRoute with { Host = endpoint.Host, Port = endpoint.Port,
+                        RelayUrl = "", RelayAccessKey = "", DirectHost = "", DirectPort = 0 }, attempt.Token).ConfigureAwait(false);
+                    ActiveRoute = IsLanAddress(endpoint.Host) ? "Direct LAN" : "Direct WAN";
+                    selectedRoute?.Invoke(ActiveRoute);
+                    return stream;
+                }
+                catch (Exception ex) when (!ct.IsCancellationRequested) { lastError = ex; }
+            }
+            ct.ThrowIfCancellationRequested();
+            throw new IOException("No direct LAN/WAN route is available. The automatic update will retry later.", lastError);
+        }
         if (discoverRoutes) await RefreshRoutesIfNeededAsync(ct).ConfigureAwait(false);
         var route = Connection;
         if (route.RelayUrl.Length > 0)
@@ -92,6 +119,7 @@ public sealed partial class RemoteClient
 
     private async Task RefreshRoutesIfNeededAsync(CancellationToken ct)
     {
+        if (DirectOnly) return;
         if (DateTimeOffset.UtcNow < nextRouteProbe && observedNetworkVersion == Volatile.Read(ref networkVersion)) return;
         if (!await routeProbe.WaitAsync(0, ct).ConfigureAwait(false)) return;
         try

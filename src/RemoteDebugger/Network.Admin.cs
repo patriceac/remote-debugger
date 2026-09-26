@@ -36,6 +36,7 @@ public sealed partial class AgentServer
                 {
                     snapshot = await updates.SnapshotAsync(ct, request.Args.TryGetProperty("versionOnly", out var versionOnly) && versionOnly.ValueKind == JsonValueKind.True),
                     busy = Session.HasPaired && !updateOnly,
+                    updating = Session.HasPaired && updateOnly || updates.PendingExitPlan != null,
                     fingerprint = Fingerprint, computer = Environment.MachineName
                 }), ct);
                 return;
