@@ -11,6 +11,8 @@ internal sealed class RemoteKeyboardCapture(Func<bool> canCapture, Action<object
     private readonly HashSet<int> swallowed = [];
     private readonly HashSet<int> held = [];
     private readonly HashSet<int> pressed = [];
+    private readonly HashSet<int> textKeys = [];
+    private readonly KeyboardTextTranslator text = new();
     private readonly Forms.Timer keepAlive = new() { Interval = 750 };
     private HookProc? callback;
     private IntPtr hook;
@@ -31,7 +33,8 @@ internal sealed class RemoteKeyboardCapture(Func<bool> canCapture, Action<object
         bool capture = hook != IntPtr.Zero && canCapture();
         if (capture == active) return;
         active = capture;
-        if (!active) { held.Clear(); release(); return; }
+        if (!active) { held.Clear(); textKeys.Clear(); text.Reset(); release(); return; }
+        text.Begin();
         // A modifier may already be held when the user clicks into the viewer.
         foreach (int vk in new[] { 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0x5B, 0x5C })
             if ((GetAsyncKeyState(vk) & 0x8000) != 0 && !swallowed.Contains(vk))
@@ -42,7 +45,7 @@ internal sealed class RemoteKeyboardCapture(Func<bool> canCapture, Action<object
             }
     }
 
-    public void Reset() { active = false; held.Clear(); }
+    public void Reset() { active = false; held.Clear(); textKeys.Clear(); text.Reset(); }
 
     internal static bool IsReleaseShortcut(int vk, IEnumerable<int> keys) => vk == 0x7B &&
         keys.Any(k => k is 0x11 or 0xA2 or 0xA3) &&
@@ -71,10 +74,22 @@ internal sealed class RemoteKeyboardCapture(Func<bool> canCapture, Action<object
                 if (down)
                 {
                     swallowed.Add(vk); suppress = true;
-                    held.Add(vk);
+                    bool repeat = !held.Add(vk);
+                    string? characters = !repeat || textKeys.Contains(vk) ? text.Translate(vk, key.ScanCode, pressed, repeat) : null;
+                    if (characters != null)
+                    {
+                        textKeys.Add(vk);
+                        if (characters.Length > 0) send(new { kind = "text", text = characters });
+                    }
+                    if (textKeys.Contains(vk)) return (IntPtr)1;
                 }
-                else held.Remove(vk);
-                send(new { kind = down ? "keyDown" : "keyUp", virtualKey = vk, scanCode = key.ScanCode, extended = (key.Flags & 1) != 0 });
+                else
+                {
+                    held.Remove(vk);
+                    if (textKeys.Remove(vk)) { swallowed.Remove(vk); return (IntPtr)1; }
+                }
+                // Shortcuts use the local logical key, not its layout-dependent physical position.
+                send(new { kind = down ? "keyDown" : "keyUp", virtualKey = vk, extended = (key.Flags & 1) != 0 });
             }
         }
         catch { Reset(); release(); }
