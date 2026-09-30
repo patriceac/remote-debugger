@@ -1,6 +1,6 @@
 # Validation record
 
-## 0.6.1 - upgrade connection reset (native rerun pending)
+## 0.6.1 - automatic service upgrade
 
 September 30, 2026: the real 0.5.40 source at `0f1133f` was rebuilt with
 the disposable acceptance authority, without overriding its version. In the
@@ -18,20 +18,61 @@ both VMs ended Off with deleted payload children and successful network cleanup.
 
 Commit `9732537` fixes this by discarding cached maintenance and input connections
 after service replacement and preparing fresh connections before reporting ready.
-Luna Max passed 35 distinct focused checks (12 provisioning, 22 input/platform,
-and the production-authority guard). A first version of the new regression had
-an invalid exception expectation for an unconnected pipe; its corrected assertion
-passed. The production 0.6.1 Release was built from that clean commit with SHA-256
+Luna Max passed 36 distinct focused checks (12 provisioning, 22 input/platform,
+the production-authority guard and remembered private-profile reimport). A first
+version of the new regression had an invalid exception expectation for an
+unconnected pipe; its corrected assertion passed. The production 0.6.1 Release
+was built from that clean commit with SHA-256
 `22A23D694EC5BAF1CDF390EFB7CE980FD3856D8D1A04D848C69338366C124DD8`.
 
 The corrected acceptance payload is `artifacts/service-upgrade-2`, current SHA-256
 `EBE4EB64C788F40D425658DF4C8E1096B19BE5A7BF3A3272C972794DBF833DA6` and old SHA-256
 `BF5D4C34BF4386574203ADFF8C3433AEB67A0033CE772789D50298C3A1B7AD7E`.
-Its rerun group `77347bc54d714e4d96bc8b60d2d8e73f` was queued but never launched:
-the SYSTEM harness broker crashed reading its group journal. Cancellation was
-requested through the canonical client. Full 0.5.40-to-0.6.1 upgrade acceptance
-is pending, not passed. This tests automatic fleet updates on an isolated LAN,
-not replay of the production installer or an upgrade on a real agent computer.
+Its first rerun group `77347bc54d714e4d96bc8b60d2d8e73f` never launched because the
+SYSTEM harness broker crashed reading its group journal. After a verified restart
+of the existing broker task, both requests became terminal queue timeouts with
+`TestEvaluated=false` and `VmFinalState=NotStarted`. No product run was replayed.
+
+Fresh controller request `executable-test-20260930T171854330Z-243ec6e4` and agent
+request `executable-test-20260930T171854264Z-b7e64c31` passed every product assertion.
+The automatic upgrade took 55.61 seconds and verified both 0.6.1 application and
+service hashes, Automatic/Running service startup, all five retained data hashes,
+the unchanged computer identity and the same medium-integrity, agent-only user.
+No agent-side setup, passphrase or UAC action was used during the update.
+
+The first elevated reboot command then succeeded. Windows independently attested
+the automatic LocalSystem service and its signed-out console worker. The broker
+recorded a new boot, 91.172 seconds signed out, one manual sign-in and no application
+action replay. Visual review confirmed the real clock/password screens and masked
+test input. The same authenticated connection returned to the unelevated user app
+and passed desktop text-input readback without re-pairing. A transient reconnect
+error resolved; the follow-up phase includes fixture startup, so this is not a
+zero-interruption or handoff-latency benchmark.
+
+Controller cleanup passed with VM Off, payload child deleted, process cleanup
+verified and network adapters disconnected. The agent's guest assertions and
+process/network cleanup passed, but its initial broker receipt remains
+`HarnessCleanup`: Hyper-V refused the first VM stop and payload-child cleanup.
+The broker subsequently recycled that worker to a clean Ready state. The separate
+`cleanup-recovery.json` receipt at 17:52:01 UTC confirms VM Off, child detached and
+deleted, and payload lease deleted. Its original-result SHA-256 binding was checked;
+the original failure remains unchanged rather than becoming an unconditional
+harness pass. The final broker audit found all four workers Off, no active or queued
+requests, no test payload-child/lease/request/processing residue and healthy platform
+status.
+
+The final signed private installer has SHA-256
+`9C567320CE3A2F9B2F92054ED61E182872EDD1FFD3B81EFDCA059844714C353C`;
+the copy in `C:\Users\patri\My Drive\Dev` matches. Exact-package fresh-install
+request `executable-test-20260930T173637719Z-08a07dc3` passed all five checks, including
+installer exit zero, exact installed Release and original-user integration,
+encrypted setup remaining locked, and the visible first-launch passphrase prompt.
+Broker and guest results passed; the VM ended Off with deleted payload child,
+verified process cleanup and all network adapters disconnected.
+The application and installer retain the enrolled local publisher; its root is
+not publicly trusted. The migration proof uses an isolated LAN and disposable
+controller authority, not real-agent deployment or in-place production-installer
+replay. Relay-only computers retain the existing manual-update workflow.
 
 ## 0.6.0 - support before Windows sign-in
 
