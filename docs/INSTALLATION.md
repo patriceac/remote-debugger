@@ -108,9 +108,18 @@ replacement after a remote application update is deferred until the interactive
 agent returns; compatible unattended support remains available meanwhile.
 
 Receiving credentials are encrypted for SYSTEM in a protected ProgramData directory;
-controller private keys are never copied there. Install the current setup to upgrade
-the Windows service, then launch the app once to synchronize the unlocked setup and
-receiving preference. Uninstall removes the service and its protected state.
+controller private keys are never copied there. On already-provisioned 0.5.40 agents,
+the normal signed application update also refreshes the service and synchronizes the
+unlocked setup automatically. It preserves the computer identity, remembered private
+access, settings and original user's unelevated tray application, without another
+agent-side setup, passphrase or UAC prompt. Expect a brief reconnect during replacement.
+
+Install the new release on the controller first. Its existing automatic updater handles
+known direct LAN/WAN agents when they are available and no support session is active.
+Relay-only agents retain the existing connection/manual-update workflow; they are not
+automatically updated through relay. Fresh or unprovisioned agents still require initial
+administrator-approved setup and private-profile unlock. Uninstall removes the service
+and its protected state.
 
 Remote Debugger runs the visible support agent in the signed-in user's desktop.
 Silent administrator maintenance and protected executable replacement use a
