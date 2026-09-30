@@ -121,10 +121,29 @@ public static class Native
     private static readonly Dictionary<ushort, KEY> HeldKeys = new();
     private static readonly HashSet<string> HeldButtons = new();
     private static DateTime lastInput = DateTime.UtcNow;
-    private static readonly System.Threading.Timer InputWatchdog = new(_ => { lock (InputLock) if ((HeldKeys.Count > 0 || HeldButtons.Count > 0 || SharedMouse.Dragging) && DateTime.UtcNow - lastInput > TimeSpan.FromSeconds(3)) ReleaseAllInput(); }, null, 1000, 1000);
+    private static readonly System.Threading.Timer InputWatchdog = new(_ => CheckInputWatchdog(), null, 1000, 1000);
+    private static void CheckInputWatchdog()
+    {
+        if (SignedOutDesktop.NeedsDispatch)
+        {
+            try { SignedOutDesktop.Invoke(() => { CheckInputWatchdog(); return true; }); }
+            catch { }
+            return;
+        }
+        lock (InputLock)
+            if ((HeldKeys.Count > 0 || HeldButtons.Count > 0 || SharedMouse.Dragging) && DateTime.UtcNow - lastInput > TimeSpan.FromSeconds(3)) ReleaseAllInput();
+    }
     internal static object HandleSharedInput(JsonElement a)
     {
+        if (SignedOutDesktop.NeedsDispatch) return SignedOutDesktop.Invoke(() => HandleSharedInput(a));
         string kind = a.Str("kind");
+        if (UnattendedSupport.IsWorker)
+        {
+            // The sign-in desktop has one Windows pointer and no user overlays.
+            if (kind is not ("pointer" or "pointerLeave")) HandleInput(a);
+            var pointer = SignedOutDesktop.Pointer();
+            return new SharedPointerReply(true, true, new(pointer.X, pointer.Y, Environment.MachineName, true, 0, 0));
+        }
         if (kind is "pointer" or "pointerLeave" || a.TryGetProperty("sharedPointer", out var shared) && shared.ValueKind == JsonValueKind.True && kind is "move" or "down" or "up" or "wheel")
         {
             lock (InputLock)
@@ -187,6 +206,12 @@ public static class Native
     }
     public static void ReleaseAllInput(bool requireSuccess = false)
     {
+        if (SignedOutDesktop.NeedsDispatch)
+        {
+            try { SignedOutDesktop.Invoke(() => { ReleaseAllInput(requireSuccess); return true; }); }
+            catch when (!requireSuccess) { }
+            return;
+        }
         lock (InputLock)
         {
             SharedMouse.Release();

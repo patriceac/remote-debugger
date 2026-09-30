@@ -19,6 +19,46 @@ internal static class InteractiveProcessLauncher
     internal static int StartInputHelper(int sessionId, string expectedUserSid, string pipeName) =>
         StartCore(sessionId, expectedUserSid, SupportPlatformPaths.ServiceExecutable, ["--input-helper", pipeName], SupportPlatformPaths.InstallDirectory, true);
 
+    internal static (int Id, string? UserSid) ConsoleSession()
+    {
+        uint session = WTSGetActiveConsoleSessionId();
+        if (session == uint.MaxValue || session == 0) return (0, null);
+        if (!WTSQueryUserToken(session, out var token))
+        {
+            int error = Marshal.GetLastWin32Error();
+            if (error == 1008) return (checked((int)session), null); // ERROR_NO_TOKEN at the sign-in screen.
+            throw new Win32Exception(error, "Cannot determine the console user.");
+        }
+        using (token)
+        using (var identity = new WindowsIdentity(token.DangerousGetHandle()))
+            return (checked((int)session), identity.User?.Value ?? throw new UnauthorizedAccessException("Console user identity unavailable."));
+    }
+
+    internal static int StartUnattendedAgent(int sessionId, IReadOnlyList<string> arguments)
+    {
+        using var identity = WindowsIdentity.GetCurrent();
+        if (!identity.IsSystem || sessionId <= 0) throw new UnauthorizedAccessException("Only the support service can start the signed-out agent.");
+        if (!DuplicateTokenEx(identity.AccessToken, TokenAllAccess, IntPtr.Zero, SecurityImpersonation, TokenPrimary, out var token))
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        using (token)
+        {
+            if (!SetTokenInformation(token, 12, ref sessionId, sizeof(int))) throw new Win32Exception(Marshal.GetLastWin32Error());
+            if (!CreateEnvironmentBlock(out IntPtr environment, token, false)) throw new Win32Exception(Marshal.GetLastWin32Error());
+            try
+            {
+                var startup = new StartupInfo { Size = Marshal.SizeOf<StartupInfo>(), Desktop = "winsta0\\default" };
+                string executable = SupportPlatformPaths.ApplicationExecutable;
+                var command = new StringBuilder(string.Join(" ", new[] { Quote(executable) }.Concat(arguments.Select(Quote))));
+                if (!CreateProcessAsUser(token, executable, command, IntPtr.Zero, IntPtr.Zero, false, CreateUnicodeEnvironment,
+                    environment, SupportPlatformPaths.ProductDirectory, ref startup, out var process))
+                    throw new Win32Exception(Marshal.GetLastWin32Error(), "Cannot start the signed-out desktop agent.");
+                try { return checked((int)process.ProcessId); }
+                finally { CloseHandle(process.Thread); CloseHandle(process.Process); }
+            }
+            finally { DestroyEnvironmentBlock(environment); }
+        }
+    }
+
     private static int StartCore(int sessionId, string expectedUserSid, string executable, IReadOnlyList<string> arguments, string workingDirectory, bool inputHelper)
     {
         if (sessionId <= 0) throw new ArgumentException("An interactive session is required.");
@@ -102,6 +142,9 @@ internal static class InteractiveProcessLauncher
 
     [DllImport("wtsapi32.dll", SetLastError = true)]
     private static extern bool WTSQueryUserToken(uint sessionId, out SafeAccessTokenHandle token);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint WTSGetActiveConsoleSessionId();
 
     [DllImport("advapi32.dll", SetLastError = true)]
     private static extern bool DuplicateTokenEx(SafeAccessTokenHandle existing, uint desiredAccess, IntPtr attributes, int impersonationLevel, int tokenType, out SafeAccessTokenHandle token);

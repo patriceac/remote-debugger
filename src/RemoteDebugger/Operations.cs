@@ -69,7 +69,7 @@ public sealed partial class Operations
             case "shell.dropTarget": case "shell.selection": case "shell.positionDesktop": case "files.manifest": case "files.conflicts": case "files.createDirectories": return await FileDropAsync(op, a, ct);
             case "wake.info": return new { wakeAdapters = WakeOnLan.GetAdapters() };
             case "wake": return await WakeOnLan.SendAsync(a.Str("macAddress"), a.Str("destination"), a.Int("port", 9), ct);
-            case "status": return new { machine = Environment.MachineName, user = Environment.UserName, version = Version, os = Environment.OSVersion.VersionString, workspace = Workspace, elevated = Native.IsElevated(), processId = Environment.ProcessId, agentBinarySha256 = ExecutableIdentity.Sha256 };
+            case "status": return new { machine = Environment.MachineName, user = Environment.UserName, version = Version, os = Environment.OSVersion.VersionString, workspace = Workspace, elevated = Native.IsElevated(), processId = Environment.ProcessId, sessionId = Process.GetCurrentProcess().SessionId, signedOut = UnattendedSupport.IsWorker, agentBinarySha256 = ExecutableIdentity.Sha256 };
             case "history": lock (historyLock) return File.Exists(Path.Combine(Root, "history.jsonl")) ? File.ReadLines(Path.Combine(Root, "history.jsonl")).TakeLast(200).Select(x => JsonSerializer.Deserialize<JsonElement>(x)).ToArray() : [];
             case "upload.begin": case "upload.chunk": case "upload.commit": case "upload.status": case "upload.abort":
                 var transferLock = transferLocks[(int)((uint)StringComparer.Ordinal.GetHashCode(a.Str("transfer")) % 32)];
@@ -111,6 +111,8 @@ public sealed partial class Operations
             case "ui.key": Native.Key(a.Int("pid"), a.Str("key")); return new { sent = true };
             case "ui.mouse": Native.Mouse(a.Int("pid"), a.Int("x"), a.Int("y")); return new { clicked = true };
             case "ui.input":
+                if (UnattendedSupport.IsWorker && a.Str("kind") == "secureAttention")
+                    return await SupportPlatform.BrokerCallAsync("unattended.secureAttention", new { }, ct);
                 if (a.Str("kind") == "batch")
                 {
                     var events = a.GetProperty("events");
@@ -142,7 +144,13 @@ public sealed partial class Operations
             case "maintenance.elevated":
                 if (!Maintenance.Enabled) throw new InvalidOperationException(MaintenanceSession.DisabledMessage);
                 return await Maintenance.RunAsync(a.Str("file"), a.Strings("arguments"), ct);
-            case "platform.ensureCurrent": return await SupportPlatform.EnsureCurrentServiceAsync(Maintenance, ct);
+            case "platform.ensureCurrent":
+                // The supervisor cannot replace itself while it owns this worker.
+                // Its compatible broker remains usable until the desktop returns.
+                if (UnattendedSupport.IsWorker) return await SupportPlatform.GetStatusAsync(ct);
+                var platform = await SupportPlatform.EnsureCurrentServiceAsync(Maintenance, ct);
+                if (platform.Available) await UnattendedSupport.ConfigureAsync(Root, Maintenance.Enabled, ct);
+                return platform;
             case "system": return await Resources.SystemAsync(ct);
             case "network": return await PowerShellAsync("[pscustomobject]@{Adapters=@(Get-NetIPConfiguration | Select-Object InterfaceAlias,IPv4Address,IPv4DefaultGateway,DNSServer);Statistics=@(Get-NetAdapterStatistics | Select-Object Name,ReceivedBytes,SentBytes)} | ConvertTo-Json -Depth 5 -Compress", ct);
             case "services": return await PowerShellAsync("Get-Service | Select-Object Name,DisplayName,Status,StartType | ConvertTo-Json -Compress", ct);

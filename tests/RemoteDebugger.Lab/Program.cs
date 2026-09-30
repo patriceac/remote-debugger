@@ -149,6 +149,8 @@ internal sealed partial class LabForm : Forms.Form
                 if (role == "workflowagent") await WorkflowAgentAsync();
                 else if (role == "workflowcontroller") await WorkflowControllerAsync();
                 else if (role == "poweragent") await PowerAgentAsync(0, auxiliaryPath);
+                else if (role == "poweragent-unattended") await PowerAgentAsync(0, auxiliaryPath, unattended: true);
+                else if (role == "powercontroller-unattended") await UnattendedControllerAsync();
                 else if (role == "powerafterfirst") await PowerAgentAsync(1, auxiliaryPath);
                 else if (role == "poweraftersecond") await PowerAgentAsync(2, auxiliaryPath);
                 else if (role == "powercontroller-once") await PowerControllerAsync("once", PowerCredentialFixture.Read(auxiliaryPath));
@@ -178,8 +180,8 @@ internal sealed partial class LabForm : Forms.Form
             {
                 Record("lab.fatal", "The acceptance Lab completed without hiding an exception", "fail", true, new { error = ex.ToString() });
                 await FinishAsync(ex.ToString());
-                if (role is "poweragent" or "powerafterfirst")
-                    await FinishAsync(ex.ToString(), role == "poweragent" ? "power-before-boot-1.json" : "power-before-boot-2.json");
+                if (role is "poweragent" or "poweragent-unattended" or "powerafterfirst")
+                    await FinishAsync(ex.ToString(), role.StartsWith("poweragent", StringComparison.Ordinal) ? "power-before-boot-1.json" : "power-before-boot-2.json");
             }
         };
         FormClosed += (_, _) =>

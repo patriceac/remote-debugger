@@ -1,5 +1,30 @@
 # Validation record
 
+## 0.6.0 - support before Windows sign-in
+
+September 30, 2026: Luna Max passed 39 focused Release checks, including
+supervised-process identity, private enrollment, disabled receiving, existing
+input/startup behavior and rejection of the disposable authority by production.
+
+The two-VM unattended acceptance used a disposable controller authority and signed
+application SHA-256 `A01EFFEE1FCB692793006DA5D65E9C11CD3B172B21A794C1E0545C96E3314343`.
+Controller request `executable-test-20260930T134807956Z-d3f78196` passed the complete
+journey: normal unelevated input, real reboot, automatic LocalSystem service,
+independently checked SYSTEM worker in console session 1, sign-in capture/input,
+then the same authenticated connection returning to the unelevated user app.
+The broker proved a new boot, 92.54 seconds without a signed-in user, one manual
+sign-in, and one original application launch without replay.
+
+Visual inspection confirmed the clock screen, the actual password-entry screen
+after Enter, and masked dummy input. The test cleared that input without submitting
+it. Held-key timeout recovery and normal desktop text entry also passed.
+Both broker and guest results passed. Both VMs finished Off with deleted payload
+children, verified process cleanup, detached test networks and no evidence warnings.
+
+This is isolated-LAN/provisioned-executable evidence, not a WAN benchmark or an
+installer replay. Simultaneous sign-in during binary replacement was not exercised.
+The production package uses the normal authority, not the acceptance fixture.
+
 ## 0.5.3 — GPU startup fallback
 
 September 22, 2026: clean Release source `b7eb539` has SHA-256

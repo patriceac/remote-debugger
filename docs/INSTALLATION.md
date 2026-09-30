@@ -78,9 +78,39 @@ The 0.4.13 broker adds a signed input helper in the authorized interactive sessi
 for elevated windows such as Task Manager. From 0.5.5, the agent prepares it at startup
 while receiving support is enabled and keeps it ready until disabled or quit.
 Each remote input request still requires an authorized support session. Secure Windows desktops
-remain unavailable and report an input permission error. An agent-only update
+inside a signed-in user session remain unavailable and report an input permission error. An agent-only update
 does not replace a pre-0.4.13 broker: run the current installer once on those agents
 to enable the new capability. Normal desktop input remains available meanwhile.
+
+## Support before Windows sign-in
+
+From 0.6.0, `RemoteDebuggerSupport` starts automatically with Windows and remains
+running after sign-out. After the private setup has been unlocked once and receiving
+support is enabled, it starts a protected SYSTEM agent in the signed-out console
+session. The existing enrolled-controller authentication and computer certificate
+protect screen viewing, keyboard/mouse input, files, diagnostics and signed updates.
+The Windows sign-in screen can be controlled remotely; Windows credentials are
+entered into Windows normally and are not saved by this feature.
+
+At sign-in, the background agent releases its listener and the service starts the
+original tray application as the registered user. Its workspace, settings and shared
+mouse behavior are retained. An active sign-in-screen connection is handed over once,
+with a bounded grant tied to the same computer certificate and executable. An
+ordinary launch still requires normal pairing. Signing out or rebooting requires
+connecting again with the existing private setup. The public six-digit-code mode
+remains interactive, since nobody can share a new code before signing in.
+
+The controller's receiving-support setting applies to both states. Quitting the tray
+application still exits it for the current signed-in session. The service only starts
+the background agent while the console has no signed-in user. Locked or elevated
+desktops inside an existing user session retain their current behavior. Broker
+replacement after a remote application update is deferred until the interactive
+agent returns; compatible unattended support remains available meanwhile.
+
+Receiving credentials are encrypted for SYSTEM in a protected ProgramData directory;
+controller private keys are never copied there. Install the current setup to upgrade
+the Windows service, then launch the app once to synchronize the unlocked setup and
+receiving preference. Uninstall removes the service and its protected state.
 
 Remote Debugger runs the visible support agent in the signed-in user's desktop.
 Silent administrator maintenance and protected executable replacement use a

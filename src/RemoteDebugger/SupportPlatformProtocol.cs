@@ -124,10 +124,12 @@ internal static class SupportPipeIdentity
     [DllImport("kernel32.dll", SetLastError = true)]
     internal static extern bool GetNamedPipeClientProcessId(SafePipeHandle pipe, out uint pid);
 
-    public static VerifiedProcessIdentity VerifyClient(NamedPipeServerStream pipe, SupportConfiguration configuration)
+    public static VerifiedProcessIdentity VerifyClient(NamedPipeServerStream pipe, SupportConfiguration configuration,
+        Func<VerifiedProcessIdentity, bool>? supervisedWorker = null)
     {
         if (!GetNamedPipeClientProcessId(pipe.SafePipeHandle, out uint pid)) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
         var identity = ProcessIdentity.Capture(checked((int)pid));
+        if (supervisedWorker?.Invoke(identity) == true) return identity;
         if (identity.SessionId <= 0 ||
             !string.Equals(identity.UserSid, configuration.RegisteredUserSid, StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(Path.GetFullPath(identity.ExecutablePath), Path.GetFullPath(configuration.RegisteredApplicationPath), StringComparison.OrdinalIgnoreCase))

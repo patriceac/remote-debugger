@@ -30,10 +30,7 @@ internal static class SupportService
         protected override void OnStart(string[] args)
         {
             lifetime = new CancellationTokenSource();
-            host = new SupportBrokerHost(lifetime.Token, () =>
-            {
-                try { Stop(); } catch (InvalidOperationException) { }
-            });
+            host = new SupportBrokerHost(lifetime.Token);
             host.Start();
         }
 
@@ -57,24 +54,24 @@ internal sealed class SupportBrokerHost : IDisposable
     private readonly SupportConfiguration configuration;
     private readonly PrivilegedUpdateManager updates;
     private readonly PrivilegedPowerManager power;
-    private readonly Action requestStop;
+    private readonly UnattendedSupportHost unattended;
     private readonly SemaphoreSlim clients = new(16, 16);
     private Task? server;
-    private long lastActivity = DateTime.UtcNow.Ticks;
-    private int activeClients;
     private int disposed;
 
-    public SupportBrokerHost(CancellationToken lifetime, Action requestStop)
+    public SupportBrokerHost(CancellationToken lifetime)
     {
         this.lifetime = lifetime;
-        this.requestStop = requestStop;
         configuration = JsonSerializer.Deserialize<SupportConfiguration>(File.ReadAllText(SupportPlatformPaths.ConfigurationPath), Json.Options)
             ?? throw new InvalidDataException("Support service configuration is empty.");
         if (configuration.ProtocolVersion != SupportPlatformPaths.ProtocolVersion)
             throw new InvalidDataException("Support service configuration protocol is incompatible.");
         if (!string.Equals(Path.GetFullPath(Environment.ProcessPath!), Path.GetFullPath(SupportPlatformPaths.ServiceExecutable), StringComparison.OrdinalIgnoreCase))
             throw new UnauthorizedAccessException("Support service executable is not running from its protected provisioned path.");
-        updates = new PrivilegedUpdateManager(configuration, lifetime);
+        unattended = new UnattendedSupportHost(configuration, lifetime);
+        unattended.Initialize();
+        updates = new PrivilegedUpdateManager(configuration, lifetime, unattended.LaunchReplacement);
+        unattended.UpdateActive = () => updates.HasActiveWork;
         power = new PrivilegedPowerManager(configuration, lifetime);
     }
 
@@ -82,25 +79,7 @@ internal sealed class SupportBrokerHost : IDisposable
     {
         power.Start();
         server = Task.Run(AcceptAsync);
-        _ = Task.Run(WatchIdleAsync);
-    }
-
-    private async Task WatchIdleAsync()
-    {
-        try
-        {
-            while (!lifetime.IsCancellationRequested)
-            {
-                await Task.Delay(TimeSpan.FromSeconds(5), lifetime);
-                if (Volatile.Read(ref activeClients) == 0 && !updates.HasActiveWork && !power.HasActiveWork &&
-                    DateTime.UtcNow - new DateTime(Volatile.Read(ref lastActivity), DateTimeKind.Utc) >= TimeSpan.FromMinutes(1))
-                {
-                    requestStop();
-                    return;
-                }
-            }
-        }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        unattended.Start();
     }
 
     private async Task AcceptAsync()
@@ -123,7 +102,6 @@ internal sealed class SupportBrokerHost : IDisposable
                     clients.Release();
                     throw;
                 }
-                Interlocked.Increment(ref activeClients);
                 _ = HandleAsync(pipe);
             }
         }
@@ -137,7 +115,7 @@ internal sealed class SupportBrokerHost : IDisposable
         {
             try
             {
-                var caller = SupportPipeIdentity.VerifyClient(pipe, configuration);
+                var caller = SupportPipeIdentity.VerifyClient(pipe, configuration, unattended.Owns);
                 using var requestTimeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
                 while (true)
                 {
@@ -147,6 +125,7 @@ internal sealed class SupportBrokerHost : IDisposable
                     if (!Guid.TryParse(request.Id, out _)) throw new ArgumentException("Broker request id must be a UUID.");
                     if (request.Operation == "input.open")
                     {
+                        if (unattended.Owns(caller)) throw new ArgumentException("The signed-out agent handles input in its own desktop session.");
                         await InteractiveInputBroker.ServeAsync(pipe, caller, request, lifetime);
                         return;
                     }
@@ -154,7 +133,7 @@ internal sealed class SupportBrokerHost : IDisposable
                     {
                         var lease = caller.CreateLease();
                         lease.Validate();
-                        await Wire.WriteAsync(pipe, Reply.Success(request.Id, new { active = true, leaseId = lease.LeaseId, processId = lease.ProcessId, sessionId = lease.SessionId, protocolVersion = SupportPlatformPaths.ProtocolVersion, interactiveInput = true }), requestTimeout.Token);
+                        await Wire.WriteAsync(pipe, Reply.Success(request.Id, new { active = true, leaseId = lease.LeaseId, processId = lease.ProcessId, sessionId = lease.SessionId, protocolVersion = SupportPlatformPaths.ProtocolVersion, interactiveInput = !unattended.Owns(caller) }), requestTimeout.Token);
                         await ServeMaintenanceAsync(pipe, lease, lifetime);
                         return;
                     }
@@ -170,6 +149,10 @@ internal sealed class SupportBrokerHost : IDisposable
 
                     object result = request.Operation switch
                     {
+                        "unattended.configure" => unattended.Configure(caller, request.Args),
+                        "unattended.claim" => unattended.Claim(caller),
+                        "unattended.attach" => unattended.Attach(caller, request.Args),
+                        "unattended.secureAttention" when unattended.Owns(caller) => SendSecureAttention(pipe),
                         "platform.status" => await GetStatusAsync(caller, requestTimeout.Token),
                         "firewall.ensure" => await FirewallManager.EnsureAsync(configuration.RegisteredApplicationPath, requestTimeout.Token),
                         "update.stage" => await updates.StageAsync(caller, request.Args, requestTimeout.Token),
@@ -184,7 +167,6 @@ internal sealed class SupportBrokerHost : IDisposable
                     bool keepAlive = request.KeepAlive && request.Operation != "update.arm";
                     await Wire.WriteAsync(pipe, Reply.Success(request.Id, result) with { KeepAlive = keepAlive }, requestTimeout.Token);
                     if (!keepAlive) return;
-                    Volatile.Write(ref lastActivity, DateTime.UtcNow.Ticks);
                 }
             }
             catch (Exception ex) when (ex is ArgumentException or InvalidDataException or InvalidOperationException or UnauthorizedAccessException or IOException or OperationCanceledException or System.ComponentModel.Win32Exception)
@@ -204,8 +186,6 @@ internal sealed class SupportBrokerHost : IDisposable
             }
             finally
             {
-                Volatile.Write(ref lastActivity, DateTime.UtcNow.Ticks);
-                Interlocked.Decrement(ref activeClients);
                 clients.Release();
             }
         }
@@ -217,13 +197,20 @@ internal sealed class SupportBrokerHost : IDisposable
         registeredApplicationPath = configuration.RegisteredApplicationPath,
         publisherThumbprint = configuration.PublisherThumbprint,
         serviceVersion = configuration.ServiceVersion,
-        interactiveInput = true,
+        unattendedSupport = unattended.Enabled,
+        interactiveInput = !unattended.Owns(caller),
         identityVerified = true,
         processId = caller.ProcessId,
         sessionId = caller.SessionId,
         firewallReady = await FirewallManager.IsReadyAsync(configuration.RegisteredApplicationPath, ct),
         message = "Privileged local support is available for this registered interactive application."
     };
+
+    private static object SendSecureAttention(NamedPipeServerStream pipe)
+    {
+        SecureAttention.Send(pipe);
+        return new { sent = true };
+    }
 
     private static async Task ServeMaintenanceAsync(NamedPipeServerStream pipe, MaintenanceLease lease, CancellationToken lifetime)
     {
@@ -268,6 +255,7 @@ internal sealed class SupportBrokerHost : IDisposable
     {
         if (Interlocked.Exchange(ref disposed, 1) != 0) return;
         power.Stop(windowsShutdown);
+        unattended.Dispose();
         updates.Dispose();
         // Active pipe handlers still release their slots while service cancellation
         // unwinds. The managed semaphore is collected after those handlers finish.

@@ -189,7 +189,7 @@ internal static partial class SupportInstaller
                 WaitForServiceReady();
                 VerifyServicePipe();
                 WriteReceipt(new(true, SupportPlatformPaths.ApplicationExecutable, SupportPlatformPaths.ServiceExecutable,
-                    updated.PublisherThumbprint, updated.RegisteredUserSid, "demand", updated.ProvisionedUtc));
+                    updated.PublisherThumbprint, updated.RegisteredUserSid, "auto", updated.ProvisionedUtc));
                 restoredOrUpdated = true;
                 return 0;
             }
@@ -409,7 +409,7 @@ internal static partial class SupportInstaller
             RunSc(true, "start", SupportPlatformPaths.ServiceName);
             WaitForServiceReady();
             WriteReceipt(new(true, SupportPlatformPaths.ApplicationExecutable, SupportPlatformPaths.ServiceExecutable,
-                enrolled.SignerThumbprint, request.RegisteredUserSid, "demand", DateTimeOffset.UtcNow));
+                enrolled.SignerThumbprint, request.RegisteredUserSid, "auto", DateTimeOffset.UtcNow));
             return 0;
         }
         catch (Exception ex)
@@ -488,11 +488,11 @@ internal static partial class SupportInstaller
     private static void ConfigureService()
     {
         string binaryCommand = $"\"{SupportPlatformPaths.ServiceExecutable}\" --platform-service";
-        var create = RunSc(false, "create", SupportPlatformPaths.ServiceName, "binPath=", binaryCommand, "start=", "demand", "obj=", "LocalSystem", "DisplayName=", "Remote Debugger privileged local support");
+        var create = RunSc(false, "create", SupportPlatformPaths.ServiceName, "binPath=", binaryCommand, "start=", "auto", "obj=", "LocalSystem", "DisplayName=", "Remote Debugger support");
         if (create.ExitCode != 0 && !create.Stdout.Contains("1073", StringComparison.Ordinal) && !create.Stderr.Contains("1073", StringComparison.Ordinal))
             throw new InvalidOperationException("Windows could not create the support service: " + create.Stderr + create.Stdout);
-        RunSc(true, "config", SupportPlatformPaths.ServiceName, "binPath=", binaryCommand, "start=", "demand", "obj=", "LocalSystem", "DisplayName=", "Remote Debugger privileged local support");
-        RunSc(true, "description", SupportPlatformPaths.ServiceName, "Local-only signed broker for Remote Debugger firewall, maintenance, and transactional updates.");
+        RunSc(true, "config", SupportPlatformPaths.ServiceName, "binPath=", binaryCommand, "start=", "auto", "obj=", "LocalSystem", "DisplayName=", "Remote Debugger support");
+        RunSc(true, "description", SupportPlatformPaths.ServiceName, "Remote Debugger signed-out support, desktop handoff, maintenance, and transactional updates.");
         RunSc(true, "sidtype", SupportPlatformPaths.ServiceName, "unrestricted");
         RunSc(true, "failure", SupportPlatformPaths.ServiceName, "reset=", "86400", "actions=", "restart/5000/restart/15000//");
         // Registered desktop user may query and demand-start the broker, but may

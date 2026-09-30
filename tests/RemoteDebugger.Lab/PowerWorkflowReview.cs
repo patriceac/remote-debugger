@@ -19,15 +19,16 @@ internal sealed partial class LabForm
 {
     // Only the initial phase launches the product. A declared harness continuation
     // must find the process started by the product's own Windows RunOnce entry.
-    private async Task PowerAgentAsync(int boot, string? credentialPath)
+    private async Task PowerAgentAsync(int boot, string? credentialPath, bool unattended = false)
     {
         if (brokerProvisioning == null) throw new IOException("Power acceptance requires verified guest provisioning.");
         var credentialBinding = credentialPath == null ? null : PowerCredentialFixture.Read(credentialPath).Identity;
         string code = "";
         if (boot == 0)
         {
+            if (unattended) UnattendedFixtureSettings.Save(productData);
             product = LaunchProduct(true); await WaitUiAsync();
-            code = await WaitPairingCodeAsync();
+            if (!unattended) code = await WaitPairingCodeAsync();
         }
         else
         {
@@ -80,6 +81,12 @@ internal sealed partial class LabForm
                 else if (request == "CLIP_HASH") response = new { hash = Safety.Hash(Forms.Clipboard.ContainsText() ? Forms.Clipboard.GetText() : "") };
                 else if (request.StartsWith("CLIP:", StringComparison.Ordinal))
                 { Forms.Clipboard.SetText(request[5..]); response = new { written = true }; }
+                else if (request == "POWER_UNATTENDED_RESTART")
+                {
+                    Pass("unattended.before_restart", "The configured receiving agent is ready for a real signed-out reboot");
+                    await FinishAsync(markerName: "power-before-boot-1.json");
+                    response = new { prepared = true, bootId };
+                }
                 else if (request == "POWER_BEFORE_RESTART")
                 {
                     if (!File.Exists(Path.Combine(productData, "restart-session.resume"))) throw new IOException("The product did not persist its restart grant.");

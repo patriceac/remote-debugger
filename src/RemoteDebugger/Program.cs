@@ -10,6 +10,7 @@ public static class Program
     public static int Main(string[] args)
     {
         if (args.Length == 1 && args[0] == "--platform-service") return SupportService.Run();
+        if (args.Contains("--unattended-agent")) return UnattendedSupport.RunAsync().GetAwaiter().GetResult();
         if (args.Length == 2 && args[0] == "--input-helper") return InteractiveInputBroker.RunHelperAsync(args[1]).GetAwaiter().GetResult();
         if (args.Length == 2 && args[0] == "--support-provision") return SupportInstaller.ExecuteElevated(args[1]);
         if (args.Length == 2 && args[0] == "--installer-provision-request") return SupportInstaller.WriteInstallerProvisionRequest(args[1]);
@@ -67,6 +68,11 @@ public static class Program
             if (!instance.TryAcquire()) return 1;
         }
         bool controllerOnly = args.Contains("--controller");
+        if (!loopbackOnly)
+        {
+            try { UnattendedSupport.ClaimDesktopAsync(dataRoot ?? Vault.DefaultRoot).GetAwaiter().GetResult(); }
+            catch (Exception ex) { startupPreparationError = ex.Message; }
+        }
         var form = new MainForm(!controllerOnly, dataRoot, loopbackOnly, startupPreparationError, languageOverride,
             enableSupport: args.Contains("--enable-support") || args.Contains("--resume-update") || args.Contains("--resume-restart"), startInTray: startInTray);
         form.Shown += (_, _) => instance.StartListening(form.ActivateExistingWindow);

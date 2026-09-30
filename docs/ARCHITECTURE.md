@@ -25,7 +25,9 @@ One logical session spans independent RPC sockets and rolling screen streams. He
 
 Each native table stores completed header resize/reorder gestures in its own JSON file below the user data root's `tables` directory. Stable column IDs decouple saved order from source order, and widths use 96-DPI logical pixels. Native handle recreation and DPI changes reapply preferences without recording those programmatic changes as user input. Missing/corrupt preferences fall back to defaults; new columns are appended and removed columns ignored.
 
-Either window can hide to the tray while its session continues and restore from its notification icon. A new session requires a fresh invitation or code. Setup registers startup in the initiating user's profile. The local broker starts on demand and becomes dormant when its work is finished.
+Either window can hide to the tray while its session continues and restore from its notification icon. A new session requires a fresh invitation or code. Setup registers startup in the initiating user's profile. The local broker starts automatically and supervises a signed-out console agent after the registered user has synchronized an enabled, unlocked private setup.
+
+The signed-out agent runs the installed application as SYSTEM in the active console session, without a visible application window. Capture and input use fresh threads bound to the current input desktop; no Session 0 UI or interactive-service flag is used. The broker attests that exact worker PID, process start time, path and session. Its protected DPAPI state contains only receiving credentials, not controller authority. At sign-in the worker stops before the original user agent starts. A one-use, ten-minute connection handoff checks certificate and executable identity; ordinary launches and ended sessions do not inherit it. The normal user agent retains its existing capture, clipboard, shared cursor and tray paths.
 
 ## Privilege and executable synchronization
 

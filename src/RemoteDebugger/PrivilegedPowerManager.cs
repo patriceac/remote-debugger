@@ -65,7 +65,7 @@ internal sealed class PrivilegedPowerManager(SupportConfiguration configuration,
     public object Dispatch(VerifiedProcessIdentity caller, string operation, JsonElement args)
     {
         caller.CreateLease().Validate();
-        if (!string.Equals(caller.UserSid, configuration.RegisteredUserSid, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(caller.UserSid, configuration.RegisteredUserSid, StringComparison.OrdinalIgnoreCase) && caller.UserSid != UnattendedSupport.SystemSid)
             throw new UnauthorizedAccessException("Power operations require the registered support user.");
         lock (gate)
         {
@@ -83,6 +83,8 @@ internal sealed class PrivilegedPowerManager(SupportConfiguration configuration,
 
     private PowerPreflight Preflight(VerifiedProcessIdentity caller)
     {
+        if (caller.UserSid == UnattendedSupport.SystemSid)
+            return new(Environment.MachineName, "", false, "no_interactive_user", "manual_sign_in");
         string account = ((NTAccount)new SecurityIdentifier(caller.UserSid).Translate(typeof(NTAccount))).Value;
         string constraint = "";
         using var key = Registry.LocalMachine.OpenSubKey(WinlogonPath);
@@ -246,7 +248,7 @@ internal sealed class PrivilegedPowerManager(SupportConfiguration configuration,
                 else key.SetValue(saved.Name, (object?)saved.Number ?? saved.Text ?? "", saved.Kind);
             }
             key.Flush();
-            SetOwnServiceStart(journal.ServiceStart);
+            SetOwnServiceStart(2);
             key.DeleteValue(OwnedLogonMarker, false);
         }
         File.Delete(JournalPath + ".recovery"); File.Delete(JournalPath); journal = null;
@@ -266,7 +268,7 @@ internal sealed class PrivilegedPowerManager(SupportConfiguration configuration,
         if (!Guid.TryParseExact(Convert.ToString(key?.GetValue(OwnedLogonMarker)), "N", out _)) return;
         key!.SetValue("AutoAdminLogon", "0", RegistryValueKind.String); key.Flush();
         LogonSecret.Store(null); key.DeleteValue("AutoLogonCount", false); key.DeleteValue(OwnedLogonMarker, false);
-        SetOwnServiceStart(3);
+        SetOwnServiceStart(2);
     }
 
     private void Save()

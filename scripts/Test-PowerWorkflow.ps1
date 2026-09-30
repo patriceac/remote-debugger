@@ -1,13 +1,15 @@
 param(
-    [ValidateSet('Once', 'Cancel', 'Expiry', 'Shutdown')]
+    [ValidateSet('Once', 'Cancel', 'Expiry', 'Shutdown', 'Unattended')]
     [string]$Scenario = 'Once',
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$')]
     [string]$Cohort = ('power-workflow-' + [guid]::NewGuid().ToString('N').Substring(0, 8)),
-    [switch]$PrepareOnly
+    [switch]$PrepareOnly,
+    [string]$ArtifactPath
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot
-$artifact = Join-Path $projectRoot 'artifacts'
+$artifact = if ($ArtifactPath) { [IO.Path]::GetFullPath($ArtifactPath) } else { Join-Path $projectRoot 'artifacts' }
+$group = [guid]::NewGuid().ToString('N')
 $runner = Join-Path $env:USERPROFILE '.agents\skills\hyperv-test-executables\scripts\Invoke-HyperVExecutableTest.ps1'
 $releaseHash = (Get-FileHash -LiteralPath (Join-Path $artifact 'release\RemoteDebugger.exe') -Algorithm SHA256).Hash
 $labHash = (Get-FileHash -LiteralPath (Join-Path $artifact 'lab\RemoteDebugger.Lab.exe') -Algorithm SHA256).Hash
@@ -21,7 +23,8 @@ function Get-LabArguments([string]$RoleName) {
     return $value
 }
 
-$requests = foreach ($roleName in @('poweragent', ('powercontroller-' + $Scenario.ToLowerInvariant()))) {
+$agentRole = if ($Scenario -eq 'Unattended') { 'poweragent-unattended' } else { 'poweragent' }
+$requests = foreach ($roleName in @($agentRole, ('powercontroller-' + $Scenario.ToLowerInvariant()))) {
     $request = @{
         ArtifactPath = $artifact; ExecutableRelativePath = 'lab\RemoteDebugger.Lab.exe'
         Arguments = (Get-LabArguments $roleName)
@@ -29,9 +32,10 @@ $requests = foreach ($roleName in @('poweragent', ('powercontroller-' + $Scenari
         GuestSetupExecutableRelativePath = 'lab\RemoteDebugger.Lab.exe'; GuestSetupExecutableSha256 = $labHash
         GuestSetupArguments = @('powersetup', '{PAYLOAD}\release\RemoteDebugger.exe', '{PAYLOAD}\lab\RemoteDebugger.Lab.exe', $releaseHash); GuestSetupTimeoutSeconds = 300
         NetworkProfile = 'IsolatedTestNet'; NetworkCohort = $Cohort; ExecutionTimeoutSeconds = $executionSeconds; ThrowOnFailure = $true
+        GroupId = $group; GroupSize = 2
     }
     if ($Scenario -eq 'Once') { $request.GuestCredentialFixture = $true }
-    if ($roleName -eq 'poweragent') {
+    if ($roleName -eq $agentRole) {
         if ($Scenario -eq 'Shutdown') {
             $request.ExpectGuestPowerOff = $true
             $request.GuestPowerOffRecoveryTimeoutSeconds = 300
@@ -40,7 +44,7 @@ $requests = foreach ($roleName in @('poweragent', ('powercontroller-' + $Scenari
             $bootCount = if ($Scenario -eq 'Once') { 2 } else { 1 }
             $boots = @(for ($boot = 1; $boot -le $bootCount; $boot++) {
                 $automatic = $Scenario -eq 'Once' -and $boot -eq 1
-                $observation = if ($automatic) { 0 } elseif ($Scenario -eq 'Expiry') { 3700 } elseif ($Scenario -eq 'Cancel') { 60 } else { 30 }
+                $observation = if ($automatic) { 0 } elseif ($Scenario -eq 'Expiry') { 3700 } elseif ($Scenario -eq 'Unattended') { 90 } elseif ($Scenario -eq 'Cancel') { 60 } else { 30 }
                 $continuationRole = if ($boot -eq 1) { 'powerafterfirst' } else { 'poweraftersecond' }
                 @{
                     ExpectedSignIn = $(if ($automatic) { 'Automatic' } else { 'Manual' })

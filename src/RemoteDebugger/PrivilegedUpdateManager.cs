@@ -31,6 +31,7 @@ internal sealed class PrivilegedUpdateManager : IDisposable
 {
     private readonly SupportConfiguration configuration;
     private readonly CancellationToken serviceLifetime;
+    private readonly Func<int, IReadOnlyList<string>, int>? launchUnattended;
     private readonly object stateLock = new();
     private readonly ConcurrentDictionary<string, TaskCompletionSource<bool>> startupHealth = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Task> workers = new(StringComparer.OrdinalIgnoreCase);
@@ -38,8 +39,10 @@ internal sealed class PrivilegedUpdateManager : IDisposable
     private readonly ConcurrentDictionary<string, bool> cancellationRelaunch = new(StringComparer.OrdinalIgnoreCase);
     private int disposed;
 
-    public PrivilegedUpdateManager(SupportConfiguration configuration, CancellationToken serviceLifetime)
+    public PrivilegedUpdateManager(SupportConfiguration configuration, CancellationToken serviceLifetime,
+        Func<int, IReadOnlyList<string>, int>? launchUnattended = null)
     {
+        this.launchUnattended = launchUnattended;
         this.configuration = configuration;
         this.serviceLifetime = serviceLifetime;
         if (!string.Equals(Path.GetFullPath(configuration.RegisteredApplicationPath), Path.GetFullPath(SupportPlatformPaths.ApplicationExecutable), StringComparison.OrdinalIgnoreCase))
@@ -339,8 +342,7 @@ internal sealed class PrivilegedUpdateManager : IDisposable
         if (UpdatePolicy.FixedHexEquals(current.Sha256, transaction.Previous.Sha256) && current.Size == transaction.Previous.Size)
         {
             if (relaunchPrevious && !IsOriginalProcessRunning(transaction))
-                _ = InteractiveProcessLauncher.Start(transaction.SessionId, transaction.UserSid, configuration.RegisteredApplicationPath,
-                    RollbackArguments(transaction.OriginalArguments, Unprotect(transaction.ProtectedReconnectTicket)), transaction.WorkingDirectory);
+                _ = LaunchAgent(transaction, RollbackArguments(transaction.OriginalArguments, Unprotect(transaction.ProtectedReconnectTicket)));
             ForceState(transaction.TransactionId, UpdateTransactionState.RolledBack, reason);
             return;
         }
@@ -354,8 +356,7 @@ internal sealed class PrivilegedUpdateManager : IDisposable
         File.Replace(restored, configuration.RegisteredApplicationPath, null, true);
         UpdatePolicy.RequireExactControllerBinary(transaction.Previous, await SnapshotAsync(configuration.RegisteredApplicationPath, CancellationToken.None));
         if (relaunchPrevious && !IsOriginalProcessRunning(transaction))
-            _ = InteractiveProcessLauncher.Start(transaction.SessionId, transaction.UserSid, configuration.RegisteredApplicationPath,
-                RollbackArguments(transaction.OriginalArguments, Unprotect(transaction.ProtectedReconnectTicket)), transaction.WorkingDirectory);
+            _ = LaunchAgent(transaction, RollbackArguments(transaction.OriginalArguments, Unprotect(transaction.ProtectedReconnectTicket)));
         ForceState(transaction.TransactionId, UpdateTransactionState.RolledBack, reason);
     }
 
@@ -367,9 +368,14 @@ internal sealed class PrivilegedUpdateManager : IDisposable
         arguments.Add(ticket);
         arguments.Add("--update-transaction");
         arguments.Add(transaction.TransactionId);
-        return InteractiveProcessLauncher.Start(transaction.SessionId, transaction.UserSid,
-            configuration.RegisteredApplicationPath, arguments, transaction.WorkingDirectory);
+        return LaunchAgent(transaction, arguments);
     }
+
+    private int LaunchAgent(PrivilegedUpdateTransaction transaction, IReadOnlyList<string> arguments) =>
+        transaction.UserSid == UnattendedSupport.SystemSid
+            ? (launchUnattended ?? throw new InvalidOperationException("Unattended update supervision is unavailable."))(transaction.SessionId, arguments)
+            : InteractiveProcessLauncher.Start(transaction.SessionId, transaction.UserSid,
+                configuration.RegisteredApplicationPath, arguments, transaction.WorkingDirectory);
 
     private Task RecoverInterruptedTransactionsAsync()
     {

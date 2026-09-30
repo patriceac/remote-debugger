@@ -92,6 +92,7 @@ public static class DesktopCapture
 
     internal static BitmapCaptureResult CaptureBitmap(int monitor, string? previousFingerprint, CaptureBuffer? buffer = null)
     {
+        if (SignedOutDesktop.NeedsDispatch) return SignedOutDesktop.Invoke(() => CaptureBitmap(monitor, previousFingerprint, buffer));
         IntPtr old = SetThreadDpiAwarenessContext(new IntPtr(-4));
         try
         {
@@ -101,7 +102,7 @@ public static class DesktopCapture
             string layoutId = LayoutId(); DateTimeOffset captured = DateTimeOffset.UtcNow;
             double copyStart = sw.Elapsed.TotalMilliseconds;
             var bmp = buffer?.Get(r.Size) ?? new Bitmap(r.Width, r.Height, PixelFormat.Format32bppArgb);
-            string? fingerprint = monitor >= 0 ? buffer?.CaptureGpu(screens[monitor].DeviceName, bmp) : null;
+            string? fingerprint = monitor >= 0 && !UnattendedSupport.IsWorker ? buffer?.CaptureGpu(screens[monitor].DeviceName, bmp) : null;
             if (fingerprint == null) using (var g = Graphics.FromImage(bmp)) g.CopyFromScreen(r.Location, Point.Empty, r.Size);
             double copyMs = sw.Elapsed.TotalMilliseconds - copyStart;
             fingerprint = fingerprint == null ? Fingerprint(bmp, r, layoutId) : layoutId + "|" + fingerprint;

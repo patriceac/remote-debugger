@@ -910,6 +910,8 @@ public sealed partial class MainForm : Forms.Form
                 agentNetworkPrepared = true;
             }
             ApplyPlatformStatus(status);
+            if (status.Available && status.FirewallReady)
+                await UnattendedSupport.ConfigureAsync(root, preparing.SupportEnabled);
             if (startupPreparationError != null)
                 ShowSetupNotice(() => UiText.InstalledStartupFailedPrefix + startupPreparationError);
         }
@@ -952,6 +954,7 @@ public sealed partial class MainForm : Forms.Form
             adminMaintenanceEnabled = requested;
             if (agent is { } current && !agentIdle)
                 await current.SetAdminMaintenanceEnabledAsync(requested);
+            if (!loopbackOnly) await UnattendedSupport.ConfigureAsync(root, requested);
             SetFooterMessage(() => requested ? UiText.AdminMaintenanceEnabledMessage : UiText.AdminMaintenanceDisabledMessage);
             SetFooterDetail(() => UiText.CloseToTrayShort);
         }

@@ -130,17 +130,15 @@ internal static class ProvisioningEvidence
             DateTimeOffset provisionedUtc = ValidateProductReceipt(receiptPath, managedPath, servicePath, publisher, registeredSid);
             using var service = new ServiceController(SupportPlatformPaths.ServiceName);
             using var serviceKey = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\" + SupportPlatformPaths.ServiceName);
-            // The demand-started service deliberately stops after one idle minute.
-            // Its liveness is asserted through the managed CLI after app launch.
-            if (service.StartType != ServiceStartMode.Manual
+            if (service.StartType != ServiceStartMode.Automatic
                 || !string.Equals(serviceKey?.GetValue("ObjectName") as string, "LocalSystem", StringComparison.OrdinalIgnoreCase)
                 || !string.Equals(serviceKey?.GetValue("ImagePath") as string, $"\"{servicePath}\" --platform-service", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException("The installed support service is not the demand-started LocalSystem fixture.");
+                throw new InvalidDataException("The installed support service is not the automatic LocalSystem fixture.");
 
             string collectedEvidencePath = EvidencePath(output);
             File.Copy(evidencePath, collectedEvidencePath, true);
             receipt = new BrokerReceipt(ExpectedFormatVersion, ContractName, requestId, fixtureHash, managedPath, managedHash, servicePath, serviceHash,
-                SupportPlatformPaths.ServiceName, service.Status.ToString(), "demand", publisher, registeredSid, receiptPath, provisionedUtc, collectedEvidencePath);
+                SupportPlatformPaths.ServiceName, service.Status.ToString(), "auto", publisher, registeredSid, receiptPath, provisionedUtc, collectedEvidencePath);
             return true;
         }
         catch (Exception ex)
@@ -260,7 +258,7 @@ internal static class ProvisioningEvidence
         if (!PathsEqual(RequiredString(value, "ServiceExecutablePath"), servicePath)) throw new InvalidDataException("The product receipt names a different support service.");
         if (!string.Equals(RequiredString(value, "PublisherThumbprint"), publisher, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The product receipt publisher does not match the signed fixture.");
         if (!string.Equals(RequiredString(value, "RegisteredUserSid"), registeredSid, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The product receipt interactive SID does not match the setup account.");
-        if (!string.Equals(RequiredString(value, "ServiceStartMode"), "demand", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The product receipt is not demand-started.");
+        if (!string.Equals(RequiredString(value, "ServiceStartMode"), "auto", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The product receipt is not automatic-start.");
         if (!DateTimeOffset.TryParse(RequiredString(value, "ProvisionedUtc"), out var provisionedUtc)) throw new InvalidDataException("The product receipt has no valid provisioning timestamp.");
         return provisionedUtc;
     }

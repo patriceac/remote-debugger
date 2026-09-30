@@ -232,7 +232,7 @@ public sealed partial class AgentServer : IDisposable
     public event Action<string>? Status;
     public event Action<AgentStopReason>? TerminationRequested;
     public SupportSessionSnapshot Session => session.Snapshot;
-    public AgentServer(string root, int port = 45832, bool loopbackOnly = false, bool enableInternet = true, bool enableAdminMaintenance = true, MaintenanceSession? maintenance = null)
+    public AgentServer(string root, int port = 45832, bool loopbackOnly = false, bool enableInternet = true, bool enableAdminMaintenance = true, MaintenanceSession? maintenance = null, bool reuseInvitation = false)
     {
         securityRoot = root;
         supportEnabled = !new UpdateAdminStore(root).IsAdmin || AdminMaintenancePreference.Load(root);
@@ -260,6 +260,11 @@ public sealed partial class AgentServer : IDisposable
         if (launchArguments.Contains("--resume-restart") || launchArguments.Contains("--startup"))
             restartAuthorization = restartStore.Restore(ExecutableIdentity.Sha256);
         if (!supportEnabled) { resumed = null; restartAuthorization = null; }
+        var handoff = UnattendedSupport.TakeHandoff();
+        bool restoreDesktop = supportEnabled && handoff != null && handoff.ExpiresUtc > DateTimeOffset.UtcNow &&
+            handoff.ExpiresUtc <= DateTimeOffset.UtcNow.AddMinutes(10) && Safety.Equal(handoff.Fingerprint, Fingerprint) &&
+            Safety.Equal(handoff.BinaryHash, ExecutableIdentity.Sha256) && PairingExchange.ValidHash(handoff.GrantHash) &&
+            PairingExchange.ValidHash(handoff.ControllerHash);
         if (resumed != null)
         {
             tokenHash = resumed.GrantHash; controllerBinaryHash = resumed.ControllerHash;
@@ -272,10 +277,16 @@ public sealed partial class AgentServer : IDisposable
             session.Pair(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
             session.AwaitRestart(restart.ExpiresUtc); session.Disconnect();
         }
+        else if (restoreDesktop)
+        {
+            tokenHash = handoff!.GrantHash; controllerBinaryHash = handoff.ControllerHash; updateOnly = handoff.UpdateOnly;
+            session.Pair(Safety.Equal(controllerBinaryHash, ExecutableIdentity.Sha256));
+        }
         else { resumeStore.Clear(); restartStore.Clear(); }
         ownsMaintenance = maintenance == null;
         Operations = new Operations(root, maintenance);
-        Operations.Clipboard = new DesktopClipboard(() => Session.Connected && Session.BinaryMatched && !stop.IsCancellationRequested);
+        if (!UnattendedSupport.IsWorker)
+            Operations.Clipboard = new DesktopClipboard(() => Session.Connected && Session.BinaryMatched && !stop.IsCancellationRequested);
         Operations.Maintenance.SetEnabled(supportEnabled);
         updates = new AgentUpdateService(root, (context, ct) =>
         {
@@ -294,7 +305,13 @@ public sealed partial class AgentServer : IDisposable
         listener = new TcpListener(loopbackOnly ? IPAddress.Loopback : IPAddress.Any, port);
         discovery = new UdpClient(new IPEndPoint(loopbackOnly ? IPAddress.Loopback : IPAddress.Any, Discovery.Port));
         if (enableInternet && InternetSettings.Load(root) is { } internetSettings)
-            Internet = new InternetAgent(root, internetSettings, resumed != null || restartAuthorization != null, AcceptInternetAsync, Fingerprint);
+            Internet = new InternetAgent(root, internetSettings, reuseInvitation || restoreDesktop || resumed != null || restartAuthorization != null, AcceptInternetAsync, Fingerprint);
+    }
+    internal DesktopHandoff? DesktopHandoff()
+    {
+        lock (authLock) return supportEnabled && Paired && Session.HasPaired
+            ? new(Fingerprint, tokenHash, controllerBinaryHash, ExecutableIdentity.Sha256, DateTimeOffset.UtcNow.AddMinutes(10), updateOnly)
+            : null;
     }
     public void Start()
     {
