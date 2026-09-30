@@ -1,5 +1,38 @@
 # Validation record
 
+## 0.6.1 - upgrade connection reset (native rerun pending)
+
+September 30, 2026: the real 0.5.40 source at `0f1133f` was rebuilt with
+the disposable acceptance authority, without overriding its version. In the
+two-VM test, the normal controller automatically upgraded that agent to 0.6.0.
+Controller request `executable-test-20260930T144333267Z-131d7c69` verified both
+application and service bytes, demand-to-automatic service startup, unchanged
+certificate/private invitation/unlocked profile/language/theme, and the same
+medium-integrity agent-only user. No agent-side setup or UAC action was used.
+The controller reported completion after 72.55 seconds.
+
+The subsequent elevated reboot command failed with `Pipe is broken`: service
+refresh retained a stale maintenance connection. No reboot/sign-in assertion
+passed in that run. The original failed result and peer cancellation are retained;
+both VMs ended Off with deleted payload children and successful network cleanup.
+
+Commit `9732537` fixes this by discarding cached maintenance and input connections
+after service replacement and preparing fresh connections before reporting ready.
+Luna Max passed 35 distinct focused checks (12 provisioning, 22 input/platform,
+and the production-authority guard). A first version of the new regression had
+an invalid exception expectation for an unconnected pipe; its corrected assertion
+passed. The production 0.6.1 Release was built from that clean commit with SHA-256
+`22A23D694EC5BAF1CDF390EFB7CE980FD3856D8D1A04D848C69338366C124DD8`.
+
+The corrected acceptance payload is `artifacts/service-upgrade-2`, current SHA-256
+`EBE4EB64C788F40D425658DF4C8E1096B19BE5A7BF3A3272C972794DBF833DA6` and old SHA-256
+`BF5D4C34BF4386574203ADFF8C3433AEB67A0033CE772789D50298C3A1B7AD7E`.
+Its rerun group `77347bc54d714e4d96bc8b60d2d8e73f` was queued but never launched:
+the SYSTEM harness broker crashed reading its group journal. Cancellation was
+requested through the canonical client. Full 0.5.40-to-0.6.1 upgrade acceptance
+is pending, not passed. This tests automatic fleet updates on an isolated LAN,
+not replay of the production installer or an upgrade on a real agent computer.
+
 ## 0.6.0 - support before Windows sign-in
 
 September 30, 2026: Luna Max passed 39 focused Release checks, including
