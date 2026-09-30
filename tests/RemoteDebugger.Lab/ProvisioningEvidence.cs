@@ -78,7 +78,8 @@ internal static class ProvisioningEvidence
         return Path.Combine(SetupRoot(requestId), "guest-setup.json");
     }
 
-    public static bool TryValidate(string expectedFixturePath, string output, out BrokerReceipt receipt, out string error, bool allowPowerSetup = false)
+    public static bool TryValidate(string expectedFixturePath, string output, out BrokerReceipt receipt, out string error, bool allowPowerSetup = false,
+        bool legacyDemandStart = false, string? upgradedFixturePath = null)
     {
         receipt = null!;
         error = "";
@@ -96,6 +97,9 @@ internal static class ProvisioningEvidence
 
             string expectedFixture = RequireRegularFile(expectedFixturePath, "expected fixture");
             string fixtureHash = HashFile(expectedFixture);
+            string installedFixture = upgradedFixturePath == null ? expectedFixture : RequireRegularFile(upgradedFixturePath, "upgraded fixture");
+            string installedHash = HashFile(installedFixture);
+            string expectedStartMode = legacyDemandStart ? "demand" : "auto";
             string payloadRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, ".."));
             string fixtureRelativePath = Path.GetRelativePath(payloadRoot, expectedFixture);
             string requestId = Path.GetFileName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(output)));
@@ -122,23 +126,23 @@ internal static class ProvisioningEvidence
             string servicePath = RequireProtectedFile(SupportPlatformPaths.ServiceExecutable, SupportPlatformPaths.InstallDirectory, "support service");
             string managedHash = HashFile(managedPath);
             string serviceHash = HashFile(servicePath);
-            if (!string.Equals(managedHash, fixtureHash, StringComparison.OrdinalIgnoreCase) || !string.Equals(serviceHash, fixtureHash, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(managedHash, installedHash, StringComparison.OrdinalIgnoreCase) || !string.Equals(serviceHash, installedHash, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("The managed application and support service must both match the requested fixture bytes.");
 
-            string publisher = AuthenticodeVerifier.InspectForEnrollment(expectedFixture).SignerThumbprint;
+            string publisher = AuthenticodeVerifier.InspectForEnrollment(installedFixture).SignerThumbprint;
             string receiptPath = RequireProtectedFile(SupportPlatformPaths.ProvisioningReceiptPath, SupportPlatformPaths.StateDirectory, "product provisioning receipt");
-            DateTimeOffset provisionedUtc = ValidateProductReceipt(receiptPath, managedPath, servicePath, publisher, registeredSid);
+            DateTimeOffset provisionedUtc = ValidateProductReceipt(receiptPath, managedPath, servicePath, publisher, registeredSid, expectedStartMode);
             using var service = new ServiceController(SupportPlatformPaths.ServiceName);
             using var serviceKey = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\" + SupportPlatformPaths.ServiceName);
-            if (service.StartType != ServiceStartMode.Automatic
+            if (service.StartType != (legacyDemandStart ? ServiceStartMode.Manual : ServiceStartMode.Automatic)
                 || !string.Equals(serviceKey?.GetValue("ObjectName") as string, "LocalSystem", StringComparison.OrdinalIgnoreCase)
                 || !string.Equals(serviceKey?.GetValue("ImagePath") as string, $"\"{servicePath}\" --platform-service", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException("The installed support service is not the automatic LocalSystem fixture.");
+                throw new InvalidDataException("The installed support service does not match the requested LocalSystem start mode: " + expectedStartMode);
 
             string collectedEvidencePath = EvidencePath(output);
             File.Copy(evidencePath, collectedEvidencePath, true);
             receipt = new BrokerReceipt(ExpectedFormatVersion, ContractName, requestId, fixtureHash, managedPath, managedHash, servicePath, serviceHash,
-                SupportPlatformPaths.ServiceName, service.Status.ToString(), "auto", publisher, registeredSid, receiptPath, provisionedUtc, collectedEvidencePath);
+                SupportPlatformPaths.ServiceName, service.Status.ToString(), expectedStartMode, publisher, registeredSid, receiptPath, provisionedUtc, collectedEvidencePath);
             return true;
         }
         catch (Exception ex)
@@ -250,7 +254,7 @@ internal static class ProvisioningEvidence
         return [$"{service.ServiceName}|{service.Status}|{service.StartType}|{key?.GetValue("ObjectName")}|{key?.GetValue("ImagePath")}"];
     }
 
-    private static DateTimeOffset ValidateProductReceipt(string path, string managedPath, string servicePath, string publisher, string registeredSid)
+    private static DateTimeOffset ValidateProductReceipt(string path, string managedPath, string servicePath, string publisher, string registeredSid, string expectedStartMode)
     {
         JsonElement value = JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(path));
         if (!TryGetBoolean(value, "Provisioned", out bool provisioned) || !provisioned) throw new InvalidDataException("The product provisioning receipt is not marked Provisioned.");
@@ -258,7 +262,7 @@ internal static class ProvisioningEvidence
         if (!PathsEqual(RequiredString(value, "ServiceExecutablePath"), servicePath)) throw new InvalidDataException("The product receipt names a different support service.");
         if (!string.Equals(RequiredString(value, "PublisherThumbprint"), publisher, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The product receipt publisher does not match the signed fixture.");
         if (!string.Equals(RequiredString(value, "RegisteredUserSid"), registeredSid, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The product receipt interactive SID does not match the setup account.");
-        if (!string.Equals(RequiredString(value, "ServiceStartMode"), "auto", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The product receipt is not automatic-start.");
+        if (!string.Equals(RequiredString(value, "ServiceStartMode"), expectedStartMode, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The product receipt has the wrong service start mode.");
         if (!DateTimeOffset.TryParse(RequiredString(value, "ProvisionedUtc"), out var provisionedUtc)) throw new InvalidDataException("The product receipt has no valid provisioning timestamp.");
         return provisionedUtc;
     }

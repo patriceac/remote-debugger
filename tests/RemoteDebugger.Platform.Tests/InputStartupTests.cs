@@ -1,9 +1,32 @@
+using System.IO.Pipes;
+using System.Reflection;
 using RemoteDebugger;
 using RemoteDebugger.Core;
 using Xunit;
 
 public sealed class InputStartupTests
 {
+    [Fact]
+    public void ServiceReplacementDiscardsCachedMaintenanceAndInputReadiness()
+    {
+        const BindingFlags fields = BindingFlags.Instance | BindingFlags.NonPublic;
+        using var maintenance = new MaintenanceSession(Path.GetTempPath());
+        using var oldPipe = new NamedPipeClientStream(".", "unused-maintenance-reset-test");
+        typeof(MaintenanceSession).GetField("pipe", fields)!.SetValue(maintenance, oldPipe);
+        typeof(MaintenanceSession).GetField("status", fields)!.SetValue(maintenance,
+            new MaintenanceSessionStatus(true, true, false, "ready", "old-lease", true));
+        var input = (PrivilegedInputSession)typeof(MaintenanceSession).GetField("input", fields)!.GetValue(maintenance)!;
+        typeof(PrivilegedInputSession).GetField("ready", fields)!.SetValue(input, 1);
+
+        maintenance.ResetBroker();
+
+        Assert.True(maintenance.Enabled);
+        Assert.False(maintenance.CurrentStatus.Active);
+        Assert.Null(maintenance.CurrentStatus.LeaseId);
+        Assert.False(input.Ready);
+        Assert.Null(typeof(MaintenanceSession).GetField("pipe", fields)!.GetValue(maintenance));
+    }
+
     [Fact]
     public async Task ModernMaintenanceOpensWithoutWaitingForFirewallStatus()
     {

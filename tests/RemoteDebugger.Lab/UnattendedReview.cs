@@ -8,9 +8,9 @@ namespace RemoteDebugger.Lab;
 internal sealed partial class LabForm
 {
     // Disposable pairing material; the test network has no Internet route.
-    private static InternetSettings UnattendedFixtureSettings => new("https://unattended.invalid", new string('A', 64), new string('B', 64));
+    private static InternetSettings UnattendedFixtureSettings => new("https://unattended.invalid", new string('A', 64), new string('B', 64), "1e5bcf2e61c449179ce9a3d887c1ddea");
 
-    private async Task UnattendedControllerAsync()
+    private async Task UnattendedControllerAsync(bool upgrade = false)
     {
         Testing.UpdateAcceptanceAuthority.Enroll(Vault.DefaultRoot);
         UnattendedFixtureSettings.Save(Vault.DefaultRoot);
@@ -25,6 +25,7 @@ internal sealed partial class LabForm
         }, 150);
         peerHost = peer!.Host;
         var initial = await PowerMessageAsync("POWER_STATUS");
+        if (upgrade) await UpgradeAgentFromControllerAsync(peer, hash);
         await CliAsync(["pair", "--host", peerHost, "--fingerprint", peer.Fingerprint]);
         await CliAsync(["sync"]);
         var remote = new RemoteClient(RemoteClient.Load().Connection, hash);

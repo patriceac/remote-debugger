@@ -19,7 +19,7 @@ internal sealed partial class LabForm
 {
     // Only the initial phase launches the product. A declared harness continuation
     // must find the process started by the product's own Windows RunOnce entry.
-    private async Task PowerAgentAsync(int boot, string? credentialPath, bool unattended = false)
+    private async Task PowerAgentAsync(int boot, string? credentialPath, bool unattended = false, bool upgrade = false)
     {
         if (brokerProvisioning == null) throw new IOException("Power acceptance requires verified guest provisioning.");
         var credentialBinding = credentialPath == null ? null : PowerCredentialFixture.Read(credentialPath).Identity;
@@ -27,6 +27,11 @@ internal sealed partial class LabForm
         if (boot == 0)
         {
             if (unattended) UnattendedFixtureSettings.Save(productData);
+            if (upgrade)
+            {
+                LanguagePreference.Save(productData, "fr");
+                ThemePreference.Save(productData, "dark");
+            }
             product = LaunchProduct(true); await WaitUiAsync();
             if (!unattended) code = await WaitPairingCodeAsync();
         }
@@ -78,6 +83,7 @@ internal sealed partial class LabForm
                     response = new { x = point.X, y = point.Y, layoutId = DesktopCapture.LayoutId() };
                 }
                 else if (request == "POWER_INPUT_READ") response = new { text = input.Text };
+                else if (request == "POWER_UPGRADE_STATE" && upgrade) response = ReadUpgradeState();
                 else if (request == "CLIP_HASH") response = new { hash = Safety.Hash(Forms.Clipboard.ContainsText() ? Forms.Clipboard.GetText() : "") };
                 else if (request.StartsWith("CLIP:", StringComparison.Ordinal))
                 { Forms.Clipboard.SetText(request[5..]); response = new { written = true }; }

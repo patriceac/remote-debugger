@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('Once', 'Cancel', 'Expiry', 'Shutdown', 'Unattended')]
+    [ValidateSet('Once', 'Cancel', 'Expiry', 'Shutdown', 'Unattended', 'Upgrade')]
     [string]$Scenario = 'Once',
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$')]
     [string]$Cohort = ('power-workflow-' + [guid]::NewGuid().ToString('N').Substring(0, 8)),
@@ -12,25 +12,29 @@ $artifact = if ($ArtifactPath) { [IO.Path]::GetFullPath($ArtifactPath) } else { 
 $group = [guid]::NewGuid().ToString('N')
 $runner = Join-Path $env:USERPROFILE '.agents\skills\hyperv-test-executables\scripts\Invoke-HyperVExecutableTest.ps1'
 $releaseHash = (Get-FileHash -LiteralPath (Join-Path $artifact 'release\RemoteDebugger.exe') -Algorithm SHA256).Hash
+$previousHash = if ($Scenario -eq 'Upgrade') { (Get-FileHash -LiteralPath (Join-Path $artifact 'previous\RemoteDebugger.exe') -Algorithm SHA256).Hash } else { $releaseHash }
 $labHash = (Get-FileHash -LiteralPath (Join-Path $artifact 'lab\RemoteDebugger.Lab.exe') -Algorithm SHA256).Hash
 $executionSeconds = if ($Scenario -eq 'Expiry') { 7200 } else { 1800 }
 $work = Join-Path $projectRoot "work\power-$Cohort"
 if (-not (Test-Path -LiteralPath $work)) { New-Item -ItemType Directory -Path $work | Out-Null }
 
 function Get-LabArguments([string]$RoleName) {
-    $value = "$RoleName `"{OUTDIR}`" provisioned none `"{PAYLOAD}\release\RemoteDebugger.exe`""
+    $fixture = if ($RoleName -in @('poweragent-upgrade', 'powerafterfirst-upgrade')) { 'previous' } else { 'release' }
+    $value = "$RoleName `"{OUTDIR}`" provisioned none `"{PAYLOAD}\$fixture\RemoteDebugger.exe`""
     if ($Scenario -eq 'Once') { $value += ' "{GUEST_CREDENTIAL_FILE}"' }
     return $value
 }
 
-$agentRole = if ($Scenario -eq 'Unattended') { 'poweragent-unattended' } else { 'poweragent' }
+$agentRole = if ($Scenario -eq 'Upgrade') { 'poweragent-upgrade' } elseif ($Scenario -eq 'Unattended') { 'poweragent-unattended' } else { 'poweragent' }
 $requests = foreach ($roleName in @($agentRole, ('powercontroller-' + $Scenario.ToLowerInvariant()))) {
+    $fixture = if ($roleName -eq 'poweragent-upgrade') { 'previous' } else { 'release' }
+    $fixtureHash = if ($fixture -eq 'previous') { $previousHash } else { $releaseHash }
     $request = @{
         ArtifactPath = $artifact; ExecutableRelativePath = 'lab\RemoteDebugger.Lab.exe'
         Arguments = (Get-LabArguments $roleName)
         AssertResultFile = '{OUTDIR}\lab-result.json'; AssertResultJsonPointer = '/passed'; AssertResultEqualsJson = 'true'
         GuestSetupExecutableRelativePath = 'lab\RemoteDebugger.Lab.exe'; GuestSetupExecutableSha256 = $labHash
-        GuestSetupArguments = @('powersetup', '{PAYLOAD}\release\RemoteDebugger.exe', '{PAYLOAD}\lab\RemoteDebugger.Lab.exe', $releaseHash); GuestSetupTimeoutSeconds = 300
+        GuestSetupArguments = @('powersetup', "{PAYLOAD}\$fixture\RemoteDebugger.exe", '{PAYLOAD}\lab\RemoteDebugger.Lab.exe', $fixtureHash); GuestSetupTimeoutSeconds = 300
         NetworkProfile = 'IsolatedTestNet'; NetworkCohort = $Cohort; ExecutionTimeoutSeconds = $executionSeconds; ThrowOnFailure = $true
         GroupId = $group; GroupSize = 2
     }
@@ -44,8 +48,8 @@ $requests = foreach ($roleName in @($agentRole, ('powercontroller-' + $Scenario.
             $bootCount = if ($Scenario -eq 'Once') { 2 } else { 1 }
             $boots = @(for ($boot = 1; $boot -le $bootCount; $boot++) {
                 $automatic = $Scenario -eq 'Once' -and $boot -eq 1
-                $observation = if ($automatic) { 0 } elseif ($Scenario -eq 'Expiry') { 3700 } elseif ($Scenario -eq 'Unattended') { 90 } elseif ($Scenario -eq 'Cancel') { 60 } else { 30 }
-                $continuationRole = if ($boot -eq 1) { 'powerafterfirst' } else { 'poweraftersecond' }
+                $observation = if ($automatic) { 0 } elseif ($Scenario -eq 'Expiry') { 3700 } elseif ($Scenario -in @('Unattended', 'Upgrade')) { 90 } elseif ($Scenario -eq 'Cancel') { 60 } else { 30 }
+                $continuationRole = if ($Scenario -eq 'Upgrade') { 'powerafterfirst-upgrade' } elseif ($boot -eq 1) { 'powerafterfirst' } else { 'poweraftersecond' }
                 @{
                     ExpectedSignIn = $(if ($automatic) { 'Automatic' } else { 'Manual' })
                     BootTimeoutSeconds = 300; SignedOutObservationSeconds = $observation

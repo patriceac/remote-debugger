@@ -222,7 +222,9 @@ public static class SupportPlatform
         status = await GetStatusAsync(ct);
         if (RequiresServiceRefresh(status, currentVersion))
             throw new InvalidOperationException("The protected support service refresh did not enable the current elevated-input broker: " + status.Message);
-        await maintenance.StartAsync(ct);
+        // A service restart invalidates both cached maintenance and input pipes.
+        maintenance.ResetBroker();
+        await maintenance.PrepareAsync(ct);
         return status;
     }
 

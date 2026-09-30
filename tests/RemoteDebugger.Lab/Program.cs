@@ -150,8 +150,11 @@ internal sealed partial class LabForm : Forms.Form
                 else if (role == "workflowcontroller") await WorkflowControllerAsync();
                 else if (role == "poweragent") await PowerAgentAsync(0, auxiliaryPath);
                 else if (role == "poweragent-unattended") await PowerAgentAsync(0, auxiliaryPath, unattended: true);
+                else if (role == "poweragent-upgrade") await PowerAgentAsync(0, auxiliaryPath, unattended: true, upgrade: true);
                 else if (role == "powercontroller-unattended") await UnattendedControllerAsync();
+                else if (role == "powercontroller-upgrade") await UnattendedControllerAsync(upgrade: true);
                 else if (role == "powerafterfirst") await PowerAgentAsync(1, auxiliaryPath);
+                else if (role == "powerafterfirst-upgrade") await PowerAgentAsync(1, auxiliaryPath, upgrade: true);
                 else if (role == "poweraftersecond") await PowerAgentAsync(2, auxiliaryPath);
                 else if (role == "powercontroller-once") await PowerControllerAsync("once", PowerCredentialFixture.Read(auxiliaryPath));
                 else if (role == "powercontroller-cancel") await PowerControllerAsync("cancel");
@@ -180,7 +183,7 @@ internal sealed partial class LabForm : Forms.Form
             {
                 Record("lab.fatal", "The acceptance Lab completed without hiding an exception", "fail", true, new { error = ex.ToString() });
                 await FinishAsync(ex.ToString());
-                if (role is "poweragent" or "poweragent-unattended" or "powerafterfirst")
+                if (role is "poweragent" or "poweragent-unattended" or "poweragent-upgrade" or "powerafterfirst" or "powerafterfirst-upgrade")
                     await FinishAsync(ex.ToString(), role.StartsWith("poweragent", StringComparison.Ordinal) ? "power-before-boot-1.json" : "power-before-boot-2.json");
             }
         };
@@ -553,7 +556,9 @@ internal sealed partial class LabForm : Forms.Form
         string error;
         do
         {
-            validated = ProvisioningEvidence.TryValidate(application, output, out receipt, out error, allowPowerSetup: powerRole);
+            validated = ProvisioningEvidence.TryValidate(application, output, out receipt, out error, allowPowerSetup: powerRole,
+                legacyDemandStart: role == "poweragent-upgrade",
+                upgradedFixturePath: role == "powerafterfirst-upgrade" ? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../release/RemoteDebugger.exe")) : null);
             if (validated || !role.StartsWith("powerafter", StringComparison.Ordinal) || validationTime.Elapsed.TotalSeconds >= 30) break;
             // The product's one-use sign-in watcher restores demand start just
             // after Windows signs in. Retain the normal receipt/service checks.

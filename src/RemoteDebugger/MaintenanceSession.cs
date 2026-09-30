@@ -197,6 +197,7 @@ public sealed class MaintenanceSession(string root) : IDisposable
         if (Volatile.Read(ref commandRunning) != 0) DisposePipe(closeInput: false);
     }
     internal void EndInput() => _ = input.ReleaseAsync();
+    internal void ResetBroker() => DisposePipe();
 
     internal async Task RecoverInputAsync(CancellationToken ct)
     {
