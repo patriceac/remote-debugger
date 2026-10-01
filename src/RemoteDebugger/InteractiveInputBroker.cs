@@ -11,8 +11,11 @@ internal static class InteractiveInputBroker
 
     internal static void ValidateRequest(Request request)
     {
-        if (request.Operation != "ui.input" || !Guid.TryParse(request.Id, out _) || request.Args.GetRawText().Length > 32768)
-            throw new ArgumentException("The interactive helper accepts bounded input requests only.");
+        if (request.Operation is not ("ui.input" or "desktop.capture") || !Guid.TryParse(request.Id, out _) || request.Args.GetRawText().Length > 32768)
+            throw new ArgumentException("The interactive helper accepts bounded input and capture requests only.");
+        if (request.Operation == "desktop.capture" && (request.Args.Int("monitor") is < -1 or > 63 ||
+            request.Args.Str("fingerprint") is { Length: > 0 } fingerprint && !PairingExchange.ValidHash(fingerprint)))
+            throw new ArgumentException("Invalid desktop capture request.");
     }
 
     internal static async Task ServeAsync(NamedPipeServerStream controller, VerifiedProcessIdentity caller, Request open, CancellationToken ct)
@@ -69,11 +72,20 @@ internal static class InteractiveInputBroker
             using var connect = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             await pipe.ConnectAsync(connect.Token);
             SupportPipeIdentity.VerifyServer(pipe);
+            SignedOutDesktop.IsHelper = true;
+            using var capture = new CaptureBuffer();
             while (pipe.IsConnected)
             {
                 var request = await Wire.ReadAsync<Request>(pipe, CancellationToken.None);
                 Reply reply;
-                try { ValidateRequest(request); reply = Reply.Success(request.Id, Native.HandleSharedInput(request.Args)); }
+                try
+                {
+                    ValidateRequest(request);
+                    object result = request.Operation == "desktop.capture"
+                        ? DesktopCapture.CaptureStream(request.Args.Int("monitor"), 0, 75, 0, request.Args.Str("fingerprint"), capture)
+                        : Native.HandleSharedInput(request.Args);
+                    reply = Reply.Success(request.Id, result);
+                }
                 catch (Exception ex) { reply = Reply.Failure(request.Id, "input_blocked", ex.Message); }
                 await Wire.WriteAsync(pipe, reply, CancellationToken.None);
             }
@@ -111,7 +123,7 @@ internal sealed class PrivilegedInputSession
         catch { }
     }
 
-    public async Task<System.Text.Json.JsonElement> SendAsync(object args, Func<bool> permitted, CancellationToken ct, bool prepareOnly = false, bool releaseOnly = false)
+    public async Task<System.Text.Json.JsonElement> SendAsync(object args, Func<bool> permitted, CancellationToken ct, bool prepareOnly = false, bool releaseOnly = false, string operation = "ui.input")
     {
         await gate.WaitAsync(ct);
         try
@@ -137,7 +149,7 @@ internal sealed class PrivilegedInputSession
             }
             var current = pipe ?? throw new OperationCanceledException("Input session ended.");
             var payload = Json.Element(args);
-            await Wire.WriteAsync(current, new Request(Guid.NewGuid().ToString(), "", "ui.input", payload, SupportOperationTimeouts.InputSeconds(payload.Str("kind"))), ct);
+            await Wire.WriteAsync(current, new Request(Guid.NewGuid().ToString(), "", operation, payload, SupportOperationTimeouts.InputSeconds(payload.Str("kind"))), ct);
             var result = RemoteClient.Require(await Wire.ReadAsync<Reply>(current, ct));
             lock (sync)
             {

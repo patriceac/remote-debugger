@@ -137,7 +137,7 @@ public static class Native
     {
         if (SignedOutDesktop.NeedsDispatch) return SignedOutDesktop.Invoke(() => HandleSharedInput(a));
         string kind = a.Str("kind");
-        if (UnattendedSupport.IsWorker)
+        if (SignedOutDesktop.UsesSystemPointer)
         {
             // The sign-in desktop has one Windows pointer and no user overlays.
             if (kind is not ("pointer" or "pointerLeave")) HandleInput(a);

@@ -10,7 +10,7 @@ internal sealed partial class LabForm
     // Disposable pairing material; the test network has no Internet route.
     private static InternetSettings UnattendedFixtureSettings => new("https://unattended.invalid", new string('A', 64), new string('B', 64), "1e5bcf2e61c449179ce9a3d887c1ddea");
 
-    private async Task UnattendedControllerAsync(bool upgrade = false)
+    private async Task UnattendedControllerAsync(bool upgrade = false, PowerCredentialFixture? credential = null)
     {
         Testing.UpdateAcceptanceAuthority.Enroll(Vault.DefaultRoot);
         UnattendedFixtureSettings.Save(Vault.DefaultRoot);
@@ -34,6 +34,7 @@ internal sealed partial class LabForm
             throw new IOException("The initial desktop agent is not unelevated.");
         Pass("unattended.interactive_before", "The original desktop agent remains unelevated before reboot");
         await ProbeUnattendedInteractiveInputAsync(remote);
+        if (credential != null) await ProbeLockedStreamAsync(remote, credential, initial);
 
         await WaitWorkflowAsync(async () =>
         {
@@ -91,6 +92,7 @@ internal sealed partial class LabForm
             throw new IOException("Windows did not attest automatic LocalSystem service operation.");
         Pass("unattended.service_at_boot", "Windows reports automatic LocalSystem service operation before sign-in", os);
 
+        var liveStream = ProbeUnattendedStreamAsync(remote, "signed-out");
         var frame = RemoteClient.Require(await remote.CallAsync("screenshot", new { quality = 90 }, stop.Token)).Deserialize<ScreenFrame>(Json.Options)!;
         byte[] pixels = Convert.FromBase64String(frame.Data);
         await File.WriteAllBytesAsync(Path.Combine(output, "unattended-sign-in-before.jpg"), pixels, stop.Token);
@@ -123,6 +125,7 @@ internal sealed partial class LabForm
             RemoteClient.Require(await remote.CallAsync("ui.input", new { kind = key.Item1, virtualKey = key.Item2 }, stop.Token));
         if (afterText.Data == afterKey.Data) throw new IOException("Windows sign-in did not display the test keyboard input.");
         Pass("unattended.sign_in_input", "The real sign-in screen is nonblank and receives pointer and keyboard input");
+        await liveStream;
 
         // Keep the session active until the broker performs its declared Windows sign-in.
         await WaitWorkflowAsync(async () =>
@@ -164,5 +167,71 @@ internal sealed partial class LabForm
             await File.WriteAllBytesAsync(Path.Combine(output, "unattended-desktop-input-failure.jpg"), Convert.FromBase64String(frame.Data), stop.Token);
             throw new IOException("Desktop input readback was: " + JsonSerializer.Serialize(observed), ex);
         }
+    }
+
+    private async Task ProbeLockedStreamAsync(RemoteClient remote, PowerCredentialFixture credential, JsonElement initial)
+    {
+        var before = RemoteClient.Require(await remote.CallAsync("status", ct: stop.Token));
+        var stream = ProbeUnattendedStreamAsync(remote, "lock-unlock", 40);
+        await Task.Delay(1000, stop.Token);
+        if (!(await PowerMessageAsync("POWER_LOCK")).GetProperty("locked").GetBoolean()) throw new IOException("Windows refused to lock the fixture.");
+        await WaitWorkflowAsync(async () => !(await PowerMessageAsync("POWER_STATUS")).GetProperty("desktopAvailable").GetBoolean(), 15);
+        await Task.Delay(2000, stop.Token);
+        foreach (string kind in new[] { "keyDown", "keyUp" })
+            RemoteClient.Require(await remote.SendInputAsync(new { kind, virtualKey = 13 }, stop.Token));
+        await Task.Delay(1000, stop.Token);
+        RemoteClient.Require(await remote.SendInputAsync(new { kind = "text", text = "locked-input-probe" }, stop.Token));
+        await Task.Delay(20000, stop.Token);
+        if (stream.IsCompleted) { await stream; throw new IOException("The stream stopped while Windows was locked."); }
+        foreach (var key in new[] { ("keyDown", 17), ("keyDown", 65), ("keyUp", 65), ("keyUp", 17), ("keyDown", 8), ("keyUp", 8) })
+            RemoteClient.Require(await remote.SendInputAsync(new { kind = key.Item1, virtualKey = key.Item2 }, stop.Token));
+        await credential.EnterPasswordAsync(initial.GetProperty("credentialBinding"), async password =>
+            RemoteClient.Require(await remote.SendInputAsync(new { kind = "text", text = password }, stop.Token)));
+        foreach (string kind in new[] { "keyDown", "keyUp" })
+            RemoteClient.Require(await remote.SendInputAsync(new { kind, virtualKey = 13 }, stop.Token));
+        await WaitWorkflowAsync(async () => (await PowerMessageAsync("POWER_STATUS")).GetProperty("desktopAvailable").GetBoolean(), 15);
+        var after = RemoteClient.Require(await remote.CallAsync("status", ct: stop.Token));
+        if (before.Int("processId") != after.Int("processId") || after.GetProperty("elevated").GetBoolean())
+            throw new IOException("Lock/unlock replaced or elevated the desktop agent.");
+        await ProbeUnattendedInteractiveInputAsync(remote);
+        await stream;
+        Pass("unattended.unlock", "Windows unlock returns control to the same unelevated process and authenticated stream");
+    }
+
+    private async Task ProbeUnattendedStreamAsync(RemoteClient remote, string stage, int seconds = 20)
+    {
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(stop.Token);
+        int frames = 0;
+        var fingerprints = new HashSet<string>();
+        var stream = remote.StreamAdaptiveAsync(frame =>
+        {
+            using (frame)
+            using (var image = frame.TakeImage())
+            {
+                frames++;
+                fingerprints.Add(DesktopCapture.Fingerprint(image.Image, new Rectangle(Point.Empty, image.Image.Size), frame.Geometry.LayoutId));
+                image.Image.Save(Path.Combine(output, stage + "-stream-latest.png"));
+            }
+            return Task.CompletedTask;
+        }, null, fps: 5, seconds: 60, ct: cancellation.Token);
+        try
+        {
+            for (int i = 0; i < seconds * 2; i++)
+            {
+                await Task.Delay(500, stop.Token);
+                if (stream.IsCompleted) { await stream; throw new IOException("The stream ended before the observation completed."); }
+                RemoteClient.Require(await remote.CallAsync("screen.refresh", ct: stop.Token));
+            }
+        }
+        finally
+        {
+            cancellation.Cancel();
+            try { await stream; }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+        }
+        var evidence = new { frames, distinctFrames = fingerprints.Count, seconds, negotiation = remote.StreamNegotiation };
+        await File.WriteAllTextAsync(Path.Combine(output, stage + "-stream.json"), JsonSerializer.Serialize(evidence, Json.Options), stop.Token);
+        if (frames < 20 || fingerprints.Count < 2) throw new IOException("The sign-in video did not remain live with changing frames.");
+        Pass("unattended.stream_" + stage, "One adaptive stream stays open throughout the observation and delivers changing desktop frames", evidence);
     }
 }

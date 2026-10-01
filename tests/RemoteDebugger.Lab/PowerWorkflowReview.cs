@@ -17,6 +17,8 @@ namespace RemoteDebugger.Lab;
 
 internal sealed partial class LabForm
 {
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern bool LockWorkStation();
     // Only the initial phase launches the product. A declared harness continuation
     // must find the process started by the product's own Windows RunOnce entry.
     private async Task PowerAgentAsync(int boot, string? credentialPath, bool unattended = false, bool upgrade = false)
@@ -75,7 +77,10 @@ internal sealed partial class LabForm
                 if (request is "RD_LAB_BOOTSTRAP" or "POWER_STATUS")
                     response = new { code, boot, bootId, userSid, account = WindowsIdentity.GetCurrent().Name, credentialBinding,
                         binarySha256 = await HashFileAsync(application), productStartedUtc = product!.StartTime.ToUniversalTime(),
+                        desktopAvailable = DesktopCapture.IsAvailable,
                         utc = DateTimeOffset.UtcNow, reports = new IncidentLog(productData).Read().Select(x => x.Failure.Name).ToArray() };
+                else if (request == "POWER_LOCK")
+                    response = new { locked = LockWorkStation() };
                 else if (request == "POWER_INPUT_CLEAR")
                 {
                     WindowState = Forms.FormWindowState.Normal; TopMost = true; Show(); Activate(); input.Clear();

@@ -10,6 +10,26 @@ namespace RemoteDebugger.Platform.Tests;
 public sealed class UnattendedSupportTests
 {
     [Fact]
+    public void CaptureFailureRetriesWithoutRetryingAuthenticationFailures()
+    {
+        Assert.True(MainForm.IsRecoverableStreamFailure(new IOException()));
+        Assert.True(MainForm.IsRecoverableStreamFailure(new RemoteOperationException("stream_failed", "Desktop switching")));
+        Assert.False(MainForm.IsRecoverableStreamFailure(new RemoteOperationException("access_denied", "Session ended")));
+        Assert.False(MainForm.IsRecoverableStreamFailure(new InvalidOperationException()));
+    }
+
+    [Fact]
+    public void InteractiveHelperAllowsOnlyBoundedCaptureAlongsideInput()
+    {
+        var request = new Request(Guid.NewGuid().ToString(), "", "desktop.capture", Json.Element(new { monitor = 0 }));
+        InteractiveInputBroker.ValidateRequest(request);
+        InteractiveInputBroker.ValidateRequest(request with { Args = Json.Element(new { monitor = -1, fingerprint = new string('A', 64) }) });
+        Assert.Throws<ArgumentException>(() => InteractiveInputBroker.ValidateRequest(request with { Args = Json.Element(new { monitor = -2 }) }));
+        Assert.Throws<ArgumentException>(() => InteractiveInputBroker.ValidateRequest(request with { Args = Json.Element(new { fingerprint = "bad" }) }));
+        Assert.Throws<ArgumentException>(() => InteractiveInputBroker.ValidateRequest(request with { Operation = "command" }));
+    }
+
+    [Fact]
     public void DisablingDoesNotReadPrivateCredentials()
         => Assert.Equal(new UnattendedProfile(false), UnattendedSupport.CreateProfile("invalid\0path", false));
 

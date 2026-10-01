@@ -1740,7 +1740,7 @@ public sealed partial class MainForm : Forms.Form
                         return Task.CompletedTask;
                     }, (codec, reason) => SetStreamCodec(codec, reason), StreamPolicy.MaximumFps, MonitorValue(), 300, lifetime.Token, economyPreferred);
                 }
-                catch (Exception ex) when (!lifetime.IsCancellationRequested && ex is IOException or System.Net.Sockets.SocketException or OperationCanceledException)
+                catch (Exception ex) when (!lifetime.IsCancellationRequested && IsRecoverableStreamFailure(ex))
                 {
                     if (ex is not OperationCanceledException) RecordIncident("stream_interrupted", ex);
                     // The five-minute transport boundary and transient link loss

@@ -5,6 +5,7 @@ using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using RemoteDebugger.Core;
 using Forms = System.Windows.Forms;
 
@@ -22,6 +23,7 @@ internal sealed class CaptureBuffer : IDisposable
     private Bitmap? bitmap;
     private DxgiCapture? gpu;
     private bool gpuAttempted;
+    private PrivilegedInputSession? privileged;
     public bool UsesGpu => gpu != null;
     public Bitmap Get(Size size)
     {
@@ -38,7 +40,23 @@ internal sealed class CaptureBuffer : IDisposable
         catch (Exception ex) when (ex is not OutOfMemoryException)
         { gpu?.Dispose(); gpu = null; return null; }
     }
-    public void Dispose() { gpu?.Dispose(); bitmap?.Dispose(); }
+    public BitmapCaptureResult CapturePrivileged(int monitor, string? fingerprint)
+    {
+        // Keep the agent's authenticated stream in the user process. Only pixels
+        // cross the verified service pipe while Windows owns the input desktop.
+        gpu?.Dispose(); gpu = null; gpuAttempted = false;
+        privileged ??= new PrivilegedInputSession(async ct => await SupportPlatform.OpenBrokerPipeAsync(ct), () => { });
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        var data = Task.Run(() => privileged.SendAsync(new { monitor, fingerprint = PairingExchange.ValidHash(fingerprint ?? "") ? fingerprint : null },
+            () => true, deadline.Token, operation: "desktop.capture")).GetAwaiter().GetResult();
+        var result = data.Deserialize<StreamCaptureResult>(Json.Options) ?? throw new IOException("Missing privileged capture.");
+        if (result.Frame is not { } frame) return new(null, result.Fingerprint);
+        using var bytes = new MemoryStream(Convert.FromBase64String(frame.Data));
+        using var image = Image.FromStream(bytes);
+        return new(new CapturedDesktop(new Bitmap(image), frame.CapturedUtc, frame.Geometry, result.Fingerprint, frame.CopyMs,
+            CaptureMs: frame.CaptureEncodeMs, CaptureMethod: "GDI/service"), result.Fingerprint);
+    }
+    public void Dispose() { privileged?.End(); gpu?.Dispose(); bitmap?.Dispose(); }
 }
 internal sealed record BitmapCaptureResult(CapturedDesktop? Capture, string Fingerprint);
 internal sealed record EncodedJpeg(ScreenFrame Frame, byte[] Bytes);
@@ -60,6 +78,8 @@ public static class DesktopCapture
         return (inputName, threadName, inputName != "<unavailable>" && inputName == threadName);
     }
     public static object State() { var state = ReadDesktopState(); return new { inputDesktop = state.Input, threadDesktop = state.Thread, available = state.Available }; }
+    internal static bool IsAvailable => ReadDesktopState().Available;
+    internal static bool IsDefaultDesktop => ReadDesktopState().Thread.Equals("Default", StringComparison.OrdinalIgnoreCase);
     public static void RequireDesktop()
     {
         if (!ReadDesktopState().Available) throw new InvalidOperationException("Interactive desktop unavailable or secure desktop active; unlock or handle the Windows prompt locally.");
@@ -93,6 +113,11 @@ public static class DesktopCapture
     internal static BitmapCaptureResult CaptureBitmap(int monitor, string? previousFingerprint, CaptureBuffer? buffer = null)
     {
         if (SignedOutDesktop.NeedsDispatch) return SignedOutDesktop.Invoke(() => CaptureBitmap(monitor, previousFingerprint, buffer));
+        if (!SignedOutDesktop.IsPrivileged && !IsAvailable)
+        {
+            using var temporary = buffer == null ? new CaptureBuffer() : null;
+            return (buffer ?? temporary!).CapturePrivileged(monitor, previousFingerprint);
+        }
         IntPtr old = SetThreadDpiAwarenessContext(new IntPtr(-4));
         try
         {
@@ -102,7 +127,7 @@ public static class DesktopCapture
             string layoutId = LayoutId(); DateTimeOffset captured = DateTimeOffset.UtcNow;
             double copyStart = sw.Elapsed.TotalMilliseconds;
             var bmp = buffer?.Get(r.Size) ?? new Bitmap(r.Width, r.Height, PixelFormat.Format32bppArgb);
-            string? fingerprint = monitor >= 0 && !UnattendedSupport.IsWorker ? buffer?.CaptureGpu(screens[monitor].DeviceName, bmp) : null;
+            string? fingerprint = monitor >= 0 && !SignedOutDesktop.IsPrivileged ? buffer?.CaptureGpu(screens[monitor].DeviceName, bmp) : null;
             if (fingerprint == null) using (var g = Graphics.FromImage(bmp)) g.CopyFromScreen(r.Location, Point.Empty, r.Size);
             double copyMs = sw.Elapsed.TotalMilliseconds - copyStart;
             fingerprint = fingerprint == null ? Fingerprint(bmp, r, layoutId) : layoutId + "|" + fingerprint;
@@ -112,6 +137,11 @@ public static class DesktopCapture
                 return new BitmapCaptureResult(null, fingerprint);
             }
             return new BitmapCaptureResult(new CapturedDesktop(bmp, captured, new DesktopGeometry(r.X, r.Y, r.Width, r.Height, layoutId), fingerprint, copyMs, buffer == null, sw.Elapsed.TotalMilliseconds, buffer?.UsesGpu == true ? "DXGI" : "GDI"), fingerprint);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception && !SignedOutDesktop.IsPrivileged && !IsAvailable)
+        {
+            using var temporary = buffer == null ? new CaptureBuffer() : null;
+            return (buffer ?? temporary!).CapturePrivileged(monitor, previousFingerprint);
         }
         finally { SetThreadDpiAwarenessContext(old); }
     }

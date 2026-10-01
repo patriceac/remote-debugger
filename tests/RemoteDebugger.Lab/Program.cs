@@ -151,7 +151,7 @@ internal sealed partial class LabForm : Forms.Form
                 else if (role == "poweragent") await PowerAgentAsync(0, auxiliaryPath);
                 else if (role == "poweragent-unattended") await PowerAgentAsync(0, auxiliaryPath, unattended: true);
                 else if (role == "poweragent-upgrade") await PowerAgentAsync(0, auxiliaryPath, unattended: true, upgrade: true);
-                else if (role == "powercontroller-unattended") await UnattendedControllerAsync();
+                else if (role == "powercontroller-unattended") await UnattendedControllerAsync(credential: auxiliaryPath == null ? null : PowerCredentialFixture.Read(auxiliaryPath));
                 else if (role == "powercontroller-upgrade") await UnattendedControllerAsync(upgrade: true);
                 else if (role == "powerafterfirst") await PowerAgentAsync(1, auxiliaryPath);
                 else if (role == "powerafterfirst-upgrade") await PowerAgentAsync(1, auxiliaryPath, upgrade: true);

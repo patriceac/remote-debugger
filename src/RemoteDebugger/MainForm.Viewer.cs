@@ -5,6 +5,9 @@ namespace RemoteDebugger;
 
 public sealed partial class MainForm
 {
+    internal static bool IsRecoverableStreamFailure(Exception error) =>
+        error is IOException or System.Net.Sockets.SocketException or OperationCanceledException or RemoteOperationException { Code: "stream_failed" };
+
     private RemoteKeyboardCapture? keyboardCapture;
     private readonly Forms.Panel economyHost = new() { AutoSize = true, Margin = Forms.Padding.Empty };
     private readonly Forms.Button secureAttention = Button(() => "Ctrl+Alt+Del", "secureAttention", 116);

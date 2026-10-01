@@ -42,6 +42,9 @@ internal sealed class PowerCredentialFixture
     }
 
     internal void EnterPassword(JsonElement peer)
+        => EnterPasswordAsync(peer, password => { Native.TypeText(0, password); return Task.CompletedTask; }).GetAwaiter().GetResult();
+
+    internal async Task EnterPasswordAsync(JsonElement peer, Func<string, Task> enter)
     {
         RequirePeerBinding(Identity, peer.Deserialize<Binding>(Json.Options) ?? throw new IOException("The target credential binding is missing."));
         byte[] encrypted = Convert.FromBase64String(protectedPassword);
@@ -50,7 +53,7 @@ internal sealed class PowerCredentialFixture
         {
             clear = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.CurrentUser);
             if (clear.Length is < 1 or > 8192) throw new IOException("The guest password fixture has an invalid size.");
-            Native.TypeText(0, Encoding.UTF8.GetString(clear));
+            await enter(Encoding.UTF8.GetString(clear));
         }
         finally
         {

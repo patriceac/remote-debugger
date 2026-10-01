@@ -4,6 +4,7 @@ param(
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$')]
     [string]$Cohort = ('power-workflow-' + [guid]::NewGuid().ToString('N').Substring(0, 8)),
     [switch]$PrepareOnly,
+    [switch]$SignedOutOnly,
     [string]$ArtifactPath
 )
 $ErrorActionPreference = 'Stop'
@@ -21,7 +22,7 @@ if (-not (Test-Path -LiteralPath $work)) { New-Item -ItemType Directory -Path $w
 function Get-LabArguments([string]$RoleName) {
     $fixture = if ($RoleName -in @('poweragent-upgrade', 'powerafterfirst-upgrade')) { 'previous' } else { 'release' }
     $value = "$RoleName `"{OUTDIR}`" provisioned none `"{PAYLOAD}\$fixture\RemoteDebugger.exe`""
-    if ($Scenario -eq 'Once') { $value += ' "{GUEST_CREDENTIAL_FILE}"' }
+    if ($Scenario -eq 'Once' -or ($Scenario -eq 'Unattended' -and -not $SignedOutOnly)) { $value += ' "{GUEST_CREDENTIAL_FILE}"' }
     return $value
 }
 
@@ -38,7 +39,7 @@ $requests = foreach ($roleName in @($agentRole, ('powercontroller-' + $Scenario.
         NetworkProfile = 'IsolatedTestNet'; NetworkCohort = $Cohort; ExecutionTimeoutSeconds = $executionSeconds; ThrowOnFailure = $true
         GroupId = $group; GroupSize = 2
     }
-    if ($Scenario -eq 'Once') { $request.GuestCredentialFixture = $true }
+    if ($Scenario -eq 'Once' -or ($Scenario -eq 'Unattended' -and -not $SignedOutOnly)) { $request.GuestCredentialFixture = $true }
     if ($roleName -eq $agentRole) {
         if ($Scenario -eq 'Shutdown') {
             $request.ExpectGuestPowerOff = $true

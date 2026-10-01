@@ -7,7 +7,10 @@ namespace RemoteDebugger;
 internal static class SignedOutDesktop
 {
     [ThreadStatic] private static bool bound;
-    internal static bool NeedsDispatch => UnattendedSupport.IsWorker && !bound;
+    internal static bool IsHelper { get; set; }
+    internal static bool IsPrivileged => UnattendedSupport.IsWorker || IsHelper;
+    internal static bool NeedsDispatch => IsPrivileged && !bound && (UnattendedSupport.IsWorker || !DesktopCapture.IsAvailable);
+    internal static bool UsesSystemPointer => UnattendedSupport.IsWorker || IsHelper && !DesktopCapture.IsDefaultDesktop;
     internal static Point Pointer()
     {
         if (!GetCursorPos(out var point)) throw new Win32Exception(Marshal.GetLastWin32Error());
