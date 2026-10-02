@@ -6,14 +6,17 @@ using Xunit;
 
 public sealed class SavedConnectionResumeTests
 {
-    [Fact]
-    public async Task MatchingSavedPrivateGrantResumesTheExistingSession()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MatchingSavedPrivateGrantResumesTheExistingSession(bool savedLanEndpoint)
     {
         string root = NewRoot();
         try
         {
             string fingerprint = new('a', 64), token = new('b', 64);
             var saved = Target(fingerprint, token);
+            if (savedLanEndpoint) saved = saved with { DirectHost = "127.0.0.1", DirectPort = 45832 };
             SaveConnection(root, saved);
             var stream = new ReplyStream(request => Reply.Success(request.Id, new { session = new { connected = true } }));
             var calls = new List<Connection>();
@@ -25,6 +28,8 @@ public sealed class SavedConnectionResumeTests
 
             Assert.True(await client.TryResumeSavedConnectionAsync(CancellationToken.None));
             Assert.Equal(token, client.Connection.Token);
+            Assert.Equal(saved.DirectHost, client.Connection.DirectHost);
+            Assert.Equal(savedLanEndpoint ? "Direct LAN" : "Relay", client.ActiveRoute);
             Assert.Equal(saved with { Token = token }, calls.Single());
             var request = Assert.Single(stream.Requests);
             Assert.Equal("session.heartbeat", request.Operation);
@@ -39,7 +44,7 @@ public sealed class SavedConnectionResumeTests
         string root = NewRoot();
         try
         {
-            SaveConnection(root, Target(new('b', 64), new('c', 64)));
+            SaveConnection(root, Target(new('b', 64), new('c', 64)) with { DirectHost = "127.0.0.1", DirectPort = 45832 });
             int opens = 0;
             var client = CreateClient(root, Target(new('a', 64)), (route, _) =>
             {
@@ -74,6 +79,49 @@ public sealed class SavedConnectionResumeTests
         Assert.True((await client.CallAsync("status")).Ok);
         Assert.Equal(new[] { "direct", "relay", "direct" }, attempts);
         Assert.Equal("Direct LAN", client.ActiveRoute);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task FirstScreenRetriesLanAfterSavedSessionHeartbeatFallsBack(bool lanRecovers)
+    {
+        var endpoint = new DirectEndpoint("127.0.0.1", 45832);
+        var target = Target(new('a', 64), new('b', 64)) with { DirectHost = endpoint.Host, DirectPort = endpoint.Port };
+        bool directWorks = false;
+        int directAttempts = 0;
+        var requests = new List<(string Route, Request Request)>();
+        var client = new RemoteClient(target, (route, _) =>
+        {
+            bool direct = route.DirectHost.Length > 0 || route.RelayUrl.Length == 0;
+            if (direct)
+            {
+                directAttempts++;
+                if (!directWorks) throw new IOException("LAN listener is still starting.");
+            }
+            return Task.FromResult<Stream>(new ReplyStream(request =>
+            {
+                requests.Add((direct ? "Direct LAN" : "Relay", request));
+                if (request.Operation == "connection.candidates")
+                    return Reply.Success(request.Id, new { candidates = new[] { endpoint } });
+                if (request.Operation == "screen.stream")
+                    return Reply.Failure(request.Id, "test_stream_finished", "Route selected; no frames needed.");
+                return Reply.Success(request.Id, new { session = new { connected = true } });
+            }));
+        });
+
+        Assert.True((await client.HeartbeatAsync()).GetProperty("session").GetProperty("connected").GetBoolean());
+        Assert.Equal("Relay", client.ActiveRoute);
+        directWorks = lanRecovers;
+        await client.PreferDirectAtSessionStartAsync(CancellationToken.None);
+        Assert.Equal(lanRecovers ? endpoint.Host : "", client.Connection.DirectHost);
+        await Assert.ThrowsAsync<RemoteOperationException>(() => client.StreamAdaptiveAsync(_ => Task.CompletedTask, null));
+        Assert.Equal(lanRecovers ? "Direct LAN" : "Relay", client.ScreenRoute);
+        Assert.Equal(lanRecovers ? 3 : 2, directAttempts);
+        var screen = Assert.Single(requests, item => item.Request.Operation == "screen.stream");
+        Assert.Equal(client.ScreenRoute, screen.Route);
+        Assert.Equal(target.Token, screen.Request.Token);
+        if (lanRecovers) Assert.Equal(target.Token, Assert.Single(requests, item => item.Request.Operation == "status").Request.Token);
     }
 
     [Fact]

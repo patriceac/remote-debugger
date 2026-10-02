@@ -728,6 +728,8 @@ public sealed partial class MainForm : Forms.Form
                 session.TryGetProperty("connected", out var connectedValue) && connectedValue.GetBoolean();
             bool matched = heartbeat.TryGetProperty("binaryMatched", out var matchedValue) && matchedValue.GetBoolean();
             if (generation != operationGeneration || !ReferenceEquals(target, client) || !connected) return;
+            await target.PreferDirectAtSessionStartAsync(resumeCts.Token);
+            if (generation != operationGeneration || !ReferenceEquals(target, client)) return;
             clientUpToDate = matched;
             if (!CanAutomaticallyResumeSavedSession(matched, heartbeat.Str("agentBinarySha256"), ExecutableIdentity.Sha256))
             {
@@ -1421,19 +1423,7 @@ public sealed partial class MainForm : Forms.Form
                 try { await pairedClient.PairAsync(PrivateInternet ? InternetSettings.Load(root)!.AuthenticationSecret(privateSupportId) : code.Text, handshake.Token); }
                 catch (OperationCanceledException) when (!pairingCts.IsCancellationRequested) { throw new TimeoutException(UiText.PairingTimedOut); }
             }
-            // Pairing already proved this LAN route; do not probe every adapter again.
-            if (pairedClient.Connection.RelayUrl.Length > 0 && !RemoteClient.IsLanAddress(pairedClient.Connection.DirectHost))
-            {
-                using var directUpgrade = CancellationTokenSource.CreateLinkedTokenSource(pairingCts.Token);
-                directUpgrade.CancelAfter(TimeSpan.FromSeconds(15));
-                try
-                {
-                    var candidates = await pairedClient.GetDirectEndpointsAsync(directUpgrade.Token);
-                    await pairedClient.TryPreferDirectAsync(candidates, directUpgrade.Token);
-                }
-                catch (OperationCanceledException) when (!pairingCts.IsCancellationRequested) { }
-                catch (Exception) when (!pairingCts.IsCancellationRequested) { }
-            }
+            await pairedClient.PreferDirectAtSessionStartAsync(pairingCts.Token);
             pairedClient.Save(ConnectionPath); synchronizingAgent = true; connectionState.SetText(() => UiText.AgentSynchronizing); SetFooterMessage(() => UiText.AgentSynchronizing); SetFooterDetail(() => UiText.TransferValidateVersion); ShowUpdateProgress(new AgentUpdateProgress("idle", 0, 0)); UpdateHeader(); RefreshFooter();
             using (var synchronization = CancellationTokenSource.CreateLinkedTokenSource(pairingCts.Token))
             {

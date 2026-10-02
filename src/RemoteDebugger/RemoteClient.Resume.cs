@@ -20,6 +20,8 @@ public sealed partial class RemoteClient
         Connection target = Connection;
         bool resumed = false;
         Connection = target with { Token = saved.Token };
+        if (target.DirectHost.Length == 0 && IsLanAddress(saved.DirectHost) && saved.DirectPort is > 0 and < 65536)
+            Connection = Connection with { DirectHost = saved.DirectHost, DirectPort = saved.DirectPort };
         try
         {
             Reply reply = await CallAsync("session.heartbeat", ct: ct, seconds: 10).ConfigureAwait(false);
@@ -30,5 +32,19 @@ public sealed partial class RemoteClient
             return resumed;
         }
         finally { if (!resumed) Connection = target; }
+    }
+
+    internal async Task PreferDirectAtSessionStartAsync(CancellationToken ct)
+    {
+        if (Connection.RelayUrl.Length == 0 || IsLanAddress(Connection.DirectHost)) return;
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(TimeSpan.FromSeconds(15));
+        try
+        {
+            // A failed resume may have cooled down a LAN endpoint that is ready now.
+            await TryPreferDirectAsync(await GetDirectEndpointsAsync(deadline.Token).ConfigureAwait(false),
+                deadline.Token, retryFailedRoutes: true).ConfigureAwait(false);
+        }
+        catch (Exception) when (!ct.IsCancellationRequested) { }
     }
 }

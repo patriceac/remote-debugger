@@ -1238,16 +1238,16 @@ public sealed partial class RemoteClient
             .Take(16)
             .ToArray() ?? [];
     }
-    internal async Task<bool> TryPreferDirectAsync(IEnumerable<DirectEndpoint> candidates, CancellationToken ct = default)
+    internal async Task<bool> TryPreferDirectAsync(IEnumerable<DirectEndpoint> candidates, CancellationToken ct = default, bool retryFailedRoutes = false)
     {
         if (Connection.RelayUrl.Length == 0) return true;
         Connection relay = Connection;
         async Task<DirectEndpoint?> Probe(DirectEndpoint candidate)
         {
             if (!(IsLanAddress(candidate.Host) || candidate == relay.WanEndpoint) ||
-                candidate.Port is not (> 0 and < 65536) || CoolingDown(candidate)) return null;
+                candidate.Port is not (> 0 and < 65536) || (CoolingDown(candidate) && !retryFailedRoutes)) return null;
             using var attempt = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            attempt.CancelAfter(TimeSpan.FromSeconds(2));
+            attempt.CancelAfter(TimeSpan.FromSeconds(retryFailedRoutes ? 5 : 2));
             var direct = relay with
             {
                 Host = candidate.Host,
@@ -1279,6 +1279,7 @@ public sealed partial class RemoteClient
         {
             var results = await Task.WhenAll(group.Select(Probe)).ConfigureAwait(false);
             if (results.FirstOrDefault(candidate => candidate != null) is not { } preferred) continue;
+            failedRoutes.TryRemove($"{preferred.Host}:{preferred.Port}", out _);
             Connection = Connection with { DirectHost = preferred.Host, DirectPort = preferred.Port };
             return true;
         }
