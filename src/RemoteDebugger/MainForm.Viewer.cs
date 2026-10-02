@@ -164,7 +164,8 @@ public sealed partial class MainForm
             FormBorderStyle = Forms.FormBorderStyle.Sizable; Bounds = windowedBounds; WindowState = windowedState;
         }
         ResumeLayout(true);
-        screenSurface.Refresh();
+        if (fullScreenHost is { } host) { host.Bounds = ClientRectangle; host.Show(); }
+        Refresh();
         if (enabled) screen.Focus(); else remoteText.Focus();
     }
 

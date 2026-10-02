@@ -142,6 +142,9 @@ internal sealed partial class LabForm
             Get<RemoteScreenView>("screen").Image = frame;
             if (scope == "fullscreen")
             {
+                AppTheme.SetPreference("dark");
+                Set("nextRoleCheck", long.MaxValue);
+                Get<Forms.Timer>("renderTimer").Start();
                 var viewer = Get<RemoteScreenView>("screen");
                 var surface = Get<Forms.Control>("screenSurface");
                 bool attached = true;
@@ -158,21 +161,30 @@ internal sealed partial class LabForm
                     for (int i = 0; i < 3; i++)
                     {
                         int before = paints;
-                        Call("SetFullScreen", true);
+                        if (i > 0) Get<Forms.Button>("fullScreenButton").PerformClick();
+                        else Call("SetFullScreen", true);
                         Require(attached, $"ui.fullscreen_attached_{state}_{i}");
+                        Require(Field("fullScreenHost").GetValue(form) != null, $"ui.fullscreen_entered_{state}_{i}");
                         Require(paints > before, $"ui.fullscreen_repaint_{state}_{i}");
                         await Task.Delay(150, stop.Token);
                         var area = viewer.RectangleToScreen(viewer.ClientRectangle);
                         Require(viewer.Visible && area.Width > 0 && area.Height > 0 && viewer.Image == frame,
                             $"ui.fullscreen_surface_{state}_{i}", new { viewer.Visible, area, form.Opacity });
+                        var host = Get<Forms.Panel>("fullScreenHost");
+                        var exit = Get<Forms.Button>("exitFullScreen");
+                        Require(host.Visible && host.Bounds == form.ClientRectangle && exit.Visible &&
+                            host.RectangleToScreen(host.ClientRectangle).Contains(exit.RectangleToScreen(exit.ClientRectangle)),
+                            $"ui.fullscreen_toolbar_{state}_{i}");
                         using var pixels = new Bitmap(area.Width, area.Height);
                         using (var graphics = Graphics.FromImage(pixels)) graphics.CopyFromScreen(area.Location, Point.Empty, area.Size);
                         pixels.Save(Path.Combine(output, $"fullscreen-{state}-{i}.png"));
                         Require(pixels.GetPixel(pixels.Width / 2, pixels.Height / 2).ToArgb() == frame.GetPixel(frame.Width / 2, frame.Height / 2).ToArgb(),
                             $"ui.fullscreen_pixels_{state}_{i}");
                         before = paints;
-                        Call("SetFullScreen", false);
+                        if (i > 0) exit.PerformClick();
+                        else Call("SetFullScreen", false);
                         Require(paints > before, $"ui.fullscreen_exit_repaint_{state}_{i}");
+                        Require(Field("fullScreenHost").GetValue(form) == null, $"ui.fullscreen_exited_{state}_{i}");
                         await Task.Delay(150, stop.Token);
                         Require(viewer.Visible && viewer.Image == frame && form.WindowState == state,
                             $"ui.fullscreen_restores_{state}_{i}");
