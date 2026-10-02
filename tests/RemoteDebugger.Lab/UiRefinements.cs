@@ -140,6 +140,47 @@ internal sealed partial class LabForm
                 graphics.DrawString("Isolated UI test\nRemote screen area", font, Brushes.SlateGray, 48, 48);
             }
             Get<RemoteScreenView>("screen").Image = frame;
+            if (scope == "fullscreen")
+            {
+                var viewer = Get<RemoteScreenView>("screen");
+                var surface = Get<Forms.Control>("screenSurface");
+                bool attached = true;
+                surface.ParentChanged += (_, _) =>
+                {
+                    if (surface.Parent is { } parent) attached &= parent.IsHandleCreated && parent.FindForm() == form;
+                };
+                int paints = 0;
+                viewer.Paint += (_, _) => paints++;
+                Get<Forms.Control>("streamOverlay").Visible = false;
+                foreach (var state in new[] { Forms.FormWindowState.Normal, Forms.FormWindowState.Maximized })
+                {
+                    form.WindowState = state;
+                    for (int i = 0; i < 3; i++)
+                    {
+                        int before = paints;
+                        Call("SetFullScreen", true);
+                        Require(attached, $"ui.fullscreen_attached_{state}_{i}");
+                        Require(paints > before, $"ui.fullscreen_repaint_{state}_{i}");
+                        await Task.Delay(150, stop.Token);
+                        var area = viewer.RectangleToScreen(viewer.ClientRectangle);
+                        Require(viewer.Visible && area.Width > 0 && area.Height > 0 && viewer.Image == frame,
+                            $"ui.fullscreen_surface_{state}_{i}", new { viewer.Visible, area, form.Opacity });
+                        using var pixels = new Bitmap(area.Width, area.Height);
+                        using (var graphics = Graphics.FromImage(pixels)) graphics.CopyFromScreen(area.Location, Point.Empty, area.Size);
+                        pixels.Save(Path.Combine(output, $"fullscreen-{state}-{i}.png"));
+                        Require(pixels.GetPixel(pixels.Width / 2, pixels.Height / 2).ToArgb() == frame.GetPixel(frame.Width / 2, frame.Height / 2).ToArgb(),
+                            $"ui.fullscreen_pixels_{state}_{i}");
+                        before = paints;
+                        Call("SetFullScreen", false);
+                        Require(paints > before, $"ui.fullscreen_exit_repaint_{state}_{i}");
+                        await Task.Delay(150, stop.Token);
+                        Require(viewer.Visible && viewer.Image == frame && form.WindowState == state,
+                            $"ui.fullscreen_restores_{state}_{i}");
+                    }
+                }
+                viewer.Image = null;
+                await FinishAsync(); return;
+            }
             int Pixels(int value) => (int)Math.Round(value * form.DeviceDpi / 96f);
             form.ClientSize = new(Pixels(216 + 1447), Pixels(900)); await Task.Delay(150, stop.Token);
             if (scope == "header")
