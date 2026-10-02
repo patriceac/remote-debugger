@@ -97,7 +97,7 @@ internal sealed class SharedMouse
         Volatile.Write(ref dragging, remoteButtons.Count);
         overlay.Pointer.Update(new(remote.X, remote.Y, name, visible, remoteActivity, remoteClick), contact);
         Refresh();
-        return new(true, applied, new(local.X, local.Y, Environment.MachineName, true, activity, click));
+        return new(true, applied, new(local.X, local.Y, CursorUserName.Current, true, activity, click));
     }
 
     private IntPtr OnMouse(int code, IntPtr message, IntPtr data)

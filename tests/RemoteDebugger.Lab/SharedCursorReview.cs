@@ -50,7 +50,7 @@ internal sealed partial class LabForm
             var overlay = (CursorOverlay)typeof(SharedMouse).GetField("overlay", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(engine)!;
             var overlayEvidence = (JsonElement)overlay.Invoke(() => Json.Element(new { overlay.Visible, overlay.ExcludedFromCapture, overlay.ExcludedFromDuplication, pointer = overlay.Pointer.Position }));
             bool overlayValid = overlayEvidence.GetProperty("visible").GetBoolean() && overlayEvidence.GetProperty("excludedFromCapture").GetBoolean() && overlayEvidence.GetProperty("excludedFromDuplication").GetBoolean() &&
-                overlayEvidence.GetProperty("pointer").Deserialize<CursorPosition>(Json.Options) is { Name: "Controller PC", Visible: true } p && p.X == other.X && p.Y == other.Y;
+                overlayEvidence.GetProperty("pointer").Deserialize<CursorPosition>(Json.Options) is { Name: "Alex", Visible: true } p && p.X == other.X && p.Y == other.Y;
             var captureEvidence = new List<object>();
             bool cleanCapture = true;
             foreach (var captureBuffer in new CaptureBuffer?[] { buffer, null })
@@ -122,22 +122,18 @@ internal sealed partial class LabForm
                 Require(HasBlue(rendered), "cursor.viewer_render", "The viewer paints the assisted person's cursor at a separate mapped position");
             }
             SaveOverlay("shared-cursor-moving.png");
-            while ((float)overlay.Invoke(() => overlay.Pointer.LabelOpacity(Environment.TickCount64)) > 0.65f)
-            { await Task.Delay(40, stop.Token); await Send("pointer"); }
-            bool fading = (bool)overlay.Invoke(() =>
+            long idleUntil = Environment.TickCount64 + 2200;
+            while (Environment.TickCount64 < idleUntil)
+            { await Task.Delay(70, stop.Token); await Send("pointer"); }
+            bool namedWhileIdle = (bool)overlay.Invoke(() =>
             {
                 using var bitmap = overlay.RenderSurface();
-                bitmap.Save(Path.Combine(output, "shared-cursor-fading.png"), ImageFormat.Png);
+                bitmap.Save(Path.Combine(output, "shared-cursor-idle.png"), ImageFormat.Png);
                 var tip = overlay.PointToClient(other);
                 int alpha = bitmap.GetPixel(tip.X + 24, tip.Y + 33).A;
-                return alpha is > 0 and < 255;
+                return overlay.Visible && overlay.Pointer.LabelVisible(Environment.TickCount64) && alpha == 255;
             });
-            Require(fading, "cursor.fade", "An intermediate label frame has real partial alpha rather than disappearing abruptly");
-            while ((bool)overlay.Invoke(() => overlay.Pointer.LabelVisible(Environment.TickCount64)))
-            { await Task.Delay(70, stop.Token); await Send("pointer"); }
-            Require((bool)overlay.Invoke(() => overlay.Visible && !overlay.Pointer.LabelVisible(Environment.TickCount64)),
-                "cursor.idle", "The name label fades while the peer pointer remains visible");
-            SaveOverlay("shared-cursor-idle.png");
+            Require(namedWhileIdle, "cursor.idle", "The name label stays fully visible while the peer pointer is stationary");
 
             await Send("down", other); SaveOverlay("shared-cursor-click.png");
             await Send("up", other);
@@ -190,7 +186,7 @@ internal sealed partial class LabForm
 
         async Task<SharedPointerReply> Send(string kind, Point point = default)
         {
-            var args = Json.Element(new { kind, x = point.X, y = point.Y, layoutId = layout, button = "left", sharedPointer = true, pointerName = "Controller PC" });
+            var args = Json.Element(new { kind, x = point.X, y = point.Y, layoutId = layout, button = "left", sharedPointer = true, pointerName = "Alex" });
             var result = Json.Element(await Task.Run(() => Native.HandleSharedInput(args)));
             await Task.Delay(60, stop.Token);
             return result.Deserialize<SharedPointerReply>(Json.Options)!;

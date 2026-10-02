@@ -8,17 +8,23 @@ namespace RemoteDebugger.Platform.Tests;
 
 public sealed class RemoteScreenViewTests
 {
+    [Theory]
+    [InlineData("Patrice Dupont", "patri", "Patrice")]
+    [InlineData("  Élodie-Marie  Martin ", "elo", "Élodie-Marie")]
+    [InlineData(null, "support", "support")]
+    [InlineData(" \t ", "support", "support")]
+    public void PeerNameUsesFirstNameOrLoginWhenWindowsHasNoDisplayName(string? fullName, string login, string expected)
+        => Assert.Equal(expected, CursorUserName.FirstName(fullName, login));
+
     [Fact]
-    public void PeerLabelFadesWithoutLosingPositionAndClicksAnimateOnce()
+    public void PeerLabelStaysVisibleWhileStationaryAndClicksAnimateOnce()
     {
         var cursor = new SharedCursor();
         var state = new CursorPosition(120, 80, "Remote PC", true, 1, 0);
         cursor.Update(state, 100);
         cursor.Update(state, 2000);
-        Assert.True(cursor.LabelVisible(2099));
-        Assert.Equal(0.5f, cursor.LabelOpacity(1850));
-        Assert.False(cursor.LabelVisible(2100));
-        Assert.Equal(0, cursor.LabelOpacity(2100));
+        Assert.True(cursor.LabelVisible(2100));
+        Assert.Equal(1, cursor.LabelOpacity(2100));
         Assert.True(cursor.Visible(2100));
         cursor.Update(state with { Activity = 2, Click = 1 }, 2200);
         Assert.True(cursor.LabelVisible(2200));
@@ -26,9 +32,20 @@ public sealed class RemoteScreenViewTests
         cursor.Update(state with { Activity = 2, Click = 1 }, 2400);
         Assert.Equal(1, cursor.Pulse(2650));
         Assert.Equal((120, 80), (cursor.Position!.X, cursor.Position.Y));
-        Assert.False(cursor.Visible(5400));
-        cursor.Update(null, 5500);
-        Assert.False(cursor.Visible(5500));
+        cursor.Update(state with { Activity = 2, Click = 1 }, 10_000);
+        Assert.True(cursor.LabelVisible(10_000));
+        Assert.Equal(1, cursor.LabelOpacity(10_000));
+        Assert.False(cursor.Visible(13_000));
+        Assert.False(cursor.LabelVisible(13_000));
+        Assert.Equal(0, cursor.LabelOpacity(13_000));
+        cursor.Update(state with { Visible = false }, 14_000);
+        Assert.False(cursor.LabelVisible(14_000));
+        cursor.Update(null, 15_000);
+        Assert.False(cursor.Visible(15_000));
+        Assert.False(cursor.LabelVisible(15_000));
+        cursor.Update(state with { Name = "" }, 16_000);
+        Assert.True(cursor.Visible(16_000));
+        Assert.False(cursor.LabelVisible(16_000));
     }
 
     [Theory]
