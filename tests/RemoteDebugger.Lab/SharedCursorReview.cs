@@ -182,6 +182,7 @@ internal sealed partial class LabForm
         }
         finally { mouse_event(4, 0, 0, 0, UIntPtr.Zero); await Task.Run(() => Native.ReleaseAllInput()); }
         await NativeViewerKeyboardAsync();
+        await CursorNicknameReviewAsync();
         await FinishAsync();
 
         async Task<SharedPointerReply> Send(string kind, Point point = default)
