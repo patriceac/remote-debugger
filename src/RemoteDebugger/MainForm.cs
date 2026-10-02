@@ -311,7 +311,7 @@ public sealed partial class MainForm : Forms.Form
 
         var roles = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false, Margin = new(8, 0, 8, 0), Padding = new Forms.Padding(0), BackColor = Rail };
         roles.Controls.Add(roleAgent); roles.Controls.Add(roleController);
-        foreach (var button in new[] { roleAgent, roleController, navConnection, navScreen, navProcesses, navFiles, navDiagnostics }) button.Font = new Font("Segoe UI", 12);
+        foreach (var button in new[] { roleAgent, roleController, navConnection, navScreen, navProcesses, navFiles, navDiagnostics, restartRemote, shutdownRemote }) button.Font = new Font("Segoe UI", 12);
         var brand = new WorkspaceLabel { Name = "appBrand", Text = "Remote\nDebugger", ForeColor = Color.White, Font = new Font("Segoe UI", 17, FontStyle.Bold), Dock = Forms.DockStyle.Fill, Margin = new(0, 0, 0, 3) };
         var brandPanel = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = new(8, 0, 8, 0) };
         brandPanel.ColumnStyles.Add(new(Forms.SizeType.Absolute, 63)); brandPanel.ColumnStyles.Add(new(Forms.SizeType.Percent, 100));
@@ -324,7 +324,7 @@ public sealed partial class MainForm : Forms.Form
 
         var work = new Forms.FlowLayoutPanel { Name = "workspaceNavigation", Dock = Forms.DockStyle.Fill, FlowDirection = Forms.FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Margin = Forms.Padding.Empty, Padding = new Forms.Padding(0, 10, 0, 0), BackColor = Rail };
         controllerNavCaption.Margin = new(16, 0, 0, 8);
-        foreach (var button in new[] { navConnection, navScreen, navProcesses, navFiles, navDiagnostics }) { button.Width = 217; button.Padding = new(22, 0, 0, 0); }
+        foreach (var button in new[] { navConnection, navScreen, navProcesses, navFiles, navDiagnostics, restartRemote, shutdownRemote }) { button.Width = 217; button.Padding = new(22, 0, 0, 0); }
         work.Controls.Add(controllerNavCaption);
         work.Controls.Add(navConnection); work.Controls.Add(navScreen); work.Controls.Add(navProcesses); work.Controls.Add(navFiles); work.Controls.Add(navDiagnostics);
         InitializePowerControls(work);
@@ -2550,7 +2550,7 @@ public sealed partial class MainForm : Forms.Form
     private static Forms.Label Eyebrow(string text) => new WorkspaceLabel() { Name = "agentEyebrow", Text = text, AutoSize = true, ForeColor = Teal, Font = new Font("Segoe UI", 9.5F, FontStyle.Bold) };
     private static Forms.Label RailCaption(string text) => new() { Text = text, AutoSize = true, ForeColor = RailSecondary, Font = new Font("Segoe UI", 9.5F), Margin = new Forms.Padding(8, 0, 0, 8) };
     private static Forms.Button RailButton(string text, string name) => new WorkspaceButton() { Name = name, Text = text, AccessibleName = text, AutoSize = false, RailStyle = true, Glyph = name == "roleAgent" ? UiGlyph.Give : UiGlyph.Take, Width = 201, Height = 44, Font = new Font("Segoe UI", 11.5f), FlatStyle = Forms.FlatStyle.Flat, FlatAppearance = { BorderSize = 0 }, ForeColor = Color.White, BackColor = Rail, TextAlign = ContentAlignment.MiddleLeft, Padding = new Forms.Padding(14, 0, 0, 0), Margin = new Forms.Padding(0, 0, 0, 4), UseMnemonic = false };
-    private static Forms.Button RailSubButton(string text, string name) => new WorkspaceButton() { Name = name, Text = text, AccessibleName = text, AutoSize = false, RailStyle = true, Glyph = name switch { "navConnection" => UiGlyph.Link, "navScreen" => UiGlyph.Computer, "navProcesses" => UiGlyph.Processes, "navFiles" => UiGlyph.Folder, _ => UiGlyph.Diagnostics }, Width = 201, Height = 46, Font = new Font("Segoe UI", 11.5f), FlatStyle = Forms.FlatStyle.Flat, FlatAppearance = { BorderSize = 0 }, ForeColor = Color.FromArgb(230, 239, 245), BackColor = Rail, TextAlign = ContentAlignment.MiddleLeft, Padding = new Forms.Padding(14, 0, 0, 0), Margin = new Forms.Padding(0, 0, 0, 3), UseMnemonic = false };
+    private static Forms.Button RailSubButton(string text, string name) => new WorkspaceButton() { Name = name, Text = text, AccessibleName = text, AutoSize = false, RailStyle = true, Glyph = name switch { "navConnection" => UiGlyph.Link, "navScreen" => UiGlyph.Computer, "navProcesses" => UiGlyph.Processes, "navFiles" => UiGlyph.Folder, "restartRemotePc" => UiGlyph.Restart, "shutdownRemotePc" => UiGlyph.Wake, _ => UiGlyph.Diagnostics }, Width = 201, Height = 46, Font = new Font("Segoe UI", 11.5f), FlatStyle = Forms.FlatStyle.Flat, FlatAppearance = { BorderSize = 0 }, ForeColor = Color.FromArgb(230, 239, 245), BackColor = Rail, TextAlign = ContentAlignment.MiddleLeft, Padding = new Forms.Padding(14, 0, 0, 0), Margin = new Forms.Padding(0, 0, 0, 3), UseMnemonic = false };
     private static Forms.Button Button(string text, string name, int width = 0, bool primary = false, bool destructive = false) => new WorkspaceButton
     {
         Name = name, Text = text, AccessibleName = text, AutoSize = true, AutoSizeMode = Forms.AutoSizeMode.GrowAndShrink,
