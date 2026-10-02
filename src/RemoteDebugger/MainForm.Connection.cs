@@ -167,7 +167,8 @@ public sealed partial class MainForm
         };
         ConnectionRow(stack, connectionSettingsToggle, 4);
         connectionSettings.Padding = new(32, 0, 0, 0);
-        if (PrivateInternet) ConnectionRow(connectionSettings, BuildWanAddressFields());
+        ConnectionRow(connectionSettings, BuildCursorNicknameFields());
+        if (PrivateInternet) ConnectionRow(connectionSettings, BuildWanAddressFields(), 16);
         ConnectionRow(connectionSettings, ConnectionLabel("wakeSection", 10.5f).WithText(() => UiText.Get("ConnectionWakeSection")), 8);
         ((WorkspaceButton)wakePc).Glyph = UiGlyph.Wake; ((WorkspaceButton)configureWake).Glyph = UiGlyph.Settings;
         wakePc.MinimumSize = new(192, 38); configureWake.MinimumSize = new(192, 38);
@@ -221,6 +222,7 @@ public sealed partial class MainForm
 
     private void RefreshConnectionPresentation()
     {
+        RefreshCursorNickname();
         bool fleetUpdating = SelectedFleetUpdate != null;
         if (fleetUpdating)
         {

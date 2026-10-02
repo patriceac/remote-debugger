@@ -1864,7 +1864,7 @@ public sealed partial class MainForm : Forms.Form
         {
             var data = RemoteClient.Require(await target.SendInputAsync(new { kind = "pointer", layoutId = layout }, seconds: 3));
             if (generation == sessionGeneration && ReferenceEquals(target, client) && liveStream != null && geometry?.LayoutId == layout && CanSendFocusedInput())
-                screen.UpdateCursor(data.TryGetProperty("cursor", out var cursor) ? cursor.Deserialize<CursorPosition>(Json.Options) : null, geometry);
+                screen.UpdateCursor(CursorNames.Apply(target.Connection.Fingerprint, data.TryGetProperty("cursor", out var cursor) ? cursor.Deserialize<CursorPosition>(Json.Options) : null), geometry);
         }
         catch { screen.UpdateCursor(null, null); }
         finally { cursorPolling = false; }

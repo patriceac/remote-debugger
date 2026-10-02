@@ -1067,4 +1067,9 @@ Default port: 45832. Leave blank to skip WAN.</value></data>
   <data name="ThemeLight" xml:space="preserve"><value>Light</value></data>
   <data name="ThemeDark" xml:space="preserve"><value>Dark</value></data>
   <data name="ThemeSaveFailed" xml:space="preserve"><value>The theme changed, but the preference could not be saved.</value></data>
+  <data name="CursorNickname" xml:space="preserve"><value>Cursor nickname (optional)</value></data>
+  <data name="CursorNicknameDefault" xml:space="preserve"><value>Windows first name</value></data>
+  <data name="CursorNicknameHelp" xml:space="preserve"><value>Leave blank to use the Windows first name.</value></data>
+  <data name="CursorNicknameSaved" xml:space="preserve"><value>Cursor nickname saved.</value></data>
+  <data name="InvalidCursorNickname" xml:space="preserve"><value>Use a nickname of up to 28 characters on one line.</value></data>
 </root>
