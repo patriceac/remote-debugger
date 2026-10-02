@@ -55,6 +55,28 @@ public sealed class SavedConnectionResumeTests
     }
 
     [Fact]
+    public async Task SuccessfulLanPairingClearsTheEarlierResumeRouteFailure()
+    {
+        var target = Target(new('a', 64), new('b', 64)) with { DirectHost = "127.0.0.1", DirectPort = 45832 };
+        bool directWorks = false;
+        var attempts = new List<string>();
+        var client = new RemoteClient(target, (route, _) =>
+        {
+            attempts.Add(route.DirectHost.Length > 0 ? "direct" : "relay");
+            if (route.DirectHost.Length > 0 && !directWorks) throw new IOException("Earlier resume failed.");
+            return Task.FromResult<Stream>(new ReplyStream(request => Reply.Success(request.Id, new { })));
+        });
+        Assert.True((await client.CallAsync("status")).Ok);
+        Assert.Equal("Relay", client.ActiveRoute);
+
+        directWorks = true;
+        client.SetPairedConnection(target with { Token = new('c', 64) });
+        Assert.True((await client.CallAsync("status")).Ok);
+        Assert.Equal(new[] { "direct", "relay", "direct" }, attempts);
+        Assert.Equal("Direct LAN", client.ActiveRoute);
+    }
+
+    [Fact]
     public async Task ExpiredSavedGrantFallsBackWithoutRetainingItsToken()
     {
         string root = NewRoot();
