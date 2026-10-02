@@ -1849,7 +1849,7 @@ public sealed partial class MainForm : Forms.Form
         if (!CanSendInput() || geometry == null) { applied?.TrySetResult(false); return; }
         var point = geometry.MapLetterbox(screen.Width, screen.Height, e.X, e.Y);
         if (point == null) { applied?.TrySetResult(false); if (kind == "up") QueueInput(new { kind = "release" }); return; }
-        QueueInput(new { kind, x = point.Value.X, y = point.Value.Y, layoutId = geometry.LayoutId, button = e.Button == Forms.MouseButtons.Right ? "right" : e.Button == Forms.MouseButtons.Middle ? "middle" : "left", delta = e.Delta, sharedPointer = true, pointerName = Environment.MachineName }, applied);
+        QueueInput(new { kind, x = point.Value.X, y = point.Value.Y, layoutId = geometry.LayoutId, button = e.Button == Forms.MouseButtons.Right ? "right" : e.Button == Forms.MouseButtons.Middle ? "middle" : "left", delta = e.Delta, sharedPointer = true, pointerName = CursorUserName.Current }, applied);
     }
 
     private async Task RefreshSharedCursorAsync()

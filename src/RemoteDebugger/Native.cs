@@ -142,7 +142,7 @@ public static class Native
             // The sign-in desktop has one Windows pointer and no user overlays.
             if (kind is not ("pointer" or "pointerLeave")) HandleInput(a);
             var pointer = SignedOutDesktop.Pointer();
-            return new SharedPointerReply(true, true, new(pointer.X, pointer.Y, Environment.MachineName, true, 0, 0));
+            return new SharedPointerReply(true, true, new(pointer.X, pointer.Y, CursorUserName.Current, true, 0, 0));
         }
         if (kind is "pointer" or "pointerLeave" || a.TryGetProperty("sharedPointer", out var shared) && shared.ValueKind == JsonValueKind.True && kind is "move" or "down" or "up" or "wheel")
         {

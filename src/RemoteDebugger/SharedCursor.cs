@@ -11,17 +11,16 @@ internal sealed class SharedCursor
 {
     internal static readonly Color Blue = Color.FromArgb(37, 99, 235);
     private CursorPosition? position;
-    private long received, moved, clicked = long.MinValue / 2;
+    private long received, clicked = long.MinValue / 2;
     internal CursorPosition? Position => position;
-    internal bool LabelVisible(long now) => now - moved < 2000;
-    internal float LabelOpacity(long now) => Math.Clamp((2000 - (now - moved)) / 500f, 0, 1);
+    internal bool LabelVisible(long now) => Visible(now) && position!.Name.Length > 0;
+    internal float LabelOpacity(long now) => LabelVisible(now) ? 1 : 0;
     internal float Pulse(long now) => Math.Clamp((now - clicked) / 450f, 0, 1);
 
     internal void Update(CursorPosition? value, long now)
     {
         if (value != null)
         {
-            if (position == null || value.Activity != position.Activity || !position.Visible) moved = now;
             if (position != null && value.Click != 0 && value.Click != position.Click) clicked = now;
         }
         position = value; received = now;
