@@ -147,8 +147,10 @@ public sealed partial class MainForm
             bar.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
             bar.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
             bar.Controls.Add(fullScreenStatus, 0, 0); bar.Controls.Add(fullScreenCharts, 1, 0); bar.Controls.Add(exitFullScreen, 2, 0);
+            // Attach the destination before reparenting the live native viewer.
+            Controls.Add(fullScreenHost);
             fullScreenHost.Controls.Add(screenSurface); fullScreenHost.Controls.Add(bar);
-            Controls.Add(fullScreenHost); shell.Visible = false; fullScreenHost.BringToFront();
+            shell.Visible = false; fullScreenHost.BringToFront();
             WindowState = Forms.FormWindowState.Normal; FormBorderStyle = Forms.FormBorderStyle.None; Bounds = display;
         }
         else
@@ -162,6 +164,7 @@ public sealed partial class MainForm
             FormBorderStyle = Forms.FormBorderStyle.Sizable; Bounds = windowedBounds; WindowState = windowedState;
         }
         ResumeLayout(true);
+        screenSurface.Refresh();
         if (enabled) screen.Focus(); else remoteText.Focus();
     }
 
