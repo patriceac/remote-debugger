@@ -82,7 +82,7 @@ internal sealed partial class LabForm
             }
             finally { overlay.Invoke(() => overlay.SetCaptureExclusion(true)); }
 
-            using (var foreground = new Forms.Form { Text = "Window under the shared cursor", Bounds = new(other.X - 40, other.Y - 60, 230, 160), BackColor = Color.LemonChiffon })
+            using (var foreground = new Forms.Form { Text = "Window under the shared cursor", StartPosition = Forms.FormStartPosition.Manual, Bounds = new(other.X - 40, other.Y - 60, 230, 160), BackColor = Color.LemonChiffon })
             {
                 int clicked = 0;
                 foreground.MouseDown += (_, _) => clicked++;
@@ -93,8 +93,8 @@ internal sealed partial class LabForm
                 bool above = true;
                 for (IntPtr window = CursorWindowAbove(overlay.Handle, 3); window != IntPtr.Zero; window = CursorWindowAbove(window, 3))
                     if (window == foreground.Handle) above = false;
-                Require(above && Native.NativeWindows().Any(w => w.Handle == foreground.Handle.ToInt64() && w.Foreground),
-                    "cursor.foreground_window", "The cursor stays above an open active window without taking focus");
+                Require(above && foreground.ClientRectangle.Contains(foreground.PointToClient(other)) && Native.NativeWindows().Any(w => w.Handle == foreground.Handle.ToInt64() && w.Foreground),
+                    "cursor.foreground_window", "The cursor stays above an open active window without taking focus", new { foreground.Bounds, other });
                 overlay.Invoke(() => overlay.SetCaptureExclusion(false));
                 try
                 {
@@ -106,7 +106,7 @@ internal sealed partial class LabForm
                 }
                 finally { overlay.Invoke(() => overlay.SetCaptureExclusion(true)); }
                 await Send("down", other); await Send("up", other);
-                Require(clicked == 1 && Forms.Cursor.Position == own, "cursor.foreground_click", "Clicks pass through the cursor overlay to the open window");
+                Require(clicked == 1 && Forms.Cursor.Position == own, "cursor.foreground_click", "Clicks pass through the cursor overlay to the open window", new { clicked, actual = Forms.Cursor.Position, own });
                 foreground.Close();
             }
             Activate(); target.Focus();
