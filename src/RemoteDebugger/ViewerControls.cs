@@ -3,6 +3,39 @@ using Forms = System.Windows.Forms;
 
 namespace RemoteDebugger;
 
+internal sealed class RouteStatusLabel : Forms.Label
+{
+    public int RouteTextOffset { get; set; }
+    public RouteStatusLabel() => DoubleBuffered = true;
+    protected override void OnPaint(Forms.PaintEventArgs e)
+    {
+        e.Graphics.Clear(BackColor);
+        int offset = Math.Clamp(RouteTextOffset, 0, Text.Length);
+        string status = Text[offset..];
+        Color color = status.StartsWith("Relay · ", StringComparison.Ordinal) ? Color.FromArgb(245, 158, 11)
+            : status.StartsWith("Direct LAN · ", StringComparison.Ordinal) || status.StartsWith("Direct WAN · ", StringComparison.Ordinal)
+                ? Color.FromArgb(34, 197, 94) : Color.Empty;
+        if (color.IsEmpty) { base.OnPaint(e); return; }
+        const Forms.TextFormatFlags flags = Forms.TextFormatFlags.NoPadding | Forms.TextFormatFlags.NoPrefix
+            | Forms.TextFormatFlags.SingleLine | Forms.TextFormatFlags.VerticalCenter;
+        var bounds = new Rectangle(Padding.Left, Padding.Top, Math.Max(0, Width - Padding.Horizontal), Math.Max(0, Height - Padding.Vertical));
+        int left = bounds.Left;
+        if (offset > 0)
+        {
+            string prefix = Text[..offset];
+            Forms.TextRenderer.DrawText(e.Graphics, prefix, Font, bounds, ForeColor, flags);
+            left += Forms.TextRenderer.MeasureText(e.Graphics, prefix, Font, Size.Empty, flags).Width;
+        }
+        int diameter = (int)Math.Round(8 * DeviceDpi / 96f), gap = (int)Math.Round(7 * DeviceDpi / 96f);
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        using var brush = new SolidBrush(color);
+        e.Graphics.FillEllipse(brush, left, bounds.Top + (bounds.Height - diameter) / 2, diameter, diameter);
+        bounds.X = left + diameter + gap;
+        bounds.Width = Math.Max(0, Width - Padding.Right - bounds.X);
+        Forms.TextRenderer.DrawText(e.Graphics, status, Font, bounds, ForeColor, flags);
+    }
+}
+
 internal sealed class ViewerComboBox : LocalizedComboBox
 {
     public ViewerComboBox()

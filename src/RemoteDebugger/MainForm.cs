@@ -110,7 +110,7 @@ public sealed partial class MainForm : Forms.Form
     private readonly Forms.CheckBox mouseEnabled = new ViewerCheckBox { Name = "mouseKeyboard", Checked = true, AutoSize = true, ForeColor = PrimaryText }.WithText(() => UiText.MouseKeyboardControl);
     private readonly Forms.CheckBox relayEconomy = new ViewerCheckBox { Name = "relayEconomy", Enabled = false, AutoSize = true, ForeColor = PrimaryText, Location = Point.Empty, Margin = Forms.Padding.Empty }.WithText(() => UiText.RelayEconomy);
     private bool resumeViewingAfterMinimize;
-    private readonly Forms.Label streamStatus = new() { Name = "streamStatus", AutoSize = false, Dock = Forms.DockStyle.Fill, Margin = Forms.Padding.Empty, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F), TextAlign = ContentAlignment.MiddleLeft };
+    private readonly RouteStatusLabel streamStatus = new() { Name = "streamStatus", AutoSize = false, Dock = Forms.DockStyle.Fill, Margin = Forms.Padding.Empty, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F), TextAlign = ContentAlignment.MiddleLeft };
     private readonly Forms.Label inputStatus = new() { Name = "inputStatus", AutoSize = false, Dock = Forms.DockStyle.Fill, Margin = Forms.Padding.Empty, ForeColor = SecondaryText, Font = new Font("Segoe UI", 9.5F), TextAlign = ContentAlignment.MiddleRight };
     private readonly RemoteInputState inputState = new();
     private readonly Forms.TextBox remoteText = TextBox("remoteText");

@@ -13,7 +13,7 @@ public sealed partial class MainForm
     private readonly Forms.Button secureAttention = Button(() => "Ctrl+Alt+Del", "secureAttention", 116);
     private readonly Forms.Button fullScreenButton = Button(() => UiText.FullScreen, "fullScreen", 124);
     private readonly Forms.Button exitFullScreen = Button(() => UiText.ExitFullScreen, "exitFullScreen", 190);
-    private readonly Forms.Label fullScreenStatus = new() { Name = "fullScreenStatus", Dock = Forms.DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, ForeColor = SecondaryText };
+    private readonly RouteStatusLabel fullScreenStatus = new() { Name = "fullScreenStatus", Dock = Forms.DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, ForeColor = SecondaryText };
     private readonly ResourceMiniCharts headerCharts = new() { Name = "resourceMiniCharts", Visible = false, ForeColor = Color.FromArgb(15, 35, 64), BackColor = Surface, Font = new Font("Segoe UI", 9.5F), Margin = Forms.Padding.Empty };
     private readonly ResourceMiniCharts fullScreenCharts = new() { Name = "fullScreenResourceCharts", Width = 264, Height = 34, ForeColor = PrimaryText, Anchor = Forms.AnchorStyles.Left };
     private readonly Forms.Timer resourceRefreshTimer = new() { Interval = 5000 };
@@ -104,7 +104,9 @@ public sealed partial class MainForm
         updatingEconomy = false;
         secureAttention.Enabled = CanSendFocusedInput();
         fullScreenButton.Enabled = supportSession && liveFrameFresh;
-        fullScreenStatus.Text = (remoteDeviceName.Length > 0 ? remoteDeviceName : selectedPeer?.Name ?? client?.Connection.Host ?? "") + " · " + streamStatus.Text;
+        string devicePrefix = (remoteDeviceName.Length > 0 ? remoteDeviceName : selectedPeer?.Name ?? client?.Connection.Host ?? "") + " · ";
+        fullScreenStatus.RouteTextOffset = devicePrefix.Length;
+        fullScreenStatus.Text = devicePrefix + streamStatus.Text;
         if (fullScreenHost != null && !supportSession) SetFullScreen(false);
     }
 
