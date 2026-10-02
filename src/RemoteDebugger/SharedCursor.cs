@@ -124,6 +124,9 @@ internal sealed class CursorOverlay : Forms.Form
     }
     internal void Redraw()
     {
+        // Reassert the native z-order after showing/resizing the composition window, without taking focus.
+        if (!SetWindowPos(Handle, new IntPtr(-1), 0, 0, 0, 0, 0x0213))
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
         using var bitmap = RenderSurface();
         (surface ??= new CursorSurface(Handle)).Present(bitmap);
     }
@@ -135,5 +138,6 @@ internal sealed class CursorOverlay : Forms.Form
     [StructLayout(LayoutKind.Sequential)] private struct CompositionAttribute { public int Attribute; public IntPtr Data; public uint Size; }
     [DllImport("user32.dll")] private static extern bool SetWindowCompositionAttribute(IntPtr window, ref CompositionAttribute attribute);
     [DllImport("user32.dll", SetLastError = true)] private static extern bool SetLayeredWindowAttributes(IntPtr window, uint key, byte alpha, uint flags);
+    [DllImport("user32.dll", SetLastError = true)] private static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags);
     [DllImport("user32.dll")] private static extern bool SetWindowDisplayAffinity(IntPtr window, uint affinity);
 }

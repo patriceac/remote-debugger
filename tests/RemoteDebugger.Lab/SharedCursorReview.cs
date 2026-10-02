@@ -2,6 +2,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using RemoteDebugger.Core;
 using Forms = System.Windows.Forms;
@@ -80,6 +81,35 @@ internal sealed partial class LabForm
                 Require(blue == SharedCursor.Blue.ToArgb() && clear == Color.White.ToArgb(), "cursor.composed_surface", "The actual desktop shows the blue cursor over a transparent background", new { blue, clear });
             }
             finally { overlay.Invoke(() => overlay.SetCaptureExclusion(true)); }
+
+            using (var foreground = new Forms.Form { Text = "Window under the shared cursor", Bounds = new(other.X - 40, other.Y - 60, 230, 160), BackColor = Color.LemonChiffon })
+            {
+                int clicked = 0;
+                foreground.MouseDown += (_, _) => clicked++;
+                foreground.Show(); foreground.Activate();
+                // Reproduce a demoted overlay even on workers where Windows does not demote it spontaneously.
+                overlay.Invoke(() => CursorWindowPos(overlay.Handle, new IntPtr(1), 0, 0, 0, 0, 0x0213));
+                await Send("move", other);
+                bool above = true;
+                for (IntPtr window = CursorWindowAbove(overlay.Handle, 3); window != IntPtr.Zero; window = CursorWindowAbove(window, 3))
+                    if (window == foreground.Handle) above = false;
+                Require(above && Native.NativeWindows().Any(w => w.Handle == foreground.Handle.ToInt64() && w.Foreground),
+                    "cursor.foreground_window", "The cursor stays above an open active window without taking focus");
+                overlay.Invoke(() => overlay.SetCaptureExclusion(false));
+                try
+                {
+                    await Task.Delay(150, stop.Token);
+                    using var displayed = DesktopCapture.CaptureBitmap(0, null).Capture!;
+                    displayed.Bitmap.Save(Path.Combine(output, "shared-cursor-foreground-window.png"), ImageFormat.Png);
+                    Require(displayed.Bitmap.GetPixel(other.X - displayed.Geometry.X + 6, other.Y - displayed.Geometry.Y + 12).ToArgb() == SharedCursor.Blue.ToArgb(),
+                        "cursor.foreground_pixels", "The composed cursor is visible over the open window");
+                }
+                finally { overlay.Invoke(() => overlay.SetCaptureExclusion(true)); }
+                await Send("down", other); await Send("up", other);
+                Require(clicked == 1 && Forms.Cursor.Position == own, "cursor.foreground_click", "Clicks pass through the cursor overlay to the open window");
+                foreground.Close();
+            }
+            Activate(); target.Focus();
 
             using var frame = new Bitmap(target.Width, target.Height);
             target.DrawToBitmap(frame, target.ClientRectangle); viewer.Image = frame;
@@ -184,4 +214,6 @@ internal sealed partial class LabForm
                 (uint)(((point.Y - bounds.Top) * 65536L + 32768) / bounds.Height), 0, UIntPtr.Zero);
         }
     }
+    [DllImport("user32.dll", EntryPoint = "SetWindowPos")] private static extern bool CursorWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags);
+    [DllImport("user32.dll", EntryPoint = "GetWindow")] private static extern IntPtr CursorWindowAbove(IntPtr window, uint command);
 }
