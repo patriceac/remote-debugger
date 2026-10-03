@@ -18,7 +18,8 @@ internal sealed partial class LabForm
         Vault.Save(Path.Combine(root, "internet.dpapi"), JsonSerializer.SerializeToUtf8Bytes(new InternetSettings("https://ui.invalid", new string('a', 64), new string('b', 64)), Json.Options));
         TableLayoutStore.Save(root, "peers", [new("name", 210, 0), new("version", 94, 2), new("state", 354, 1), new("progress", 380, 3)]);
         if (scope == "startup") ThemePreference.Save(root, "dark");
-        using var form = new MainForm(startAgent: false, dataRoot: root, loopbackOnly: true, languageOverride: "en");
+        if (scope == "fullscreen-tray") WindowPlacementStore.Save(root, new(30, 30, 1060, 720), true);
+        using var form = new MainForm(startAgent: false, dataRoot: root, loopbackOnly: true, languageOverride: "en", startInTray: scope == "fullscreen-tray");
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
         FieldInfo Field(string name) => typeof(MainForm).GetField(name, flags)!;
         T Get<T>(string name) => (T)Field(name).GetValue(form)!;
@@ -91,6 +92,13 @@ internal sealed partial class LabForm
         form.Show(); form.Activate();
         await Task.Delay(150, stop.Token); // Let the deferred Shown event select the initial role.
         Get<Forms.Timer>("renderTimer").Stop(); Get<Forms.Timer>("resourceRefreshTimer").Stop();
+        if (scope == "fullscreen-tray")
+        {
+            Call("RestoreFromTray"); await Task.Delay(150, stop.Token);
+            Require(form.IsHandleCreated && form.Created && form.Visible && form.WindowState == Forms.FormWindowState.Maximized,
+                "ui.fullscreen_tray_restores_created", new { form.Created, form.IsHandleCreated, form.Visible, form.WindowState });
+            Require(form.RestoreBounds == new Rectangle(30, 30, 1060, 720), "ui.fullscreen_tray_preserves_bounds", form.RestoreBounds);
+        }
         // Select synthetic presentation state directly; this fixture has no enrolled controller credentials.
         Set("isUpdateAdmin", true); Get<PageSwitcher>("rolePages").SelectedIndex = 1;
         foreach (string name in new[] { "controllerNavCaption", "navConnection", "navScreen", "navProcesses", "navFiles", "navDiagnostics" }) Get<Forms.Control>(name).Visible = true;
@@ -140,7 +148,7 @@ internal sealed partial class LabForm
                 graphics.DrawString("Isolated UI test\nRemote screen area", font, Brushes.SlateGray, 48, 48);
             }
             Get<RemoteScreenView>("screen").Image = frame;
-            if (scope == "fullscreen")
+            if (scope is "fullscreen" or "fullscreen-tray")
             {
                 AppTheme.SetPreference("dark");
                 Set("nextRoleCheck", long.MaxValue);
@@ -162,10 +170,8 @@ internal sealed partial class LabForm
                     {
                         if (i == 2)
                         {
-                            // Match the live black-screen dump: an existing HWND with Created cleared.
-                            var controlState = typeof(Forms.Control).GetField("_state", flags)!;
-                            controlState.SetValue(form, Enum.ToObject(controlState.FieldType, Convert.ToInt32(controlState.GetValue(form)) & ~1));
-                            Require(form.IsHandleCreated && !form.Created, $"ui.fullscreen_existing_hwnd_{state}");
+                            Call("HideToTray"); Call("RestoreFromTray");
+                            Require(form.IsHandleCreated && form.Created && form.WindowState == state, $"ui.fullscreen_tray_{state}");
                         }
                         int before = paints;
                         if (i > 0) Get<Forms.Button>("fullScreenButton").PerformClick();

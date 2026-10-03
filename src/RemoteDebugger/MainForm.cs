@@ -2388,7 +2388,9 @@ public sealed partial class MainForm : Forms.Form
 
     private void RestoreFromTray()
     {
-        trayVisible = false; ShowInTaskbar = true; Show(); WindowState = trayWindowState == Forms.FormWindowState.Maximized ? trayWindowState : Forms.FormWindowState.Normal; Activate();
+        // Show normally so WinForms initializes controls before restoring maximization.
+        trayVisible = false; WindowState = Forms.FormWindowState.Normal;
+        ShowInTaskbar = true; Show(); WindowState = trayWindowState == Forms.FormWindowState.Maximized ? trayWindowState : Forms.FormWindowState.Normal; Activate();
         if (resumeViewingOnRestore && supportSession && controllerPages.SelectedIndex == 1) _ = StartStreamAsync();
         resumeViewingOnRestore = false;
     }
