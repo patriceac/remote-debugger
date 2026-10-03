@@ -160,10 +160,17 @@ internal sealed partial class LabForm
                     form.WindowState = state;
                     for (int i = 0; i < 3; i++)
                     {
+                        if (i == 2)
+                        {
+                            // Match the live black-screen dump: an existing HWND with Created cleared.
+                            var controlState = typeof(Forms.Control).GetField("_state", flags)!;
+                            controlState.SetValue(form, Enum.ToObject(controlState.FieldType, Convert.ToInt32(controlState.GetValue(form)) & ~1));
+                            Require(form.IsHandleCreated && !form.Created, $"ui.fullscreen_existing_hwnd_{state}");
+                        }
                         int before = paints;
                         if (i > 0) Get<Forms.Button>("fullScreenButton").PerformClick();
                         else Call("SetFullScreen", true);
-                        Require(attached, $"ui.fullscreen_attached_{state}_{i}");
+                        Require(attached, $"ui.fullscreen_attached_{state}_{i}", new { form.Created, form.IsHandleCreated, hostHandleCreated = Get<Forms.Panel>("fullScreenHost").IsHandleCreated });
                         Require(Field("fullScreenHost").GetValue(form) != null, $"ui.fullscreen_entered_{state}_{i}");
                         Require(paints > before, $"ui.fullscreen_repaint_{state}_{i}");
                         await Task.Delay(150, stop.Token);

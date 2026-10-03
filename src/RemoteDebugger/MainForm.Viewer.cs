@@ -147,8 +147,9 @@ public sealed partial class MainForm
             bar.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
             bar.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
             bar.Controls.Add(fullScreenStatus, 0, 0); bar.Controls.Add(fullScreenCharts, 1, 0); bar.Controls.Add(exitFullScreen, 2, 0);
-            // Attach the destination before reparenting the live native viewer.
+            // Create the destination before reparenting the live native viewer.
             Controls.Add(fullScreenHost);
+            fullScreenHost.CreateControl();
             fullScreenHost.Controls.Add(screenSurface); fullScreenHost.Controls.Add(bar);
             shell.Visible = false; fullScreenHost.BringToFront();
             WindowState = Forms.FormWindowState.Normal; FormBorderStyle = Forms.FormBorderStyle.None; Bounds = display;
