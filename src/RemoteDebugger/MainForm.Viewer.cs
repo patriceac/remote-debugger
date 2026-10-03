@@ -126,6 +126,7 @@ public sealed partial class MainForm
         double fraction = fullScreenToolbarVisibility.VisibleFraction(now);
         fullScreenToolbar.Top = (int)Math.Round((fraction - 1) * fullScreenToolbar.Height);
         fullScreenToolbar.Visible = fraction > 0;
+        screen.Update();
     }
 
     private void LoadViewerPreferences()
