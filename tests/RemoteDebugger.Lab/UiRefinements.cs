@@ -17,7 +17,7 @@ internal sealed partial class LabForm
         UiCulture.Apply(System.Globalization.CultureInfo.GetCultureInfo("en"));
         Vault.Save(Path.Combine(root, "internet.dpapi"), JsonSerializer.SerializeToUtf8Bytes(new InternetSettings("https://ui.invalid", new string('a', 64), new string('b', 64)), Json.Options));
         TableLayoutStore.Save(root, "peers", [new("name", 210, 0), new("version", 94, 2), new("state", 354, 1), new("progress", 380, 3)]);
-        if (scope == "startup") ThemePreference.Save(root, "dark");
+        if (scope is "startup" or "toolbar") ThemePreference.Save(root, "dark");
         if (scope == "fullscreen-tray") WindowPlacementStore.Save(root, new(30, 30, 1060, 720), true);
         using var form = new MainForm(startAgent: false, dataRoot: root, loopbackOnly: true, languageOverride: "en", startInTray: scope == "fullscreen-tray");
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
@@ -101,6 +101,7 @@ internal sealed partial class LabForm
         }
         // Select synthetic presentation state directly; this fixture has no enrolled controller credentials.
         Set("isUpdateAdmin", true); Get<PageSwitcher>("rolePages").SelectedIndex = 1;
+        if (scope == "toolbar") { Get<Forms.Panel>("rail").Controls.Clear(); Call("BuildRail", "en"); }
         foreach (string name in new[] { "controllerNavCaption", "navConnection", "navScreen", "navProcesses", "navFiles", "navDiagnostics" }) Get<Forms.Control>(name).Visible = true;
         Get<Forms.Control>("roleController").Enabled = true;
         try
@@ -148,6 +149,33 @@ internal sealed partial class LabForm
                 graphics.DrawString("Isolated UI test\nRemote screen area", font, Brushes.SlateGray, 48, 48);
             }
             Get<RemoteScreenView>("screen").Image = frame;
+            if (scope == "toolbar")
+            {
+                Get<RouteStatusLabel>("streamStatus").Text = "Direct LAN · H.264 · 0.9 fps · 0.1 Mbit/s · capture 341 ms";
+                var actionToolbar = form.Controls.Find("viewerToolbar", true).Single();
+                var actions = new[] { Get<Forms.Button>("secureAttention"), Get<Forms.Button>("fullScreenButton") };
+                var visibleToolbarControls = new[] { Get<Forms.Control>("monitor"), Get<Forms.Control>("mouseEnabled"), Get<Forms.Control>("shareClipboard"),
+                    Get<Forms.Control>("relayEconomy"), actions[0], actions[1] };
+                foreach (int width in new[] { 1678, 1060 })
+                {
+                    form.Size = new(width, 940); await Task.Delay(150, stop.Token);
+                    Require(visibleToolbarControls.All(control => control.Visible && actionToolbar.RectangleToScreen(actionToolbar.ClientRectangle)
+                        .Contains(control.RectangleToScreen(control.ClientRectangle))) && Bounds("secureAttention").Right <= Bounds("fullScreenButton").Left,
+                        "ui.viewer_toolbar_fits_" + width, new { actionToolbar.Bounds, controls = visibleToolbarControls.Select(control => new { control.Name, control.Bounds }) });
+                    Require(form.Controls.Find("adminMode", true).Single().Visible && Get<Forms.Control>("navScreen").Visible &&
+                        Get<Forms.Control>("streamStatus").Visible && Get<Forms.Control>("inputStatus").Visible &&
+                        Bounds("streamStatus").Top >= Bounds("screenSurface").Bottom &&
+                        new[] { "remoteText", "typeText", "enterKey", "pauseViewing" }.All(id => form.Controls.Find(id, true).Length == 0),
+                        "ui.viewer_sidebar_footer_retained_" + width);
+                    Capture(width == 1678 ? "viewer-toolbar-wide" : "viewer-toolbar-minimum");
+                }
+                actions[1].PerformClick(); await Task.Delay(150, stop.Token); Capture("viewer-toolbar-fullscreen");
+                Require(Field("fullScreenHost").GetValue(form) != null, "ui.viewer_toolbar_enters_fullscreen");
+                Get<Forms.Button>("exitFullScreen").PerformClick(); await Task.Delay(150, stop.Token);
+                Require(Field("fullScreenHost").GetValue(form) == null && Get<RemoteScreenView>("screen").ContainsFocus &&
+                    actions.All(action => action.Visible && action.Parent == actionToolbar), "ui.viewer_toolbar_restores_focus");
+                Get<RemoteScreenView>("screen").Image = null; await FinishAsync(); return;
+            }
             if (scope is "fullscreen" or "fullscreen-tray")
             {
                 AppTheme.SetPreference("dark");
@@ -277,7 +305,7 @@ internal sealed partial class LabForm
             {
                 foreach (byte[] chord in new byte[][] { [0xA2, 0xA4, 0x7B], [0xA3, 0xA1, 0x7B, 0x7B] })
                 {
-                    form.Activate(); Get<Forms.Control>("remoteText").Focus();
+                    form.Activate(); Get<Forms.Control>("screen").Focus();
                     await ViewerChordAsync(chord);
                     Require(Field("fullScreenHost").GetValue(form) != null, "ui.shortcut_enters_fullscreen_" + chord[1]);
                     await ViewerChordAsync(chord);

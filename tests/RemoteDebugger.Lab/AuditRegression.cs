@@ -116,7 +116,6 @@ internal sealed partial class LabForm
             if (!root.TryGetCurrentPattern(WindowPattern.Pattern, out var pattern) || pattern is not WindowPattern state)
                 throw new InvalidOperationException("The loopback controller did not expose WindowPattern.");
             window = state;
-            var pauseButton = Element("pauseViewing");
 
             var before = await WaitForLiveEvidenceAsync(30);
             if (!before.BadgeVisible || !before.TelemetryVisible)
@@ -124,8 +123,8 @@ internal sealed partial class LabForm
 
             state.SetWindowVisualState(WindowVisualState.Minimized);
             await WaitForUiAsync(() => state.Current.WindowVisualState == WindowVisualState.Minimized, 10);
-            await WaitForUiAsync(() => IsResumeViewingButton(pauseButton), 10);
-            bool minimizedPaused = state.Current.WindowVisualState == WindowVisualState.Minimized && IsResumeViewingButton(pauseButton);
+            await WaitForUiAsync(IsMinimizedViewingStatus, 10);
+            bool minimizedPaused = state.Current.WindowVisualState == WindowVisualState.Minimized && IsMinimizedViewingStatus();
 
             state.SetWindowVisualState(WindowVisualState.Normal);
             await WaitForUiAsync(() => state.Current.WindowVisualState == WindowVisualState.Normal, 10);
@@ -133,38 +132,21 @@ internal sealed partial class LabForm
             var heartbeat = Data(await CallAsync("session.heartbeat"));
             bool sessionAfterRestore = heartbeat.ValueKind == JsonValueKind.Object;
 
-            Click("pauseViewing");
-            await WaitForUiAsync(() => IsResumeViewingButton(pauseButton), 10);
-            state.SetWindowVisualState(WindowVisualState.Minimized);
-            await WaitForUiAsync(() => state.Current.WindowVisualState == WindowVisualState.Minimized, 10);
-            state.SetWindowVisualState(WindowVisualState.Normal);
-            await WaitForUiAsync(() => state.Current.WindowVisualState == WindowVisualState.Normal, 10);
-            await Task.Delay(500, stop.Token);
-            string pauseButtonText = Value(pauseButton), pauseOverlay = TryValue("streamOverlay");
-            bool pauseIntentPreserved = IsResumeViewingButton(pauseButton)
-                && FindVisibleId(ContractId("liveBadge")) == null;
-            var pausedHeartbeat = Data(await CallAsync("session.heartbeat"));
-            bool sessionWhilePaused = pausedHeartbeat.ValueKind == JsonValueKind.Object;
-
             var evidence = new
             {
                 minimizedPaused,
                 restoredLive = restored.BadgeVisible && restored.TelemetryVisible,
                 sessionAfterRestore,
-                pauseIntentPreserved,
-                sessionWhilePaused,
-                pauseButton = pauseButtonText,
-                pauseOverlay,
                 restoredTelemetry = restored.TelemetryText
             };
-            if (minimizedPaused && restored.BadgeVisible && restored.TelemetryVisible && sessionAfterRestore && pauseIntentPreserved && sessionWhilePaused)
-                Pass("loopback.normal_minimize_restore", "Ordinary minimize pauses live viewing to save work, restores it for an active stream, and preserves an explicit pause without ending the session", evidence);
+            if (minimizedPaused && restored.BadgeVisible && restored.TelemetryVisible && sessionAfterRestore)
+                Pass("loopback.normal_minimize_restore", "Ordinary minimize pauses live viewing to save work and restores it without ending the session", evidence);
             else
-                Fail("loopback.normal_minimize_restore", "Ordinary minimize pauses live viewing to save work, restores it for an active stream, and preserves an explicit pause without ending the session", evidence);
+                Fail("loopback.normal_minimize_restore", "Ordinary minimize pauses live viewing to save work and restores it without ending the session", evidence);
         }
         catch (Exception ex)
         {
-            Fail("loopback.normal_minimize_restore", "Ordinary minimize pauses live viewing to save work, restores it for an active stream, and preserves an explicit pause without ending the session", new { error = ex.ToString() });
+            Fail("loopback.normal_minimize_restore", "Ordinary minimize pauses live viewing to save work and restores it without ending the session", new { error = ex.ToString() });
         }
         finally
         {
@@ -178,13 +160,13 @@ internal sealed partial class LabForm
         }
     }
 
-    private bool IsResumeViewingButton(AutomationElement? button = null)
+    private bool IsMinimizedViewingStatus()
     {
         string actual;
-        try { actual = button == null ? TryValue("pauseViewing") : Value(button); }
+        try { actual = TryValue("streamStatus"); }
         catch (ElementNotAvailableException) { return false; }
         return new[] { "en", "fr", "es" }
-            .Select(language => UiText.Get(nameof(UiText.Resume), CultureInfo.GetCultureInfo(language)))
+            .Select(language => UiText.Get(nameof(UiText.MinimizedConnected), CultureInfo.GetCultureInfo(language)))
             .Any(expected => actual.Equals(expected, StringComparison.Ordinal));
     }
 }

@@ -82,10 +82,8 @@ internal sealed partial class LabForm
             CheckLanguageState("directory_preserved", TryValue("remoteDirectory") == "C:\\keep-language-choice",
                 "The remote folder editor survives a language change and tab navigation");
             Click("navScreen"); await WaitForTextAsync("liveBadge", value => value.Contains(UiText.Live), 30);
-            Click("pauseViewing");
             await SelectInterfaceLanguageAsync("Français", "fr");
-            CheckLocalizedText("selector.paused", "streamOverlay", UiText.ViewingPausedResume);
-            CheckLocalizedText("selector.resume", "pauseViewing", UiText.Resume);
+            CheckLocalizedText("selector.fullscreen", "fullScreen", UiText.FullScreen);
             Click("terminateSession");
             product = loopbackAgent; UiCulture.Apply(CultureInfo.GetCultureInfo("es"));
             await WaitForTextAsync("agentHeading", value => value == UiText.SupportEnded, 20);

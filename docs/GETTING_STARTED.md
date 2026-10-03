@@ -24,7 +24,7 @@ Drag files or folders between Explorer and the **Files** pane, or over an Explor
 
 Incident reports and relevant logs are created automatically and retained locally for 30 days. Codex can read the controller's reports after disconnection when you request an investigation. Clipboard text and sign-in passwords are excluded. There are no scheduled follow-ups.
 
-The header shows connection state. **LIVE** appears only while fresh frames arrive. The viewer enables mouse and keyboard by default; click inside it to direct input to the remote desktop. Moving focus away returns keyboard input to the local PC. Pause, lost connection, target changes, and termination release held input. The monitor selector changes the viewed desktop. Secure-desktop prompts and Ctrl+Alt+Delete remain Windows-controlled.
+The header shows connection state. **LIVE** appears only while fresh frames arrive. The viewer enables mouse and keyboard by default; click inside it to direct input to the remote desktop. Moving focus away returns keyboard input to the local PC. Changing pages, lost connection, target changes, and termination release held input. The monitor selector changes the viewed desktop. **Ctrl+Alt+Del** and **Full screen** are at the right of the toolbar. Secure-desktop prompts and Ctrl+Alt+Delete remain Windows-controlled.
 
 When the authenticated client runs the same build as the controller, the update button is disabled and reads **✓ Client up to date**. An enrolled admin PC can install strictly newer releases. In private support, **Update all devices** updates online older clients and shows each device's version, status, bar and ETA. Busy or offline devices can be retried later. A newer device version blocks an older controller from starting the batch.
 

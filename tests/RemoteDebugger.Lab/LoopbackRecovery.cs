@@ -10,7 +10,7 @@ internal sealed partial class LabForm
 {
     private async Task ProbeLatestFramesAsync()
     {
-        Click("pauseViewing");
+        Click("navFiles");
         try
         {
             var report = await CliAsync(["stream", "--seconds", "6", "--fps", "5", "--present-delay-ms", "1200",
@@ -23,7 +23,7 @@ internal sealed partial class LabForm
         }
         finally
         {
-            Click("pauseViewing");
+            Click("navScreen");
             await WaitForLiveEvidenceAsync(30);
         }
     }
@@ -35,19 +35,16 @@ internal sealed partial class LabForm
     {
         var checkbox = FindVisibleId("mouseKeyboard") ?? throw new InvalidOperationException("Input preference missing.");
         var toggle = (TogglePattern)checkbox.GetCurrentPattern(TogglePattern.Pattern);
-        Click("pauseViewing");
-        await Task.Delay(400, stop.Token);
-        bool pausePreserved = toggle.Current.ToggleState == ToggleState.On;
         Click("navFiles"); Click("navScreen");
         await WaitForLiveEvidenceAsync(30);
         bool tabPreserved = toggle.Current.ToggleState == ToggleState.On;
         toggle.Toggle();
-        Click("pauseViewing"); Click("pauseViewing");
+        Click("navFiles"); Click("navScreen");
         await WaitForLiveEvidenceAsync(30);
         bool offPreserved = toggle.Current.ToggleState == ToggleState.Off;
         toggle.Toggle();
-        if (pausePreserved && tabPreserved && offPreserved) Pass("loopback.input_preference", "Pausing and changing pages preserve both enabled and disabled input preferences", new { pausePreserved, tabPreserved, offPreserved });
-        else Fail("loopback.input_preference", "Pausing and changing pages preserve both enabled and disabled input preferences", new { pausePreserved, tabPreserved, offPreserved });
+        if (tabPreserved && offPreserved) Pass("loopback.input_preference", "Changing pages preserves both enabled and disabled input preferences", new { tabPreserved, offPreserved });
+        else Fail("loopback.input_preference", "Changing pages preserves both enabled and disabled input preferences", new { tabPreserved, offPreserved });
     }
 
     private async Task ProbeAgentTrayAsync()

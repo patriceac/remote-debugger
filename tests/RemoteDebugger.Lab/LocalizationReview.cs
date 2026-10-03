@@ -79,9 +79,7 @@ internal sealed partial class LabForm
                 Click("navScreen");
                 await WaitForTextAsync("liveBadge", value => value.Contains(UiText.Live), 30);
                 CaptureDesktop("localization-" + tag + "-live.png");
-                Click("pauseViewing");
-                CheckLocalizedText(tag + ".resume", "pauseViewing", UiText.Resume);
-                CheckLocalizedText(tag + ".paused", "streamOverlay", UiText.ViewingPausedResume);
+                CheckLocalizedText(tag + ".fullscreen", "fullScreen", UiText.FullScreen);
                 Click("terminateSession");
                 product = loopbackAgent; Native.FocusWindow(product.Id);
                 bool ended = await WaitForTextAsync("agentHeading", value => value == UiText.SupportEnded, 20);

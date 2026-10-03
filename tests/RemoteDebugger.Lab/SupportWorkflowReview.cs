@@ -174,7 +174,7 @@ internal sealed partial class LabForm
 
     private async Task ProbeWorkflowFrameRateAsync(RemoteClient remote)
     {
-        Click("navScreen"); Click("pauseViewing");
+        Click("navFiles");
         await LabMessageAsync(peerHost!, "ANIMATE");
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(stop.Token); limit.CancelAfter(TimeSpan.FromSeconds(12));
         int frames = 0; var watch = new Stopwatch(); string codec = ""; double oldest = 0;
@@ -191,7 +191,7 @@ internal sealed partial class LabForm
         double fps = frames / Math.Max(1, watch.Elapsed.TotalSeconds);
         if (fps <= 5.5 || oldest > 5) throw new IOException($"Viewer did not exceed the old frame ceiling with fresh frames: {fps:F1} FPS, {oldest:F1}s.");
         Pass("workflow.viewer_fps", "A real remote desktop streams fresh frames above the former 5 FPS ceiling", new { frames, fps, oldest, codec });
-        Click("pauseViewing"); await WaitForLiveEvidenceAsync(30);
+        Click("navScreen"); await WaitForLiveEvidenceAsync(30);
     }
 
     private async Task ProbeWorkflowExplorerAsync(RemoteClient remote, string remoteFiles)

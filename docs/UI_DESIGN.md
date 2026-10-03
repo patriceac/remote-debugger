@@ -54,7 +54,7 @@ During an update, show a thin transfer bar and an explicit percentage plus recei
 
 ## Controller: live view (controller-live.svg)
 
-Header remote PC name and IP, Connected pill, terminate button. Toolbar under header: Ecran label with monitor selector, checked Controle souris et clavier toggle, small Pause/Reprendre viewing action. Main viewport fills remaining space with #142630 letterbox; no giant padding or redundant surrounding cards. Small EN DIRECT badge sits within the viewer top-left only while frames are current. An interruption overlay must clearly distinguish the last frozen frame.
+Header remote PC name and IP, Connected pill, terminate button. Toolbar under header: Display label with monitor selector, checked mouse and keyboard control toggle, Share clipboard and Economy mode, then Ctrl+Alt+Del and Full screen aligned right. Main viewport fills remaining space above the connection/performance footer; no giant padding or redundant surrounding cards. Small EN DIRECT badge sits within the viewer top-left only while frames are current. An interruption overlay must clearly distinguish the last frozen frame.
 
 Input defaults enabled but events only forward with viewer focus and valid frame geometry. The checkbox represents user preference and never changes on a transport error. A separate input status explains waiting or recovery. Coalesce adjacent mouse moves, preserve click/key order, and serialize release after input already in flight. Focus loss, pause, tab switch, update, disconnect, or termination releases keys/buttons. Footer frame rate, bandwidth, and latency uses actual values.
 

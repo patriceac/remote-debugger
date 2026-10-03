@@ -48,7 +48,7 @@ internal sealed partial class LabForm
         foreach (var tab in new[]
         {
             (Nav: "navConnection", Name: "connection", Controls: new[] { "host", "pairCode", "pair" }),
-            (Nav: "navScreen", Name: "screen", Controls: new[] { "remoteScreen", "pauseViewing", "inputStatus" }),
+            (Nav: "navScreen", Name: "screen", Controls: new[] { "remoteScreen", "fullScreen", "inputStatus" }),
             (Nav: "navProcesses", Name: "processes", Controls: new[] { "refreshResources", "processList", "resourceState" }),
             (Nav: "navFiles", Name: "files", Controls: new[] { "browseFiles", "remoteFiles", "upload", "download" }),
             (Nav: "navDiagnostics", Name: "diagnostics", Controls: new[] { "execute", "arguments", "argumentsLabel", "resultLabel", "technicalIdentity", "output" })
@@ -80,7 +80,7 @@ internal sealed partial class LabForm
             bool actions = tab.Name switch
             {
                 "connection" => Element("pair").Current.IsEnabled == !connected && Element("host").Current.IsEnabled == !connected,
-                "screen" => Element("pauseViewing").Current.IsEnabled == connected,
+                "screen" => Element("fullScreen").Current.IsEnabled == connected,
                 "processes" => Element("refreshResources").Current.IsEnabled == connected,
                 "files" => Element("upload").Current.IsEnabled == connected && !Element("download").Current.IsEnabled,
                 _ => Element("execute").Current.IsEnabled == connected && !Element("cancel").Current.IsEnabled
@@ -157,8 +157,8 @@ internal sealed partial class LabForm
         bool recovered = await WaitForTextAsync("fileState", text => text.Contains("élément", StringComparison.OrdinalIgnoreCase) || text == "Dossier vide", 20);
         if (fileError && recovered) Pass("ui.files_error_recovery", "An invalid directory has a visible error and a corrected path reloads", new { fileError, recovered });
         else Fail("ui.files_error_recovery", "An invalid directory has a visible error and a corrected path reloads", new { fileError, recovered });
-        Click("navScreen"); await WaitForLiveEvidenceAsync(30); Click("pauseViewing");
-        CaptureDesktop("ui-screen-paused.png"); Click("pauseViewing"); await WaitForLiveEvidenceAsync(30);
+        Click("navScreen"); await WaitForLiveEvidenceAsync(30);
+        CaptureDesktop("ui-screen-live.png");
     }
 
     private async Task SelectDiagnosticOperationAsync(string name)

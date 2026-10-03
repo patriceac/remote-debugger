@@ -15,7 +15,7 @@ internal sealed partial class LabForm
         string[][] rows = tab switch
         {
             "connection" => [["pairCode", "pair"]],
-            "screen" => [["monitorLabel", "monitor", "mouseKeyboard", "pauseViewing"], ["remoteText", "typeText", "enterKey"]],
+            "screen" => [["monitorLabel", "monitor"], ["mouseKeyboard", "shareClipboard"], ["secureAttention", "fullScreen"]],
             "processes" => [["refreshResources", "resourceState"]],
             "files" => [["remoteDirectory", "openRemoteFolder", "parentFolder", "browseFiles"], ["selectionLabel", "remotePath"], ["fileTransferStatus", "cancelTransfer"]],
             _ => [["operationLabel", "operation", "pidLabel", "targetPid", "execute", "cancel"]]

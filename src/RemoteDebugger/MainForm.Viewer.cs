@@ -167,7 +167,7 @@ public sealed partial class MainForm
         ResumeLayout(true);
         if (fullScreenHost is { } host) { host.Bounds = ClientRectangle; host.Show(); }
         Refresh();
-        if (enabled) screen.Focus(); else remoteText.Focus();
+        screen.Focus();
     }
 
     private bool CanRefreshResourcesAutomatically() => supportSession && heartbeatHealthy && rolePages.SelectedIndex == 1 &&

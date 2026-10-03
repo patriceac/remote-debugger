@@ -491,39 +491,35 @@ public sealed partial class MainForm : Forms.Form
         var page = new PagePanel(() => UiText.RemoteScreen) { BackColor = Canvas, Padding = Forms.Padding.Empty };
         monitor.Items.Add(new MonitorChoice(0, () => UiText.PrimaryMonitor)); monitor.SelectedIndex = 0;
         economyHost.Controls.Add(relayEconomy);
-        var top = new Forms.Panel { Name = "viewerToolbar", Dock = Forms.DockStyle.Top, Height = 52, BackColor = Color.FromArgb(247, 249, 251) };
-        var toolbar = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 5, RowCount = 1, Padding = new Forms.Padding(18, 0, 18, 0), Margin = Forms.Padding.Empty };
-        toolbar.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
-        for (int i = 0; i < 5; i++) toolbar.ColumnStyles.Add(new Forms.ColumnStyle(i == 4 ? Forms.SizeType.Percent : Forms.SizeType.AutoSize, i == 4 ? 100 : 0));
+        var top = new Forms.TableLayoutPanel { Name = "viewerToolbar", Dock = Forms.DockStyle.Top, AutoSize = true, AutoSizeMode = Forms.AutoSizeMode.GrowAndShrink,
+            MinimumSize = new Size(0, 52), ColumnCount = 3, RowCount = 1, Padding = new Forms.Padding(18, 0, 18, 0), Margin = Forms.Padding.Empty, BackColor = Color.FromArgb(247, 249, 251) };
+        top.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
+        top.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
+        top.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
+        top.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
+        var toolbar = new Forms.FlowLayoutPanel { Dock = Forms.DockStyle.Fill, AutoSize = true, AutoSizeMode = Forms.AutoSizeMode.GrowAndShrink,
+            WrapContents = true, Padding = new Forms.Padding(0, 8, 0, 8), Margin = Forms.Padding.Empty };
         Forms.Control[] toolbarControls = [RowLabel(() => UiText.Monitor, "monitorLabel"), monitor, mouseEnabled, shareClipboard, economyHost];
         for (int i = 0; i < toolbarControls.Length; i++)
         {
             toolbarControls[i].Anchor = Forms.AnchorStyles.Left;
             toolbarControls[i].ForeColor = Color.FromArgb(30, 49, 80);
             toolbarControls[i].Margin = new Forms.Padding(0, 0, i switch { 0 => 14, 1 or 2 => 24, 3 => 26, _ => 0 }, 0);
-            toolbar.Controls.Add(toolbarControls[i], i, 0);
+            toolbar.Controls.Add(toolbarControls[i]);
         }
-        top.Controls.Add(toolbar);
+        secureAttention.Anchor = fullScreenButton.Anchor = Forms.AnchorStyles.Right;
+        secureAttention.Margin = new Forms.Padding(0, 8, 8, 8); fullScreenButton.Margin = new Forms.Padding(0, 8, 0, 8);
+        top.Controls.Add(toolbar, 0, 0); top.Controls.Add(secureAttention, 1, 0); top.Controls.Add(fullScreenButton, 2, 0);
         toolbarControls[0].ForeColor = Color.FromArgb(91, 105, 121);
         relayEconomy.ForeColor = Color.FromArgb(30, 49, 80);
         screenSurface.Controls.Add(screen); screenSurface.Controls.Add(liveBadge); screenSurface.Controls.Add(streamOverlay); liveBadge.BringToFront(); streamOverlay.BringToFront(); liveBadge.Location = new Point(16, 14); streamOverlay.Anchor = Forms.AnchorStyles.None; screenSurface.Resize += (_, _) => streamOverlay.Location = new Point(Math.Max(0, (screenSurface.Width - streamOverlay.Width) / 2), Math.Max(0, (screenSurface.Height - streamOverlay.Height) / 2));
-        var view = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = Forms.Padding.Empty, Margin = Forms.Padding.Empty };
+        var view = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 1, RowCount = 1, Padding = Forms.Padding.Empty, Margin = Forms.Padding.Empty };
         screenSurface.Margin = Forms.Padding.Empty;
         // An automatic column can grow to the bitmap's preferred width when DPI
-        // changes. Keep both the viewer and its input row inside the workspace.
+        // changes. Keep the viewer inside the workspace.
         view.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
-        view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100)); view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize)); view.Controls.Add(screenSurface, 0, 0);
-        var bottom = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Fill, ColumnCount = 6, RowCount = 1, Padding = new Forms.Padding(18, 6, 18, 12), Margin = Forms.Padding.Empty };
-        bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100)); bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
-        bottom.AutoSize = true; bottom.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
-        remoteText.Anchor = Forms.AnchorStyles.Left | Forms.AnchorStyles.Right; remoteText.PlaceholderText = UiText.RemoteTextPlaceholder;
-        typeText.Anchor = enterKey.Anchor = Forms.AnchorStyles.Left;
-        bottom.Controls.Add(remoteText, 0, 0); bottom.Controls.Add(typeText, 1, 0); bottom.Controls.Add(enterKey, 2, 0);
-        bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); bottom.Controls.Add(secureAttention, 3, 0);
-        bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); bottom.Controls.Add(fullScreenButton, 4, 0);
-        bottom.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize)); bottom.Controls.Add(pauseViewing, 5, 0);
+        view.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100)); view.Controls.Add(screenSurface, 0, 0);
         shareClipboard.CheckedChanged += (_, _) => { SaveViewerPreferences(); RefreshClipboardSharing(); };
-        view.Controls.Add(bottom, 0, 1);
         page.Controls.Add(view); page.Controls.Add(top); return page;
     }
 

@@ -35,22 +35,12 @@ internal sealed partial class LabForm
             "viewer.saved_toggles", "The real viewer saves both toggles under the connected device identity");
         foreach (string id in new[] { "mouseKeyboard", "shareClipboard" }) ((TogglePattern)Control(id).GetCurrentPattern(TogglePattern.Pattern)).Toggle();
 
-        // In a loopback guest both endpoints share the desktop. Sending text into
-        // the foreground controller editor proves the real UI-to-agent path.
-        var text = Control("remoteText");
-        ((ValuePattern)text.GetCurrentPattern(ValuePattern.Pattern)).SetValue("viewer-text");
-        text.SetFocus(); Native.FocusWindow(product!.Id); await ViewerChordAsync([0x23]); Native.Key(product.Id, "ENTER");
-        await WaitForUiAsync(() => Value(text) == "viewer-textviewer-text", 8);
-        Require(Value(text) == "viewer-textviewer-text", "viewer.enter_sends_text", "Enter in the text editor sends its contents through the remote input channel");
-        // Clicking a controller button changes the agent's foreground control in
-        // this single-desktop fixture; Enter above exercises their shared sender.
-        Require(Value(Control("typeText")) == UiText.TypeText, "viewer.send_text_caption",
-            "The text action has the explicit localized Send text caption", new { caption = Value(Control("typeText")) });
-        ((ValuePattern)text.GetCurrentPattern(ValuePattern.Pattern)).SetValue("");
+        Require(new[] { "remoteText", "typeText", "enterKey", "pauseViewing" }.All(id => FindVisibleId(id) == null),
+            "viewer.lower_controls_removed", "The remote viewer has no lower input/control strip");
 
         ResizeProductWindow(1060, 720);
         await Task.Delay(350, stop.Token);
-        Require(new[] { "monitor", "mouseKeyboard", "shareClipboard", "relayEconomy", "remoteText", "typeText", "enterKey", "secureAttention", "fullScreen", "pauseViewing" }
+        Require(new[] { "monitor", "mouseKeyboard", "shareClipboard", "relayEconomy", "secureAttention", "fullScreen" }
             .All(id => FitsVisibleAncestors(Control(id))), "viewer.minimum_layout", "All viewer controls fit the minimum window");
         CaptureDesktop("viewer-normal-minimum.png");
         for (int i = 0; i < 3; i++)
@@ -58,7 +48,7 @@ internal sealed partial class LabForm
             if (i == 0) InvokeElement(Control("fullScreen"));
             else
             {
-                Control("remoteText").SetFocus();
+                Control("remoteScreen").SetFocus();
                 await ViewerChordAsync(i == 1 ? [0xA2, 0xA4, 0x7B] : [0xA3, 0xA1, 0x7B, 0x7B]);
             }
             await Task.Delay(350, stop.Token);
@@ -77,7 +67,7 @@ internal sealed partial class LabForm
             Require(FindVisibleId("exitFullScreen") == null, "viewer.fullscreen_exit_" + i, "The exit button and both requested shortcuts return to the normal viewer");
         }
         await NativeViewerKeyboardAsync();
-        Native.FocusWindow(product.Id);
+        Native.FocusWindow(product!.Id);
         CaptureDesktop("viewer-final.png");
     }
 
