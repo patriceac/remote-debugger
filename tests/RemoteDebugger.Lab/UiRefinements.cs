@@ -175,16 +175,35 @@ internal sealed partial class LabForm
                 try
                 {
                     Forms.Cursor.Position = Forms.Screen.FromControl(form).Bounds.Location + new Size(400, 300);
-                    Call("SetFullScreen", true); await Task.Delay(150, stop.Token);
+                    await FocusViewerAsync();
+                    Call("SetFullScreen", true); await Task.Delay(300, stop.Token);
                     var host = Get<Forms.Panel>("fullScreenHost"); var bar = Get<Forms.Control>("fullScreenToolbar");
+                    async Task ObserveSlideAsync(bool shown, string direction)
+                    {
+                        var positions = new List<int>();
+                        bool captured = false, surfaceStable = true;
+                        var deadline = Stopwatch.StartNew();
+                        while (deadline.ElapsedMilliseconds < 2000)
+                        {
+                            positions.Add(bar.Top);
+                            surfaceStable &= surface.Bounds == host.ClientRectangle;
+                            if (bar.Visible && bar.Top < 0 && bar.Top > -bar.Height && !captured)
+                            { Capture("fullscreen-slide-" + direction); captured = true; }
+                            if (shown ? bar.Visible && bar.Top == 0 : !bar.Visible && bar.Top <= -bar.Height) break;
+                            await Task.Delay(16, stop.Token);
+                        }
+                        Require(captured && surfaceStable && positions.Distinct().Count() > 2 &&
+                            (shown ? bar.Visible && bar.Top == 0 : !bar.Visible && bar.Top <= -bar.Height),
+                            "ui.fullscreen_slide_" + direction, new { positions, surfaceStable, bar.Bounds, bar.Visible });
+                    }
                     Require(bar.Visible && bar.Top == 0 && bar.Width == host.ClientSize.Width && bar.Height >= 34 &&
                         surface.Bounds == host.ClientRectangle, "ui.fullscreen_autohide_initial_overlay", new { bar.Bounds, surface = surface.Bounds, host.ClientRectangle });
                     var away = host.PointToScreen(new Point(host.Width / 2, host.Height / 2));
-                    Forms.Cursor.Position = away; await Task.Delay(1400, stop.Token);
+                    Forms.Cursor.Position = away; await ObserveSlideAsync(false, "out");
                     Require(!bar.Visible && surface.Bounds == host.ClientRectangle, "ui.fullscreen_autohide_fills_display", new { surface.Bounds, host.ClientRectangle });
                     await FocusViewerAsync();
                     Capture("fullscreen-autohide-hidden");
-                    Forms.Cursor.Position = host.PointToScreen(new Point(10, 0)); await Task.Delay(350, stop.Token);
+                    Forms.Cursor.Position = host.PointToScreen(new Point(10, 0)); await ObserveSlideAsync(true, "in");
                     Require(bar.Visible && surface.Bounds == host.ClientRectangle, "ui.fullscreen_autohide_top_edge_overlay");
                     Capture("fullscreen-autohide-revealed");
                     Forms.Cursor.Position = bar.PointToScreen(new Point(bar.Width / 2, bar.Height / 2));

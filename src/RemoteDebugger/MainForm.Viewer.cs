@@ -45,7 +45,8 @@ public sealed partial class MainForm
     }
     private Forms.Panel? fullScreenHost;
     private Forms.TableLayoutPanel? fullScreenToolbar;
-    private readonly AutoHideToolbar fullScreenToolbarVisibility = new();
+    private AutoHideToolbar fullScreenToolbarVisibility = new();
+    private readonly Forms.Timer fullScreenToolbarTimer = new() { Interval = 16 };
     private Forms.TableLayoutPanel? viewerHost;
     private Rectangle windowedBounds;
     private Forms.FormWindowState windowedState;
@@ -72,6 +73,7 @@ public sealed partial class MainForm
 
     private void InitializeViewer()
     {
+        fullScreenToolbarTimer.Tick += (_, _) => RefreshFullScreenToolbar();
         resourceRefreshTimer.Tick += async (_, _) => { if (CanRefreshResourcesAutomatically()) await RefreshResourcesAsync(automatic: true); };
         resourceRefreshTimer.Start();
         keyboardCapture = new(CanSendInput, value => QueueInput(value), ReleaseHeldInputForCurrentSession,
@@ -118,8 +120,12 @@ public sealed partial class MainForm
         if (fullScreenHost == null || fullScreenToolbar == null) return;
         var pointer = fullScreenHost.PointToClient(Forms.Cursor.Position);
         bool atTopEdge = fullScreenHost.ClientRectangle.Contains(pointer) && pointer.Y < HeaderPixels(3);
-        bool overToolbar = fullScreenToolbar.Visible && (fullScreenToolbar.Bounds.Contains(pointer) || fullScreenToolbar.ContainsFocus);
-        fullScreenToolbar.Visible = fullScreenToolbarVisibility.Update(Environment.TickCount64, atTopEdge, overToolbar);
+        bool overToolbar = fullScreenToolbar.Visible && (fullScreenHost.ClientRectangle.Contains(pointer) && fullScreenToolbar.Bounds.Contains(pointer) || fullScreenToolbar.ContainsFocus);
+        long now = Environment.TickCount64;
+        fullScreenToolbarVisibility.Update(now, atTopEdge || overToolbar, overToolbar);
+        double fraction = fullScreenToolbarVisibility.VisibleFraction(now);
+        fullScreenToolbar.Top = (int)Math.Round((fraction - 1) * fullScreenToolbar.Height);
+        fullScreenToolbar.Visible = fraction > 0;
     }
 
     private void LoadViewerPreferences()
@@ -155,7 +161,7 @@ public sealed partial class MainForm
             viewerHost = (Forms.TableLayoutPanel)screenSurface.Parent!;
             fullScreenHost = new Forms.Panel { Name = "fullScreenViewer", Dock = Forms.DockStyle.Fill, BackColor = screen.BackColor };
             var bar = new Forms.TableLayoutPanel { Name = "fullScreenToolbar", Anchor = Forms.AnchorStyles.Top | Forms.AnchorStyles.Left | Forms.AnchorStyles.Right,
-                Size = new(fullScreenHost.ClientSize.Width, 1), AutoSize = true, ColumnCount = 3, RowCount = 1, Padding = new Forms.Padding(16, 4, 8, 4), BackColor = Canvas };
+                Size = new(fullScreenHost.ClientSize.Width, 1), AutoSize = true, Visible = false, ColumnCount = 3, RowCount = 1, Padding = new Forms.Padding(16, 4, 8, 4), BackColor = Canvas };
             bar.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
             bar.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
             bar.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
@@ -164,12 +170,13 @@ public sealed partial class MainForm
             Controls.Add(fullScreenHost);
             fullScreenHost.CreateControl();
             fullScreenHost.Controls.Add(screenSurface); fullScreenHost.Controls.Add(bar);
-            fullScreenToolbar = bar; bar.BringToFront(); fullScreenToolbarVisibility.Reveal(Environment.TickCount64);
+            fullScreenToolbar = bar; bar.BringToFront(); fullScreenToolbarVisibility = new(); fullScreenToolbarVisibility.Reveal(Environment.TickCount64);
             shell.Visible = false; fullScreenHost.BringToFront();
             WindowState = Forms.FormWindowState.Normal; FormBorderStyle = Forms.FormBorderStyle.None; Bounds = display;
         }
         else
         {
+            fullScreenToolbarTimer.Stop();
             var previous = fullScreenHost!; fullScreenHost = null; fullScreenToolbar = null;
             viewerHost!.Controls.Add(screenSurface, 0, 0);
             exitFullScreen.Parent!.Controls.Remove(exitFullScreen);
@@ -179,7 +186,13 @@ public sealed partial class MainForm
             FormBorderStyle = Forms.FormBorderStyle.Sizable; Bounds = windowedBounds; WindowState = windowedState;
         }
         ResumeLayout(true);
-        if (fullScreenHost is { } host) { host.Bounds = ClientRectangle; fullScreenToolbar!.Width = host.ClientSize.Width; host.Show(); }
+        if (fullScreenHost is { } host)
+        {
+            host.Bounds = ClientRectangle;
+            fullScreenToolbar!.Width = host.ClientSize.Width;
+            fullScreenToolbar.Height = fullScreenToolbar.GetPreferredSize(new Size(host.ClientSize.Width, 0)).Height;
+            RefreshFullScreenToolbar(); fullScreenToolbarTimer.Start(); host.Show();
+        }
         Refresh();
         screen.Focus();
     }

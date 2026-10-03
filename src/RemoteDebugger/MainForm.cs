@@ -2421,6 +2421,7 @@ public sealed partial class MainForm : Forms.Form
 
     private async Task<bool> ShutdownAsync()
     {
+        fullScreenToolbarTimer.Stop();
         cursorTimer.Stop();
         directUpdateTimer.Stop(); directUpdateLifetime?.Cancel();
         powerLifetime?.Cancel();
@@ -2464,6 +2465,7 @@ public sealed partial class MainForm : Forms.Form
 
     private void DisposeResources()
     {
+        fullScreenToolbarTimer.Dispose();
         cursorTimer.Dispose();
         directUpdateTimer.Dispose(); directUpdateLifetime?.Cancel();
         agentMaintenance.Dispose();
