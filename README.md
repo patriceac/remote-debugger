@@ -58,6 +58,8 @@ structured errors and image results. Build it with `./scripts/Build-Mcp.ps1`.
 ./scripts/Build-Installer.ps1 -Sign
 ```
 
+To build and install without setup prompts, use `./scripts/Build-Installer.ps1 -Sign -Install -Unattended`. Silent setup starts the installed program in the current user's system tray when it finishes. Without `-Unattended`, `-Install` opens the normal wizard; omitting `-Install` only builds the installer. Windows administrator elevation is still required. The packaged installer also accepts `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /LOG`; see the [installer command-line options](https://jrsoftware.org/ishelp/topic_setupcmdline.htm).
+
 See [architecture and security](docs/ARCHITECTURE.md), [interface languages](docs/LOCALIZATION.md), [CLI contract](docs/CLI.md), and [test evidence](docs/VALIDATION.md). Application binaries and integration test scripts must run through the configured Hyper-V SYSTEM broker, not on the physical development host. Unit tests exercise logic and isolated control bindings without launching the application.
 
 Local session logs, diagnostic captures, signing keys, and build outputs are excluded from the repository.

@@ -4,9 +4,13 @@ param(
     [switch]$Sign,
     [string]$InternetProfilePath = (Join-Path $env:LOCALAPPDATA 'RemoteDebugger\RemoteDebugger-Protected.rdrelay'),
     [string]$AdminCredentialPath = (Join-Path $env:LOCALAPPDATA 'RemoteDebugger\RemoteDebugger-Admin.rdadmin'),
-    [switch]$WithoutInternetProfile
+    [switch]$WithoutInternetProfile,
+    [switch]$Install,
+    [switch]$Unattended
 )
 $ErrorActionPreference = 'Stop'
+if ($Unattended -and -not $Install) { throw 'Unattended requires -Install.' }
+. (Join-Path $PSScriptRoot 'InstallerArguments.ps1')
 $projectRoot = Split-Path $PSScriptRoot
 $releaseExecutable = Join-Path $projectRoot 'artifacts\release\RemoteDebugger.exe'
 $definition = Join-Path $projectRoot 'installer\RemoteDebugger.iss'
@@ -88,3 +92,13 @@ $signature = Get-AuthenticodeSignature -LiteralPath $installer
     Signed = $null -ne $signature.SignerCertificate -and $signature.Status -ne 'HashMismatch'
     InternetPreconfigured = -not $WithoutInternetProfile
 } | ConvertTo-Json
+
+if ($Install) {
+    $launch = @{ FilePath = $installer; PassThru = $true }
+    $installArguments = @(Get-InstallerArguments -Unattended:$Unattended)
+    if ($installArguments.Count) { $launch.ArgumentList = $installArguments; $launch.WindowStyle = 'Hidden' }
+    $setup = Start-Process @launch
+    $setup.WaitForExit()
+    if ($setup.ExitCode -ne 0) { throw "Installer failed with exit code $($setup.ExitCode)." }
+    [pscustomobject]@{ Installed = $true; Unattended = [bool]$Unattended; ExitCode = $setup.ExitCode } | ConvertTo-Json
+}

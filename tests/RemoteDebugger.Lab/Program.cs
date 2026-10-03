@@ -20,6 +20,11 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        if (args.FirstOrDefault() == "installerstartup")
+        {
+            InstallerStartupReview.RunAsync(args).GetAwaiter().GetResult();
+            return;
+        }
         if (args.FirstOrDefault() == "powersetup")
         {
             Environment.ExitCode = PowerGuestSetup.RunAsync(args).GetAwaiter().GetResult();

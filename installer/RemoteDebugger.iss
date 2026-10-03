@@ -67,6 +67,7 @@ Name: "{commonprograms}\Remote Debugger"; Filename: "{app}\{#AppExeName}"; Worki
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Parameters: "{code:LaunchArguments}"; Description: "{cm:LaunchProgram,Remote Debugger}"; Flags: nowait postinstall skipifsilent runasoriginaluser
+Filename: "{app}\{#AppExeName}"; Parameters: "--startup"; Flags: nowait skipifnotsilent runasoriginaluser
 
 [Tasks]
 #ifdef AdminCredentialPath
