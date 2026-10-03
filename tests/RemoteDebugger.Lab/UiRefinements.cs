@@ -17,7 +17,7 @@ internal sealed partial class LabForm
         UiCulture.Apply(System.Globalization.CultureInfo.GetCultureInfo("en"));
         Vault.Save(Path.Combine(root, "internet.dpapi"), JsonSerializer.SerializeToUtf8Bytes(new InternetSettings("https://ui.invalid", new string('a', 64), new string('b', 64)), Json.Options));
         TableLayoutStore.Save(root, "peers", [new("name", 210, 0), new("version", 94, 2), new("state", 354, 1), new("progress", 380, 3)]);
-        if (scope is "startup" or "toolbar") ThemePreference.Save(root, "dark");
+        if (scope is "startup" or "toolbar" or "fullscreen-autohide") ThemePreference.Save(root, "dark");
         if (scope == "fullscreen-tray") WindowPlacementStore.Save(root, new(30, 30, 1060, 720), true);
         using var form = new MainForm(startAgent: false, dataRoot: root, loopbackOnly: true, languageOverride: "en", startInTray: scope == "fullscreen-tray");
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
@@ -34,7 +34,12 @@ internal sealed partial class LabForm
         void Capture(string name)
         {
             using var bitmap = new Bitmap(form.Width, form.Height);
-            form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, form.Size));
+            if (scope == "fullscreen-autohide")
+            {
+                using var graphics = Graphics.FromImage(bitmap);
+                graphics.CopyFromScreen(form.Location, Point.Empty, form.Size);
+            }
+            else form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, form.Size));
             bitmap.Save(Path.Combine(output, name + ".png"));
         }
         void HeaderFits(string sample)
@@ -141,7 +146,8 @@ internal sealed partial class LabForm
             Set("supportSession", true); Set("heartbeatHealthy", true); Set("liveFrameFresh", true);
             Call("SelectControllerPage", 1);
             var charts = Get<ResourceMiniCharts>("headerCharts");
-            using var frame = new Bitmap(900, 700);
+            var frameSize = scope == "fullscreen-autohide" ? Forms.Screen.FromControl(form).Bounds.Size : new Size(900, 700);
+            using var frame = new Bitmap(frameSize.Width, frameSize.Height);
             using (var graphics = Graphics.FromImage(frame))
             using (var font = new Font("Segoe UI", 22))
             {
@@ -149,6 +155,55 @@ internal sealed partial class LabForm
                 graphics.DrawString("Isolated UI test\nRemote screen area", font, Brushes.SlateGray, 48, 48);
             }
             Get<RemoteScreenView>("screen").Image = frame;
+            if (scope == "fullscreen-autohide")
+            {
+                Set("nextRoleCheck", long.MaxValue); Get<Forms.Timer>("renderTimer").Start();
+                Get<Forms.Control>("streamOverlay").Visible = false;
+                var viewer = Get<RemoteScreenView>("screen"); var surface = Get<Forms.Control>("screenSurface");
+                var originalBounds = form.Bounds; var originalState = form.WindowState; var originalCursor = Forms.Cursor.Position;
+                async Task FocusViewerAsync()
+                {
+                    Forms.Cursor.Position = viewer.PointToScreen(new Point(viewer.Width / 2, viewer.Height / 2));
+                    mouse_event(2, 0, 0, 0, UIntPtr.Zero); mouse_event(4, 0, 0, 0, UIntPtr.Zero);
+                    await Task.Delay(150, stop.Token);
+                    if (Forms.Form.ActiveForm != form) throw new IOException("The guest viewer did not receive foreground focus after clicking it.");
+                }
+                void Restored(string route) => Require(Field("fullScreenHost").GetValue(form) == null &&
+                    Get<Forms.Control>("shell").Visible && form.WindowState == originalState && form.Bounds == originalBounds && viewer.ContainsFocus,
+                    "ui.fullscreen_autohide_restores_" + route, new { originalBounds, originalState, form.Bounds, form.WindowState,
+                        viewer.ContainsFocus, fullScreen = Field("fullScreenHost").GetValue(form) != null, activeForm = Forms.Form.ActiveForm?.Name });
+                try
+                {
+                    Forms.Cursor.Position = Forms.Screen.FromControl(form).Bounds.Location + new Size(400, 300);
+                    Call("SetFullScreen", true); await Task.Delay(150, stop.Token);
+                    var host = Get<Forms.Panel>("fullScreenHost"); var bar = Get<Forms.Control>("fullScreenToolbar");
+                    Require(bar.Visible && bar.Top == 0 && bar.Width == host.ClientSize.Width && bar.Height >= 34 &&
+                        surface.Bounds == host.ClientRectangle, "ui.fullscreen_autohide_initial_overlay", new { bar.Bounds, surface = surface.Bounds, host.ClientRectangle });
+                    var away = host.PointToScreen(new Point(host.Width / 2, host.Height / 2));
+                    Forms.Cursor.Position = away; await Task.Delay(1400, stop.Token);
+                    Require(!bar.Visible && surface.Bounds == host.ClientRectangle, "ui.fullscreen_autohide_fills_display", new { surface.Bounds, host.ClientRectangle });
+                    await FocusViewerAsync();
+                    Capture("fullscreen-autohide-hidden");
+                    Forms.Cursor.Position = host.PointToScreen(new Point(10, 0)); await Task.Delay(350, stop.Token);
+                    Require(bar.Visible && surface.Bounds == host.ClientRectangle, "ui.fullscreen_autohide_top_edge_overlay");
+                    Capture("fullscreen-autohide-revealed");
+                    Forms.Cursor.Position = bar.PointToScreen(new Point(bar.Width / 2, bar.Height / 2));
+                    await Task.Delay(1400, stop.Token);
+                    Require(bar.Visible, "ui.fullscreen_autohide_hover_keeps_open");
+                    Forms.Cursor.Position = away; await Task.Delay(600, stop.Token);
+                    Require(bar.Visible, "ui.fullscreen_autohide_leave_grace");
+                    await Task.Delay(900, stop.Token);
+                    Require(!bar.Visible && surface.Bounds == host.ClientRectangle, "ui.fullscreen_autohide_leave_hides");
+                    await FocusViewerAsync();
+                    await ViewerChordAsync([0xA2, 0xA4, 0x7B]); Restored("shortcut");
+                    Call("SetFullScreen", true); await Task.Delay(1400, stop.Token);
+                    host = Get<Forms.Panel>("fullScreenHost");
+                    Forms.Cursor.Position = host.PointToScreen(new Point(10, 0)); await Task.Delay(350, stop.Token);
+                    Get<Forms.Button>("exitFullScreen").PerformClick(); Restored("button");
+                }
+                finally { Forms.Cursor.Position = originalCursor; viewer.Image = null; }
+                await FinishAsync(); return;
+            }
             if (scope == "toolbar")
             {
                 Get<RouteStatusLabel>("streamStatus").Text = "Direct LAN · H.264 · 0.9 fps · 0.1 Mbit/s · capture 341 ms";

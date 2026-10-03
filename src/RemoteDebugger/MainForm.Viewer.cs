@@ -44,6 +44,8 @@ public sealed partial class MainForm
         SetFooterDetail(() => streamStatus.Text); RefreshFooter();
     }
     private Forms.Panel? fullScreenHost;
+    private Forms.TableLayoutPanel? fullScreenToolbar;
+    private readonly AutoHideToolbar fullScreenToolbarVisibility = new();
     private Forms.TableLayoutPanel? viewerHost;
     private Rectangle windowedBounds;
     private Forms.FormWindowState windowedState;
@@ -108,6 +110,16 @@ public sealed partial class MainForm
         fullScreenStatus.RouteTextOffset = devicePrefix.Length;
         fullScreenStatus.Text = devicePrefix + streamStatus.Text;
         if (fullScreenHost != null && !supportSession) SetFullScreen(false);
+        RefreshFullScreenToolbar();
+    }
+
+    private void RefreshFullScreenToolbar()
+    {
+        if (fullScreenHost == null || fullScreenToolbar == null) return;
+        var pointer = fullScreenHost.PointToClient(Forms.Cursor.Position);
+        bool atTopEdge = fullScreenHost.ClientRectangle.Contains(pointer) && pointer.Y < HeaderPixels(3);
+        bool overToolbar = fullScreenToolbar.Visible && (fullScreenToolbar.Bounds.Contains(pointer) || fullScreenToolbar.ContainsFocus);
+        fullScreenToolbar.Visible = fullScreenToolbarVisibility.Update(Environment.TickCount64, atTopEdge, overToolbar);
     }
 
     private void LoadViewerPreferences()
@@ -142,7 +154,8 @@ public sealed partial class MainForm
             var display = Forms.Screen.FromControl(this).Bounds;
             viewerHost = (Forms.TableLayoutPanel)screenSurface.Parent!;
             fullScreenHost = new Forms.Panel { Name = "fullScreenViewer", Dock = Forms.DockStyle.Fill, BackColor = screen.BackColor };
-            var bar = new Forms.TableLayoutPanel { Dock = Forms.DockStyle.Top, AutoSize = true, ColumnCount = 3, RowCount = 1, Padding = new Forms.Padding(16, 4, 8, 4), BackColor = Canvas };
+            var bar = new Forms.TableLayoutPanel { Name = "fullScreenToolbar", Anchor = Forms.AnchorStyles.Top | Forms.AnchorStyles.Left | Forms.AnchorStyles.Right,
+                Size = new(fullScreenHost.ClientSize.Width, 1), AutoSize = true, ColumnCount = 3, RowCount = 1, Padding = new Forms.Padding(16, 4, 8, 4), BackColor = Canvas };
             bar.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
             bar.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
             bar.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
@@ -151,12 +164,13 @@ public sealed partial class MainForm
             Controls.Add(fullScreenHost);
             fullScreenHost.CreateControl();
             fullScreenHost.Controls.Add(screenSurface); fullScreenHost.Controls.Add(bar);
+            fullScreenToolbar = bar; bar.BringToFront(); fullScreenToolbarVisibility.Reveal(Environment.TickCount64);
             shell.Visible = false; fullScreenHost.BringToFront();
             WindowState = Forms.FormWindowState.Normal; FormBorderStyle = Forms.FormBorderStyle.None; Bounds = display;
         }
         else
         {
-            var previous = fullScreenHost!; fullScreenHost = null;
+            var previous = fullScreenHost!; fullScreenHost = null; fullScreenToolbar = null;
             viewerHost!.Controls.Add(screenSurface, 0, 0);
             exitFullScreen.Parent!.Controls.Remove(exitFullScreen);
             fullScreenStatus.Parent!.Controls.Remove(fullScreenStatus);
@@ -165,7 +179,7 @@ public sealed partial class MainForm
             FormBorderStyle = Forms.FormBorderStyle.Sizable; Bounds = windowedBounds; WindowState = windowedState;
         }
         ResumeLayout(true);
-        if (fullScreenHost is { } host) { host.Bounds = ClientRectangle; host.Show(); }
+        if (fullScreenHost is { } host) { host.Bounds = ClientRectangle; fullScreenToolbar!.Width = host.ClientSize.Width; host.Show(); }
         Refresh();
         screen.Focus();
     }
