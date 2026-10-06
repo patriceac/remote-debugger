@@ -13,6 +13,7 @@ public sealed partial class MainForm
     private readonly Forms.Button secureAttention = Button(() => "Ctrl+Alt+Del", "secureAttention", 116);
     private readonly Forms.Button fullScreenButton = Button(() => UiText.FullScreen, "fullScreen", 124);
     private readonly Forms.Button exitFullScreen = Button(() => UiText.ExitFullScreen, "exitFullScreen", 190);
+    private readonly Forms.Button fullScreenEndSupport = Button(() => UiText.EndSupport, "fullScreenEndSupport", 160, destructive: true);
     private readonly RouteStatusLabel fullScreenStatus = new() { Name = "fullScreenStatus", Dock = Forms.DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, ForeColor = SecondaryText };
     private readonly ResourceMiniCharts headerCharts = new() { Name = "resourceMiniCharts", Visible = false, ForeColor = Color.FromArgb(15, 35, 64), BackColor = Surface, Font = new Font("Segoe UI", 9.5F), Margin = Forms.Padding.Empty };
     private readonly ResourceMiniCharts fullScreenCharts = new() { Name = "fullScreenResourceCharts", Width = 264, Height = 34, ForeColor = PrimaryText, Anchor = Forms.AnchorStyles.Left };
@@ -92,6 +93,7 @@ public sealed partial class MainForm
         secureAttention.Click += (_, _) => { if (CanSendFocusedInput()) QueueInput(new { kind = "secureAttention" }); };
         fullScreenButton.Click += (_, _) => SetFullScreen(true);
         exitFullScreen.Click += (_, _) => SetFullScreen(false);
+        fullScreenEndSupport.Click += async (_, _) => await TerminateSupportAsync();
     }
 
     private void RefreshViewerControls()
@@ -118,6 +120,7 @@ public sealed partial class MainForm
     private void RefreshFullScreenToolbar()
     {
         if (fullScreenHost == null || fullScreenToolbar == null) return;
+        fullScreenEndSupport.Enabled = terminateSession.Enabled && CanUseControllerWorkspace(supportSession, terminating);
         var pointer = fullScreenHost.PointToClient(Forms.Cursor.Position);
         bool atTopEdge = fullScreenHost.ClientRectangle.Contains(pointer) && pointer.Y < HeaderPixels(3);
         bool overToolbar = fullScreenToolbar.Visible && (fullScreenHost.ClientRectangle.Contains(pointer) && fullScreenToolbar.Bounds.Contains(pointer) || fullScreenToolbar.ContainsFocus);
@@ -162,11 +165,12 @@ public sealed partial class MainForm
             viewerHost = (Forms.TableLayoutPanel)screenSurface.Parent!;
             fullScreenHost = new Forms.Panel { Name = "fullScreenViewer", Dock = Forms.DockStyle.Fill, BackColor = screen.BackColor };
             var bar = new Forms.TableLayoutPanel { Name = "fullScreenToolbar", Anchor = Forms.AnchorStyles.Top | Forms.AnchorStyles.Left | Forms.AnchorStyles.Right,
-                Size = new(fullScreenHost.ClientSize.Width, 1), AutoSize = true, Visible = false, ColumnCount = 3, RowCount = 1, Padding = new Forms.Padding(16, 4, 8, 4), BackColor = Canvas };
+                Size = new(fullScreenHost.ClientSize.Width, 1), AutoSize = true, Visible = false, ColumnCount = 4, RowCount = 1, Padding = new Forms.Padding(16, 4, 8, 4), BackColor = Canvas };
             bar.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 100));
             bar.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
             bar.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
-            bar.Controls.Add(fullScreenStatus, 0, 0); bar.Controls.Add(fullScreenCharts, 1, 0); bar.Controls.Add(exitFullScreen, 2, 0);
+            bar.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.AutoSize));
+            bar.Controls.Add(fullScreenStatus, 0, 0); bar.Controls.Add(fullScreenCharts, 1, 0); bar.Controls.Add(exitFullScreen, 2, 0); bar.Controls.Add(fullScreenEndSupport, 3, 0);
             // Create the destination before reparenting the live native viewer.
             Controls.Add(fullScreenHost);
             fullScreenHost.CreateControl();
@@ -181,6 +185,7 @@ public sealed partial class MainForm
             var previous = fullScreenHost!; fullScreenHost = null; fullScreenToolbar = null;
             viewerHost!.Controls.Add(screenSurface, 0, 0);
             exitFullScreen.Parent!.Controls.Remove(exitFullScreen);
+            fullScreenEndSupport.Parent!.Controls.Remove(fullScreenEndSupport);
             fullScreenStatus.Parent!.Controls.Remove(fullScreenStatus);
             fullScreenCharts.Parent!.Controls.Remove(fullScreenCharts);
             Controls.Remove(previous); previous.Dispose(); shell.Visible = true;

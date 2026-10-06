@@ -7,6 +7,13 @@ namespace RemoteDebugger.Platform.Tests;
 public sealed class MainFormActionTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ControllerEndSupportTargetsItsSessionEvenWithALocalAgent(bool agentRunning) =>
+        Assert.Equal(MainForm.SessionTerminationTarget.Controller,
+            MainForm.SelectTerminationTarget(onAgent: false, agentRunning, controllerSessionActive: true));
+
+    [Theory]
     [InlineData(false, true, true, false)]
     [InlineData(true, false, false, false)]
     [InlineData(true, true, false, true)]

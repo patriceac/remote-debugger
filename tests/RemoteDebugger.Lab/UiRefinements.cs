@@ -198,6 +198,10 @@ internal sealed partial class LabForm
                     }
                     Require(bar.Visible && bar.Top == 0 && bar.Width == host.ClientSize.Width && bar.Height >= 34 &&
                         surface.Bounds == host.ClientRectangle, "ui.fullscreen_autohide_initial_overlay", new { bar.Bounds, surface = surface.Bounds, host.ClientRectangle });
+                    var endSupport = Get<Forms.Button>("fullScreenEndSupport"); var exit = Get<Forms.Button>("exitFullScreen");
+                    Require(endSupport.Visible && endSupport.Enabled && endSupport.Text == UiText.EndSupport &&
+                        endSupport.Parent == bar && exit.Right <= endSupport.Left && bar.ClientRectangle.Contains(endSupport.Bounds),
+                        "ui.fullscreen_end_support_next_to_exit", new { exit = exit.Bounds, endSupport = endSupport.Bounds, endSupport.Text });
                     var away = host.PointToScreen(new Point(host.Width / 2, host.Height / 2));
                     Forms.Cursor.Position = away; await ObserveSlideAsync(false, "out");
                     Require(!bar.Visible && surface.Bounds == host.ClientRectangle, "ui.fullscreen_autohide_fills_display", new { surface.Bounds, host.ClientRectangle });
@@ -219,6 +223,17 @@ internal sealed partial class LabForm
                     host = Get<Forms.Panel>("fullScreenHost");
                     Forms.Cursor.Position = host.PointToScreen(new Point(10, 0)); await Task.Delay(350, stop.Token);
                     Get<Forms.Button>("exitFullScreen").PerformClick(); Restored("button");
+                    Set("client", new RemoteClient(new Connection("127.0.0.2", 45832, peer.Fingerprint, new string('e', 64)),
+                        (_, _) => Task.FromException<Stream>(new InvalidOperationException("This UI fixture has no remote agent."))));
+                    Call("SetFullScreen", true); await Task.Delay(350, stop.Token);
+                    Forms.Cursor.Position = endSupport.PointToScreen(new Point(endSupport.Width / 2, endSupport.Height / 2));
+                    Capture("fullscreen-end-support"); endSupport.PerformClick();
+                    var ending = Stopwatch.StartNew();
+                    while (Get<bool>("terminating") && ending.ElapsedMilliseconds < 5000) await Task.Delay(50, stop.Token);
+                    Require(!Get<bool>("supportSession") && !Get<bool>("terminating") && Field("client").GetValue(form) == null &&
+                        Field("fullScreenHost").GetValue(form) == null && Get<Forms.Control>("shell").Visible &&
+                        form.Bounds == originalBounds,
+                        "ui.fullscreen_end_support_ends_session", new { form.Bounds, form.WindowState });
                 }
                 finally { Forms.Cursor.Position = originalCursor; viewer.Image = null; }
                 await FinishAsync(); return;

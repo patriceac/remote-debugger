@@ -2530,9 +2530,9 @@ public sealed partial class MainForm : Forms.Form
         int currentRole, int targetRole, bool agentRunning, bool controllerSessionActive) =>
         currentRole != targetRole && (agentRunning || controllerSessionActive);
 
-    private enum SessionTerminationTarget { None, Agent, Controller }
+    internal enum SessionTerminationTarget { None, Agent, Controller }
 
-    private static SessionTerminationTarget SelectTerminationTarget(bool onAgent, bool agentRunning, bool controllerSessionActive) =>
+    internal static SessionTerminationTarget SelectTerminationTarget(bool onAgent, bool agentRunning, bool controllerSessionActive) =>
         onAgent ? agentRunning ? SessionTerminationTarget.Agent : SessionTerminationTarget.None :
         controllerSessionActive ? SessionTerminationTarget.Controller : SessionTerminationTarget.None;
 
