@@ -240,7 +240,7 @@ internal sealed partial class LabForm
                     Get<Forms.Button>("exitFullScreen").PerformClick(); Restored("button");
                     stage = "creating offline client";
                     Set("client", new RemoteClient(new Connection("127.0.0.2", 45832, peer.Fingerprint, new string('e', 64)),
-                        (_, _) => Task.FromException<Stream>(new InvalidOperationException("This UI fixture has no remote agent."))));
+                        async (_, ct) => { await Task.Delay(20, ct); throw new InvalidOperationException("This UI fixture has no remote agent."); }));
                     Call("SetFullScreen", true); await Task.Delay(350, stop.Token);
                     Forms.Cursor.Position = endSupport.PointToScreen(new Point(endSupport.Width / 2, endSupport.Height / 2));
                     stage = "ending support";
